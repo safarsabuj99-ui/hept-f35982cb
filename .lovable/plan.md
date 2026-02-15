@@ -1,61 +1,86 @@
 
 
-# Digital Marketing Client Portal — Implementation Plan
+# Team Management and Granular Permissions for Super Admin
 
 ## Overview
-A secure, mobile-first client portal for a digital marketing agency to manage ad spend across Meta, TikTok, and Google Ads. Admins manage all clients and transactions; clients see only their own data.
+Add a dedicated "Team Management" page for the Super Admin to create, view, edit, and control manager/employee accounts with granular permissions -- specifying exactly what each team member can view and do.
 
----
+## What You'll Get
 
-## 1. Authentication & Roles
-- **Supabase Auth** for login (email/password)
-- **Admin creates client accounts** — an admin-only form to register new clients (creates auth user + profile)
-- **Roles stored in a separate `user_roles` table** (not on profiles) using a security-definer helper function to prevent privilege escalation and RLS recursion
-- Login page routes users to the correct dashboard based on their role
+1. **Team Management Page** -- A new page at `/admin/team` listing all managers with their status, assigned client count, and permission summary.
 
-## 2. Database Design (Supabase)
-- **`profiles`** — user_id, full_name, email, phone, business_name, created_at
-- **`user_roles`** — user_id, role (enum: 'admin', 'client')
-- **`transactions`** — id, client_id, type (credit/debit), amount, platform (nullable — meta/tiktok/google, only for debits), description, date, created_at, created_by
-- **Balance** is calculated dynamically: `SUM(credits) - SUM(debits)` per client
-- RLS policies ensure clients can only read their own profile and transactions; admins have full access
+2. **Create Manager/Employee** -- The existing "New Account" form already supports creating managers. We'll link it from the team page and keep it consistent.
 
-## 3. Admin Dashboard
-- **Client list** with real-time calculated balances
-- **Add Funds form** — select client, enter amount & date → creates a "credit" transaction
-- **Log Daily Spend form** — select client, select platform (Meta / TikTok / Google), enter amount & date → creates a "debit" transaction
-- **Client management** — add new client accounts (name, email, phone, business, password)
-- Success toast notifications on all actions
+3. **Granular Permission Controls** -- For each manager, the Super Admin can toggle:
+   - **View Permissions**: See client dashboards, see transaction history, see financial summaries
+   - **Action Permissions**: Add funds (creates pending approval), log daily spend, edit client profiles
 
-## 4. Client Dashboard
-- **Summary cards:**
-  - Current Balance (large, prominent)
-  - Total Spent to date
-  - Last Updated timestamp
-- **Platform Breakdown:**
-  - Donut chart showing percentage split across Meta, TikTok, Google
-  - Bar chart showing spend amounts per platform (with daily trend option)
-- **Transaction History** — table of all credits (deposits) and debits (spends) with date, type, platform, and amount
+4. **Permission Enforcement** -- Managers will only see navigation items and UI controls matching their assigned permissions.
 
-## 5. Design & UX
-- **Blue/Indigo professional theme** applied to the Shadcn design tokens
-- **Fully responsive** — optimized for mobile-first viewing (cards stack, tables scroll horizontally)
-- **Shadcn UI components** — cards, tables, forms, selects, dialogs, toasts
-- Clean navigation: sidebar on desktop, bottom nav or hamburger on mobile
+## Technical Details
 
-## 6. Pages & Routing
-| Route | Access | Description |
-|-------|--------|-------------|
-| `/login` | Public | Login page |
-| `/admin` | Admin only | Admin dashboard with client list |
-| `/admin/clients/new` | Admin only | Create new client account |
-| `/admin/add-funds` | Admin only | Add funds form |
-| `/admin/log-spend` | Admin only | Log daily spend form |
-| `/dashboard` | Client only | Client's personal dashboard |
+### Database Changes
 
-## 7. Security
-- RLS on all tables — clients see only their own data
-- Role checks via security-definer function (no recursive RLS)
-- Input validation with Zod on all forms
-- Protected routes with auth guards
+**New table: `manager_permissions`**
+
+```text
++---------------------+----------+---------+----------------------------------+
+| Column              | Type     | Default | Description                      |
++---------------------+----------+---------+----------------------------------+
+| id                  | uuid     | auto    | Primary key                      |
+| user_id             | uuid     | --      | The manager's user ID            |
+| can_view_dashboard  | boolean  | true    | Can view assigned client boards   |
+| can_view_transactions| boolean | true    | Can see transaction history       |
+| can_add_funds       | boolean  | true    | Can submit fund deposits          |
+| can_log_spend       | boolean  | true    | Can log daily ad spend            |
+| can_edit_clients    | boolean  | false   | Can edit client profile info      |
+| updated_at          | timestamp| now()   | Last modified                    |
++---------------------+----------+---------+----------------------------------+
+```
+
+- RLS: Only admins can read/write. Managers can read their own row.
+- A row is auto-created when a manager account is created (via trigger or edge function update).
+
+### New Files
+
+1. **`src/pages/TeamManagement.tsx`** -- Main team listing page with:
+   - Table of all managers (name, email, assigned clients count, permission summary)
+   - "Edit Permissions" button per row opening a dialog
+   - Permission toggle dialog with switches for each capability
+   - Link to create a new manager
+
+2. **`src/hooks/usePermissions.tsx`** -- Hook that fetches the current manager's permissions and exposes boolean flags. Used by ManagerLayout and manager pages to show/hide features.
+
+### Modified Files
+
+3. **`src/components/AdminLayout.tsx`** -- Add "Team" nav item linking to `/admin/team`.
+
+4. **`src/App.tsx`** -- Add route `/admin/team` pointing to `TeamManagement`.
+
+5. **`src/components/ManagerLayout.tsx`** -- Use `usePermissions` hook to conditionally show/hide nav items (Add Funds, Log Spend) based on the manager's permissions.
+
+6. **`src/pages/AddFunds.tsx`** -- Check `can_add_funds` permission; show "no access" message if disabled.
+
+7. **`src/pages/LogSpend.tsx`** -- Check `can_log_spend` permission; show "no access" message if disabled.
+
+8. **`supabase/functions/create-client/index.ts`** -- After creating a manager, also insert a default row into `manager_permissions`.
+
+### User Flow
+
+```text
+Super Admin -> Team Management page
+  |
+  +-> Sees list of all managers with permissions summary
+  |
+  +-> Clicks "Edit Permissions" on a manager
+  |     -> Dialog with toggle switches for each permission
+  |     -> Save updates the manager_permissions table
+  |
+  +-> Clicks "New Manager" -> goes to /admin/clients/new (pre-set to manager)
+```
+
+### Permission Enforcement
+
+- **UI Level**: ManagerLayout hides nav items the manager doesn't have access to. Individual pages check permissions and show a friendly "You don't have access" card if disabled.
+- **Database Level**: RLS on transactions already restricts managers to their assigned clients. The permissions add an application-level layer for feature access within that scope.
 
