@@ -12,7 +12,7 @@ import { ClientLayout } from "@/components/ClientLayout";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AddFunds from "@/pages/AddFunds";
-import LogSpend from "@/pages/LogSpend";
+
 import NewClient from "@/pages/NewClient";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ManagerDashboard from "@/pages/ManagerDashboard";
@@ -51,7 +51,7 @@ const App = () => (
               >
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/add-funds" element={<AddFunds />} />
-                <Route path="/admin/log-spend" element={<LogSpend />} />
+                
                 <Route path="/admin/clients/new" element={<NewClient />} />
                 <Route path="/admin/pending" element={<PendingApprovals />} />
                 <Route path="/admin/settings" element={<Settings />} />
@@ -74,7 +74,7 @@ const App = () => (
               >
                 <Route path="/manager" element={<ManagerDashboard />} />
                 <Route path="/manager/add-funds" element={<AddFunds />} />
-                <Route path="/manager/log-spend" element={<LogSpend />} />
+                
               </Route>
 
               {/* Client routes */}

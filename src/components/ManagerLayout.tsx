@@ -6,7 +6,6 @@ import {
   BarChart3,
   Users,
   DollarSign,
-  TrendingDown,
   LogOut,
   Menu,
   X,
@@ -17,7 +16,7 @@ import { cn } from "@/lib/utils";
 const allNavItems = [
   { to: "/manager", icon: Users, label: "My Clients", permKey: "can_view_dashboard" as const },
   { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_add_funds" as const },
-  { to: "/manager/log-spend", icon: TrendingDown, label: "Log Spend", permKey: "can_log_spend" as const },
+  
 ];
 
 export function ManagerLayout() {
