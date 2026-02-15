@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Receipt,
   Banknote,
+  Megaphone,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ const navItems = [
   { to: "/admin/finance", icon: TrendingUp, label: "Finance" },
   { to: "/admin/expenses", icon: Receipt, label: "Expenses" },
   { to: "/admin/payment-requests", icon: Banknote, label: "Payments" },
+  { to: "/admin/orders", icon: Megaphone, label: "Orders" },
   { to: "/admin/settings", icon: Settings, label: "Settings" },
   { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
 ];

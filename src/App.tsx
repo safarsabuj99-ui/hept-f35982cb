@@ -30,6 +30,9 @@ import WalletInventory from "@/pages/WalletInventory";
 import FinanceDashboard from "@/pages/FinanceDashboard";
 import ExpenseManager from "@/pages/ExpenseManager";
 import PaymentRequests from "@/pages/PaymentRequests";
+import OrderManagement from "@/pages/OrderManagement";
+import NewCampaignRequest from "@/pages/NewCampaignRequest";
+import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +75,7 @@ const App = () => (
                 <Route path="/admin/finance" element={<FinanceDashboard />} />
                 <Route path="/admin/expenses" element={<ExpenseManager />} />
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
+                <Route path="/admin/orders" element={<OrderManagement />} />
               </Route>
 
               {/* Manager routes */}
@@ -96,6 +100,8 @@ const App = () => (
                 }
               >
                 <Route path="/dashboard" element={<ClientDashboard />} />
+                <Route path="/dashboard/campaigns" element={<MyCampaignRequests />} />
+                <Route path="/dashboard/campaigns/new" element={<NewCampaignRequest />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

@@ -198,6 +198,60 @@ export type Database = {
           },
         ]
       }
+      campaign_requests: {
+        Row: {
+          ad_caption: string | null
+          budget_usd: number
+          client_id: string
+          created_at: string
+          creative_link: string
+          duration_days: number
+          id: string
+          landing_page_url: string | null
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          platform: Database["public"]["Enums"]["ad_platform"]
+          rejection_reason: string | null
+          start_date: string
+          status: Database["public"]["Enums"]["campaign_request_status"]
+          target_audience_note: string | null
+          updated_at: string
+        }
+        Insert: {
+          ad_caption?: string | null
+          budget_usd: number
+          client_id: string
+          created_at?: string
+          creative_link: string
+          duration_days?: number
+          id?: string
+          landing_page_url?: string | null
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          platform: Database["public"]["Enums"]["ad_platform"]
+          rejection_reason?: string | null
+          start_date: string
+          status?: Database["public"]["Enums"]["campaign_request_status"]
+          target_audience_note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ad_caption?: string | null
+          budget_usd?: number
+          client_id?: string
+          created_at?: string
+          creative_link?: string
+          duration_days?: number
+          id?: string
+          landing_page_url?: string | null
+          objective?: Database["public"]["Enums"]["campaign_objective"]
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          rejection_reason?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["campaign_request_status"]
+          target_audience_note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_ad_spend: {
         Row: {
           ad_account_id: string
@@ -501,6 +555,16 @@ export type Database = {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       app_role: "admin" | "client" | "manager"
+      campaign_objective:
+        | "Message"
+        | "Traffic/Website"
+        | "Video Views"
+        | "Sales"
+      campaign_request_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "rejected"
       expense_category:
         | "Rent"
         | "Salary"
@@ -642,6 +706,18 @@ export const Constants = {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       app_role: ["admin", "client", "manager"],
+      campaign_objective: [
+        "Message",
+        "Traffic/Website",
+        "Video Views",
+        "Sales",
+      ],
+      campaign_request_status: [
+        "pending",
+        "processing",
+        "completed",
+        "rejected",
+      ],
       expense_category: [
         "Rent",
         "Salary",
