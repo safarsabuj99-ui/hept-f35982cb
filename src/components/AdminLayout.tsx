@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   BarChart3,
   Users,
@@ -14,6 +15,10 @@ import {
   ScrollText,
   ClipboardCheck,
   UserCog,
+  Monitor,
+  Plug,
+  MapPin,
+  FileText,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +31,10 @@ const navItems = [
   { to: "/admin/log-spend", icon: TrendingDown, label: "Log Spend" },
   { to: "/admin/clients/new", icon: PlusCircle, label: "New Client" },
   { to: "/admin/assign", icon: UserCog, label: "Assign Clients" },
+  { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
+  { to: "/admin/integrations", icon: Plug, label: "Integrations" },
+  { to: "/admin/campaigns", icon: MapPin, label: "Campaigns" },
+  { to: "/admin/spend-report", icon: FileText, label: "Spend Report" },
   { to: "/admin/settings", icon: Settings, label: "Settings" },
   { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
 ];
@@ -42,13 +51,13 @@ export function AdminLayout() {
           <BarChart3 className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-bold text-sidebar-primary-foreground">AdSpend</span>
         </div>
-        <nav className="flex-1 space-y-1 p-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {navItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 location.pathname === item.to
                   ? "bg-sidebar-accent text-sidebar-primary"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -59,15 +68,16 @@ export function AdminLayout() {
             </Link>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border p-4">
+        <div className="flex items-center justify-between border-t border-sidebar-border p-4">
           <Button
             variant="ghost"
-            className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="flex-1 justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={signOut}
           >
             <LogOut className="h-4 w-4" />
             Sign Out
           </Button>
+          <ThemeToggle />
         </div>
       </aside>
 
@@ -77,9 +87,12 @@ export function AdminLayout() {
             <BarChart3 className="h-5 w-5 text-primary" />
             <span className="text-lg font-bold">AdSpend</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)}>
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)}>
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </header>
 
         {mobileOpen && (
