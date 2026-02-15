@@ -37,8 +37,6 @@ export default function AdminDashboard() {
   const [activeAccounts, setActiveAccounts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [rateValue, setRateValue] = useState(120);
-  const [rateSaving, setRateSaving] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const { exchangeRate } = useCurrency();
@@ -134,26 +132,11 @@ export default function AdminDashboard() {
     setTodayCollections(Math.round(todayCollect * 100) / 100);
     setPendingCount(pendingRes.count ?? 0);
     setActiveAccounts((accountsRes as any).count ?? 0);
-    setRateValue(exchangeRate);
     if ((syncRes.data as any)?.[0]?.last_synced_at) {
       setLastSynced(new Date((syncRes.data as any)[0].last_synced_at).toLocaleString());
     }
     setLoading(false);
   }, [exchangeRate, today, yesterday]);
-
-  const saveRate = async () => {
-    if (rateValue <= 0) return;
-    setRateSaving(true);
-    const { error } = await (supabase.from("settings") as any)
-      .update({ value: String(rateValue) })
-      .eq("key", "exchange_rate");
-    setRateSaving(false);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Saved", description: `Exchange rate updated to ${rateValue} BDT/USD` });
-    }
-  };
 
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
@@ -173,13 +156,7 @@ export default function AdminDashboard() {
       />
 
       {/* Zone 2: Quick Actions Strip */}
-      <QuickActions
-        pendingCount={pendingCount}
-        rateValue={rateValue}
-        onRateChange={setRateValue}
-        onSaveRate={saveRate}
-        rateSaving={rateSaving}
-      />
+      <QuickActions pendingCount={pendingCount} />
 
       {/* Zone 3: Primary KPIs */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 xs:grid-cols-2 lg:grid-cols-4">
