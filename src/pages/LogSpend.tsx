@@ -40,7 +40,7 @@ export default function LogSpend() {
         const { data: profiles } = await supabase
           .from("profiles")
           .select("user_id, full_name, business_name, manager_id" as any);
-        setClients((profiles ?? []).filter((p: any) => p.manager_id === user?.id) as ClientProfile[]);
+        setClients((profiles ?? []).filter((p: any) => p.manager_id === user?.id) as unknown as ClientProfile[]);
       } else {
         const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "client");
         const clientIds = roles?.map((r) => r.user_id) ?? [];
