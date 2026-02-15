@@ -20,7 +20,7 @@ import ManagerDashboard from "@/pages/ManagerDashboard";
 import PendingApprovals from "@/pages/PendingApprovals";
 import Settings from "@/pages/Settings";
 import AuditLogs from "@/pages/AuditLogs";
-import ClientAssignment from "@/pages/ClientAssignment";
+
 import TeamManagement from "@/pages/TeamManagement";
 import AdAccounts from "@/pages/AdAccounts";
 import Integrations from "@/pages/Integrations";
@@ -66,7 +66,7 @@ const App = () => (
                 <Route path="/admin/pending" element={<PendingApprovals />} />
                 <Route path="/admin/settings" element={<Settings />} />
                 <Route path="/admin/logs" element={<AuditLogs />} />
-                <Route path="/admin/assign" element={<ClientAssignment />} />
+                
                 <Route path="/admin/team" element={<TeamManagement />} />
                 <Route path="/admin/ad-accounts" element={<AdAccounts />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
