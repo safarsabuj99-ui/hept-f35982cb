@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           account_currency: Database["public"]["Enums"]["account_currency"]
           ad_account_id: string
+          api_integration_id: string | null
           client_id: string
           created_at: string
           id: string
@@ -27,6 +28,7 @@ export type Database = {
         Insert: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           ad_account_id: string
+          api_integration_id?: string | null
           client_id: string
           created_at?: string
           id?: string
@@ -36,13 +38,22 @@ export type Database = {
         Update: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           ad_account_id?: string
+          api_integration_id?: string | null
           client_id?: string
           created_at?: string
           id?: string
           is_active?: boolean
           platform_name?: Database["public"]["Enums"]["ad_platform"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ad_accounts_api_integration_id_fkey"
+            columns: ["api_integration_id"]
+            isOneToOne: false
+            referencedRelation: "api_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       api_integrations: {
         Row: {
@@ -50,6 +61,7 @@ export type Database = {
           app_id: string
           created_at: string
           id: string
+          instance_name: string | null
           is_active: boolean
           last_synced_at: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
@@ -60,6 +72,7 @@ export type Database = {
           app_id?: string
           created_at?: string
           id?: string
+          instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
@@ -70,6 +83,7 @@ export type Database = {
           app_id?: string
           created_at?: string
           id?: string
+          instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
@@ -230,6 +244,7 @@ export type Database = {
           full_name: string
           id: string
           manager_id: string | null
+          mapping_keyword: string | null
           phone: string | null
           user_id: string
         }
@@ -240,6 +255,7 @@ export type Database = {
           full_name: string
           id?: string
           manager_id?: string | null
+          mapping_keyword?: string | null
           phone?: string | null
           user_id: string
         }
@@ -250,6 +266,7 @@ export type Database = {
           full_name?: string
           id?: string
           manager_id?: string | null
+          mapping_keyword?: string | null
           phone?: string | null
           user_id?: string
         }

@@ -87,8 +87,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get all client profiles with mapping keywords
+    const { data: clientProfiles } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id, mapping_keyword")
+      .not("mapping_keyword", "is", null);
+
+    const keywordMap: { keyword: string; userId: string }[] = [];
+    for (const p of clientProfiles ?? []) {
+      if (p.mapping_keyword && p.mapping_keyword.trim()) {
+        keywordMap.push({ keyword: p.mapping_keyword.trim().toLowerCase(), userId: p.user_id });
+      }
+    }
+
     const today = new Date();
     const records: any[] = [];
+    const campaignMappings: any[] = [];
+    let autoMapped = 0;
+    let unmapped = 0;
 
     // Generate 5-15 random entries across ad accounts
     const count = Math.floor(Math.random() * 11) + 5;
@@ -108,16 +124,48 @@ Deno.serve(async (req) => {
         ? Math.round((rawAmount / exchangeRate) * 100) / 100
         : rawAmount;
 
+      // For demo: some campaign names include client keywords
+      let campaignName =
+        CAMPAIGN_NAMES[Math.floor(Math.random() * CAMPAIGN_NAMES.length)];
+      
+      // 30% chance to prepend a client keyword if keywords exist
+      if (keywordMap.length > 0 && Math.random() < 0.3) {
+        const kw = keywordMap[Math.floor(Math.random() * keywordMap.length)];
+        campaignName = `${kw.keyword.toUpperCase()}_${campaignName}`;
+      }
+
       records.push({
         ad_account_id: account.id,
         date: spendDate.toISOString().split("T")[0],
-        campaign_name:
-          CAMPAIGN_NAMES[Math.floor(Math.random() * CAMPAIGN_NAMES.length)],
+        campaign_name: campaignName,
         raw_spend_amount: rawAmount,
         raw_currency: account.account_currency,
         exchange_rate_used: isBDT ? exchangeRate : 1,
         final_billable_usd: finalBillableUsd,
       });
+
+      // Auto-mapping: check if campaign name contains any keyword
+      let matchedClientId: string | null = null;
+      const nameLower = campaignName.toLowerCase();
+      for (const { keyword, userId } of keywordMap) {
+        if (nameLower.includes(keyword)) {
+          matchedClientId = userId;
+          break;
+        }
+      }
+
+      // Upsert campaign mapping
+      campaignMappings.push({
+        campaign_id: `sim_${Date.now()}_${i}`,
+        campaign_name: campaignName,
+        platform: account.platform_name,
+        ad_account_id: account.id,
+        client_id: matchedClientId,
+        is_active: true,
+      });
+
+      if (matchedClientId) autoMapped++;
+      else unmapped++;
     }
 
     const { error: insertError } = await supabaseAdmin
@@ -131,6 +179,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Upsert campaign mappings
+    if (campaignMappings.length > 0) {
+      await supabaseAdmin.from("campaign_mappings").insert(campaignMappings);
+    }
+
     // Update last_synced_at on api_integrations
     await supabaseAdmin
       .from("api_integrations")
@@ -142,6 +195,8 @@ Deno.serve(async (req) => {
         success: true,
         records_created: records.length,
         exchange_rate_used: exchangeRate,
+        auto_mapped: autoMapped,
+        unmapped: unmapped,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

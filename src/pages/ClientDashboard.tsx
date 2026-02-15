@@ -7,8 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DollarSign, TrendingDown, Clock, Info } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
+import { DollarSign, TrendingDown, TrendingUp, Clock, Info, Wallet, Zap } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 
 const PLATFORM_COLORS: Record<string, string> = {
   meta: "hsl(214, 80%, 52%)",
@@ -26,16 +26,20 @@ export default function ClientDashboard() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
+  const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  const today = new Date().toISOString().split("T")[0];
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
     const [{ data: txData }, { data: accounts }] = await Promise.all([
       supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
-      supabase.from("ad_accounts" as any).select("id").eq("client_id", user.id) as any,
+      supabase.from("ad_accounts" as any).select("*").eq("client_id", user.id) as any,
     ]);
     setTransactions((txData as Transaction[]) ?? []);
+    setAdAccounts(accounts ?? []);
 
     const accIds = accounts?.map((a: any) => a.id) ?? [];
     if (accIds.length > 0) {
@@ -46,26 +50,16 @@ export default function ClientDashboard() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Realtime subscriptions
   useEffect(() => {
     if (!user) return;
     const channel = supabase
       .channel('client-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
-        fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => {
-        fetchAll();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => fetchAll())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [user, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
@@ -73,25 +67,33 @@ export default function ClientDashboard() {
   const balance = credits - debits;
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
-  // Platform breakdown from daily_ad_spend
-  const spendByPlatform: Record<string, { usd: number; raw: { amount: number; currency: string }[] }> = {};
+  // Today's spend from daily_ad_spend
+  const todaySpend = adSpend
+    .filter((s: any) => s.date === today)
+    .reduce((sum: number, s: any) => sum + Number(s.final_billable_usd), 0);
+
+  // 7-day avg spend for "Remaining Funds" projection
+  const last7 = adSpend.filter((s: any) => {
+    const d = new Date(s.date);
+    const daysAgo = (Date.now() - d.getTime()) / 86400000;
+    return daysAgo <= 7;
+  });
+  const avgDailySpend = last7.length > 0
+    ? last7.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0) / 7
+    : 0;
+  const daysRemaining = avgDailySpend > 0 ? Math.floor(balance / avgDailySpend) : balance > 0 ? 999 : 0;
+
+  // Platform breakdown from daily_ad_spend (more accurate)
+  const platformSpend: Record<string, number> = {};
   for (const row of adSpend) {
-    const acc = row.ad_account_id; // We'll group by platform from accounts later
-    // For simplicity, group from the campaign data
+    const acc = adAccounts.find((a: any) => a.id === row.ad_account_id);
+    const platform = acc?.platform_name || "unknown";
+    platformSpend[platform] = (platformSpend[platform] || 0) + Number(row.final_billable_usd);
   }
+  const platformData = Object.entries(platformSpend)
+    .map(([platform, value]) => ({ name: PLATFORM_LABELS[platform] || platform, value, platform }))
+    .sort((a, b) => b.value - a.value);
 
-  // Use transactions for platform pie (existing logic)
-  const platformData = Object.entries(
-    transactions
-      .filter((t) => t.type === "debit" && t.platform)
-      .reduce<Record<string, number>>((acc, t) => {
-        const key = t.platform!;
-        acc[key] = (acc[key] || 0) + Number(t.amount);
-        return acc;
-      }, {})
-  ).map(([platform, value]) => ({ name: PLATFORM_LABELS[platform] || platform, value, platform }));
-
-  // Also build from daily_ad_spend for transparency tooltips
   const spendWithRaw = adSpend.map((s: any) => ({
     date: s.date,
     billable: Number(s.final_billable_usd),
@@ -104,7 +106,7 @@ export default function ClientDashboard() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 sm:grid-cols-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)}</div>
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-36" />)}</div>
         <Skeleton className="h-64" />
       </div>
     );
@@ -124,74 +126,85 @@ export default function ClientDashboard() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Current Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent><p className="text-3xl font-bold text-primary">{fmt(balance)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Spent</CardTitle>
-            <TrendingDown className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent><p className="text-3xl font-bold">{fmt(debits)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Last Updated</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+      {/* Bold KPI Cards - Mobile First */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-primary/5 rounded-full -mr-6 -mt-6" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
+              <Wallet className="h-5 w-5 text-primary" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">
-              {transactions.length > 0
-                ? new Date(transactions[0].created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
-                : "—"}
+            <p className="text-3xl md:text-4xl font-bold font-mono text-primary">{fmt(balance)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden border-destructive/30 bg-gradient-to-br from-destructive/10 to-destructive/5">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-destructive/5 rounded-full -mr-6 -mt-6" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/15">
+              <Zap className="h-5 w-5 text-destructive" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Today's Spend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl md:text-4xl font-bold font-mono">{fmt(todaySpend)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center gap-3 pb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <TrendingDown className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Spent</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl md:text-3xl font-bold font-mono">{fmt(debits)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center gap-3 pb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Remaining</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl md:text-3xl font-bold font-mono">
+              {daysRemaining >= 999 ? "∞" : `~${daysRemaining}d`}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {avgDailySpend > 0 ? `~${fmt(avgDailySpend)}/day avg` : "No spend data"}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Platform pie + bar charts */}
+      {/* Platform Donut from daily_ad_spend */}
       {platformData.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Platform Split</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={platformData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {platformData.map((entry) => <Cell key={entry.platform} fill={PLATFORM_COLORS[entry.platform] || "#888"} />)}
-                  </Pie>
-                  <RTooltip formatter={(value: number) => fmt(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Spend by Platform</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={platformData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
-                  <RTooltip formatter={(value: number) => fmt(value)} />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                    {platformData.map((entry) => <Cell key={entry.platform} fill={PLATFORM_COLORS[entry.platform] || "#888"} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Platform Spend Split</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={platformData} cx="50%" cy="50%" innerRadius={65} outerRadius={100} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  {platformData.map((entry) => <Cell key={entry.platform} fill={PLATFORM_COLORS[entry.platform] || "#888"} />)}
+                </Pie>
+                <RTooltip formatter={(value: number) => fmt(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Spend trend from daily_ad_spend */}
+      {/* Spend trend */}
       {user && <SpendTrendChart clientId={user.id} />}
 
-      {/* Daily ad spend with transparency */}
+      {/* Ad Spend Details */}
       {spendWithRaw.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-lg">Ad Spend Details (Billable USD)</CardTitle></CardHeader>
@@ -232,7 +245,7 @@ export default function ClientDashboard() {
         </Card>
       )}
 
-      {/* Transaction history */}
+      {/* Transaction History */}
       <Card>
         <CardHeader><CardTitle className="text-lg">Transaction History</CardTitle></CardHeader>
         <CardContent>

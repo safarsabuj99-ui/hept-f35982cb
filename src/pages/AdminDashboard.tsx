@@ -9,6 +9,7 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueVsCostChart } from "@/components/dashboard/RevenueVsCostChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { ClientOverviewTable } from "@/components/dashboard/ClientOverviewTable";
+import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -255,6 +256,9 @@ export default function AdminDashboard() {
         <SpendTrendChart />
         <RevenueVsCostChart />
       </div>
+
+      {/* Row 3.5: Unassigned Spend Alert */}
+      <UnassignedSpendAlert />
 
       {/* Row 4: Alerts + Activity */}
       <div className="grid gap-4 md:grid-cols-2">
