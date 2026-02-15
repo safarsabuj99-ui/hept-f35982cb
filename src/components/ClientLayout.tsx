@@ -2,17 +2,21 @@ import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BarChart3, LogOut } from "lucide-react";
+import { BarChart3, LogOut, Shield } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export function ClientLayout() {
   const { signOut, user } = useAuth();
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex h-16 items-center justify-between border-b bg-card px-4 md:px-8">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card/95 backdrop-blur-sm px-4 md:px-8">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <span className="text-lg font-bold">AdSpend Portal</span>
+          <span className="text-lg font-bold tracking-tight">AdSpend Portal</span>
+          <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex gap-1 ml-1">
+            <Shield className="h-2.5 w-2.5" /> Read-Only
+          </Badge>
         </div>
         <div className="flex items-center gap-3">
           <span className="hidden text-sm text-muted-foreground sm:inline">
