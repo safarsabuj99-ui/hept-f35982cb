@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
+import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 
 interface ClientProfit {
   name: string;
@@ -24,20 +25,35 @@ export default function FinanceDashboard() {
   const [ownerDraw, setOwnerDraw] = useState(0);
   const [clientProfits, setClientProfits] = useState<ClientProfit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [periodLabel, setPeriodLabel] = useState("All Time");
 
-  useEffect(() => { fetchAll(); }, []);
+  const fetchAll = useCallback(async (range: DateRange | null) => {
+    setLoading(true);
 
-  const fetchAll = async () => {
+    // Build date-filtered queries
+    let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
+    let spendQuery = supabase.from("daily_ad_spend").select("final_billable_usd, ad_account_id, campaign_name, date");
+    let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date");
+
+    if (range) {
+      const from = toISODate(range.from);
+      const to = toISODate(range.to);
+      purchasesQuery = purchasesQuery.gte("date", from).lte("date", to);
+      spendQuery = spendQuery.gte("date", from).lte("date", to);
+      expensesQuery = expensesQuery.gte("date", from).lte("date", to);
+    }
+
     const [purchasesRes, spendRes, profilesRes, rolesRes, expensesRes, settingsRes] = await Promise.all([
-      supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
-      supabase.from("daily_ad_spend").select("final_billable_usd, ad_account_id, campaign_name"),
+      purchasesQuery,
+      spendQuery,
       supabase.from("profiles").select("user_id, full_name, pricing_config, custom_exchange_rate"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
-      supabase.from("agency_expenses").select("amount_bdt, category"),
+      expensesQuery,
       supabase.from("settings").select("key, value").eq("key", "exchange_rate").maybeSingle(),
     ]);
 
-    // WAC
+    // WAC from filtered purchases
     const purchases = (purchasesRes.data as any[]) ?? [];
     let totalBdt = 0, totalUsd = 0;
     for (const p of purchases) { totalBdt += Number(p.bdt_amount_paid); totalUsd += Number(p.usd_received); }
@@ -46,7 +62,6 @@ export default function FinanceDashboard() {
 
     const globalRate = settingsRes.data?.value ? Number(settingsRes.data.value) : 120;
 
-    // Map ad accounts to clients
     const { data: adAccounts } = await supabase.from("ad_accounts").select("id, client_id");
     const accToClient: Record<string, string> = {};
     for (const a of adAccounts ?? []) accToClient[a.id] = a.client_id;
@@ -57,14 +72,12 @@ export default function FinanceDashboard() {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    // Aggregate spend per client
     const clientSpend: Record<string, number> = {};
     for (const s of (spendRes.data ?? []) as any[]) {
       const cid = accToClient[s.ad_account_id];
       if (cid) clientSpend[cid] = (clientSpend[cid] || 0) + Number(s.final_billable_usd);
     }
 
-    // Calculate per-client profitability
     let aggRevenue = 0, aggCogs = 0;
     const profits: ClientProfit[] = [];
     for (const [cid, spendUsd] of Object.entries(clientSpend)) {
@@ -75,7 +88,6 @@ export default function FinanceDashboard() {
       let revenueBdt = 0;
 
       if (pricingConfig?.mode === "flat_rate") {
-        // Use average of platform rates as approximation (no per-platform split here)
         const rates = pricingConfig.rates || {};
         const rateValues = Object.values(rates).map(Number).filter((v: number) => v > 0);
         const avgRate = rateValues.length > 0 ? rateValues.reduce((a: number, b: number) => a + b, 0) / rateValues.length : globalRate;
@@ -85,7 +97,6 @@ export default function FinanceDashboard() {
         const marketRate = Number(profile.custom_exchange_rate) || globalRate;
         revenueBdt = spendUsd * marketRate * (1 + markup);
       } else {
-        // Default: use custom_exchange_rate or global rate
         const rate = Number(profile.custom_exchange_rate) || globalRate;
         revenueBdt = spendUsd * rate;
       }
@@ -107,7 +118,6 @@ export default function FinanceDashboard() {
       });
     }
 
-    // Expenses
     const expenses = (expensesRes.data as any[]) ?? [];
     const opex = expenses.filter(e => e.category !== "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
     const draw = expenses.filter(e => e.category === "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
@@ -119,13 +129,28 @@ export default function FinanceDashboard() {
     setNetProfit(Math.round(aggRevenue - aggCogs - opex));
     setClientProfits(profits.sort((a, b) => b.netProfit - a.netProfit));
     setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(dateRange); }, []);
+
+  const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
+    setDateRange(range);
+    const labels: Record<DatePreset, string> = {
+      all_time: "All Time", today: "Today", this_week: "This Week",
+      this_month: "This Month", last_month: "Last Month", custom: "Custom Range",
+    };
+    setPeriodLabel(labels[preset]);
+    fetchAll(range);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Finance Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Agency P&L, COGS, and client profitability</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Finance Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Agency P&L, COGS, and client profitability</p>
+        </div>
+        <DateRangeFilter onRangeChange={handleRangeChange} />
       </div>
 
       {/* Main KPI Cards */}
@@ -135,7 +160,7 @@ export default function FinanceDashboard() {
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
               <div>
-                <p className="text-xs text-muted-foreground">Net Profit (All Time)</p>
+                <p className="text-xs text-muted-foreground">Net Profit ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-28" /> : (
                   <p className={`text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
                     ৳{netProfit.toLocaleString()}
@@ -150,7 +175,7 @@ export default function FinanceDashboard() {
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
               <div>
-                <p className="text-xs text-muted-foreground">Avg. Buying Cost (WAC)</p>
+                <p className="text-xs text-muted-foreground">Avg. Buying Cost ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
                   <p className="text-2xl font-bold font-mono">{wac} <span className="text-sm text-muted-foreground">BDT</span></p>
                 )}
@@ -163,7 +188,7 @@ export default function FinanceDashboard() {
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
               <div>
-                <p className="text-xs text-muted-foreground">Owner's Draw</p>
+                <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
                   <p className="text-2xl font-bold font-mono">৳{ownerDraw.toLocaleString()}</p>
                 )}
@@ -176,7 +201,7 @@ export default function FinanceDashboard() {
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-accent p-2"><Banknote className="h-5 w-5 text-accent-foreground" /></div>
               <div>
-                <p className="text-xs text-muted-foreground">Total OpEx</p>
+                <p className="text-xs text-muted-foreground">Total OpEx ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
                   <p className="text-2xl font-bold font-mono">৳{totalOpex.toLocaleString()}</p>
                 )}
