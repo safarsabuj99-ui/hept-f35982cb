@@ -373,6 +373,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auto_pause_threshold_pct: number
           business_name: string | null
           created_at: string
           custom_exchange_rate: number | null
@@ -382,12 +383,15 @@ export type Database = {
           is_super_admin: boolean
           manager_id: string | null
           mapping_keyword: string | null
+          overdraft_limit_usd: number
           permissions: Json
           phone: string | null
           pricing_config: Json | null
+          system_paused_campaigns: Json
           user_id: string
         }
         Insert: {
+          auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string
           custom_exchange_rate?: number | null
@@ -397,12 +401,15 @@ export type Database = {
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
           pricing_config?: Json | null
+          system_paused_campaigns?: Json
           user_id: string
         }
         Update: {
+          auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string
           custom_exchange_rate?: number | null
@@ -412,9 +419,11 @@ export type Database = {
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
           pricing_config?: Json | null
+          system_paused_campaigns?: Json
           user_id?: string
         }
         Relationships: []
