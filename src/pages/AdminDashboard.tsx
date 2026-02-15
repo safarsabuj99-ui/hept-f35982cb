@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { useCurrency } from "@/hooks/useCurrency";
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
@@ -58,7 +59,7 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendTodayRes, spendYesterdayRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, email, business_name"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
@@ -138,7 +139,7 @@ export default function AdminDashboard() {
       setLastSynced(new Date((syncRes.data as any)[0].last_synced_at).toLocaleString());
     }
     setLoading(false);
-  };
+  }, [exchangeRate, today, yesterday]);
 
   const saveRate = async () => {
     if (rateValue <= 0) return;
@@ -163,8 +164,8 @@ export default function AdminDashboard() {
     : null;
 
   return (
+    <PullToRefresh onRefresh={fetchData}>
     <div className="space-y-6">
-      {/* Zone 1: Greeting Header */}
       <DashboardHeader
         lastSynced={lastSynced}
         activeAccounts={activeAccounts}
@@ -264,5 +265,6 @@ export default function AdminDashboard() {
         </Tabs>
       </div>
     </div>
+    </PullToRefresh>
   );
 }
