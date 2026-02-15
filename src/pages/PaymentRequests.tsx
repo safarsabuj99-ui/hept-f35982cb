@@ -7,8 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-react";
+
+interface RateOption {
+  key: string;
+  label: string;
+  rate: number;
+}
 
 interface PaymentRequest {
   id: string;
@@ -30,8 +37,12 @@ export default function PaymentRequests() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; request: PaymentRequest | null; action: "approved" | "rejected" }>({ open: false, request: null, action: "approved" });
   const [adminNote, setAdminNote] = useState("");
-  const [rateInfo, setRateInfo] = useState<{ rate: number; usd: number } | null>(null);
+  const [rateOptions, setRateOptions] = useState<RateOption[]>([]);
+  const [selectedRateKey, setSelectedRateKey] = useState<string>("");
   const [rateLoading, setRateLoading] = useState(false);
+
+  const selectedRate = rateOptions.find((r) => r.key === selectedRateKey);
+  const calculatedUsd = selectedRate ? Math.round((confirmModal.request?.amount_bdt ?? 0) / selectedRate.rate * 100) / 100 : 0;
   const { toast } = useToast();
 
   const fetchRequests = async () => {
@@ -59,19 +70,30 @@ export default function PaymentRequests() {
 
   const openConfirm = async (request: PaymentRequest, action: "approved" | "rejected") => {
     setAdminNote("");
-    setRateInfo(null);
+    setRateOptions([]);
+    setSelectedRateKey("");
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
       setRateLoading(true);
-      // Fetch rate for preview
-      const { data: profile } = await supabase.from("profiles").select("custom_exchange_rate").eq("user_id", request.client_id).single();
-      let rate = profile?.custom_exchange_rate ?? null;
-      if (!rate) {
-        const { data: setting } = await supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single();
-        rate = setting ? Number(setting.value) : 120;
-      }
-      setRateInfo({ rate: Number(rate), usd: Math.round((request.amount_bdt / Number(rate)) * 100) / 100 });
+      // Fetch client pricing_config + custom rate
+      const { data: profile } = await supabase.from("profiles").select("custom_exchange_rate, pricing_config").eq("user_id", request.client_id).single();
+      const pricingConfig = profile?.pricing_config as any;
+      const customRate = profile?.custom_exchange_rate;
+
+      // Fetch global default
+      const { data: setting } = await supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single();
+      const defaultRate = setting ? Number(setting.value) : 120;
+
+      const options: RateOption[] = [];
+      if (pricingConfig?.rates?.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(pricingConfig.rates.meta) });
+      if (pricingConfig?.rates?.tiktok) options.push({ key: "tiktok", label: "TikTok Rate", rate: Number(pricingConfig.rates.tiktok) });
+      if (pricingConfig?.rates?.google) options.push({ key: "google", label: "Google Rate", rate: Number(pricingConfig.rates.google) });
+      if (customRate) options.push({ key: "custom", label: "Custom Rate", rate: Number(customRate) });
+      options.push({ key: "default", label: "Default Rate", rate: defaultRate });
+
+      setRateOptions(options);
+      setSelectedRateKey(options[0]?.key ?? "default");
       setRateLoading(false);
     }
   };
@@ -82,7 +104,12 @@ export default function PaymentRequests() {
     setProcessing(reqId);
 
     const { data, error } = await supabase.functions.invoke("approve-payment", {
-      body: { request_id: reqId, action: confirmModal.action, admin_note: adminNote || undefined },
+      body: {
+        request_id: reqId,
+        action: confirmModal.action,
+        admin_note: adminNote || undefined,
+        selected_rate: selectedRate?.rate ?? undefined,
+      },
     });
 
     setProcessing(null);
@@ -219,18 +246,26 @@ export default function PaymentRequests() {
               </div>
 
               {confirmModal.action === "approved" && (
-                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-2">
+                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
                   {rateLoading ? (
                     <div className="flex items-center justify-center py-2"><Loader2 className="h-4 w-4 animate-spin" /></div>
-                  ) : rateInfo ? (
+                  ) : rateOptions.length > 0 ? (
                     <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Applied Rate</span>
-                        <span className="font-mono font-semibold">1 USD = ৳{rateInfo.rate}</span>
-                      </div>
-                      <div className="flex justify-between text-sm border-t pt-2">
+                      <Label className="text-sm font-medium">Select Dollar Rate</Label>
+                      <RadioGroup value={selectedRateKey} onValueChange={setSelectedRateKey} className="space-y-2">
+                        {rateOptions.map((opt) => (
+                          <div key={opt.key} className="flex items-center justify-between rounded-md border p-3 cursor-pointer hover:bg-muted/50" onClick={() => setSelectedRateKey(opt.key)}>
+                            <div className="flex items-center gap-2">
+                              <RadioGroupItem value={opt.key} id={`rate-${opt.key}`} />
+                              <Label htmlFor={`rate-${opt.key}`} className="cursor-pointer font-normal">{opt.label}</Label>
+                            </div>
+                            <span className="font-mono text-sm text-muted-foreground">৳{opt.rate}</span>
+                          </div>
+                        ))}
+                      </RadioGroup>
+                      <div className="flex justify-between text-sm border-t pt-2 mt-2">
                         <span className="font-medium">Credit to Wallet</span>
-                        <span className="text-lg font-bold text-primary font-mono">${fmt(rateInfo.usd)}</span>
+                        <span className="text-lg font-bold text-primary font-mono">${fmt(calculatedUsd)}</span>
                       </div>
                     </>
                   ) : null}

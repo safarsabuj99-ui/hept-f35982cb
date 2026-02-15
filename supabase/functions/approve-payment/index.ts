@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { request_id, action, admin_note } = await req.json();
+    const { request_id, action, admin_note, selected_rate } = await req.json();
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
       return new Response(JSON.stringify({ error: "Invalid params" }), {
         status: 400,
@@ -87,23 +87,29 @@ Deno.serve(async (req) => {
     }
 
     // APPROVED flow: determine exchange rate
-    // 1. Check client's custom rate
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("custom_exchange_rate")
-      .eq("user_id", pr.client_id)
-      .single();
+    let exchangeRate: number;
 
-    let exchangeRate: number | null = profile?.custom_exchange_rate ?? null;
-
-    // 2. Fall back to global default
-    if (!exchangeRate) {
-      const { data: setting } = await adminClient
-        .from("settings")
-        .select("value")
-        .eq("key", "default_bdt_to_usd_rate")
+    if (selected_rate && typeof selected_rate === "number" && selected_rate > 0) {
+      // Admin explicitly chose a rate from the UI
+      exchangeRate = selected_rate;
+    } else {
+      // Fallback: client custom rate → global default
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("custom_exchange_rate")
+        .eq("user_id", pr.client_id)
         .single();
-      exchangeRate = setting ? Number(setting.value) : 120;
+
+      exchangeRate = profile?.custom_exchange_rate ?? null;
+
+      if (!exchangeRate) {
+        const { data: setting } = await adminClient
+          .from("settings")
+          .select("value")
+          .eq("key", "default_bdt_to_usd_rate")
+          .single();
+        exchangeRate = setting ? Number(setting.value) : 120;
+      }
     }
 
     const finalUsd = Math.round((Number(pr.amount_bdt) / exchangeRate) * 100) / 100;
