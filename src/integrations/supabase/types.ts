@@ -379,8 +379,10 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          is_super_admin: boolean
           manager_id: string | null
           mapping_keyword: string | null
+          permissions: Json
           phone: string | null
           pricing_config: Json | null
           user_id: string
@@ -392,8 +394,10 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          permissions?: Json
           phone?: string | null
           pricing_config?: Json | null
           user_id: string
@@ -405,8 +409,10 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          permissions?: Json
           phone?: string | null
           pricing_config?: Json | null
           user_id?: string
@@ -538,6 +544,10 @@ export type Database = {
       get_managed_client_ids: {
         Args: { _manager_id: string }
         Returns: string[]
+      }
+      has_permission: {
+        Args: { _permission_key: string; _user_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {

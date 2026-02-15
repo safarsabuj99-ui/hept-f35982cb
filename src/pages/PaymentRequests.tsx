@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,9 @@ export default function PaymentRequests() {
   const [rateOptions, setRateOptions] = useState<RateOption[]>([]);
   const [selectedRateKey, setSelectedRateKey] = useState<string>("");
   const [rateLoading, setRateLoading] = useState(false);
+  const { hasPermission } = usePermissions();
+
+  const canManageFinance = hasPermission("can_manage_finance");
 
   const selectedRate = rateOptions.find((r) => r.key === selectedRateKey);
   const calculatedUsd = selectedRate ? Math.round((confirmModal.request?.amount_bdt ?? 0) / selectedRate.rate * 100) / 100 : 0;
@@ -59,7 +63,6 @@ export default function PaymentRequests() {
 
   useEffect(() => { fetchRequests(); }, []);
 
-  // Realtime
   useEffect(() => {
     const channel = supabase
       .channel("payment-requests-admin")
@@ -76,12 +79,10 @@ export default function PaymentRequests() {
 
     if (action === "approved") {
       setRateLoading(true);
-      // Fetch client pricing_config + custom rate
       const { data: profile } = await supabase.from("profiles").select("custom_exchange_rate, pricing_config").eq("user_id", request.client_id).single();
       const pricingConfig = profile?.pricing_config as any;
       const customRate = profile?.custom_exchange_rate;
 
-      // Fetch global default
       const { data: setting } = await supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single();
       const defaultRate = setting ? Number(setting.value) : 120;
 
@@ -179,7 +180,7 @@ export default function PaymentRequests() {
                         {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
                       </TableCell>
                       <TableCell>
-                        {r.status === "pending" ? (
+                        {r.status === "pending" && canManageFinance ? (
                           <div className="flex items-center justify-center gap-2">
                             <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1">
                               {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
@@ -189,6 +190,8 @@ export default function PaymentRequests() {
                               <XCircle className="h-3 w-3" /> Reject
                             </Button>
                           </div>
+                        ) : r.status === "pending" ? (
+                          <span className="text-xs text-muted-foreground text-center block">View only</span>
                         ) : (
                           <span className="text-xs text-muted-foreground text-center block">
                             {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
