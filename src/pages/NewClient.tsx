@@ -19,6 +19,7 @@ export default function NewClient() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"client" | "manager">("client");
   const [managerId, setManagerId] = useState("");
+  const [mappingKeyword, setMappingKeyword] = useState("");
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -47,8 +48,9 @@ export default function NewClient() {
     const res = await supabase.functions.invoke("create-client", {
       body: {
         email, password, full_name: fullName, phone, business_name: businessName,
-        role, // 'client' or 'manager'
+        role,
         manager_id: role === "client" && managerId ? managerId : null,
+        mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
       },
     });
 
@@ -107,6 +109,13 @@ export default function NewClient() {
               <Label>Business Name</Label>
               <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Acme Corp" />
             </div>
+            {role === "client" && (
+              <div className="space-y-2">
+                <Label>Mapping Keyword</Label>
+                <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
+                <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
+              </div>
+            )}
             {role === "client" && managers.length > 0 && (
               <div className="space-y-2">
                 <Label>Assign Manager (optional)</Label>
