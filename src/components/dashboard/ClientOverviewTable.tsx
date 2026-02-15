@@ -90,7 +90,7 @@ export function ClientOverviewTable({ clients, loading, exchangeRate }: Props) {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/clients`}><Eye className="h-3.5 w-3.5" /></Link>
+                          <Link to={`/admin/clients/${c.user_id}`}><Eye className="h-3.5 w-3.5" /></Link>
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
                           <Link to={`/admin/add-funds`}><Plus className="h-3.5 w-3.5" /></Link>

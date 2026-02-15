@@ -27,7 +27,8 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/admin", icon: Users, label: "Clients" },
+  { to: "/admin", icon: BarChart3, label: "Dashboard" },
+  { to: "/admin/clients", icon: Users, label: "Client List" },
   { to: "/admin/team", icon: UserCog, label: "Team" },
   { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
   { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds" },
