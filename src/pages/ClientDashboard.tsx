@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
@@ -29,25 +29,44 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
+  const fetchAll = useCallback(async () => {
+    if (!user) return;
+    const [{ data: txData }, { data: accounts }] = await Promise.all([
+      supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
+      supabase.from("ad_accounts" as any).select("id").eq("client_id", user.id) as any,
+    ]);
+    setTransactions((txData as Transaction[]) ?? []);
+
+    const accIds = accounts?.map((a: any) => a.id) ?? [];
+    if (accIds.length > 0) {
+      const { data: spend } = await (supabase.from("daily_ad_spend" as any).select("*").in("ad_account_id", accIds).order("date", { ascending: false }) as any);
+      setAdSpend(spend ?? []);
+      if (spend?.[0]?.synced_at) setLastSynced(new Date(spend[0].synced_at).toLocaleString());
+    }
+    setLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  // Realtime subscriptions
   useEffect(() => {
     if (!user) return;
-    const fetchAll = async () => {
-      const [{ data: txData }, { data: accounts }] = await Promise.all([
-        supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
-        supabase.from("ad_accounts" as any).select("id").eq("client_id", user.id) as any,
-      ]);
-      setTransactions((txData as Transaction[]) ?? []);
+    const channel = supabase
+      .channel('client-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => {
+        fetchAll();
+      })
+      .subscribe();
 
-      const accIds = accounts?.map((a: any) => a.id) ?? [];
-      if (accIds.length > 0) {
-        const { data: spend } = await (supabase.from("daily_ad_spend" as any).select("*").in("ad_account_id", accIds).order("date", { ascending: false }) as any);
-        setAdSpend(spend ?? []);
-        if (spend?.[0]?.synced_at) setLastSynced(new Date(spend[0].synced_at).toLocaleString());
-      }
-      setLoading(false);
+    return () => {
+      supabase.removeChannel(channel);
     };
-    fetchAll();
-  }, [user]);
+  }, [user, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
   const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
