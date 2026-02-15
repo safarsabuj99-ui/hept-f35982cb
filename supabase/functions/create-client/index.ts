@@ -70,6 +70,13 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .insert({ user_id: newUser.user.id, role: assignRole });
 
+    // If manager, create default permissions row
+    if (assignRole === "manager") {
+      await supabaseAdmin
+        .from("manager_permissions")
+        .insert({ user_id: newUser.user.id });
+    }
+
     return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

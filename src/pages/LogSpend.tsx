@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, TrendingDown } from "lucide-react";
+import { Loader2, TrendingDown, ShieldAlert } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
@@ -30,6 +31,7 @@ export default function LogSpend() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const { exchangeRate } = useCurrency();
+  const { permissions } = usePermissions();
   const navigate = useNavigate();
   const isManager = role === "manager";
   const backPath = isManager ? "/manager" : "/admin";
@@ -79,6 +81,20 @@ export default function LogSpend() {
       navigate(backPath);
     }
   };
+
+  if (isManager && !permissions.can_log_spend) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-12">
+            <ShieldAlert className="h-10 w-10 text-muted-foreground" />
+            <p className="text-lg font-medium">Access Restricted</p>
+            <p className="text-sm text-muted-foreground text-center">You don't have permission to log spend. Contact your admin to update your permissions.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-lg">

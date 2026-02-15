@@ -20,6 +20,7 @@ import PendingApprovals from "@/pages/PendingApprovals";
 import Settings from "@/pages/Settings";
 import AuditLogs from "@/pages/AuditLogs";
 import ClientAssignment from "@/pages/ClientAssignment";
+import TeamManagement from "@/pages/TeamManagement";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
                 <Route path="/admin/settings" element={<Settings />} />
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 <Route path="/admin/assign" element={<ClientAssignment />} />
+                <Route path="/admin/team" element={<TeamManagement />} />
               </Route>
 
               {/* Manager routes */}

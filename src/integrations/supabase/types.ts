@@ -41,6 +41,39 @@ export type Database = {
         }
         Relationships: []
       }
+      manager_permissions: {
+        Row: {
+          can_add_funds: boolean
+          can_edit_clients: boolean
+          can_log_spend: boolean
+          can_view_dashboard: boolean
+          can_view_transactions: boolean
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_add_funds?: boolean
+          can_edit_clients?: boolean
+          can_log_spend?: boolean
+          can_view_dashboard?: boolean
+          can_view_transactions?: boolean
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_add_funds?: boolean
+          can_edit_clients?: boolean
+          can_log_spend?: boolean
+          can_view_dashboard?: boolean
+          can_view_transactions?: boolean
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           business_name: string | null

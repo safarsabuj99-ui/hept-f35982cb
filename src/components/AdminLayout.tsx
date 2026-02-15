@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/admin", icon: Users, label: "Clients" },
+  { to: "/admin/team", icon: UserCog, label: "Team" },
   { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
   { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds" },
   { to: "/admin/log-spend", icon: TrendingDown, label: "Log Spend" },
