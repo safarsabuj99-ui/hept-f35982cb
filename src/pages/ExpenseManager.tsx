@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Loader2, Trash2 } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -43,18 +44,32 @@ export default function ExpenseManager() {
   const [category, setCategory] = useState<string>("Salary");
   const [description, setDescription] = useState("");
   const [expDate, setExpDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [periodLabel, setPeriodLabel] = useState("All Time");
   const { user } = useAuth();
   const { toast } = useToast();
 
-  useEffect(() => { fetchExpenses(); }, []);
-
-  const fetchExpenses = async () => {
-    const { data } = await supabase
-      .from("agency_expenses")
-      .select("*")
-      .order("date", { ascending: false });
+  const fetchExpenses = useCallback(async (range: DateRange | null) => {
+    setLoading(true);
+    let query = supabase.from("agency_expenses").select("*").order("date", { ascending: false });
+    if (range) {
+      query = query.gte("date", toISODate(range.from)).lte("date", toISODate(range.to));
+    }
+    const { data } = await query;
     setExpenses((data as any[]) ?? []);
     setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchExpenses(dateRange); }, []);
+
+  const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
+    setDateRange(range);
+    const labels: Record<DatePreset, string> = {
+      all_time: "All Time", today: "Today", this_week: "This Week",
+      this_month: "This Month", last_month: "Last Month", custom: "Custom Range",
+    };
+    setPeriodLabel(labels[preset]);
+    fetchExpenses(range);
   };
 
   const handleSubmit = async () => {
@@ -77,7 +92,7 @@ export default function ExpenseManager() {
       toast({ title: "Success", description: "Expense recorded" });
       setAmount(""); setDescription("");
       setDialogOpen(false);
-      fetchExpenses();
+      fetchExpenses(dateRange);
     }
   };
 
@@ -86,7 +101,7 @@ export default function ExpenseManager() {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      fetchExpenses();
+      fetchExpenses(dateRange);
     }
   };
 
@@ -103,7 +118,7 @@ export default function ExpenseManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Expense Manager</h1>
           <p className="text-sm text-muted-foreground">Track agency operational expenses and owner draws</p>
@@ -146,11 +161,13 @@ export default function ExpenseManager() {
         </Dialog>
       </div>
 
+      <DateRangeFilter onRangeChange={handleRangeChange} />
+
       {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-3">
         <Card>
           <CardContent className="pt-6 text-center">
-            <p className="text-xs text-muted-foreground">Total Expenses</p>
+            <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
@@ -158,7 +175,7 @@ export default function ExpenseManager() {
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
-            <p className="text-xs text-muted-foreground">OpEx (excl. Owner Draw)</p>
+            <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
             )}
@@ -166,7 +183,7 @@ export default function ExpenseManager() {
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
-            <p className="text-xs text-muted-foreground">Owner's Draw</p>
+            <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
@@ -197,12 +214,12 @@ export default function ExpenseManager() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Recent Expenses</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Expenses ({periodLabel})</CardTitle></CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : expenses.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No expenses recorded</p>
+              <p className="text-center text-muted-foreground py-8">No expenses in this period</p>
             ) : (
               <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
                 <Table>
