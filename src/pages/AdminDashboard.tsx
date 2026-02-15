@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrency } from "@/hooks/useCurrency";
 import { CurrencyToggle } from "@/components/CurrencyToggle";
@@ -35,8 +35,29 @@ export default function AdminDashboard() {
   const { formatAmount, exchangeRate } = useCurrency();
   const { toast } = useToast();
 
+  const fetchDataCb = useCallback(async () => {
+    await fetchData();
+  }, [exchangeRate]);
+
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchData = async () => {
