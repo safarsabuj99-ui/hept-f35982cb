@@ -275,6 +275,48 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_requests: {
+        Row: {
+          admin_note: string | null
+          amount_bdt: number
+          client_id: string
+          created_at: string
+          exchange_rate_snapshot: number | null
+          final_amount_usd: number | null
+          id: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status: Database["public"]["Enums"]["payment_request_status"]
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          amount_bdt: number
+          client_id: string
+          created_at?: string
+          exchange_rate_snapshot?: number | null
+          final_amount_usd?: number | null
+          id?: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status?: Database["public"]["Enums"]["payment_request_status"]
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          amount_bdt?: number
+          client_id?: string
+          created_at?: string
+          exchange_rate_snapshot?: number | null
+          final_amount_usd?: number | null
+          id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          status?: Database["public"]["Enums"]["payment_request_status"]
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           business_name: string | null
@@ -466,6 +508,8 @@ export type Database = {
         | "Owner_Draw"
         | "Marketing"
         | "Other"
+      payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
+      payment_request_status: "pending" | "approved" | "rejected"
       transaction_status: "pending_approval" | "completed" | "rejected"
       transaction_type: "credit" | "debit"
     }
@@ -606,6 +650,8 @@ export const Constants = {
         "Marketing",
         "Other",
       ],
+      payment_method: ["Bank", "bKash", "Cash", "Nagad"],
+      payment_request_status: ["pending", "approved", "rejected"],
       transaction_status: ["pending_approval", "completed", "rejected"],
       transaction_type: ["credit", "debit"],
     },

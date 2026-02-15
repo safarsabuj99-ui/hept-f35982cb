@@ -8,11 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import {
   Wallet, Zap, TrendingDown, TrendingUp, Clock, Info,
   Eye, Activity, Shield, ArrowDown, ArrowUp, Minus,
-  Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight
+  Image as ImageIcon, ExternalLink, ChevronLeft, ChevronRight,
+  Plus, Loader2, Banknote
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
@@ -307,11 +312,20 @@ function LiveCreativeGallery({ creatives, fmt }: { creatives: any[]; fmt: (n: nu
 
 export default function ClientDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  // Deposit modal state
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositBdt, setDepositBdt] = useState("");
+  const [depositMethod, setDepositMethod] = useState("");
+  const [depositTrxId, setDepositTrxId] = useState("");
+  const [depositSubmitting, setDepositSubmitting] = useState(false);
+  const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -330,10 +344,37 @@ export default function ClientDashboard() {
       setAdSpend(spend ?? []);
       if (spend?.[0]?.synced_at) setLastSynced(new Date(spend[0].synced_at).toLocaleString());
     }
+    // Fetch payment requests
+    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
+    setPaymentRequests(prs ?? []);
+
     setLoading(false);
   }, [user]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositBdt || Number(depositBdt) <= 0 || !depositMethod || !user) return;
+    setDepositSubmitting(true);
+    const { error } = await (supabase.from("payment_requests" as any).insert({
+      client_id: user.id,
+      amount_bdt: Number(depositBdt),
+      payment_method: depositMethod,
+      transaction_id: depositTrxId || null,
+    }) as any);
+    setDepositSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Request Submitted", description: "Your payment will be reviewed by the admin shortly." });
+      setDepositOpen(false);
+      setDepositBdt("");
+      setDepositMethod("");
+      setDepositTrxId("");
+      fetchAll();
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -341,6 +382,7 @@ export default function ClientDashboard() {
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchAll]);
@@ -407,16 +449,21 @@ export default function ClientDashboard() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">My Dashboard</h1>
-        <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
-          <Shield className="h-3.5 w-3.5" /> Read-only performance overview
-          {lastSynced && (
-            <span className="inline-flex items-center gap-1 text-xs ml-2">
-              <Clock className="h-3 w-3" /> {lastSynced}
-            </span>
-          )}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">My Dashboard</h1>
+          <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
+            <Shield className="h-3.5 w-3.5" /> Read-only performance overview
+            {lastSynced && (
+              <span className="inline-flex items-center gap-1 text-xs ml-2">
+                <Clock className="h-3 w-3" /> {lastSynced}
+              </span>
+            )}
+          </p>
+        </div>
+        <Button onClick={() => setDepositOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" /> Add Funds
+        </Button>
       </div>
 
       {/* Smart Growth Indicators - KPI Cards */}
@@ -549,6 +596,96 @@ export default function ClientDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Payment Requests History */}
+      {paymentRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Banknote className="h-5 w-5" /> Payment Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead className="text-right">Amount (BDT)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell text-right">Credited (USD)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentRequests.map((pr: any) => (
+                    <TableRow key={pr.id}>
+                      <TableCell className="whitespace-nowrap">{new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                      <TableCell><Badge variant="secondary">{pr.payment_method}</Badge></TableCell>
+                      <TableCell className="text-right font-mono">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell>
+                        {pr.status === "pending" && <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Pending</Badge>}
+                        {pr.status === "approved" && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Approved</Badge>}
+                        {pr.status === "rejected" && <Badge variant="destructive">Rejected</Badge>}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-right font-mono">
+                        {pr.final_amount_usd ? `$${Number(pr.final_amount_usd).toFixed(2)}` : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deposit Modal */}
+      <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" /> Deposit Funds
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleDeposit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Amount (BDT)</Label>
+              <Input
+                type="number" step="0.01" min="1"
+                value={depositBdt} onChange={(e) => setDepositBdt(e.target.value)}
+                placeholder="৳ 0.00" required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select value={depositMethod} onValueChange={setDepositMethod} required>
+                <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Bank">Bank Transfer</SelectItem>
+                  <SelectItem value="bKash">bKash</SelectItem>
+                  <SelectItem value="Nagad">Nagad</SelectItem>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Transaction ID / Note (optional)</Label>
+              <Input
+                value={depositTrxId} onChange={(e) => setDepositTrxId(e.target.value)}
+                placeholder="e.g. TrxID or reference"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDepositOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={depositSubmitting || !depositMethod || !depositBdt}>
+                {depositSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Submit Request
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
