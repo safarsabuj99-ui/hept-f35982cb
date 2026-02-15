@@ -10,6 +10,8 @@ import { RevenueVsCostChart } from "@/components/dashboard/RevenueVsCostChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { ClientOverviewTable } from "@/components/dashboard/ClientOverviewTable";
 import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
+import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
+import { ProfitabilityTable } from "@/components/dashboard/ProfitabilityTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -214,9 +216,9 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Row 2: Profit/Loss + Exchange Rate */}
+      {/* Row 2: System Health + Exchange Rate */}
       <div className="grid gap-4 md:grid-cols-2">
-        <ProfitLossWidget />
+        <SystemHealthWidget />
         <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Exchange Rate</CardTitle>
@@ -249,6 +251,12 @@ export default function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Row 2.5: Profitability + Profit/Loss */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <ProfitabilityTable />
+        <ProfitLossWidget />
       </div>
 
       {/* Row 3: Charts */}

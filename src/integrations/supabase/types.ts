@@ -21,6 +21,7 @@ export type Database = {
           api_integration_id: string | null
           client_id: string
           created_at: string
+          daily_spending_limit: number | null
           id: string
           is_active: boolean
           platform_name: Database["public"]["Enums"]["ad_platform"]
@@ -31,6 +32,7 @@ export type Database = {
           api_integration_id?: string | null
           client_id: string
           created_at?: string
+          daily_spending_limit?: number | null
           id?: string
           is_active?: boolean
           platform_name: Database["public"]["Enums"]["ad_platform"]
@@ -41,6 +43,7 @@ export type Database = {
           api_integration_id?: string | null
           client_id?: string
           created_at?: string
+          daily_spending_limit?: number | null
           id?: string
           is_active?: boolean
           platform_name?: Database["public"]["Enums"]["ad_platform"]
@@ -59,34 +62,40 @@ export type Database = {
         Row: {
           api_token: string
           app_id: string
+          connection_status: string
           created_at: string
           id: string
           instance_name: string | null
           is_active: boolean
           last_synced_at: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
+          token_expiry_date: string | null
           updated_by: string | null
         }
         Insert: {
           api_token?: string
           app_id?: string
+          connection_status?: string
           created_at?: string
           id?: string
           instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
+          token_expiry_date?: string | null
           updated_by?: string | null
         }
         Update: {
           api_token?: string
           app_id?: string
+          connection_status?: string
           created_at?: string
           id?: string
           instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
+          token_expiry_date?: string | null
           updated_by?: string | null
         }
         Relationships: []
@@ -240,6 +249,7 @@ export type Database = {
         Row: {
           business_name: string | null
           created_at: string
+          custom_exchange_rate: number | null
           email: string
           full_name: string
           id: string
@@ -251,6 +261,7 @@ export type Database = {
         Insert: {
           business_name?: string | null
           created_at?: string
+          custom_exchange_rate?: number | null
           email: string
           full_name: string
           id?: string
@@ -262,6 +273,7 @@ export type Database = {
         Update: {
           business_name?: string | null
           created_at?: string
+          custom_exchange_rate?: number | null
           email?: string
           full_name?: string
           id?: string

@@ -24,7 +24,7 @@ export default function Integrations() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [newForm, setNewForm] = useState({ platform: "meta", instance_name: "", api_token: "", app_id: "" });
+  const [newForm, setNewForm] = useState({ platform: "meta", instance_name: "", api_token: "", app_id: "", token_expiry_date: "" });
   const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
@@ -53,6 +53,7 @@ export default function Integrations() {
       instance_name: newForm.instance_name,
       api_token: newForm.api_token,
       app_id: newForm.app_id,
+      token_expiry_date: newForm.token_expiry_date || null,
       updated_by: user?.id,
       is_active: true,
     });
@@ -62,7 +63,7 @@ export default function Integrations() {
     } else {
       toast({ title: "Added", description: `${newForm.instance_name} instance created` });
       setAddOpen(false);
-      setNewForm({ platform: "meta", instance_name: "", api_token: "", app_id: "" });
+      setNewForm({ platform: "meta", instance_name: "", api_token: "", app_id: "", token_expiry_date: "" });
       fetchData();
     }
   };
@@ -140,6 +141,10 @@ export default function Integrations() {
                   <Label>App ID</Label>
                   <Input value={newForm.app_id} onChange={(e) => setNewForm({ ...newForm, app_id: e.target.value })} placeholder="Enter App ID" />
                 </div>
+                <div className="space-y-2">
+                  <Label>Token Expiry Date</Label>
+                  <Input type="date" value={newForm.token_expiry_date} onChange={(e) => setNewForm({ ...newForm, token_expiry_date: e.target.value })} />
+                </div>
                 <Button onClick={addInstance} className="w-full" disabled={saving}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Instance
                 </Button>
@@ -172,6 +177,13 @@ export default function Integrations() {
                         {inst.instance_name || key}
                       </CardTitle>
                       <div className="flex items-center gap-2">
+                        {inst.token_expiry_date && (() => {
+                          const days = Math.ceil((new Date(inst.token_expiry_date).getTime() - Date.now()) / 86400000);
+                          if (days <= 0) return <Badge variant="destructive" className="text-xs">Expired</Badge>;
+                          if (days <= 3) return <Badge variant="destructive" className="text-xs">{days}d left</Badge>;
+                          if (days <= 7) return <Badge className="bg-warning text-warning-foreground text-xs">{days}d left</Badge>;
+                          return null;
+                        })()}
                         <Badge variant="default" className="bg-success text-success-foreground text-xs">Active</Badge>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteInstance(inst.id)}>
                           <Trash2 className="h-3.5 w-3.5" />

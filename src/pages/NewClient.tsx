@@ -17,6 +17,7 @@ export default function NewClient() {
   const [phone, setPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [password, setPassword] = useState("");
+  const [customRate, setCustomRate] = useState("");
   const [role, setRole] = useState<"client" | "manager">("client");
   const [managerId, setManagerId] = useState("");
   const [mappingKeyword, setMappingKeyword] = useState("");
@@ -51,6 +52,7 @@ export default function NewClient() {
         role,
         manager_id: role === "client" && managerId ? managerId : null,
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
+        custom_exchange_rate: role === "client" && customRate ? Number(customRate) : null,
       },
     });
 
@@ -110,11 +112,18 @@ export default function NewClient() {
               <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Acme Corp" />
             </div>
             {role === "client" && (
-              <div className="space-y-2">
-                <Label>Mapping Keyword</Label>
-                <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
-                <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>Mapping Keyword</Label>
+                  <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
+                  <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Custom Exchange Rate (optional)</Label>
+                  <Input type="number" value={customRate} onChange={(e) => setCustomRate(e.target.value)} placeholder="e.g. 118 — overrides global rate" step="0.5" min="1" />
+                  <p className="text-xs text-muted-foreground">Leave blank to use the global BDT/USD rate</p>
+                </div>
+              </>
             )}
             {role === "client" && managers.length > 0 && (
               <div className="space-y-2">
