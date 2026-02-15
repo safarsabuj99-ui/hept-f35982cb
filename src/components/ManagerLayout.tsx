@@ -1,5 +1,6 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import {
   BarChart3,
@@ -10,19 +11,25 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { to: "/manager", icon: Users, label: "My Clients" },
-  { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds" },
-  { to: "/manager/log-spend", icon: TrendingDown, label: "Log Spend" },
+const allNavItems = [
+  { to: "/manager", icon: Users, label: "My Clients", permKey: "can_view_dashboard" as const },
+  { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_add_funds" as const },
+  { to: "/manager/log-spend", icon: TrendingDown, label: "Log Spend", permKey: "can_log_spend" as const },
 ];
 
 export function ManagerLayout() {
   const { signOut } = useAuth();
+  const { permissions } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navItems = useMemo(
+    () => allNavItems.filter((item) => permissions[item.permKey]),
+    [permissions]
+  );
 
   return (
     <div className="flex min-h-screen">

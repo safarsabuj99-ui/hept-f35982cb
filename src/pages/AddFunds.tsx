@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, DollarSign } from "lucide-react";
+import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
@@ -23,6 +24,7 @@ export default function AddFunds() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const { exchangeRate } = useCurrency();
+  const { permissions } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const isManager = role === "manager";
@@ -77,6 +79,20 @@ export default function AddFunds() {
       navigate(backPath);
     }
   };
+
+  if (isManager && !permissions.can_add_funds) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-12">
+            <ShieldAlert className="h-10 w-10 text-muted-foreground" />
+            <p className="text-lg font-medium">Access Restricted</p>
+            <p className="text-sm text-muted-foreground text-center">You don't have permission to add funds. Contact your admin to update your permissions.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-lg">
