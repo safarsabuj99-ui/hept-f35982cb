@@ -33,6 +33,7 @@ import PaymentRequests from "@/pages/PaymentRequests";
 import OrderManagement from "@/pages/OrderManagement";
 import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
+import ClientReports from "@/pages/ClientReports";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -102,6 +103,7 @@ const App = () => (
                 <Route path="/dashboard" element={<ClientDashboard />} />
                 <Route path="/dashboard/campaigns" element={<MyCampaignRequests />} />
                 <Route path="/dashboard/campaigns/new" element={<NewCampaignRequest />} />
+                <Route path="/dashboard/reports" element={<ClientReports />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

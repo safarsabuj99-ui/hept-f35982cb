@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
+import { ClientDateFilter, ClientDateRange, ClientDatePreset } from "@/components/ClientDateFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -326,6 +327,8 @@ export default function ClientDashboard() {
   const [depositTrxId, setDepositTrxId] = useState("");
   const [depositSubmitting, setDepositSubmitting] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
+  const [datePreset, setDatePreset] = useState<ClientDatePreset>("all_time");
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -387,16 +390,35 @@ export default function ClientDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchAll]);
 
+  // Balance always uses ALL transactions (unfiltered)
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
   const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
   const balance = credits - debits;
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
+    setDateRange(range);
+    setDatePreset(p);
+  };
+
+  // Apply date filter to data
+  const filterByDate = useCallback((items: any[], dateField: string) => {
+    if (!dateRange) return items;
+    return items.filter((item) => {
+      const d = new Date(item[dateField]);
+      return d >= dateRange.from && d <= dateRange.to;
+    });
+  }, [dateRange]);
+
+  const filteredTransactions = useMemo(() => filterByDate(transactions, "date"), [transactions, filterByDate]);
+  const filteredAdSpend = useMemo(() => filterByDate(adSpend, "date"), [adSpend, filterByDate]);
+  const filteredPaymentRequests = useMemo(() => filterByDate(paymentRequests, "created_at"), [paymentRequests, filterByDate]);
+
   const todaySpend = adSpend
     .filter((s: any) => s.date === today)
     .reduce((sum: number, s: any) => sum + Number(s.final_billable_usd), 0);
 
-  // 7-day avg spend
+  // 7-day avg spend (always unfiltered for wallet health)
   const last7 = adSpend.filter((s: any) => {
     const daysAgo = (Date.now() - new Date(s.date).getTime()) / 86400000;
     return daysAgo <= 7;
@@ -405,26 +427,27 @@ export default function ClientDashboard() {
     ? last7.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0) / 7
     : 0;
 
-  // MoM comparison: current 30d vs previous 30d
+  // Filtered period spend for KPI cards
+  const currentTotalSpend = filteredAdSpend.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
+
+  // MoM comparison: current 30d vs previous 30d (always uses unfiltered for comparison)
   const now = Date.now();
   const current30d = adSpend.filter((s: any) => (now - new Date(s.date).getTime()) / 86400000 <= 30);
   const prev30d = adSpend.filter((s: any) => {
     const daysAgo = (now - new Date(s.date).getTime()) / 86400000;
     return daysAgo > 30 && daysAgo <= 60;
   });
-
-  const currentTotalSpend = current30d.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
   const prevTotalSpend = prev30d.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
 
-  // Simulated clicks/CPR from spend data (no real click API yet)
-  const currentClicks = current30d.length * 47; // approximate
+  // Simulated clicks/CPR from filtered spend data
+  const currentClicks = filteredAdSpend.length * 47;
   const prevClicks = prev30d.length * 47;
   const currentCPR = currentClicks > 0 ? currentTotalSpend / currentClicks : 0;
   const prevCPR = prevClicks > 0 ? prevTotalSpend / prevClicks : 0;
 
-  // Platform breakdown
+  // Platform breakdown (filtered)
   const platformSpend: Record<string, number> = {};
-  for (const row of adSpend) {
+  for (const row of filteredAdSpend) {
     const acc = adAccounts.find((a: any) => a.id === row.ad_account_id);
     const platform = acc?.platform_name || "unknown";
     platformSpend[platform] = (platformSpend[platform] || 0) + Number(row.final_billable_usd);
@@ -466,6 +489,9 @@ export default function ClientDashboard() {
         </Button>
       </div>
 
+      {/* Date Filter */}
+      <ClientDateFilter onRangeChange={handleDateChange} activePreset={datePreset} />
+
       {/* Smart Growth Indicators - KPI Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         {/* Balance + Wallet Health */}
@@ -493,7 +519,7 @@ export default function ClientDashboard() {
               <Zap className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Spend (30d)</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{dateRange ? "Spend (Filtered)" : "Spend (30d)"}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -558,8 +584,8 @@ export default function ClientDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {transactions.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No transactions yet</p>
+          {filteredTransactions.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">No transactions for this period</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -573,7 +599,7 @@ export default function ClientDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((t) => (
+                  {filteredTransactions.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell>
@@ -598,7 +624,7 @@ export default function ClientDashboard() {
       </Card>
 
       {/* Payment Requests History */}
-      {paymentRequests.length > 0 && (
+      {filteredPaymentRequests.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -618,7 +644,7 @@ export default function ClientDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paymentRequests.map((pr: any) => (
+                  {filteredPaymentRequests.map((pr: any) => (
                     <TableRow key={pr.id}>
                       <TableCell className="whitespace-nowrap">{new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell><Badge variant="secondary">{pr.payment_method}</Badge></TableCell>
