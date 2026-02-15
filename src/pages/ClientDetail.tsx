@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus } from "lucide-react";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { format } from "date-fns";
@@ -25,6 +25,7 @@ interface PricingConfig {
 
 export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -229,6 +230,7 @@ export default function ClientDetail() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <Label className="text-sm font-medium whitespace-nowrap">Assigned Manager</Label>
             <Select value={assignedManager} onValueChange={handleManagerChange} disabled={savingManager}>
@@ -242,6 +244,10 @@ export default function ClientDetail() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <Button size="sm" className="gap-2" onClick={() => navigate(`/admin/add-funds?client=${userId}`)}>
+            <Plus className="h-3.5 w-3.5" /> Add Funds
+          </Button>
           </div>
         </CardContent>
       </Card>
