@@ -1,32 +1,66 @@
 
+# Client Dashboard Enhancements: Date Filter + Campaign Reports
 
-# Platform Rate Selector for Payment Approval
+## Overview
+Add a comprehensive date filter to the Client Dashboard so clients can filter their transaction history, spend data, and payment requests by preset date ranges. Also add a "Reports" tab to the client navigation for a dedicated spend report view, and improve the Campaigns page with more detail.
 
-## What Changes
+## 1. Date Filter on Client Dashboard
 
-When you click "Approve" on a payment request, the pop-up will now show a **rate selector** where you can choose which dollar rate to apply:
+Add a date filter bar below the header with these presets:
+- **Today**, **Yesterday**, **This Week**, **Last Week**, **This Month**, **Last Month**, **Custom Date Range**
 
-- **Meta Rate** (e.g., 145 BDT per USD)
-- **TikTok Rate** (e.g., 150 BDT per USD)  
-- **Google Rate** (e.g., 155 BDT per USD)
-- **Custom Exchange Rate** (if set for the client)
-- **Default Rate** (global default, currently 120 BDT)
+The filter will apply to:
+- Transaction History table
+- Payment Requests table  
+- Spend data (KPI cards, platform breakdown, spend trend)
+- Ad spend calculations
 
-The rates are pulled from the client's `pricing_config` in the profiles table. As you select a rate, the USD credit amount recalculates instantly so you see exactly how much will be credited before confirming.
+### How It Works
+- A new `ClientDateFilter` component with pill buttons for each preset
+- "Custom" opens a popover with two calendar pickers (From/To)
+- Selected range filters all data client-side from the already-fetched datasets
+- KPI cards recalculate based on the filtered period
+
+## 2. Client Navigation Update
+
+Update `ClientLayout.tsx` sub-nav to add:
+- **Dashboard** (existing)
+- **Campaigns** (existing) 
+- **Reports** (new) -- links to `/dashboard/reports`
+
+## 3. Client Reports Page (`/dashboard/reports`)
+
+A new page showing:
+- Date filter (same component reused)
+- Spend breakdown table by date (daily rows showing spend per platform)
+- Summary cards: Total Spend, Average Daily Spend, Top Platform
+- Export-friendly clean layout
+
+## 4. Campaign List Improvements
+
+Enhance `MyCampaignRequests.tsx` with:
+- Summary cards at top (Total Requests, Pending, Processing, Completed counts)
+- Expandable row details showing creative link, ad caption, target audience, landing page URL
+- Better mobile layout
 
 ## Technical Details
 
-### 1. Update `src/pages/PaymentRequests.tsx`
-- When opening the approval modal, fetch the client's `pricing_config` (which contains `rates.meta`, `rates.tiktok`, `rates.google`) along with `custom_exchange_rate`
-- Add radio buttons or a dropdown in the approval modal to pick the rate source
-- Recalculate `USD = amount_bdt / selected_rate` live as the admin switches rates
-- Pass the selected rate to the edge function
+### New Files
+- `src/components/ClientDateFilter.tsx` -- reusable date filter with presets (Today, Yesterday, This Week, Last Week, This Month, Last Month, Custom)
+- `src/pages/ClientReports.tsx` -- dedicated spend report page for clients
 
-### 2. Update `supabase/functions/approve-payment/index.ts`
-- Accept an optional `selected_rate` parameter in the request body
-- If `selected_rate` is provided, use it directly instead of the auto-lookup logic
-- This keeps backward compatibility (if no rate is sent, the old logic still works)
+### Modified Files
+- `src/pages/ClientDashboard.tsx` -- integrate ClientDateFilter, filter transactions/spend/payments by selected date range
+- `src/pages/MyCampaignRequests.tsx` -- add summary cards and expandable detail rows
+- `src/components/ClientLayout.tsx` -- add "Reports" nav tab with BarChart3 icon
+- `src/App.tsx` -- add route `/dashboard/reports`
 
-### No Database Changes Needed
-All pricing data already exists in the `profiles.pricing_config` JSONB field.
+### Date Filter Logic
+The filter component emits a `{ from: Date, to: Date } | null` range. When null (All Time), no filtering is applied. The dashboard applies this filter to:
+1. `transactions` array -- filter by `date` field
+2. `adSpend` array -- filter by `date` field
+3. `paymentRequests` array -- filter by `created_at` field
+4. KPI recalculations use filtered data instead of hardcoded 30-day windows
 
+### No Database Changes Required
+All filtering happens client-side on already-fetched data. No new tables, columns, or migrations needed.
