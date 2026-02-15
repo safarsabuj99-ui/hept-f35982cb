@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useCurrency } from "@/hooks/useCurrency";
-import { CurrencyToggle } from "@/components/CurrencyToggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +17,7 @@ interface ClientWithBalance {
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
-  const { formatAmount } = useCurrency();
+  const formatUSD = (v: number) => `$${v.toFixed(2)}`;
   const [clients, setClients] = useState<ClientWithBalance[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -59,7 +57,7 @@ export default function ManagerDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">My Assigned Clients</h1>
           <p className="text-muted-foreground">Manage your client accounts</p>
         </div>
-        <CurrencyToggle />
+        
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -78,7 +76,7 @@ export default function ManagerDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-8 w-24" /> : <p className="text-3xl font-bold">{formatAmount(totalBalance)}</p>}
+            {loading ? <Skeleton className="h-8 w-24" /> : <p className="text-3xl font-bold">{formatUSD(totalBalance)}</p>}
           </CardContent>
         </Card>
       </div>
@@ -111,7 +109,7 @@ export default function ManagerDashboard() {
                       <TableCell className="hidden md:table-cell">{client.email}</TableCell>
                       <TableCell className="text-right">
                         <Badge variant={client.balance >= 0 ? "default" : "destructive"} className="font-mono">
-                          {formatAmount(client.balance)}
+                          {formatUSD(client.balance)}
                         </Badge>
                       </TableCell>
                     </TableRow>
