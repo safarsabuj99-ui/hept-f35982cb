@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield } from "lucide-react";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
+import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
@@ -44,6 +46,10 @@ export default function ClientDetail() {
   const [spendData, setSpendData] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+
+  // Spend date filter
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(null);
+  const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("all_time");
 
   useEffect(() => {
     if (!userId) return;
@@ -86,18 +92,38 @@ export default function ClientDetail() {
     // Spend data
     if (adAccountsRes.data?.length) {
       const accountIds = adAccountsRes.data.map((a) => a.id);
-      const { data: spend } = await supabase
-        .from("daily_ad_spend")
-        .select("*, ad_accounts!inner(platform_name)")
-        .in("ad_account_id", accountIds)
-        .order("date", { ascending: false })
-        .limit(100);
-      setSpendData(spend || []);
+      await loadSpendData(accountIds, null);
     }
 
     setPayments(paymentsRes.data || []);
     setTransactions(txRes.data || []);
     setLoading(false);
+  }
+
+  async function loadSpendData(accountIds: string[], range: ClientDateRange | null) {
+    let query = supabase
+      .from("daily_ad_spend")
+      .select("*, ad_accounts!inner(platform_name)")
+      .in("ad_account_id", accountIds)
+      .order("date", { ascending: false })
+      .limit(500);
+    if (range) {
+      query = query.gte("date", format(range.from, "yyyy-MM-dd")).lte("date", format(range.to, "yyyy-MM-dd"));
+    }
+    const { data: spend } = await query;
+    setSpendData(spend || []);
+  }
+
+  async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
+    setSpendDateRange(range);
+    setSpendDatePreset(preset);
+    // Fetch account IDs again for the filter query
+    const { data: accounts } = await supabase.from("ad_accounts").select("id").eq("client_id", userId!);
+    if (accounts?.length) {
+      await loadSpendData(accounts.map((a) => a.id), range);
+    } else {
+      setSpendData([]);
+    }
   }
 
   async function handleManagerChange(value: string) {
@@ -313,7 +339,8 @@ export default function ClientDetail() {
               <CardTitle className="text-base">Ad Spend Summary</CardTitle>
               <CardDescription>Total: {fmt(totalSpend)}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendDatePreset} />
               {Object.keys(spendByPlatform).length > 0 ? (
                 <div className="mb-4 flex flex-wrap gap-3">
                     {Object.entries(spendByPlatform).map(([plat, amount]) => (
