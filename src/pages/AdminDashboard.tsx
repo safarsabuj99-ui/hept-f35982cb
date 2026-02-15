@@ -1,26 +1,19 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrency } from "@/hooks/useCurrency";
-import { CurrencyToggle } from "@/components/CurrencyToggle";
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
-import { LowBalanceAlerts } from "@/components/LowBalanceAlerts";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueVsCostChart } from "@/components/dashboard/RevenueVsCostChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { ClientOverviewTable } from "@/components/dashboard/ClientOverviewTable";
-import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
-import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
 import { ProfitabilityTable } from "@/components/dashboard/ProfitabilityTable";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { QuickActions } from "@/components/dashboard/QuickActions";
+import { AttentionPanel } from "@/components/dashboard/AttentionPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DollarSign, Banknote, AlertCircle, Wallet, MonitorSmartphone,
-  ClipboardCheck, Clock, Loader2
+  DollarSign, Banknote, AlertCircle, Wallet, Loader2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +38,8 @@ export default function AdminDashboard() {
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [rateValue, setRateValue] = useState(120);
   const [rateSaving, setRateSaving] = useState(false);
+  const [spendHistory, setSpendHistory] = useState<number[]>([]);
+  const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const { exchangeRate } = useCurrency();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -75,22 +70,32 @@ export default function AdminDashboard() {
       supabase.from("daily_ad_spend").select("final_billable_usd").eq("date", yesterday),
     ]);
 
+    // Fetch last 7 days spend for sparkline
+    const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    const { data: weekSpend } = await supabase.from("daily_ad_spend").select("date, final_billable_usd").gte("date", sevenAgo).order("date");
+    const dailySpendMap: Record<string, number> = {};
+    for (const r of (weekSpend ?? []) as any[]) {
+      dailySpendMap[r.date] = (dailySpendMap[r.date] || 0) + Number(r.final_billable_usd);
+    }
+    const spark = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      return dailySpendMap[d] || 0;
+    });
+    setSpendHistory(spark);
+
     const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
     const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
     const transactions = txnsRes.data ?? [];
 
-    // Today's spend per ad_account
     const spendByAccount: Record<string, number> = {};
     for (const row of (spendTodayRes.data ?? []) as any[]) {
       spendByAccount[row.ad_account_id] = (spendByAccount[row.ad_account_id] || 0) + Number(row.final_billable_usd);
     }
 
-    // Get ad_account -> client mapping
     const { data: allAccounts } = await supabase.from("ad_accounts").select("id, client_id");
     const accountToClient: Record<string, string> = {};
     for (const acc of allAccounts ?? []) accountToClient[acc.id] = acc.client_id;
 
-    // Client spend today
     const clientSpendToday: Record<string, number> = {};
     for (const [accId, spend] of Object.entries(spendByAccount)) {
       const cid = accountToClient[accId];
@@ -104,12 +109,23 @@ export default function AdminDashboard() {
       return { ...p, balance: credits - debits, todaySpend: clientSpendToday[p.user_id] || 0 };
     });
 
-    // KPI calculations
     const todaySpendTotal = (spendTodayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
 
     const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
     const todayCollect = todayTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
+
+    // Collections sparkline
+    const dailyCollMap: Record<string, number> = {};
+    for (const t of transactions as any[]) {
+      if (t.type === "credit" && t.status === "completed" && t.date >= sevenAgo) {
+        dailyCollMap[t.date] = (dailyCollMap[t.date] || 0) + Number(t.amount);
+      }
+    }
+    setCollectHistory(Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      return dailyCollMap[d] || 0;
+    }));
 
     setClients(result);
     setTodaySpend(Math.round(todaySpendTotal * 100) / 100);
@@ -148,24 +164,24 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            Real-time overview
-            {lastSynced && (
-              <span className="inline-flex items-center gap-1 text-xs">
-                <Clock className="h-3 w-3" /> Synced: {lastSynced}
-              </span>
-            )}
-          </p>
-        </div>
-        <CurrencyToggle />
-      </div>
+      {/* Zone 1: Greeting Header */}
+      <DashboardHeader
+        lastSynced={lastSynced}
+        activeAccounts={activeAccounts}
+        pendingCount={pendingCount}
+      />
 
-      {/* Row 1: KPI Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* Zone 2: Quick Actions Strip */}
+      <QuickActions
+        pendingCount={pendingCount}
+        rateValue={rateValue}
+        onRateChange={setRateValue}
+        onSaveRate={saveRate}
+        rateSaving={rateSaving}
+      />
+
+      {/* Zone 3: Primary KPIs */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Today's Spend"
           value={`$${todaySpend.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
@@ -173,6 +189,7 @@ export default function AdminDashboard() {
           loading={loading}
           trend={spendTrend}
           accentColor="hsl(var(--primary))"
+          sparklineData={spendHistory}
         />
         <KpiCard
           title="Today's Collections"
@@ -181,6 +198,7 @@ export default function AdminDashboard() {
           icon={Banknote}
           loading={loading}
           accentColor="hsl(var(--success))"
+          sparklineData={collectHistory}
         />
         <KpiCard
           title="Payment Due"
@@ -198,84 +216,53 @@ export default function AdminDashboard() {
           loading={loading}
           accentColor="hsl(var(--chart-meta))"
         />
-        <KpiCard
-          title="Active Accounts"
-          value={String(activeAccounts)}
-          icon={MonitorSmartphone}
-          loading={loading}
-          accentColor="hsl(var(--chart-google))"
-        />
-        <KpiCard
-          title="Pending Approvals"
-          value={String(pendingCount)}
-          icon={ClipboardCheck}
-          loading={loading}
-          onClick={() => navigate("/admin/pending")}
-          accentColor="hsl(var(--warning))"
-          subtitle={pendingCount > 0 ? "Click to review" : undefined}
-        />
       </div>
 
-      {/* Row 2: System Health + Exchange Rate */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <SystemHealthWidget />
-        <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Exchange Rate</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center py-2">
-              <p className="text-3xl font-bold font-mono">{rateValue}</p>
-              <p className="text-xs text-muted-foreground">BDT per 1 USD</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Slider
-                value={[rateValue]}
-                onValueChange={([v]) => setRateValue(v)}
-                min={50}
-                max={200}
-                step={0.5}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                value={rateValue}
-                onChange={(e) => setRateValue(Number(e.target.value))}
-                className="w-20 text-center font-mono"
-                step="0.5"
-                min="1"
-              />
-              <Button size="sm" onClick={saveRate} disabled={rateSaving}>
-                {rateSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />} Save
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Zone 4: Financial Intelligence */}
+      <div>
+        <p className="section-label">Financial Intelligence</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <ProfitabilityTable />
+          <ProfitLossWidget />
+        </div>
       </div>
 
-      {/* Row 2.5: Profitability + Profit/Loss */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <ProfitabilityTable />
-        <ProfitLossWidget />
+      {/* Zone 5: Analytics */}
+      <div>
+        <p className="section-label">Analytics</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <SpendTrendChart />
+          <RevenueVsCostChart />
+        </div>
       </div>
 
-      {/* Row 3: Charts */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <SpendTrendChart />
-        <RevenueVsCostChart />
+      {/* Zone 6: Attention Required */}
+      <div>
+        <p className="section-label">Operations</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <AttentionPanel />
+          </div>
+          <RecentActivityFeed />
+        </div>
       </div>
 
-      {/* Row 3.5: Unassigned Spend Alert */}
-      <UnassignedSpendAlert />
-
-      {/* Row 4: Alerts + Activity */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <LowBalanceAlerts />
-        <RecentActivityFeed />
+      {/* Zone 7: Data Tables */}
+      <div>
+        <p className="section-label">Client Data</p>
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="overview">Client Overview</TabsTrigger>
+            <TabsTrigger value="profitability">All Clients</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
+          </TabsContent>
+          <TabsContent value="profitability">
+            <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      {/* Row 5: Client Table */}
-      <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
     </div>
   );
 }

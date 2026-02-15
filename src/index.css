@@ -122,4 +122,58 @@
     font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
+
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl border border-border/50;
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(var(--border) / 0.5), transparent 50%, hsl(var(--border) / 0.3));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .glow-border {
+    @apply transition-shadow duration-300;
+  }
+
+  .glow-border:hover {
+    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.15), 0 8px 24px -8px hsl(var(--primary) / 0.1);
+  }
+
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground/70 mb-4 flex items-center gap-2;
+  }
+
+  .section-label::after {
+    content: '';
+    @apply flex-1 h-px bg-border/50;
+  }
+
+  .stat-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium;
+    background: hsl(var(--muted) / 0.5);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  .pulse-dot {
+    @apply relative inline-block h-2 w-2 rounded-full bg-success;
+  }
+
+  .pulse-dot::before {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-success animate-ping;
+    animation-duration: 2s;
+  }
 }
