@@ -28,6 +28,7 @@ import SpendReport from "@/pages/SpendReport";
 import WalletInventory from "@/pages/WalletInventory";
 import FinanceDashboard from "@/pages/FinanceDashboard";
 import ExpenseManager from "@/pages/ExpenseManager";
+import PaymentRequests from "@/pages/PaymentRequests";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="/admin/wallet" element={<WalletInventory />} />
                 <Route path="/admin/finance" element={<FinanceDashboard />} />
                 <Route path="/admin/expenses" element={<ExpenseManager />} />
+                <Route path="/admin/payment-requests" element={<PaymentRequests />} />
               </Route>
 
               {/* Manager routes */}
