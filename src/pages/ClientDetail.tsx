@@ -34,6 +34,11 @@ export default function ClientDetail() {
   const [percentage, setPercentage] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
 
+  // Manager assignment
+  const [managers, setManagers] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [assignedManager, setAssignedManager] = useState<string>("unassigned");
+  const [savingManager, setSavingManager] = useState(false);
+
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -46,16 +51,28 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountsRes, paymentsRes, txRes] = await Promise.all([
+    const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_accounts").select("id, platform_name").eq("client_id", userId!),
       supabase.from("payment_requests").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
+      supabase.from("user_roles").select("user_id").eq("role", "manager"),
     ]);
+
+    // Load manager profiles
+    if (managersRes.data?.length) {
+      const managerIds = managersRes.data.map((r) => r.user_id);
+      const { data: managerProfiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", managerIds);
+      setManagers(managerProfiles || []);
+    }
 
     if (profileRes.data) {
       const p = profileRes.data;
       setProfile(p);
+      setAssignedManager(p.manager_id || "unassigned");
       const pc = (p.pricing_config as unknown as PricingConfig) || { mode: "default" };
       setPricingMode(pc.mode || "default");
       setFlatMeta(String(pc.flat_rates?.meta ?? ""));
@@ -80,6 +97,24 @@ export default function ClientDetail() {
     setPayments(paymentsRes.data || []);
     setTransactions(txRes.data || []);
     setLoading(false);
+  }
+
+  async function handleManagerChange(value: string) {
+    if (!userId) return;
+    setSavingManager(true);
+    setAssignedManager(value);
+    const newManagerId = value === "unassigned" ? null : value;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ manager_id: newManagerId })
+      .eq("user_id", userId);
+    setSavingManager(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      const managerName = managers.find((m) => m.user_id === value)?.full_name || "Unassigned";
+      toast({ title: "Manager updated", description: `Assigned to ${managerName}.` });
+    }
   }
 
   async function handleSave() {
@@ -166,6 +201,22 @@ export default function ClientDetail() {
             {profile.email} {profile.phone && ` · ${profile.phone}`}
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Label className="text-sm font-medium whitespace-nowrap">Assigned Manager</Label>
+            <Select value={assignedManager} onValueChange={handleManagerChange} disabled={savingManager}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Select manager" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {managers.map((m) => (
+                  <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
       </Card>
 
       <Tabs defaultValue="pricing" className="space-y-4">

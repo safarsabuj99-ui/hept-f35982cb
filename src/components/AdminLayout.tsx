@@ -18,7 +18,7 @@ const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionK
   { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
   { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_manage_finance" },
   { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
-  { to: "/admin/assign", icon: UserCog, label: "Assign Clients", permKey: "can_manage_clients" },
+  
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
   { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
   { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
