@@ -7,10 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Wallet, Zap, Clock, Shield, ArrowDown, ArrowUp, Minus,
@@ -135,10 +132,6 @@ export default function ClientDashboard() {
 
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
-  const [depositBdt, setDepositBdt] = useState("");
-  const [depositMethod, setDepositMethod] = useState("");
-  const [depositTrxId, setDepositTrxId] = useState("");
-  const [depositSubmitting, setDepositSubmitting] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("all_time");
@@ -174,28 +167,6 @@ export default function ClientDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!depositBdt || Number(depositBdt) <= 0 || !depositMethod || !user) return;
-    setDepositSubmitting(true);
-    const { error } = await (supabase.from("payment_requests" as any).insert({
-      client_id: user.id,
-      amount_bdt: Number(depositBdt),
-      payment_method: depositMethod,
-      transaction_id: depositTrxId || null,
-    }) as any);
-    setDepositSubmitting(false);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Request Submitted", description: "Your payment will be reviewed by the admin shortly." });
-      setDepositOpen(false);
-      setDepositBdt("");
-      setDepositMethod("");
-      setDepositTrxId("");
-      fetchAll();
-    }
-  };
 
   useEffect(() => {
     if (!user) return;
@@ -482,51 +453,12 @@ export default function ClientDashboard() {
       )}
 
       {/* Deposit Modal */}
-      <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Banknote className="h-5 w-5 text-primary" /> Deposit Funds
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleDeposit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Amount (BDT)</Label>
-              <Input
-                type="number" step="0.01" min="1"
-                value={depositBdt} onChange={(e) => setDepositBdt(e.target.value)}
-                placeholder="৳ 0.00" required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Method</Label>
-              <Select value={depositMethod} onValueChange={setDepositMethod} required>
-                <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Bank">Bank Transfer</SelectItem>
-                  <SelectItem value="bKash">bKash</SelectItem>
-                  <SelectItem value="Nagad">Nagad</SelectItem>
-                  <SelectItem value="Cash">Cash</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Transaction ID / Note (optional)</Label>
-              <Input
-                value={depositTrxId} onChange={(e) => setDepositTrxId(e.target.value)}
-                placeholder="e.g. TrxID or reference"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDepositOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={depositSubmitting || !depositMethod || !depositBdt}>
-                {depositSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Submit Request
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        clientId={user?.id}
+        onSuccess={fetchAll}
+      />
     </div>
   );
 }

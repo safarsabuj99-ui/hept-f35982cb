@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus } from "lucide-react";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
@@ -26,6 +27,7 @@ interface PricingConfig {
 export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const [depositOpen, setDepositOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -245,7 +247,7 @@ export default function ClientDetail() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" className="gap-2" onClick={() => navigate(`/admin/add-funds?client=${userId}`)}>
+          <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
             <Plus className="h-3.5 w-3.5" /> Add Funds
           </Button>
           </div>
@@ -491,6 +493,13 @@ export default function ClientDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        clientId={userId}
+        onSuccess={loadAll}
+      />
     </div>
   );
 }
