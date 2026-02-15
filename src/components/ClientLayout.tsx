@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard } from "lucide-react";
+import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,17 @@ export function ClientLayout() {
             )}
           >
             <Megaphone className="h-4 w-4" /> Campaigns
+          </Link>
+          <Link
+            to="/dashboard/reports"
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+              location.pathname.startsWith("/dashboard/reports")
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FileBarChart className="h-4 w-4" /> Reports
           </Link>
         </nav>
       </div>
