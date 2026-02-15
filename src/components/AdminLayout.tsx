@@ -7,7 +7,6 @@ import {
   Users,
   PlusCircle,
   DollarSign,
-  TrendingDown,
   LogOut,
   Menu,
   X,
@@ -28,7 +27,7 @@ const navItems = [
   { to: "/admin/team", icon: UserCog, label: "Team" },
   { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
   { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds" },
-  { to: "/admin/log-spend", icon: TrendingDown, label: "Log Spend" },
+  
   { to: "/admin/clients/new", icon: PlusCircle, label: "New Client" },
   { to: "/admin/assign", icon: UserCog, label: "Assign Clients" },
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
