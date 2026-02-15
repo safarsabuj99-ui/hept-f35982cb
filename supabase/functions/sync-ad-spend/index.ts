@@ -7,17 +7,12 @@ const corsHeaders = {
 };
 
 const CAMPAIGN_NAMES = [
-  "Summer Sale 2026",
-  "Brand Awareness Q1",
-  "Retargeting - Cart Abandon",
-  "Lookalike Audience - US",
-  "Video Views Campaign",
-  "Lead Gen - Webinar",
-  "Product Launch",
-  "Holiday Promo",
-  "App Install Drive",
-  "Engagement Boost",
+  "Summer Sale 2026", "Brand Awareness Q1", "Retargeting - Cart Abandon",
+  "Lookalike Audience - US", "Video Views Campaign", "Lead Gen - Webinar",
+  "Product Launch", "Holiday Promo", "App Install Drive", "Engagement Boost",
 ];
+
+const EXPENSE_CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -33,64 +28,38 @@ Deno.serve(async (req) => {
     // Verify admin
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user: caller },
-      error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !caller) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const { data: roleCheck } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", caller.id)
-      .eq("role", "admin")
-      .single();
-
+      .from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").single();
     if (!roleCheck) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: Admin only" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Get current exchange rate
+    // Get settings
     const { data: rateSetting } = await supabaseAdmin
-      .from("settings")
-      .select("value")
-      .eq("key", "exchange_rate")
-      .maybeSingle();
+      .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
     const exchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
     // Get active ad accounts
     const { data: adAccounts } = await supabaseAdmin
-      .from("ad_accounts")
-      .select("*")
-      .eq("is_active", true);
-
+      .from("ad_accounts").select("*").eq("is_active", true);
     if (!adAccounts || adAccounts.length === 0) {
-      return new Response(
-        JSON.stringify({
-          error: "No active ad accounts found. Create ad accounts first.",
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ error: "No active ad accounts found. Create ad accounts first." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Get all client profiles with mapping keywords AND custom exchange rates
+    // Get client profiles with mapping keywords, custom rates, and pricing configs
     const { data: clientProfiles } = await supabaseAdmin
-      .from("profiles")
-      .select("user_id, mapping_keyword, custom_exchange_rate");
+      .from("profiles").select("user_id, mapping_keyword, custom_exchange_rate, pricing_config");
 
     const keywordMap: { keyword: string; userId: string }[] = [];
     const clientRates: Record<string, number | null> = {};
@@ -106,14 +75,12 @@ Deno.serve(async (req) => {
     const today = new Date();
     const records: any[] = [];
     const campaignMappings: any[] = [];
-    let autoMapped = 0;
-    let unmapped = 0;
+    let autoMapped = 0, unmapped = 0;
 
-    // Generate 5-15 random entries across ad accounts
+    // Generate 5-15 random spend entries
     const count = Math.floor(Math.random() * 11) + 5;
     for (let i = 0; i < count; i++) {
-      const account =
-        adAccounts[Math.floor(Math.random() * adAccounts.length)];
+      const account = adAccounts[Math.floor(Math.random() * adAccounts.length)];
       const daysAgo = Math.floor(Math.random() * 7);
       const spendDate = new Date(today);
       spendDate.setDate(spendDate.getDate() - daysAgo);
@@ -123,103 +90,128 @@ Deno.serve(async (req) => {
         ? Math.round((Math.random() * 50000 + 1000) * 100) / 100
         : Math.round((Math.random() * 500 + 10) * 100) / 100;
 
-      // Tiered rate: determine rate after auto-mapping to potentially use client custom rate
-      // We'll calculate finalBillableUsd after mapping below
-      let pendingRawAmount = rawAmount;
-      let pendingIsBDT = isBDT;
-
-      // For demo: some campaign names include client keywords
-      let campaignName =
-        CAMPAIGN_NAMES[Math.floor(Math.random() * CAMPAIGN_NAMES.length)];
-      
-      // 30% chance to prepend a client keyword if keywords exist
+      let campaignName = CAMPAIGN_NAMES[Math.floor(Math.random() * CAMPAIGN_NAMES.length)];
       if (keywordMap.length > 0 && Math.random() < 0.3) {
         const kw = keywordMap[Math.floor(Math.random() * keywordMap.length)];
         campaignName = `${kw.keyword.toUpperCase()}_${campaignName}`;
       }
 
-      // Auto-mapping: check if campaign name contains any keyword
+      // Auto-mapping
       let matchedClientId: string | null = null;
       const nameLower = campaignName.toLowerCase();
       for (const { keyword, userId } of keywordMap) {
-        if (nameLower.includes(keyword)) {
-          matchedClientId = userId;
-          break;
-        }
+        if (nameLower.includes(keyword)) { matchedClientId = userId; break; }
       }
 
-      // Tiered Currency Normalization: use client custom rate if available
+      // Tiered rate
       let effectiveRate = exchangeRate;
       if (matchedClientId && clientRates[matchedClientId]) {
         effectiveRate = clientRates[matchedClientId]!;
       }
 
-      const finalBillableUsd = pendingIsBDT
-        ? Math.round((pendingRawAmount / effectiveRate) * 100) / 100
-        : pendingRawAmount;
+      const finalBillableUsd = isBDT
+        ? Math.round((rawAmount / effectiveRate) * 100) / 100
+        : rawAmount;
 
       records.push({
-        ad_account_id: account.id,
-        date: spendDate.toISOString().split("T")[0],
-        campaign_name: campaignName,
-        raw_spend_amount: rawAmount,
-        raw_currency: account.account_currency,
-        exchange_rate_used: pendingIsBDT ? effectiveRate : 1,
+        ad_account_id: account.id, date: spendDate.toISOString().split("T")[0],
+        campaign_name: campaignName, raw_spend_amount: rawAmount,
+        raw_currency: account.account_currency, exchange_rate_used: isBDT ? effectiveRate : 1,
         final_billable_usd: finalBillableUsd,
       });
 
-      // Upsert campaign mapping
       campaignMappings.push({
-        campaign_id: `sim_${Date.now()}_${i}`,
-        campaign_name: campaignName,
-        platform: account.platform_name,
-        ad_account_id: account.id,
-        client_id: matchedClientId,
-        is_active: true,
+        campaign_id: `sim_${Date.now()}_${i}`, campaign_name: campaignName,
+        platform: account.platform_name, ad_account_id: account.id,
+        client_id: matchedClientId, is_active: true,
       });
 
-      if (matchedClientId) autoMapped++;
-      else unmapped++;
+      if (matchedClientId) autoMapped++; else unmapped++;
     }
 
-    const { error: insertError } = await supabaseAdmin
-      .from("daily_ad_spend")
-      .insert(records);
-
+    const { error: insertError } = await supabaseAdmin.from("daily_ad_spend").insert(records);
     if (insertError) {
       return new Response(JSON.stringify({ error: insertError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Upsert campaign mappings
     if (campaignMappings.length > 0) {
       await supabaseAdmin.from("campaign_mappings").insert(campaignMappings);
     }
 
-    // Update last_synced_at on api_integrations
-    await supabaseAdmin
-      .from("api_integrations")
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq("is_active", true);
+    await supabaseAdmin.from("api_integrations")
+      .update({ last_synced_at: new Date().toISOString() }).eq("is_active", true);
+
+    // === FINANCE SIMULATION ===
+    // Generate USD purchases to establish WAC
+    const usdPurchases: any[] = [];
+    const purchaseCount = Math.floor(Math.random() * 3) + 2;
+    for (let i = 0; i < purchaseCount; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const pDate = new Date(today);
+      pDate.setDate(pDate.getDate() - daysAgo);
+      const bdtPaid = Math.round((Math.random() * 50000 + 10000) * 100) / 100;
+      const usdReceived = Math.round((bdtPaid / (120 + Math.random() * 20 - 10)) * 100) / 100;
+      usdPurchases.push({
+        date: pDate.toISOString().split("T")[0],
+        bdt_amount_paid: bdtPaid,
+        usd_received: usdReceived,
+        notes: `Simulation purchase #${i + 1}`,
+        created_by: caller.id,
+      });
+    }
+    await supabaseAdmin.from("usd_purchases").insert(usdPurchases);
+
+    // Generate expenses
+    const expenseEntries: any[] = [];
+    const expCount = Math.floor(Math.random() * 5) + 3;
+    for (let i = 0; i < expCount; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const eDate = new Date(today);
+      eDate.setDate(eDate.getDate() - daysAgo);
+      const cat = EXPENSE_CATEGORIES[Math.floor(Math.random() * EXPENSE_CATEGORIES.length)];
+      const amt = cat === "Salary" ? Math.round(Math.random() * 30000 + 15000)
+        : cat === "Rent" ? Math.round(Math.random() * 10000 + 5000)
+        : cat === "Owner_Draw" ? Math.round(Math.random() * 20000 + 5000)
+        : Math.round(Math.random() * 5000 + 500);
+      expenseEntries.push({
+        date: eDate.toISOString().split("T")[0],
+        amount_bdt: amt,
+        category: cat,
+        description: `Sim: ${cat} expense`,
+        created_by: caller.id,
+      });
+    }
+    await supabaseAdmin.from("agency_expenses").insert(expenseEntries);
+
+    // Assign random pricing_config to clients that don't have one
+    const { data: allClientRoles } = await supabaseAdmin
+      .from("user_roles").select("user_id").eq("role", "client");
+    for (const cr of allClientRoles ?? []) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles").select("pricing_config").eq("user_id", cr.user_id).single();
+      if (!profile?.pricing_config) {
+        const isFlat = Math.random() > 0.5;
+        const config = isFlat
+          ? { mode: "flat_rate", rates: { meta: 140 + Math.round(Math.random() * 20), tiktok: 145 + Math.round(Math.random() * 15), google: 150 + Math.round(Math.random() * 15) } }
+          : { mode: "percentage", markup: Math.round(10 + Math.random() * 15) };
+        await supabaseAdmin.from("profiles")
+          .update({ pricing_config: config }).eq("user_id", cr.user_id);
+      }
+    }
 
     return new Response(
       JSON.stringify({
-        success: true,
-        records_created: records.length,
-        exchange_rate_used: exchangeRate,
-        auto_mapped: autoMapped,
-        unmapped: unmapped,
+        success: true, records_created: records.length,
+        exchange_rate_used: exchangeRate, auto_mapped: autoMapped, unmapped,
+        finance_sim: { usd_purchases: usdPurchases.length, expenses: expenseEntries.length },
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

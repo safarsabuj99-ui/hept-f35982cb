@@ -58,6 +58,36 @@ export type Database = {
           },
         ]
       }
+      agency_expenses: {
+        Row: {
+          amount_bdt: number
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at: string
+          created_by: string
+          date: string
+          description: string | null
+          id: string
+        }
+        Insert: {
+          amount_bdt: number
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by: string
+          date?: string
+          description?: string | null
+          id?: string
+        }
+        Update: {
+          amount_bdt?: number
+          category?: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          created_by?: string
+          date?: string
+          description?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       api_integrations: {
         Row: {
           api_token: string
@@ -256,6 +286,7 @@ export type Database = {
           manager_id: string | null
           mapping_keyword: string | null
           phone: string | null
+          pricing_config: Json | null
           user_id: string
         }
         Insert: {
@@ -268,6 +299,7 @@ export type Database = {
           manager_id?: string | null
           mapping_keyword?: string | null
           phone?: string | null
+          pricing_config?: Json | null
           user_id: string
         }
         Update: {
@@ -280,6 +312,7 @@ export type Database = {
           manager_id?: string | null
           mapping_keyword?: string | null
           phone?: string | null
+          pricing_config?: Json | null
           user_id?: string
         }
         Relationships: []
@@ -350,6 +383,39 @@ export type Database = {
         }
         Relationships: []
       }
+      usd_purchases: {
+        Row: {
+          bdt_amount_paid: number
+          calculated_rate: number | null
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          notes: string | null
+          usd_received: number
+        }
+        Insert: {
+          bdt_amount_paid: number
+          calculated_rate?: number | null
+          created_at?: string
+          created_by: string
+          date?: string
+          id?: string
+          notes?: string | null
+          usd_received: number
+        }
+        Update: {
+          bdt_amount_paid?: number
+          calculated_rate?: number | null
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          usd_received?: number
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -393,6 +459,13 @@ export type Database = {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       app_role: "admin" | "client" | "manager"
+      expense_category:
+        | "Rent"
+        | "Salary"
+        | "Software"
+        | "Owner_Draw"
+        | "Marketing"
+        | "Other"
       transaction_status: "pending_approval" | "completed" | "rejected"
       transaction_type: "credit" | "debit"
     }
@@ -525,6 +598,14 @@ export const Constants = {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       app_role: ["admin", "client", "manager"],
+      expense_category: [
+        "Rent",
+        "Salary",
+        "Software",
+        "Owner_Draw",
+        "Marketing",
+        "Other",
+      ],
       transaction_status: ["pending_approval", "completed", "rejected"],
       transaction_type: ["credit", "debit"],
     },

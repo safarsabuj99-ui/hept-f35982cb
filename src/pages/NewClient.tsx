@@ -21,6 +21,11 @@ export default function NewClient() {
   const [role, setRole] = useState<"client" | "manager">("client");
   const [managerId, setManagerId] = useState("");
   const [mappingKeyword, setMappingKeyword] = useState("");
+  const [pricingMode, setPricingMode] = useState<"flat_rate" | "percentage" | "default">("default");
+  const [flatMeta, setFlatMeta] = useState("");
+  const [flatTiktok, setFlatTiktok] = useState("");
+  const [flatGoogle, setFlatGoogle] = useState("");
+  const [markupPercent, setMarkupPercent] = useState("");
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -46,6 +51,13 @@ export default function NewClient() {
     }
     setIsLoading(true);
 
+    let pricingConfig = null;
+    if (role === "client" && pricingMode === "flat_rate") {
+      pricingConfig = { mode: "flat_rate", rates: { meta: Number(flatMeta) || 145, tiktok: Number(flatTiktok) || 150, google: Number(flatGoogle) || 155 } };
+    } else if (role === "client" && pricingMode === "percentage") {
+      pricingConfig = { mode: "percentage", markup: Number(markupPercent) || 15 };
+    }
+
     const res = await supabase.functions.invoke("create-client", {
       body: {
         email, password, full_name: fullName, phone, business_name: businessName,
@@ -53,6 +65,7 @@ export default function NewClient() {
         manager_id: role === "client" && managerId ? managerId : null,
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
         custom_exchange_rate: role === "client" && customRate ? Number(customRate) : null,
+        pricing_config: pricingConfig,
       },
     });
 
@@ -123,6 +136,40 @@ export default function NewClient() {
                   <Input type="number" value={customRate} onChange={(e) => setCustomRate(e.target.value)} placeholder="e.g. 118 — overrides global rate" step="0.5" min="1" />
                   <p className="text-xs text-muted-foreground">Leave blank to use the global BDT/USD rate</p>
                 </div>
+                <div className="space-y-2">
+                  <Label>Pricing Model</Label>
+                  <Select value={pricingMode} onValueChange={(v) => setPricingMode(v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default (Custom Rate)</SelectItem>
+                      <SelectItem value="flat_rate">Flat Rate per Platform</SelectItem>
+                      <SelectItem value="percentage">Percentage Markup</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {pricingMode === "flat_rate" && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Meta Rate</Label>
+                      <Input type="number" placeholder="145" value={flatMeta} onChange={e => setFlatMeta(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">TikTok Rate</Label>
+                      <Input type="number" placeholder="150" value={flatTiktok} onChange={e => setFlatTiktok(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Google Rate</Label>
+                      <Input type="number" placeholder="155" value={flatGoogle} onChange={e => setFlatGoogle(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+                {pricingMode === "percentage" && (
+                  <div className="space-y-2">
+                    <Label>Markup %</Label>
+                    <Input type="number" placeholder="15" value={markupPercent} onChange={e => setMarkupPercent(e.target.value)} />
+                    <p className="text-xs text-muted-foreground">Service charge added on top of market rate spend</p>
+                  </div>
+                )}
               </>
             )}
             {role === "client" && managers.length > 0 && (

@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: Super Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, custom_exchange_rate } = await req.json();
+    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, custom_exchange_rate, pricing_config } = await req.json();
 
     if (!email || !password || !full_name) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -63,6 +63,9 @@ Deno.serve(async (req) => {
     }
     if (custom_exchange_rate) {
       profileUpdate.custom_exchange_rate = custom_exchange_rate;
+    }
+    if (pricing_config) {
+      profileUpdate.pricing_config = pricing_config;
     }
 
     await supabaseAdmin
