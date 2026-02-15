@@ -113,7 +113,7 @@ export type Database = {
     }
     Enums: {
       ad_platform: "meta" | "tiktok" | "google"
-      app_role: "admin" | "client"
+      app_role: "admin" | "client" | "manager"
       transaction_type: "credit" | "debit"
     }
     CompositeTypes: {
@@ -243,7 +243,7 @@ export const Constants = {
   public: {
     Enums: {
       ad_platform: ["meta", "tiktok", "google"],
-      app_role: ["admin", "client"],
+      app_role: ["admin", "client", "manager"],
       transaction_type: ["credit", "debit"],
     },
   },
