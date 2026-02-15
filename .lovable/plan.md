@@ -1,96 +1,72 @@
 
+# Client Management Page with Detail View
 
-# Enhance Agency Ad Manager -- Gap Analysis and Improvements
+## Overview
+Create a dedicated **Client List** page and a **Client Detail** page where you can click on any client to view and edit their configuration, see their spend, payments, and transaction history -- all in one place.
 
-## What's Already Built (No Changes Needed)
-- Three-tier RBAC (Admin/Manager/Client) with RLS
-- Ad accounts with platform/currency management and ON/OFF toggle
-- Currency normalization engine (BDT to USD with historical snapshots)
-- Campaign mapping with manual client assignment
-- Admin dashboard with KPIs, charts, exchange rate control
-- Client dashboard with balance, spend, platform charts, transaction history
-- API integrations page with "Simulate Sync" button
-- Pending approvals workflow (Manager submits, Admin approves)
-- Real-time subscriptions on dashboards
-- Audit logging, settings, team management
+## What Gets Built
 
-## What's Missing (To Be Implemented)
+### 1. Client List Page (`/admin/clients`)
+A searchable table of all clients showing:
+- Client name, business name, email
+- Current balance (USD and BDT)
+- Pricing model (Flat Rate / Percentage / Default)
+- Custom exchange rate (if set)
+- Clickable rows that navigate to the client detail page
 
-### 1. Unassigned Spend Alert on Admin Dashboard
-**Problem:** If a campaign has spend but `client_id` is NULL in `campaign_mappings`, money is being spent without being billed to any client -- a revenue leak.
+### 2. Client Detail Page (`/admin/clients/:userId`)
+A comprehensive single-client management page with these sections:
 
-**Implementation:**
-- Add an "Unmapped Campaign Spend" alert widget to `AdminDashboard.tsx`
-- Query `daily_ad_spend` joined with `ad_accounts` and `campaign_mappings` to find campaigns with spend but no assigned client
-- Display as a prominent warning card with total unassigned spend amount and a link to the Campaign Mapping page
+**Header Card**
+- Client name, email, business name
+- Current wallet balance with BDT equivalent
 
-### 2. Auto-Mapping Logic in Sync Function
-**Problem:** The `sync-ad-spend` edge function generates campaigns but never auto-assigns them to clients based on keywords.
+**Pricing Configuration (Editable)**
+- Edit the per-platform dollar rates for Meta, TikTok, and Google (flat rate mode)
+- Edit percentage markup (percentage mode)
+- Switch between pricing modes (Default / Flat Rate / Percentage)
+- Edit the client's custom exchange rate
+- Save button to persist changes to the `profiles` table (`pricing_config` JSONB and `custom_exchange_rate`)
 
-**Implementation:**
-- Add a `mapping_keyword` column to the `profiles` table (e.g., "CL_Rahim") via migration
-- Update the `sync-ad-spend` edge function to:
-  1. After generating campaigns, check if campaign name contains any client's keyword
-  2. If match found, automatically set `client_id` on the `campaign_mappings` entry
-  3. Leave unmatched campaigns as NULL (showing in unmapped alerts)
-- Add keyword field to the "New Client" form and client profile editing
+**Spend Summary**
+- Total spend across all ad accounts for this client
+- Breakdown by platform if data exists
+- Pulled from `daily_ad_spend` joined through `ad_accounts` where `client_id` matches
 
-### 3. Client Dashboard -- Mobile-First Polish
-**Problem:** Current client dashboard works but isn't optimized for mobile-first bold card design.
+**Payment Requests**
+- Table of all `payment_requests` for this client (status, amount BDT, method, date, USD credited)
 
-**Implementation:**
-- Redesign the top KPI cards to be larger, bolder with gradient backgrounds
-- Make "Current Balance" and "Today's Spend" cards visually dominant
-- Improve the platform donut chart to pull data from `daily_ad_spend` instead of transactions (more accurate)
-- Add a "Remaining Funds" card showing balance minus projected daily spend
+**Transaction History**
+- Table of all `transactions` for this client (credits and debits, date, status, description)
 
-### 4. Multi-Instance API Management
-**Problem:** Currently `api_integrations` stores one entry per platform. The spec calls for multiple Business Manager instances per platform.
-
-**Implementation:**
-- Add an `instance_name` column to `api_integrations` (e.g., "BM Account 1", "BM Account 2")
-- Update the Integrations page UI to support adding multiple instances per platform
-- Link `ad_accounts` to specific `api_integrations` entries via a new `api_integration_id` foreign key on `ad_accounts`
-
----
+### 3. Navigation Update
+- Update AdminLayout sidebar: rename the existing "Clients" link (currently pointing to `/admin`) and add a new "Client List" entry pointing to `/admin/clients`
+- Update `ClientOverviewTable` eye icon to link to `/admin/clients/:userId` instead of `/admin/clients`
 
 ## Technical Details
 
-### Database Migration
+### New Files
+- `src/pages/ClientList.tsx` -- the searchable client list
+- `src/pages/ClientDetail.tsx` -- the single-client detail/edit page
 
-```sql
--- Add mapping keyword to profiles for auto-assignment
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mapping_keyword text;
+### Modified Files
+- `src/App.tsx` -- add routes `/admin/clients` and `/admin/clients/:userId`
+- `src/components/AdminLayout.tsx` -- add "Client List" nav item
+- `src/components/dashboard/ClientOverviewTable.tsx` -- update Eye icon link to `/admin/clients/${c.user_id}`
 
--- Add instance name to api_integrations for multi-instance support
-ALTER TABLE public.api_integrations ADD COLUMN IF NOT EXISTS instance_name text DEFAULT '';
+### Data Queries (Client Detail Page)
+1. **Profile**: `profiles` table filtered by `user_id` (includes `pricing_config`, `custom_exchange_rate`)
+2. **Spend**: `ad_accounts` where `client_id` matches, then `daily_ad_spend` for those account IDs
+3. **Payment Requests**: `payment_requests` where `client_id` matches, ordered by `created_at desc`
+4. **Transactions**: `transactions` where `client_id` matches, ordered by `created_at desc`
 
--- Add link from ad_accounts to specific api_integration
-ALTER TABLE public.ad_accounts ADD COLUMN IF NOT EXISTS api_integration_id uuid REFERENCES public.api_integrations(id);
-```
+### Editing Logic
+- Updates to `pricing_config` and `custom_exchange_rate` go through a direct `supabase.from("profiles").update(...)` call
+- Admin RLS policy already grants full access to the profiles table
+- No database schema changes needed -- all fields already exist
 
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `supabase/functions/sync-ad-spend/index.ts` | Add auto-mapping logic: after generating spend, match campaign names against `profiles.mapping_keyword` and update `campaign_mappings.client_id` |
-| `src/pages/AdminDashboard.tsx` | Add "Unassigned Spend Risk" alert widget querying unmapped campaigns with active spend |
-| `src/pages/ClientDashboard.tsx` | Mobile-first redesign with bold cards, improve platform chart to use `daily_ad_spend` data, add "Remaining Funds" card |
-| `src/pages/NewClient.tsx` | Add "Mapping Keyword" input field |
-| `src/pages/Integrations.tsx` | Support multiple instances per platform with instance naming |
-| `src/pages/AdAccounts.tsx` | Add optional API integration link when creating accounts |
-
-### New Components
-
-| File | Purpose |
-|------|---------|
-| `src/components/dashboard/UnassignedSpendAlert.tsx` | Prominent warning card showing campaigns with spend but no client assignment |
-
-### Edge Function Update
-The `sync-ad-spend` function will be enhanced to:
-1. Generate campaign mappings with some names containing client keywords (for demo)
-2. Query all profiles with non-null `mapping_keyword`
-3. For each generated campaign, check if name contains any keyword
-4. Auto-assign matching campaigns to the corresponding client
-5. Log auto-mapped vs unmapped counts in the response
-
+### Additional Features
+- Search/filter on the client list (by name or business)
+- Status badges on payment requests (Pending = yellow, Approved = green, Rejected = red)
+- Transaction type badges (Credit = green, Debit = red)
+- Quick action buttons: "Add Funds" and "View Payment Requests" links from the detail page
