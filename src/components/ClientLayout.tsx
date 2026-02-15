@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { BarChart3, LogOut } from "lucide-react";
 
 export function ClientLayout() {
@@ -17,6 +18,7 @@ export function ClientLayout() {
           <span className="hidden text-sm text-muted-foreground sm:inline">
             {user?.email}
           </span>
+          <ThemeToggle />
           <Button variant="ghost" size="sm" onClick={signOut} className="gap-2">
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Sign Out</span>

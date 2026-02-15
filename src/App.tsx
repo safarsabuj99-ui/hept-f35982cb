@@ -21,6 +21,10 @@ import Settings from "@/pages/Settings";
 import AuditLogs from "@/pages/AuditLogs";
 import ClientAssignment from "@/pages/ClientAssignment";
 import TeamManagement from "@/pages/TeamManagement";
+import AdAccounts from "@/pages/AdAccounts";
+import Integrations from "@/pages/Integrations";
+import CampaignMapping from "@/pages/CampaignMapping";
+import SpendReport from "@/pages/SpendReport";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +58,10 @@ const App = () => (
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 <Route path="/admin/assign" element={<ClientAssignment />} />
                 <Route path="/admin/team" element={<TeamManagement />} />
+                <Route path="/admin/ad-accounts" element={<AdAccounts />} />
+                <Route path="/admin/integrations" element={<Integrations />} />
+                <Route path="/admin/campaigns" element={<CampaignMapping />} />
+                <Route path="/admin/spend-report" element={<SpendReport />} />
               </Route>
 
               {/* Manager routes */}

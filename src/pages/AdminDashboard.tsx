@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useCurrency } from "@/hooks/useCurrency";
 import { CurrencyToggle } from "@/components/CurrencyToggle";
+import { ProfitLossWidget } from "@/components/ProfitLossWidget";
+import { LowBalanceAlerts } from "@/components/LowBalanceAlerts";
+import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Users, TrendingUp, ClipboardCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { DollarSign, Users, TrendingUp, ClipboardCheck, Clock, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 interface ClientWithBalance {
   user_id: string;
@@ -22,17 +29,24 @@ export default function AdminDashboard() {
   const [clients, setClients] = useState<ClientWithBalance[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const { formatAmount } = useCurrency();
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [rateValue, setRateValue] = useState(120);
+  const [rateSaving, setRateSaving] = useState(false);
+  const { formatAmount, exchangeRate } = useCurrency();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    const profilesRes = await supabase.from("profiles").select("user_id, full_name, email, business_name");
-    const rolesRes = await supabase.from("user_roles").select("user_id").eq("role", "client");
-    const txnsRes = await supabase.from("transactions").select("*");
-    const pendingRes = await (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval");
+    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, email, business_name"),
+      supabase.from("user_roles").select("user_id").eq("role", "client"),
+      supabase.from("transactions").select("*"),
+      (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
+      supabase.from("api_integrations" as any).select("last_synced_at").order("last_synced_at", { ascending: false }).limit(1) as any,
+    ]);
 
     const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
     const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
@@ -47,7 +61,25 @@ export default function AdminDashboard() {
 
     setClients(result);
     setPendingCount(pendingRes.count ?? 0);
+    setRateValue(exchangeRate);
+    if (syncRes.data?.[0]?.last_synced_at) {
+      setLastSynced(new Date(syncRes.data[0].last_synced_at).toLocaleString());
+    }
     setLoading(false);
+  };
+
+  const saveRate = async () => {
+    if (rateValue <= 0) return;
+    setRateSaving(true);
+    const { error } = await (supabase.from("settings" as any) as any)
+      .update({ value: String(rateValue) })
+      .eq("key", "exchange_rate");
+    setRateSaving(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Saved", description: `Exchange rate updated to ${rateValue} BDT/USD` });
+    }
   };
 
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
@@ -58,12 +90,18 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Super Admin Dashboard</h1>
-          <p className="text-muted-foreground">Overview of all client accounts</p>
+          <p className="text-muted-foreground flex items-center gap-2">
+            Overview of all client accounts
+            {lastSynced && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" /> Last synced: {lastSynced}
+              </span>
+            )}
+          </p>
         </div>
         <CurrencyToggle />
       </div>
 
-      {/* Pending Approvals Banner */}
       {pendingCount > 0 && (
         <Link to="/admin/pending">
           <Card className="border-warning/50 bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer">
@@ -77,7 +115,8 @@ export default function AdminDashboard() {
         </Link>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Top widgets */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
@@ -96,7 +135,7 @@ export default function AdminDashboard() {
             {loading ? <Skeleton className="h-8 w-24" /> : <p className="text-3xl font-bold">{formatAmount(totalBalance)}</p>}
           </CardContent>
         </Card>
-        <Card className="sm:col-span-2 lg:col-span-1">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Avg Balance</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -107,8 +146,48 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+        <ProfitLossWidget />
       </div>
 
+      {/* Exchange rate control */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Exchange Rate Control</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-4">
+            <Label className="whitespace-nowrap text-sm">1 USD =</Label>
+            <Slider
+              value={[rateValue]}
+              onValueChange={([v]) => setRateValue(v)}
+              min={50}
+              max={200}
+              step={0.5}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              value={rateValue}
+              onChange={(e) => setRateValue(Number(e.target.value))}
+              className="w-24"
+              step="0.5"
+              min="1"
+            />
+            <span className="text-sm text-muted-foreground">BDT</span>
+            <Button size="sm" onClick={saveRate} disabled={rateSaving}>
+              {rateSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />} Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Low balance alerts */}
+      <LowBalanceAlerts />
+
+      {/* Spend trend chart */}
+      <SpendTrendChart />
+
+      {/* Client table */}
       <Card>
         <CardHeader>
           <CardTitle>Client Accounts</CardTitle>

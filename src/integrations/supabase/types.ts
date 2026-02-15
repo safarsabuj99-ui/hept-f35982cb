@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_accounts: {
+        Row: {
+          account_currency: Database["public"]["Enums"]["account_currency"]
+          ad_account_id: string
+          client_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          platform_name: Database["public"]["Enums"]["ad_platform"]
+        }
+        Insert: {
+          account_currency?: Database["public"]["Enums"]["account_currency"]
+          ad_account_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          platform_name: Database["public"]["Enums"]["ad_platform"]
+        }
+        Update: {
+          account_currency?: Database["public"]["Enums"]["account_currency"]
+          ad_account_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          platform_name?: Database["public"]["Enums"]["ad_platform"]
+        }
+        Relationships: []
+      }
+      api_integrations: {
+        Row: {
+          api_token: string
+          app_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_synced_at: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          updated_by: string | null
+        }
+        Insert: {
+          api_token?: string
+          app_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          updated_by?: string | null
+        }
+        Update: {
+          api_token?: string
+          app_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action_type: string
@@ -40,6 +103,91 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      campaign_mappings: {
+        Row: {
+          ad_account_id: string | null
+          campaign_id: string
+          campaign_name: string
+          client_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          platform: Database["public"]["Enums"]["ad_platform"]
+        }
+        Insert: {
+          ad_account_id?: string | null
+          campaign_id: string
+          campaign_name: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          platform: Database["public"]["Enums"]["ad_platform"]
+        }
+        Update: {
+          ad_account_id?: string | null
+          campaign_id?: string
+          campaign_name?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          platform?: Database["public"]["Enums"]["ad_platform"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_mappings_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_ad_spend: {
+        Row: {
+          ad_account_id: string
+          campaign_name: string
+          date: string
+          exchange_rate_used: number
+          final_billable_usd: number
+          id: string
+          raw_currency: Database["public"]["Enums"]["account_currency"]
+          raw_spend_amount: number
+          synced_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          campaign_name?: string
+          date?: string
+          exchange_rate_used?: number
+          final_billable_usd?: number
+          id?: string
+          raw_currency?: Database["public"]["Enums"]["account_currency"]
+          raw_spend_amount?: number
+          synced_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          campaign_name?: string
+          date?: string
+          exchange_rate_used?: number
+          final_billable_usd?: number
+          id?: string
+          raw_currency?: Database["public"]["Enums"]["account_currency"]
+          raw_spend_amount?: number
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_ad_spend_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       manager_permissions: {
         Row: {
@@ -207,8 +355,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_spend: {
+        Args: { rate: number; raw_amount: number; raw_currency: string }
+        Returns: number
+      }
     }
     Enums: {
+      account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       app_role: "admin" | "client" | "manager"
       transaction_status: "pending_approval" | "completed" | "rejected"
@@ -340,6 +493,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       app_role: ["admin", "client", "manager"],
       transaction_status: ["pending_approval", "completed", "rejected"],
