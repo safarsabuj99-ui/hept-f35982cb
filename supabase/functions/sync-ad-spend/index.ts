@@ -87,16 +87,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get all client profiles with mapping keywords
+    // Get all client profiles with mapping keywords AND custom exchange rates
     const { data: clientProfiles } = await supabaseAdmin
       .from("profiles")
-      .select("user_id, mapping_keyword")
-      .not("mapping_keyword", "is", null);
+      .select("user_id, mapping_keyword, custom_exchange_rate");
 
     const keywordMap: { keyword: string; userId: string }[] = [];
+    const clientRates: Record<string, number | null> = {};
     for (const p of clientProfiles ?? []) {
       if (p.mapping_keyword && p.mapping_keyword.trim()) {
         keywordMap.push({ keyword: p.mapping_keyword.trim().toLowerCase(), userId: p.user_id });
+      }
+      if (p.custom_exchange_rate) {
+        clientRates[p.user_id] = Number(p.custom_exchange_rate);
       }
     }
 
@@ -120,9 +123,10 @@ Deno.serve(async (req) => {
         ? Math.round((Math.random() * 50000 + 1000) * 100) / 100
         : Math.round((Math.random() * 500 + 10) * 100) / 100;
 
-      const finalBillableUsd = isBDT
-        ? Math.round((rawAmount / exchangeRate) * 100) / 100
-        : rawAmount;
+      // Tiered rate: determine rate after auto-mapping to potentially use client custom rate
+      // We'll calculate finalBillableUsd after mapping below
+      let pendingRawAmount = rawAmount;
+      let pendingIsBDT = isBDT;
 
       // For demo: some campaign names include client keywords
       let campaignName =
@@ -134,16 +138,6 @@ Deno.serve(async (req) => {
         campaignName = `${kw.keyword.toUpperCase()}_${campaignName}`;
       }
 
-      records.push({
-        ad_account_id: account.id,
-        date: spendDate.toISOString().split("T")[0],
-        campaign_name: campaignName,
-        raw_spend_amount: rawAmount,
-        raw_currency: account.account_currency,
-        exchange_rate_used: isBDT ? exchangeRate : 1,
-        final_billable_usd: finalBillableUsd,
-      });
-
       // Auto-mapping: check if campaign name contains any keyword
       let matchedClientId: string | null = null;
       const nameLower = campaignName.toLowerCase();
@@ -153,6 +147,26 @@ Deno.serve(async (req) => {
           break;
         }
       }
+
+      // Tiered Currency Normalization: use client custom rate if available
+      let effectiveRate = exchangeRate;
+      if (matchedClientId && clientRates[matchedClientId]) {
+        effectiveRate = clientRates[matchedClientId]!;
+      }
+
+      const finalBillableUsd = pendingIsBDT
+        ? Math.round((pendingRawAmount / effectiveRate) * 100) / 100
+        : pendingRawAmount;
+
+      records.push({
+        ad_account_id: account.id,
+        date: spendDate.toISOString().split("T")[0],
+        campaign_name: campaignName,
+        raw_spend_amount: rawAmount,
+        raw_currency: account.account_currency,
+        exchange_rate_used: pendingIsBDT ? effectiveRate : 1,
+        final_billable_usd: finalBillableUsd,
+      });
 
       // Upsert campaign mapping
       campaignMappings.push({

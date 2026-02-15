@@ -31,7 +31,7 @@ export default function AdAccounts() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD" });
+  const [form, setForm] = useState({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD", daily_spending_limit: "250" });
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -51,14 +51,17 @@ export default function AdAccounts() {
   const handleCreate = async () => {
     if (!form.client_id || !form.platform_name || !form.ad_account_id) return;
     setSaving(true);
-    const { error } = await (supabase.from("ad_accounts" as any) as any).insert(form);
+    const { error } = await (supabase.from("ad_accounts" as any) as any).insert({
+      ...form,
+      daily_spending_limit: form.daily_spending_limit ? Number(form.daily_spending_limit) : 250,
+    });
     setSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Created", description: "Ad account added" });
       setOpen(false);
-      setForm({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD" });
+      setForm({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD", daily_spending_limit: "250" });
       fetchData();
     }
   };
@@ -109,6 +112,10 @@ export default function AdAccounts() {
                   <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Daily Spending Limit ($)</Label>
+                <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
+              </div>
               <Button onClick={handleCreate} className="w-full" disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
               </Button>
@@ -134,6 +141,7 @@ export default function AdAccounts() {
                   <TableHead>Platform</TableHead>
                   <TableHead>Account ID</TableHead>
                   <TableHead>Currency</TableHead>
+                  <TableHead>Daily Limit</TableHead>
                   <TableHead>Active</TableHead>
                 </TableRow>
               </TableHeader>
@@ -144,6 +152,7 @@ export default function AdAccounts() {
                     <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
                     <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
                     <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
+                    <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
                     <TableCell><Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} /></TableCell>
                   </TableRow>
                 ))}
