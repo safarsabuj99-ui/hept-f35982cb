@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-type AppRole = "admin" | "client" | null;
+export type AppRole = "admin" | "manager" | "client" | null;
 
 interface AuthContextType {
   user: User | null;
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("role")
       .eq("user_id", userId)
       .single();
-    setRole(data?.role ?? null);
+    setRole((data?.role as AppRole) ?? null);
   };
 
   useEffect(() => {
@@ -36,7 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          // Use setTimeout to avoid Supabase auth deadlock
           setTimeout(() => fetchRole(session.user.id), 0);
         } else {
           setRole(null);

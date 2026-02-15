@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Users, TrendingUp, ClipboardCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { DollarSign, Users, TrendingUp } from "lucide-react";
 
 interface ClientWithBalance {
   user_id: string;
@@ -18,73 +17,59 @@ interface ClientWithBalance {
   balance: number;
 }
 
-export default function AdminDashboard() {
-  const [clients, setClients] = useState<ClientWithBalance[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+export default function ManagerDashboard() {
+  const { user } = useAuth();
   const { formatAmount } = useCurrency();
+  const [clients, setClients] = useState<ClientWithBalance[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
+    const fetchData = async () => {
+      // RLS ensures manager only sees assigned client profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email, business_name, manager_id" as any)
+        .neq("user_id", user.id);
+
+      const clientProfiles = (profiles ?? []).filter((p: any) => p.manager_id === user.id);
+
+      // Get transactions for these clients (RLS scoped)
+      const { data: transactions } = await supabase.from("transactions").select("*");
+
+      const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
+        const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id && t.status === "completed");
+        const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+        const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+        return { user_id: p.user_id, full_name: p.full_name, email: p.email, business_name: p.business_name, balance: credits - debits };
+      });
+
+      setClients(result);
+      setLoading(false);
+    };
     fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    const profilesRes = await supabase.from("profiles").select("user_id, full_name, email, business_name");
-    const rolesRes = await supabase.from("user_roles").select("user_id").eq("role", "client");
-    const txnsRes = await supabase.from("transactions").select("*");
-    const pendingRes = await (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval");
-
-    const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
-    const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
-    const transactions = txnsRes.data ?? [];
-
-    const result: ClientWithBalance[] = clientProfiles.map((p) => {
-      const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
-      const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      return { ...p, balance: credits - debits };
-    });
-
-    setClients(result);
-    setPendingCount(pendingRes.count ?? 0);
-    setLoading(false);
-  };
+  }, [user]);
 
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
-  const totalClients = clients.length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Super Admin Dashboard</h1>
-          <p className="text-muted-foreground">Overview of all client accounts</p>
+          <h1 className="text-2xl font-bold tracking-tight">My Assigned Clients</h1>
+          <p className="text-muted-foreground">Manage your client accounts</p>
         </div>
         <CurrencyToggle />
       </div>
 
-      {/* Pending Approvals Banner */}
-      {pendingCount > 0 && (
-        <Link to="/admin/pending">
-          <Card className="border-warning/50 bg-warning/10 hover:bg-warning/20 transition-colors cursor-pointer">
-            <CardContent className="flex items-center gap-3 py-4">
-              <ClipboardCheck className="h-5 w-5 text-warning" />
-              <span className="font-medium">
-                {pendingCount} pending approval{pendingCount > 1 ? "s" : ""} — click to review
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
-      )}
-
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">My Clients</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-8 w-16" /> : <p className="text-3xl font-bold">{totalClients}</p>}
+            {loading ? <Skeleton className="h-8 w-16" /> : <p className="text-3xl font-bold">{clients.length}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -94,17 +79,6 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             {loading ? <Skeleton className="h-8 w-24" /> : <p className="text-3xl font-bold">{formatAmount(totalBalance)}</p>}
-          </CardContent>
-        </Card>
-        <Card className="sm:col-span-2 lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Balance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-8 w-24" /> : (
-              <p className="text-3xl font-bold">{formatAmount(totalClients > 0 ? totalBalance / totalClients : 0)}</p>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -117,7 +91,7 @@ export default function AdminDashboard() {
           {loading ? (
             <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : clients.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No clients yet. Add your first client to get started.</p>
+            <p className="py-8 text-center text-muted-foreground">No clients assigned to you yet.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>

@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify the caller is an admin
+    // Verify the caller is an admin (super admin)
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
@@ -32,10 +32,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (!roleCheck) {
-      return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Forbidden: Super Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { email, password, full_name, phone, business_name } = await req.json();
+    const { email, password, full_name, phone, business_name, role = "client", manager_id } = await req.json();
 
     if (!email || !password || !full_name) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -53,16 +53,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Update profile with extra fields (trigger already created base profile)
+    // Update profile with extra fields
+    const profileUpdate: any = { phone, business_name, full_name };
+    if (role === "client" && manager_id && manager_id !== "none") {
+      profileUpdate.manager_id = manager_id;
+    }
+
     await supabaseAdmin
       .from("profiles")
-      .update({ phone, business_name, full_name })
+      .update(profileUpdate)
       .eq("user_id", newUser.user.id);
 
-    // Assign client role
+    // Assign role (client or manager)
+    const assignRole = role === "manager" ? "manager" : "client";
     await supabaseAdmin
       .from("user_roles")
-      .insert({ user_id: newUser.user.id, role: "client" });
+      .insert({ user_id: newUser.user.id, role: assignRole });
 
     return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,11 +1,17 @@
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, AppRole } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: "admin" | "client";
+  requiredRole?: AppRole;
 }
+
+const roleHomeMap: Record<string, string> = {
+  admin: "/admin",
+  manager: "/manager",
+  client: "/dashboard",
+};
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, role, loading } = useAuth();
@@ -21,7 +27,8 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   if (!user) return <Navigate to="/login" replace />;
 
   if (requiredRole && role !== requiredRole) {
-    return <Navigate to={role === "admin" ? "/admin" : "/dashboard"} replace />;
+    const home = role ? roleHomeMap[role] || "/login" : "/login";
+    return <Navigate to={home} replace />;
   }
 
   return <>{children}</>;

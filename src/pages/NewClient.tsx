@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus } from "lucide-react";
+
+interface ManagerOption { user_id: string; full_name: string; }
 
 export default function NewClient() {
   const [fullName, setFullName] = useState("");
@@ -14,9 +17,23 @@ export default function NewClient() {
   const [phone, setPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"client" | "manager">("client");
+  const [managerId, setManagerId] = useState("");
+  const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchManagers = async () => {
+      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "manager");
+      const managerIds = roles?.map((r) => r.user_id) ?? [];
+      if (managerIds.length === 0) return;
+      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", managerIds);
+      setManagers(profiles ?? []);
+    };
+    fetchManagers();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,17 +44,19 @@ export default function NewClient() {
     }
     setIsLoading(true);
 
-    const { data: { session } } = await supabase.auth.getSession();
-    
     const res = await supabase.functions.invoke("create-client", {
-      body: { email, password, full_name: fullName, phone, business_name: businessName },
+      body: {
+        email, password, full_name: fullName, phone, business_name: businessName,
+        role, // 'client' or 'manager'
+        manager_id: role === "client" && managerId ? managerId : null,
+      },
     });
 
     setIsLoading(false);
     if (res.error || res.data?.error) {
-      toast({ title: "Error", description: res.data?.error || res.error?.message || "Failed to create client", variant: "destructive" });
+      toast({ title: "Error", description: res.data?.error || res.error?.message || "Failed to create account", variant: "destructive" });
     } else {
-      toast({ title: "Success", description: `Client ${fullName} created successfully` });
+      toast({ title: "Success", description: `${role === "manager" ? "Manager" : "Client"} ${fullName} created` });
       navigate("/admin");
     }
   };
@@ -51,13 +70,23 @@ export default function NewClient() {
               <UserPlus className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle>New Client</CardTitle>
-              <CardDescription>Create a new client account</CardDescription>
+              <CardTitle>New Account</CardTitle>
+              <CardDescription>Create a new client or manager account</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Account Type</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as "client" | "manager")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Full Name *</Label>
               <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
@@ -78,9 +107,23 @@ export default function NewClient() {
               <Label>Business Name</Label>
               <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Acme Corp" />
             </div>
+            {role === "client" && managers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Assign Manager (optional)</Label>
+                <Select value={managerId} onValueChange={setManagerId}>
+                  <SelectTrigger><SelectValue placeholder="— None —" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— None —</SelectItem>
+                    {managers.map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Client
+              Create {role === "manager" ? "Manager" : "Client"}
             </Button>
           </form>
         </CardContent>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useCurrency } from "@/hooks/useCurrency";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign } from "lucide-react";
 
-interface ClientProfile {
-  user_id: string;
-  full_name: string;
-  business_name: string | null;
-}
+interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
 export default function AddFunds() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -23,28 +20,40 @@ export default function AddFunds() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
+  const { exchangeRate } = useCurrency();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isManager = role === "manager";
+  const backPath = isManager ? "/manager" : "/admin";
 
   useEffect(() => {
     const fetchClients = async () => {
-      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "client");
-      const clientIds = roles?.map((r) => r.user_id) ?? [];
-      if (clientIds.length === 0) return;
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, business_name")
-        .in("user_id", clientIds);
-      setClients(profiles ?? []);
+      if (isManager) {
+        // Manager sees only assigned clients via RLS
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, business_name, manager_id" as any);
+        setClients((profiles ?? []).filter((p: any) => p.manager_id === user?.id) as ClientProfile[]);
+      } else {
+        const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "client");
+        const clientIds = roles?.map((r) => r.user_id) ?? [];
+        if (clientIds.length === 0) return;
+        const { data: profiles } = await supabase
+          .from("profiles").select("user_id, full_name, business_name").in("user_id", clientIds);
+        setClients(profiles ?? []);
+      }
     };
     fetchClients();
-  }, []);
+  }, [isManager, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientId || !amount || Number(amount) <= 0) return;
     setIsLoading(true);
+
+    const status = isManager ? "pending_approval" : "completed";
 
     const { error } = await supabase.from("transactions").insert({
       client_id: clientId,
@@ -53,14 +62,19 @@ export default function AddFunds() {
       date,
       description: description || "Funds deposit",
       created_by: user!.id,
-    });
+      status,
+      exchange_rate: exchangeRate,
+    } as any);
 
     setIsLoading(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Success", description: `$${Number(amount).toFixed(2)} added successfully` });
-      navigate("/admin");
+      const msg = isManager
+        ? "Deposit submitted for Super Admin approval"
+        : `$${Number(amount).toFixed(2)} added successfully`;
+      toast({ title: "Success", description: msg });
+      navigate(backPath);
     }
   };
 
@@ -69,12 +83,14 @@ export default function AddFunds() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-              <DollarSign className="h-5 w-5 text-success" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <DollarSign className="h-5 w-5 text-primary" />
             </div>
             <div>
               <CardTitle>Add Funds</CardTitle>
-              <CardDescription>Top-up a client's wallet balance</CardDescription>
+              <CardDescription>
+                {isManager ? "Submit deposit for approval" : "Top-up a client's wallet balance"}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -94,8 +110,11 @@ export default function AddFunds() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Amount ($)</Label>
+              <Label>Amount (USD)</Label>
               <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+              {amount && Number(amount) > 0 && (
+                <p className="text-xs text-muted-foreground">≈ ৳{(Number(amount) * exchangeRate).toFixed(2)} BDT</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
@@ -107,7 +126,7 @@ export default function AddFunds() {
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Add Funds
+              {isManager ? "Submit for Approval" : "Add Funds"}
             </Button>
           </form>
         </CardContent>

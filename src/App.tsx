@@ -4,8 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { CurrencyProvider } from "@/hooks/useCurrency";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLayout } from "@/components/AdminLayout";
+import { ManagerLayout } from "@/components/ManagerLayout";
 import { ClientLayout } from "@/components/ClientLayout";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -13,6 +15,11 @@ import AddFunds from "@/pages/AddFunds";
 import LogSpend from "@/pages/LogSpend";
 import NewClient from "@/pages/NewClient";
 import ClientDashboard from "@/pages/ClientDashboard";
+import ManagerDashboard from "@/pages/ManagerDashboard";
+import PendingApprovals from "@/pages/PendingApprovals";
+import Settings from "@/pages/Settings";
+import AuditLogs from "@/pages/AuditLogs";
+import ClientAssignment from "@/pages/ClientAssignment";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,39 +29,58 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+          <CurrencyProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<Navigate to="/login" replace />} />
 
-            {/* Admin routes */}
-            <Route
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/admin/add-funds" element={<AddFunds />} />
-              <Route path="/admin/log-spend" element={<LogSpend />} />
-              <Route path="/admin/clients/new" element={<NewClient />} />
-            </Route>
+              {/* Super Admin routes */}
+              <Route
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/add-funds" element={<AddFunds />} />
+                <Route path="/admin/log-spend" element={<LogSpend />} />
+                <Route path="/admin/clients/new" element={<NewClient />} />
+                <Route path="/admin/pending" element={<PendingApprovals />} />
+                <Route path="/admin/settings" element={<Settings />} />
+                <Route path="/admin/logs" element={<AuditLogs />} />
+                <Route path="/admin/assign" element={<ClientAssignment />} />
+              </Route>
 
-            {/* Client routes */}
-            <Route
-              element={
-                <ProtectedRoute requiredRole="client">
-                  <ClientLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/dashboard" element={<ClientDashboard />} />
-            </Route>
+              {/* Manager routes */}
+              <Route
+                element={
+                  <ProtectedRoute requiredRole="manager">
+                    <ManagerLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/manager" element={<ManagerDashboard />} />
+                <Route path="/manager/add-funds" element={<AddFunds />} />
+                <Route path="/manager/log-spend" element={<LogSpend />} />
+              </Route>
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              {/* Client routes */}
+              <Route
+                element={
+                  <ProtectedRoute requiredRole="client">
+                    <ClientLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/dashboard" element={<ClientDashboard />} />
+              </Route>
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </CurrencyProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
