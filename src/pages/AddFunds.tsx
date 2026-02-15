@@ -30,6 +30,15 @@ export default function AddFunds() {
   const isManager = role === "manager";
   const backPath = isManager ? "/manager" : "/admin";
 
+  // Pre-select client from query param
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const preselected = params.get("client");
+    if (preselected && !clientId) {
+      setClientId(preselected);
+    }
+  }, [location.search]);
+
   useEffect(() => {
     const fetchClients = async () => {
       if (isManager) {
