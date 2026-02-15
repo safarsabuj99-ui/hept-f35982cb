@@ -4,9 +4,11 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Users, ChevronRight } from "lucide-react";
+import { Search, Users, ChevronRight, Plus } from "lucide-react";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 
 interface ClientRow {
   user_id: string;
@@ -21,7 +23,8 @@ export default function ClientList() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositClientId, setDepositClientId] = useState<string>("");
   useEffect(() => {
     async function load() {
       // Get client user_ids
@@ -131,12 +134,26 @@ export default function ClientList() {
                         {c.custom_exchange_rate ? `৳${c.custom_exchange_rate}` : "Global"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Link
-                          to={`/admin/clients/${c.user_id}`}
-                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                        >
-                          View <ChevronRight className="h-3 w-3" />
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 h-7 px-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDepositClientId(c.user_id);
+                              setDepositOpen(true);
+                            }}
+                          >
+                            <Plus className="h-3 w-3" /> Funds
+                          </Button>
+                          <Link
+                            to={`/admin/clients/${c.user_id}`}
+                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                          >
+                            View <ChevronRight className="h-3 w-3" />
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -146,6 +163,12 @@ export default function ClientList() {
           )}
         </CardContent>
       </Card>
+
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        clientId={depositClientId}
+      />
     </div>
   );
 }

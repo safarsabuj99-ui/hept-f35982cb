@@ -4,14 +4,15 @@ import { useNavigate } from "react-router-dom";
 
 interface QuickActionsProps {
   pendingCount: number;
+  onAddFunds?: () => void;
 }
 
-export function QuickActions({ pendingCount }: QuickActionsProps) {
+export function QuickActions({ pendingCount, onAddFunds }: QuickActionsProps) {
   const navigate = useNavigate();
 
   return (
     <div className="glass-card p-3 px-4 flex items-center gap-2">
-      <Button size="sm" className="gap-2" onClick={() => navigate("/admin/add-funds")}>
+      <Button size="sm" className="gap-2" onClick={onAddFunds ?? (() => navigate("/admin/add-funds"))}>
         <Plus className="h-3.5 w-3.5" /> Add Funds
       </Button>
       <Button

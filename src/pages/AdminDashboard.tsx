@@ -13,6 +13,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { AttentionPanel } from "@/components/dashboard/AttentionPanel";
 import { RunwayPrediction } from "@/components/RunwayPrediction";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DollarSign, Banknote, AlertCircle, Wallet, Loader2
@@ -38,6 +39,7 @@ export default function AdminDashboard() {
   const [activeAccounts, setActiveAccounts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [depositOpen, setDepositOpen] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const { exchangeRate } = useCurrency();
@@ -157,7 +159,7 @@ export default function AdminDashboard() {
       />
 
       {/* Zone 2: Quick Actions Strip */}
-      <QuickActions pendingCount={pendingCount} />
+      <QuickActions pendingCount={pendingCount} onAddFunds={() => setDepositOpen(true)} />
 
       {/* Zone 3: Primary KPIs */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 xs:grid-cols-2 lg:grid-cols-4">
@@ -245,6 +247,13 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        showClientSelector
+        onSuccess={fetchData}
+      />
     </div>
     </PullToRefresh>
   );
