@@ -4,32 +4,22 @@ import { Button } from "@/components/ui/button";
 import {
   BarChart3,
   Users,
-  PlusCircle,
   DollarSign,
   TrendingDown,
   LogOut,
   Menu,
   X,
-  Settings,
-  ScrollText,
-  ClipboardCheck,
-  UserCog,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/admin", icon: Users, label: "Clients" },
-  { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
-  { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds" },
-  { to: "/admin/log-spend", icon: TrendingDown, label: "Log Spend" },
-  { to: "/admin/clients/new", icon: PlusCircle, label: "New Client" },
-  { to: "/admin/assign", icon: UserCog, label: "Assign Clients" },
-  { to: "/admin/settings", icon: Settings, label: "Settings" },
-  { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
+  { to: "/manager", icon: Users, label: "My Clients" },
+  { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds" },
+  { to: "/manager/log-spend", icon: TrendingDown, label: "Log Spend" },
 ];
 
-export function AdminLayout() {
+export function ManagerLayout() {
   const { signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);

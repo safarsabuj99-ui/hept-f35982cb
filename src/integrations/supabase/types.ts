@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action_type: string
+          created_at: string
+          description: string
+          id: string
+          ip_address: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          description: string
+          id?: string
+          ip_address?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          description?: string
+          id?: string
+          ip_address?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           business_name: string | null
@@ -21,6 +48,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          manager_id: string | null
           phone: string | null
           user_id: string
         }
@@ -30,6 +58,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          manager_id?: string | null
           phone?: string | null
           user_id: string
         }
@@ -39,8 +68,33 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          manager_id?: string | null
           phone?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
         }
         Relationships: []
       }
@@ -52,8 +106,10 @@ export type Database = {
           created_by: string
           date: string
           description: string | null
+          exchange_rate: number | null
           id: string
           platform: Database["public"]["Enums"]["ad_platform"] | null
+          status: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
         }
         Insert: {
@@ -63,8 +119,10 @@ export type Database = {
           created_by: string
           date?: string
           description?: string | null
+          exchange_rate?: number | null
           id?: string
           platform?: Database["public"]["Enums"]["ad_platform"] | null
+          status?: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
         }
         Update: {
@@ -74,8 +132,10 @@ export type Database = {
           created_by?: string
           date?: string
           description?: string | null
+          exchange_rate?: number | null
           id?: string
           platform?: Database["public"]["Enums"]["ad_platform"] | null
+          status?: Database["public"]["Enums"]["transaction_status"]
           type?: Database["public"]["Enums"]["transaction_type"]
         }
         Relationships: []
@@ -103,6 +163,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_managed_client_ids: {
+        Args: { _manager_id: string }
+        Returns: string[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -114,6 +178,7 @@ export type Database = {
     Enums: {
       ad_platform: "meta" | "tiktok" | "google"
       app_role: "admin" | "client" | "manager"
+      transaction_status: "pending_approval" | "completed" | "rejected"
       transaction_type: "credit" | "debit"
     }
     CompositeTypes: {
@@ -244,6 +309,7 @@ export const Constants = {
     Enums: {
       ad_platform: ["meta", "tiktok", "google"],
       app_role: ["admin", "client", "manager"],
+      transaction_status: ["pending_approval", "completed", "rejected"],
       transaction_type: ["credit", "debit"],
     },
   },
