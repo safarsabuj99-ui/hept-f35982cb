@@ -181,7 +181,7 @@ export default function AdminDashboard() {
       />
 
       {/* Zone 3: Primary KPIs */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 xs:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Today's Spend"
           value={`$${todaySpend.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
@@ -239,7 +239,7 @@ export default function AdminDashboard() {
       {/* Zone 6: Attention Required */}
       <div>
         <p className="section-label">Operations</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
           <div className="md:col-span-2">
             <AttentionPanel />
           </div>
@@ -251,7 +251,7 @@ export default function AdminDashboard() {
       <div>
         <p className="section-label">Client Data</p>
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 w-full sm:w-auto">
             <TabsTrigger value="overview">Client Overview</TabsTrigger>
             <TabsTrigger value="profitability">All Clients</TabsTrigger>
           </TabsList>

@@ -23,13 +23,14 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
   });
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
           {greeting}, <span className="text-primary">{displayName}</span>
         </h1>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span>{today}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+          <span className="hidden sm:inline">{today}</span>
+          <span className="sm:hidden">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
           {lastSynced && (
             <span className="inline-flex items-center gap-1.5 text-xs">
               <span className="pulse-dot" />
@@ -38,14 +39,14 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
           )}
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="stat-pill">
           <MonitorSmartphone className="h-3.5 w-3.5 text-primary" />
-          <span className="font-mono">{activeAccounts}</span> Accounts
+          <span className="font-mono">{activeAccounts}</span> <span className="hidden xs:inline">Accounts</span>
         </div>
         <div className="stat-pill">
           <ClipboardCheck className="h-3.5 w-3.5 text-warning" />
-          <span className="font-mono">{pendingCount}</span> Pending
+          <span className="font-mono">{pendingCount}</span> <span className="hidden xs:inline">Pending</span>
         </div>
         <CurrencyToggle />
       </div>
