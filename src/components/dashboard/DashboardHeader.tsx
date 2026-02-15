@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { CurrencyToggle } from "@/components/CurrencyToggle";
+
 import { Clock, MonitorSmartphone, ClipboardCheck } from "lucide-react";
 
 interface DashboardHeaderProps {
@@ -48,7 +48,7 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
           <ClipboardCheck className="h-3.5 w-3.5 text-warning" />
           <span className="font-mono">{pendingCount}</span> <span className="hidden xs:inline">Pending</span>
         </div>
-        <CurrencyToggle />
+        
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrency } from "@/hooks/useCurrency";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ export default function PendingApprovals() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const { toast } = useToast();
-  const { formatAmount } = useCurrency();
+  
 
   const fetchPending = async () => {
     const { data: txns } = await (supabase
@@ -111,7 +111,7 @@ export default function PendingApprovals() {
                       <TableCell className="font-medium">{t.client_name}</TableCell>
                       <TableCell className="hidden sm:table-cell">{t.creator_name}</TableCell>
                       <TableCell className="hidden md:table-cell">{t.description || "—"}</TableCell>
-                      <TableCell className="text-right font-mono font-semibold">{formatAmount(Number(t.amount))}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{`$${Number(t.amount).toFixed(2)}`}</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-2">
                           <Button
