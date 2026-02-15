@@ -25,6 +25,9 @@ import AdAccounts from "@/pages/AdAccounts";
 import Integrations from "@/pages/Integrations";
 import CampaignMapping from "@/pages/CampaignMapping";
 import SpendReport from "@/pages/SpendReport";
+import WalletInventory from "@/pages/WalletInventory";
+import FinanceDashboard from "@/pages/FinanceDashboard";
+import ExpenseManager from "@/pages/ExpenseManager";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -62,6 +65,9 @@ const App = () => (
                 <Route path="/admin/integrations" element={<Integrations />} />
                 <Route path="/admin/campaigns" element={<CampaignMapping />} />
                 <Route path="/admin/spend-report" element={<SpendReport />} />
+                <Route path="/admin/wallet" element={<WalletInventory />} />
+                <Route path="/admin/finance" element={<FinanceDashboard />} />
+                <Route path="/admin/expenses" element={<ExpenseManager />} />
               </Route>
 
               {/* Manager routes */}

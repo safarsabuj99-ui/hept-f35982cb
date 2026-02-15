@@ -18,6 +18,9 @@ import {
   Plug,
   MapPin,
   FileText,
+  Wallet,
+  TrendingUp,
+  Receipt,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -34,6 +37,9 @@ const navItems = [
   { to: "/admin/integrations", icon: Plug, label: "Integrations" },
   { to: "/admin/campaigns", icon: MapPin, label: "Campaigns" },
   { to: "/admin/spend-report", icon: FileText, label: "Spend Report" },
+  { to: "/admin/wallet", icon: Wallet, label: "Wallet" },
+  { to: "/admin/finance", icon: TrendingUp, label: "Finance" },
+  { to: "/admin/expenses", icon: Receipt, label: "Expenses" },
   { to: "/admin/settings", icon: Settings, label: "Settings" },
   { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
 ];
