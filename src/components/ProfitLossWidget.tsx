@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
@@ -11,7 +12,7 @@ export function ProfitLossWidget() {
   useEffect(() => {
     const fetch = async () => {
       const { data: spendData } = await supabase
-        .from("daily_ad_spend" as any)
+        .from("daily_ad_spend")
         .select("raw_spend_amount, raw_currency, exchange_rate_used, final_billable_usd") as any;
 
       if (spendData) {
@@ -33,27 +34,32 @@ export function ProfitLossWidget() {
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
   const margin = data ? data.totalBillable - data.totalRaw : 0;
+  const marginPct = data && data.totalRaw > 0 ? ((margin / data.totalRaw) * 100).toFixed(1) : "0";
+  const isProfit = margin >= 0;
 
-  if (loading) return <Skeleton className="h-32" />;
+  if (loading) return <Skeleton className="h-[200px]" />;
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Profit / Loss Overview</CardTitle>
+    <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-medium text-muted-foreground">Profit / Loss</CardTitle>
+        <Badge variant={isProfit ? "default" : "destructive"} className="text-xs font-mono">
+          {isProfit ? "+" : ""}{marginPct}%
+        </Badge>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Total Raw Cost (USD)</span>
+          <span className="text-muted-foreground">Raw Cost</span>
           <span className="font-mono">{fmt(data?.totalRaw ?? 0)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Total Client Billed</span>
+          <span className="text-muted-foreground">Billed</span>
           <span className="font-mono">{fmt(data?.totalBillable ?? 0)}</span>
         </div>
-        <div className="flex justify-between border-t pt-2">
-          <span className="font-medium">Margin</span>
-          <span className={`flex items-center gap-1 font-mono font-bold ${margin >= 0 ? "text-success" : "text-destructive"}`}>
-            {margin >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+        <div className="flex justify-between border-t pt-3">
+          <span className="font-medium text-sm">Margin</span>
+          <span className={`flex items-center gap-1 font-mono font-bold ${isProfit ? "text-success" : "text-destructive"}`}>
+            {isProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             {fmt(Math.abs(margin))}
           </span>
         </div>

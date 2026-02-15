@@ -116,3 +116,10 @@
     font-family: 'Inter', sans-serif;
   }
 }
+
+@layer utilities {
+  .font-mono {
+    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
