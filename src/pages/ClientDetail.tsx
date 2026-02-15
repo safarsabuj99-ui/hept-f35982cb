@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield } from "lucide-react";
+import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
@@ -220,8 +221,9 @@ export default function ClientDetail() {
       </Card>
 
       <Tabs defaultValue="pricing" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="pricing" className="gap-1"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
+          <TabsTrigger value="automation" className="gap-1"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
           <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
           <TabsTrigger value="transactions" className="gap-1"><Receipt className="h-3.5 w-3.5 hidden sm:inline" /> Transactions</TabsTrigger>
@@ -287,6 +289,21 @@ export default function ClientDetail() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* AUTOMATION TAB */}
+        <TabsContent value="automation">
+          <AutomationConfigTab
+            userId={userId!}
+            autoPauseThreshold={profile?.auto_pause_threshold_pct ?? 95}
+            overdraftLimit={Number(profile?.overdraft_limit_usd ?? 0)}
+            systemPausedCampaigns={
+              Array.isArray(profile?.system_paused_campaigns)
+                ? profile.system_paused_campaigns
+                : []
+            }
+            onSaved={loadAll}
+          />
         </TabsContent>
 
         {/* SPEND TAB */}

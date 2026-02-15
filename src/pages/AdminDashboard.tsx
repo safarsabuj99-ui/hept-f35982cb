@@ -12,6 +12,7 @@ import { ProfitabilityTable } from "@/components/dashboard/ProfitabilityTable";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { AttentionPanel } from "@/components/dashboard/AttentionPanel";
+import { RunwayPrediction } from "@/components/RunwayPrediction";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DollarSign, Banknote, AlertCircle, Wallet, Loader2
@@ -213,6 +214,9 @@ export default function AdminDashboard() {
           <RevenueVsCostChart />
         </div>
       </div>
+
+      {/* Zone 5b: Runway Predictions */}
+      <RunwayPrediction />
 
       {/* Zone 6: Attention Required */}
       <div>
