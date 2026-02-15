@@ -1,58 +1,47 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
-  BarChart3,
-  Users,
-  PlusCircle,
-  DollarSign,
-  LogOut,
-  Menu,
-  X,
-  Settings,
-  ScrollText,
-  ClipboardCheck,
-  UserCog,
-  Monitor,
-  Plug,
-  MapPin,
-  FileText,
-  Wallet,
-  TrendingUp,
-  Receipt,
-  Banknote,
-  Megaphone,
+  BarChart3, Users, PlusCircle, DollarSign, LogOut, Menu, X,
+  Settings, ScrollText, ClipboardCheck, UserCog, Monitor, Plug,
+  MapPin, FileText, Wallet, TrendingUp, Receipt, Banknote, Megaphone,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { to: "/admin", icon: BarChart3, label: "Dashboard" },
-  { to: "/admin/clients", icon: Users, label: "Client List" },
-  { to: "/admin/team", icon: UserCog, label: "Team" },
+const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionKey }[] = [
+  { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
+  { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
+  { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
   { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
-  { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds" },
-  
-  { to: "/admin/clients/new", icon: PlusCircle, label: "New Client" },
-  { to: "/admin/assign", icon: UserCog, label: "Assign Clients" },
+  { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_manage_finance" },
+  { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
+  { to: "/admin/assign", icon: UserCog, label: "Assign Clients", permKey: "can_manage_clients" },
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
-  { to: "/admin/integrations", icon: Plug, label: "Integrations" },
-  { to: "/admin/campaigns", icon: MapPin, label: "Campaigns" },
+  { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
+  { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
   { to: "/admin/spend-report", icon: FileText, label: "Spend Report" },
-  { to: "/admin/wallet", icon: Wallet, label: "Wallet" },
-  { to: "/admin/finance", icon: TrendingUp, label: "Finance" },
-  { to: "/admin/expenses", icon: Receipt, label: "Expenses" },
-  { to: "/admin/payment-requests", icon: Banknote, label: "Payments" },
-  { to: "/admin/orders", icon: Megaphone, label: "Orders" },
-  { to: "/admin/settings", icon: Settings, label: "Settings" },
-  { to: "/admin/logs", icon: ScrollText, label: "System Logs" },
+  { to: "/admin/wallet", icon: Wallet, label: "Wallet", permKey: "can_manage_finance" },
+  { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
+  { to: "/admin/expenses", icon: Receipt, label: "Expenses", permKey: "can_manage_finance" },
+  { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_manage_finance" },
+  { to: "/admin/orders", icon: Megaphone, label: "Orders", permKey: "can_manage_campaigns" },
+  { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
+  { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_configure_system" },
 ];
 
 export function AdminLayout() {
   const { signOut } = useAuth();
+  const { hasPermission } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navItems = useMemo(
+    () => allNavItems.filter((item) => !item.permKey || hasPermission(item.permKey)),
+    [hasPermission]
+  );
 
   return (
     <div className="flex min-h-screen">

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Users } from "lucide-react";
+import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok", google: "Google" };
@@ -24,17 +25,18 @@ const STATUS_BADGE: Record<string, { className: string; label: string }> = {
 
 export default function OrderManagement() {
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
+  const canManageCampaigns = hasPermission("can_manage_campaigns");
+
   const [requests, setRequests] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tab, setTab] = useState("pending");
 
-  // Detail modal
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
 
-  // Reject modal
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -107,7 +109,6 @@ export default function OrderManagement() {
         <p className="text-sm text-muted-foreground mt-1">Manage incoming campaign requests from clients</p>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {(["pending", "processing", "completed", "rejected"] as const).map((s) => {
           const badge = STATUS_BADGE[s];
@@ -174,7 +175,7 @@ export default function OrderManagement() {
                                 <Button size="sm" variant="ghost" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
                                   <Eye className="h-4 w-4" />
                                 </Button>
-                                {r.status === "pending" && (
+                                {canManageCampaigns && r.status === "pending" && (
                                   <>
                                     <Button size="sm" variant="outline" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "processing")}>
                                       {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
@@ -184,7 +185,7 @@ export default function OrderManagement() {
                                     </Button>
                                   </>
                                 )}
-                                {r.status === "processing" && (
+                                {canManageCampaigns && r.status === "processing" && (
                                   <Button size="sm" variant="default" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "completed")}>
                                     {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
                                     Complete

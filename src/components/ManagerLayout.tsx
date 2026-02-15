@@ -1,33 +1,27 @@
 import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
+import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import {
-  BarChart3,
-  Users,
-  DollarSign,
-  LogOut,
-  Menu,
-  X,
+  BarChart3, Users, DollarSign, LogOut, Menu, X, Megaphone,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
-const allNavItems = [
-  { to: "/manager", icon: Users, label: "My Clients", permKey: "can_view_dashboard" as const },
-  { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_add_funds" as const },
-  
+const allNavItems: { to: string; icon: any; label: string; permKey: PermissionKey }[] = [
+  { to: "/manager", icon: Users, label: "My Clients", permKey: "can_view_dashboard_stats" },
+  { to: "/manager/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_manage_finance" },
 ];
 
 export function ManagerLayout() {
   const { signOut } = useAuth();
-  const { permissions } = usePermissions();
+  const { hasPermission } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = useMemo(
-    () => allNavItems.filter((item) => permissions[item.permKey]),
-    [permissions]
+    () => allNavItems.filter((item) => hasPermission(item.permKey)),
+    [hasPermission]
   );
 
   return (
