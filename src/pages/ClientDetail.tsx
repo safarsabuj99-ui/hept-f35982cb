@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2 } from "lucide-react";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
@@ -31,8 +31,15 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
+  const [clientRole, setClientRole] = useState<string>("");
 
-  // Editable state
+  // Profile editable state
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [mappingKeyword, setMappingKeyword] = useState("");
+
+  // Pricing state
   const [pricingMode, setPricingMode] = useState<"default" | "flat" | "percentage">("default");
   const [flatMeta, setFlatMeta] = useState("");
   const [flatTiktok, setFlatTiktok] = useState("");
@@ -43,7 +50,10 @@ export default function ClientDetail() {
   // Manager assignment
   const [managers, setManagers] = useState<{ user_id: string; full_name: string }[]>([]);
   const [assignedManager, setAssignedManager] = useState<string>("unassigned");
-  const [savingManager, setSavingManager] = useState(false);
+
+  // Password reset
+  const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
@@ -61,13 +71,18 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes] = await Promise.all([
+    const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes, roleRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_accounts").select("id, platform_name").eq("client_id", userId!),
       supabase.from("payment_requests").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
+      supabase.from("user_roles").select("role").eq("user_id", userId!).maybeSingle(),
     ]);
+
+    if (roleRes.data) {
+      setClientRole(roleRes.data.role);
+    }
 
     // Load manager profiles
     if (managersRes.data?.length) {
@@ -82,14 +97,18 @@ export default function ClientDetail() {
     if (profileRes.data) {
       const p = profileRes.data;
       setProfile(p);
+      setFullName(p.full_name || "");
+      setPhone(p.phone || "");
+      setBusinessName(p.business_name || "");
+      setMappingKeyword(p.mapping_keyword || "");
       setAssignedManager(p.manager_id || "unassigned");
+      setExchangeRate(p.custom_exchange_rate ? String(p.custom_exchange_rate) : "");
       const pc = (p.pricing_config as unknown as PricingConfig) || { mode: "default" };
       setPricingMode(pc.mode || "default");
       setFlatMeta(String(pc.flat_rates?.meta ?? ""));
       setFlatTiktok(String(pc.flat_rates?.tiktok ?? ""));
       setFlatGoogle(String(pc.flat_rates?.google ?? ""));
       setPercentage(String(pc.percentage ?? ""));
-      setExchangeRate(p.custom_exchange_rate ? String(p.custom_exchange_rate) : "");
     }
 
     // Spend data
@@ -120,7 +139,6 @@ export default function ClientDetail() {
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendDateRange(range);
     setSpendDatePreset(preset);
-    // Fetch account IDs again for the filter query
     const { data: accounts } = await supabase.from("ad_accounts").select("id").eq("client_id", userId!);
     if (accounts?.length) {
       await loadSpendData(accounts.map((a) => a.id), range);
@@ -129,25 +147,35 @@ export default function ClientDetail() {
     }
   }
 
-  async function handleManagerChange(value: string) {
+  async function handleSaveProfile() {
     if (!userId) return;
-    setSavingManager(true);
-    setAssignedManager(value);
-    const newManagerId = value === "unassigned" ? null : value;
-    const { error } = await supabase
+    setSaving(true);
+
+    const { data, error } = await supabase
       .from("profiles")
-      .update({ manager_id: newManagerId })
-      .eq("user_id", userId);
-    setSavingManager(false);
+      .update({
+        full_name: fullName,
+        phone: phone || null,
+        business_name: businessName || null,
+        mapping_keyword: mappingKeyword || null,
+        manager_id: assignedManager === "unassigned" ? null : assignedManager,
+        custom_exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
+      })
+      .eq("user_id", userId)
+      .select();
+
+    setSaving(false);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error saving", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Update failed", description: "No rows were updated.", variant: "destructive" });
     } else {
-      const managerName = managers.find((m) => m.user_id === value)?.full_name || "Unassigned";
-      toast({ title: "Manager updated", description: `Assigned to ${managerName}.` });
+      setProfile(data[0]);
+      toast({ title: "Saved", description: "Profile updated successfully." });
     }
   }
 
-  async function handleSave() {
+  async function handleSavePricing() {
     if (!userId) return;
     setSaving(true);
 
@@ -175,11 +203,35 @@ export default function ClientDetail() {
     if (error) {
       toast({ title: "Error saving", description: error.message, variant: "destructive" });
     } else if (!data || data.length === 0) {
-      toast({ title: "Update failed", description: "No rows were updated. You may not have permission.", variant: "destructive" });
+      toast({ title: "Update failed", description: "No rows were updated.", variant: "destructive" });
     } else {
       setProfile(data[0]);
-      toast({ title: "Saved", description: "Client pricing updated successfully." });
+      toast({ title: "Saved", description: "Pricing updated successfully." });
     }
+  }
+
+  async function handlePasswordReset() {
+    if (!userId || !newPassword) return;
+    if (newPassword.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await supabase.functions.invoke("reset-client-password", {
+        body: { user_id: userId, new_password: newPassword },
+      });
+      if (response.error) {
+        toast({ title: "Error", description: response.error.message, variant: "destructive" });
+      } else {
+        setNewPassword("");
+        toast({ title: "Password Reset", description: "Client password has been updated." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setResettingPassword(false);
   }
 
   const fmt = (n: number) =>
@@ -187,7 +239,6 @@ export default function ClientDetail() {
   const fmtBdt = (n: number) =>
     `৳${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  // Spend aggregation by platform
   const spendByPlatform: Record<string, number> = spendData.reduce(
     (acc: Record<string, number>, s: any) => {
       const plat = s.ad_accounts?.platform_name || "unknown";
@@ -219,6 +270,8 @@ export default function ClientDetail() {
     );
   }
 
+  const roleBadgeColor = clientRole === "admin" ? "destructive" : clientRole === "manager" ? "secondary" : "default";
+
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -227,45 +280,136 @@ export default function ClientDetail() {
       </Link>
 
       {/* Header */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">{profile.full_name}</CardTitle>
-          <CardDescription>
-            {profile.business_name && <span className="mr-3">{profile.business_name}</span>}
-            {profile.email} {profile.phone && ` · ${profile.phone}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-medium whitespace-nowrap">Assigned Manager</Label>
-            <Select value={assignedManager} onValueChange={handleManagerChange} disabled={savingManager}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select manager" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {managers.map((m) => (
-                  <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> Add Funds
-          </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{profile.full_name}</h1>
+          <Badge variant={roleBadgeColor} className="capitalize text-xs">
+            {clientRole || "client"}
+          </Badge>
+        </div>
+        <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> Add Funds
+        </Button>
+      </div>
 
-      <Tabs defaultValue="pricing" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="profile" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
+          <TabsTrigger value="profile" className="gap-1"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
           <TabsTrigger value="pricing" className="gap-1"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
           <TabsTrigger value="automation" className="gap-1"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
           <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
           <TabsTrigger value="transactions" className="gap-1"><Receipt className="h-3.5 w-3.5 hidden sm:inline" /> Transactions</TabsTrigger>
         </TabsList>
+
+        {/* PROFILE TAB */}
+        <TabsContent value="profile" className="space-y-4">
+          {/* Account Info */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Account Information</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Account Type</Label>
+                  <div>
+                    <Badge variant={roleBadgeColor} className="capitalize">{clientRole || "client"}</Badge>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-muted-foreground text-xs uppercase tracking-wide">Email</Label>
+                  <Input id="email" value={profile.email} disabled className="bg-muted" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName" className="text-muted-foreground text-xs uppercase tracking-wide">Full Name</Label>
+                  <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-muted-foreground text-xs uppercase tracking-wide">Phone</Label>
+                  <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="businessName" className="text-muted-foreground text-xs uppercase tracking-wide">Business Name</Label>
+                  <Input id="businessName" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Business name" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Password Reset */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Password</CardTitle>
+              </div>
+              <CardDescription>Set a new password for this client's account.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 max-w-md">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="newPassword" className="text-muted-foreground text-xs uppercase tracking-wide">New Password</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                  />
+                </div>
+                <Button onClick={handlePasswordReset} disabled={resettingPassword || !newPassword} variant="secondary" className="gap-2">
+                  <KeyRound className="h-3.5 w-3.5" />
+                  {resettingPassword ? "Resetting…" : "Reset"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Mapping & Assignment */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Mapping & Assignment</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="mappingKeyword" className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
+                  <Input id="mappingKeyword" value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. alpha" />
+                  <p className="text-xs text-muted-foreground">Used to attribute ad spend from shared accounts by matching campaign names.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Assigned Manager</Label>
+                  <Select value={assignedManager} onValueChange={setAssignedManager}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select manager" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {managers.map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exchangeRate" className="text-muted-foreground text-xs uppercase tracking-wide">Custom Exchange Rate (BDT/USD)</Label>
+                  <Input id="exchangeRate" type="number" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="Leave empty for global rate" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Button onClick={handleSaveProfile} disabled={saving} className="gap-2">
+            <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Changes"}
+          </Button>
+        </TabsContent>
 
         {/* PRICING TAB */}
         <TabsContent value="pricing">
@@ -322,7 +466,7 @@ export default function ClientDetail() {
                 </div>
               )}
 
-              <Button onClick={handleSave} disabled={saving} className="gap-2">
+              <Button onClick={handleSavePricing} disabled={saving} className="gap-2">
                 <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Changes"}
               </Button>
             </CardContent>
@@ -355,10 +499,10 @@ export default function ClientDetail() {
               <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendDatePreset} />
               {Object.keys(spendByPlatform).length > 0 ? (
                 <div className="mb-4 flex flex-wrap gap-3">
-                    {Object.entries(spendByPlatform).map(([plat, amount]) => (
-                      <Badge key={plat} variant="outline" className="gap-1 text-sm capitalize">
-                        {plat}: {fmt(Number(amount))}
-                      </Badge>
+                  {Object.entries(spendByPlatform).map(([plat, amount]) => (
+                    <Badge key={plat} variant="outline" className="gap-1 text-sm capitalize">
+                      {plat}: {fmt(Number(amount))}
+                    </Badge>
                   ))}
                 </div>
               ) : (
