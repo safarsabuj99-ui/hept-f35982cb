@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, FileText } from "lucide-react";
+import { DateRangeFilter, DateRange, DatePreset } from "@/components/DateRangeFilter";
 
 export default function SpendReport() {
   const { role } = useAuth();
@@ -18,8 +18,7 @@ export default function SpendReport() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -48,8 +47,10 @@ export default function SpendReport() {
     const acc = getAccount(s.ad_account_id);
     if (platformFilter !== "all" && acc?.platform_name !== platformFilter) return false;
     if (clientFilter !== "all" && acc?.client_id !== clientFilter) return false;
-    if (dateFrom && s.date < dateFrom) return false;
-    if (dateTo && s.date > dateTo) return false;
+    if (dateRange) {
+      const d = new Date(s.date);
+      if (d < dateRange.from || d > dateRange.to) return false;
+    }
     return true;
   });
 
@@ -91,12 +92,8 @@ export default function SpendReport() {
             </div>
           )}
           <div className="space-y-1">
-            <Label className="text-xs">From</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-36" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">To</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-36" />
+            <Label className="text-xs">Date Range</Label>
+            <DateRangeFilter onRangeChange={(range) => setDateRange(range)} />
           </div>
         </CardContent>
       </Card>
