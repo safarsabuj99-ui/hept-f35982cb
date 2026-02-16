@@ -52,15 +52,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get client profiles with mapping keywords and custom rates
+    // Get all ad_account_clients assignments (junction table with keywords)
+    const { data: accountClients } = await supabaseAdmin
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id, mapping_keyword");
+
+    // Build a map: ad_account_id -> [{ client_id, keyword }]
+    const accountKeywordMap: Record<string, { client_id: string; keyword: string }[]> = {};
+    for (const ac of accountClients ?? []) {
+      if (!accountKeywordMap[ac.ad_account_id]) accountKeywordMap[ac.ad_account_id] = [];
+      if (ac.mapping_keyword && ac.mapping_keyword.trim()) {
+        accountKeywordMap[ac.ad_account_id].push({
+          client_id: ac.client_id,
+          keyword: ac.mapping_keyword.trim().toLowerCase(),
+        });
+      }
+    }
+
+    // Get client profiles for fallback keyword matching and custom rates
     const { data: clientProfiles } = await supabaseAdmin
       .from("profiles").select("user_id, mapping_keyword, custom_exchange_rate, pricing_config");
 
-    const keywordMap: { keyword: string; userId: string }[] = [];
+    const profileKeywordMap: { keyword: string; userId: string }[] = [];
     const clientRates: Record<string, number | null> = {};
     for (const p of clientProfiles ?? []) {
       if (p.mapping_keyword && p.mapping_keyword.trim()) {
-        keywordMap.push({ keyword: p.mapping_keyword.trim().toLowerCase(), userId: p.user_id });
+        profileKeywordMap.push({ keyword: p.mapping_keyword.trim().toLowerCase(), userId: p.user_id });
       }
       if (p.custom_exchange_rate) {
         clientRates[p.user_id] = Number(p.custom_exchange_rate);
@@ -95,6 +112,7 @@ Deno.serve(async (req) => {
 
       const apiToken = integration.api_token;
       const adAccountId = account.ad_account_id;
+      const accountAssignments = accountKeywordMap[account.id] ?? [];
 
       try {
         // Fetch daily insights with campaign breakdown for 30 days
@@ -105,26 +123,15 @@ Deno.serve(async (req) => {
         let allInsights: any[] = [];
         let nextUrl: string | null = insightsUrl;
 
-        // Paginate through all results
         while (nextUrl) {
           const res = await fetch(nextUrl);
           const json = await res.json();
-
-          if (json.error) {
-            errors.push(`${adAccountId}: ${json.error.message}`);
-            break;
-          }
-
-          if (json.data && json.data.length > 0) {
-            allInsights = allInsights.concat(json.data);
-          }
-
-          // Check for next page
+          if (json.error) { errors.push(`${adAccountId}: ${json.error.message}`); break; }
+          if (json.data && json.data.length > 0) allInsights = allInsights.concat(json.data);
           nextUrl = json.paging?.next || null;
         }
 
         console.log(`Got ${allInsights.length} insight rows for ${account.account_name}`);
-
         if (allInsights.length === 0) continue;
 
         // Check existing records to avoid duplicates
@@ -150,21 +157,22 @@ Deno.serve(async (req) => {
           const campaignName = row.campaign_name || "Unknown Campaign";
           const campaignId = row.campaign_id || `meta_${Date.now()}`;
           
-          // Dedup check
           const key = `${date}|${campaignName}`;
-          if (existingSet.has(key)) {
-            totalSkipped++;
-            continue;
-          }
+          if (existingSet.has(key)) { totalSkipped++; continue; }
 
           const isBDT = account.account_currency === "BDT";
           const rawAmount = spend;
 
-          // Auto-mapping by keyword
-          let matchedClientId: string | null = account.client_id || null;
+          // Step 1: Match against junction table keywords for this account
+          let matchedClientId: string | null = null;
+          const nameLower = campaignName.toLowerCase();
+          for (const { client_id, keyword } of accountAssignments) {
+            if (nameLower.includes(keyword)) { matchedClientId = client_id; break; }
+          }
+
+          // Step 2: Fallback to profile-level mapping_keyword
           if (!matchedClientId) {
-            const nameLower = campaignName.toLowerCase();
-            for (const { keyword, userId } of keywordMap) {
+            for (const { keyword, userId } of profileKeywordMap) {
               if (nameLower.includes(keyword)) { matchedClientId = userId; break; }
             }
           }
@@ -201,21 +209,18 @@ Deno.serve(async (req) => {
           if (matchedClientId) autoMapped++;
           else unmapped++;
 
-          existingSet.add(key); // prevent duplicates within same batch
+          existingSet.add(key);
         }
 
         // Insert in batches of 100
         for (let i = 0; i < records.length; i += 100) {
           const batch = records.slice(i, i + 100);
           const { error: insertError } = await supabaseAdmin.from("daily_ad_spend").insert(batch);
-          if (insertError) {
-            errors.push(`${adAccountId} insert error: ${insertError.message}`);
-          }
+          if (insertError) errors.push(`${adAccountId} insert error: ${insertError.message}`);
         }
 
-        // Upsert campaign mappings (deduplicate by campaign_id + platform)
+        // Upsert campaign mappings
         if (campaignMappings.length > 0) {
-          // Check existing campaign mappings
           const campaignIds = campaignMappings.map((c: any) => c.campaign_id);
           const { data: existingMappings } = await supabaseAdmin
             .from("campaign_mappings")
@@ -237,7 +242,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update last_synced_at on integrations
+    // Update last_synced_at
     await supabaseAdmin.from("api_integrations")
       .update({ last_synced_at: new Date().toISOString() }).eq("is_active", true);
 

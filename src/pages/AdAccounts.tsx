@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, X, UserPlus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
@@ -27,10 +28,12 @@ const CURRENCIES = [
 
 interface ClientProfile { user_id: string; full_name: string; }
 interface Integration { id: string; platform: string; instance_name: string | null; is_active: boolean; }
+interface AccountClientAssignment { id: string; ad_account_id: string; client_id: string; mapping_keyword: string; }
 
 export default function AdAccounts() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
+  const [assignments, setAssignments] = useState<AccountClientAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -40,22 +43,29 @@ export default function AdAccounts() {
   const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
   const [importStatus, setImportStatus] = useState("");
   const [form, setForm] = useState({
-    client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
+    platform_name: "", ad_account_id: "", account_currency: "USD",
     daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
     next_billing_date: "", card_last_4: "",
   });
+  // Add client popover state
+  const [addClientPopover, setAddClientPopover] = useState<string | null>(null);
+  const [newAssignClient, setNewAssignClient] = useState("");
+  const [newAssignKeyword, setNewAssignKeyword] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: accs }, { data: roles }, { data: profiles }, { data: ints }] = await Promise.all([
+    const [{ data: accs }, { data: roles }, { data: profiles }, { data: ints }, { data: assigns }] = await Promise.all([
       supabase.from("ad_accounts" as any).select("*").order("created_at", { ascending: false }) as any,
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("profiles").select("user_id, full_name"),
       supabase.from("api_integrations").select("id, platform, instance_name, is_active").eq("is_active", true) as any,
+      supabase.from("ad_account_clients" as any).select("*") as any,
     ]);
     setAccounts(accs ?? []);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
+    setAssignments(assigns ?? []);
     setIntegrations(ints ?? []);
     setLoading(false);
   };
@@ -63,10 +73,9 @@ export default function AdAccounts() {
   useEffect(() => { fetchData(); }, []);
 
   const handleCreate = async () => {
-    if (!form.client_id || !form.platform_name || !form.ad_account_id) return;
+    if (!form.platform_name || !form.ad_account_id) return;
     setSaving(true);
     const payload: any = {
-      client_id: form.client_id,
       platform_name: form.platform_name,
       ad_account_id: form.ad_account_id,
       account_currency: form.account_currency,
@@ -86,7 +95,7 @@ export default function AdAccounts() {
       toast({ title: "Created", description: "Ad account added" });
       setOpen(false);
       setForm({
-        client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
+        platform_name: "", ad_account_id: "", account_currency: "USD",
         daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
         next_billing_date: "", card_last_4: "",
       });
@@ -103,9 +112,7 @@ export default function AdAccounts() {
     setImportStatus("Fetching accounts from platforms...");
     try {
       const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
-        body: {
-          integration_ids: Array.from(selectedIntegrations),
-        },
+        body: { integration_ids: Array.from(selectedIntegrations) },
       });
       if (error) throw error;
       const errMsg = data.errors?.length ? `\nWarnings: ${data.errors.join("; ")}` : "";
@@ -124,8 +131,31 @@ export default function AdAccounts() {
     }
   };
 
-  const updateAccountClient = async (accountId: string, clientId: string | null) => {
-    const { error } = await (supabase.from("ad_accounts" as any) as any).update({ client_id: clientId || null }).eq("id", accountId);
+  const addClientAssignment = async (accountId: string) => {
+    if (!newAssignClient || !newAssignKeyword.trim()) {
+      toast({ title: "Required", description: "Select a client and enter a mapping keyword", variant: "destructive" });
+      return;
+    }
+    setAssignSaving(true);
+    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert({
+      ad_account_id: accountId,
+      client_id: newAssignClient,
+      mapping_keyword: newAssignKeyword.trim(),
+    });
+    setAssignSaving(false);
+    if (error) {
+      toast({ title: "Error", description: error.message?.includes("duplicate") ? "Client already assigned to this account" : error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Assigned", description: "Client linked with keyword" });
+      setAddClientPopover(null);
+      setNewAssignClient("");
+      setNewAssignKeyword("");
+      fetchData();
+    }
+  };
+
+  const removeClientAssignment = async (assignmentId: string) => {
+    const { error } = await (supabase.from("ad_account_clients" as any) as any).delete().eq("id", assignmentId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -156,13 +186,14 @@ export default function AdAccounts() {
 
   const getClientName = (id: string) => clients.find((c) => c.user_id === id)?.full_name ?? "—";
 
+  const getAccountAssignments = (accountId: string) =>
+    assignments.filter((a) => a.ad_account_id === accountId);
+
   const getUsageColor = (pct: number) => {
     if (pct >= 80) return "text-destructive";
     if (pct >= 60) return "text-yellow-500";
     return "text-emerald-500";
   };
-
-  
 
   return (
     <div className="space-y-6">
@@ -172,6 +203,7 @@ export default function AdAccounts() {
           <p className="text-muted-foreground">Manage platform ad accounts linked to clients</p>
         </div>
         <div className="flex gap-2">
+          {/* Auto-Import Dialog */}
           <Dialog open={importOpen} onOpenChange={setImportOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" disabled={integrations.length === 0}>
@@ -209,13 +241,11 @@ export default function AdAccounts() {
                     )}
                   </div>
                 </div>
-
                 {selectedIntegrations.size > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {selectedIntegrations.size} integration(s) selected — accounts will be fetched via API
                   </p>
                 )}
-
                 {importStatus && (
                   <p className="text-xs text-primary flex items-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin" /> {importStatus}
@@ -231,6 +261,7 @@ export default function AdAccounts() {
             </DialogContent>
           </Dialog>
 
+          {/* Add Account Dialog */}
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
@@ -238,13 +269,6 @@ export default function AdAccounts() {
             <DialogContent className="max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>New Ad Account</DialogTitle></DialogHeader>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Client</Label>
-                  <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                    <SelectContent>{clients.map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label>Platform</Label>
                   <Select value={form.platform_name} onValueChange={(v) => setForm({ ...form, platform_name: v })}>
@@ -319,7 +343,7 @@ export default function AdAccounts() {
                     <TableHead>Platform</TableHead>
                     <TableHead>Account Name</TableHead>
                     <TableHead>Account ID</TableHead>
-                    <TableHead>Client</TableHead>
+                    <TableHead className="min-w-[200px]">Clients & Keywords</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead>Daily Limit</TableHead>
                     <TableHead>Billing</TableHead>
@@ -337,6 +361,9 @@ export default function AdAccounts() {
                     const daysUntilBill = a.next_billing_date
                       ? differenceInDays(new Date(a.next_billing_date), new Date())
                       : null;
+                    const accountAssignments = getAccountAssignments(a.id);
+                    const assignedClientIds = new Set(accountAssignments.map((aa) => aa.client_id));
+                    const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
 
                     return (
                       <TableRow key={a.id}>
@@ -344,16 +371,70 @@ export default function AdAccounts() {
                         <TableCell className="font-medium text-sm">{a.account_name || <span className="text-muted-foreground italic">—</span>}</TableCell>
                         <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
                         <TableCell>
-                          <Select value={a.client_id || ""} onValueChange={(v) => updateAccountClient(a.id, v)}>
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
-                              <SelectValue placeholder="Assign client" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {clients.map((c) => (
-                                <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {accountAssignments.map((assign) => (
+                              <Badge key={assign.id} variant="outline" className="flex items-center gap-1 pr-1 text-[11px]">
+                                <span className="font-medium">{getClientName(assign.client_id)}</span>
+                                {assign.mapping_keyword && (
+                                  <span className="text-muted-foreground">({assign.mapping_keyword})</span>
+                                )}
+                                <button
+                                  onClick={() => removeClientAssignment(assign.id)}
+                                  className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                            <Popover
+                              open={addClientPopover === a.id}
+                              onOpenChange={(open) => {
+                                setAddClientPopover(open ? a.id : null);
+                                if (!open) { setNewAssignClient(""); setNewAssignKeyword(""); }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled={availableClients.length === 0}>
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 space-y-3" align="start">
+                                <p className="text-sm font-medium">Add Client</p>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">Client</Label>
+                                  <Select value={newAssignClient} onValueChange={setNewAssignClient}>
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue placeholder="Select client" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableClients.map((c) => (
+                                        <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">Mapping Keyword</Label>
+                                  <Input
+                                    className="h-8 text-xs"
+                                    placeholder="e.g. brandname"
+                                    value={newAssignKeyword}
+                                    onChange={(e) => setNewAssignKeyword(e.target.value)}
+                                  />
+                                  <p className="text-[10px] text-muted-foreground">Campaigns containing this keyword will be mapped to this client</p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  className="w-full h-8 text-xs"
+                                  disabled={assignSaving || !newAssignClient || !newAssignKeyword.trim()}
+                                  onClick={() => addClientAssignment(a.id)}
+                                >
+                                  {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                  Assign
+                                </Button>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
