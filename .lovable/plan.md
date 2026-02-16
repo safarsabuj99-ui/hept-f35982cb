@@ -1,72 +1,75 @@
 
 
-# Multi-Client Ad Account Assignment with Keyword-Based Mapping
+# Redesign Client Detail Page - Full Profile Management
 
 ## Overview
 
-Currently, each ad account can only have **one client** assigned (single `client_id` column). You want **multiple clients** on the same ad account, each with their own mapping keyword so campaigns are correctly attributed. RLS ensures each client only sees their own spend data.
+Redesign the Client Detail page to show all client information (account type, full name, email, phone, business name, mapping keyword, custom exchange rate, pricing model) in an editable format, with a clean modern layout.
 
-## Database Changes
+## Current Issues
+- Profile details (name, email, phone, business) are display-only in the header with no way to edit
+- Account type (role) is not shown at all
+- Mapping keyword is not visible or editable
+- No password reset option
+- Pricing and profile info are split awkwardly
 
-### 1. New Junction Table: `ad_account_clients`
+## New Layout Design
 
-A many-to-many link between ad accounts and clients, with a per-assignment mapping keyword.
+### Header Section
+- Back button + client name as page title
+- Account type badge (Client/Manager) next to name
+- "Add Funds" button stays in header area
 
-```text
-ad_account_clients
---------------------------------------
-id              uuid (PK)
-ad_account_id   uuid (FK -> ad_accounts.id)
-client_id       uuid (not null)
-mapping_keyword text (not null)
-created_at      timestamptz
-UNIQUE(ad_account_id, client_id)
-```
+### Tab Structure (6 tabs)
+1. **Profile** (NEW - first tab) - All editable client details
+2. **Pricing** - Pricing model configuration (existing)
+3. **Ad Guard** - Automation config (existing)
+4. **Spend** - Ad spend data (existing)
+5. **Payments** - Payment requests (existing)
+6. **Transactions** - Transaction history (existing)
 
-RLS policies:
-- Admins: full access
-- Managers: read for their managed clients
-- Clients: read their own assignments
+### Profile Tab Design
+A clean card-based form with grouped sections:
 
-### 2. Remove `client_id` from `ad_accounts`
+**Section 1: Account Info**
+- Account Type (read-only badge showing Client/Manager)
+- Full Name (editable input)
+- Email (read-only, shown as text)
+- Phone (editable input)
+- Business Name (editable input)
 
-The single-client column becomes obsolete. We drop it after migrating any existing assignments into the new junction table.
+**Section 2: Password**
+- "Reset Password" button that triggers a password reset email via the `create-client` edge function or a new simple edge function
 
-## UI Changes
+**Section 3: Mapping & Assignment**
+- Mapping Keyword (editable input with helper text)
+- Assigned Manager (dropdown selector - moved here from header)
+- Custom Exchange Rate (editable input - moved here from Pricing tab)
 
-### 3. Ad Accounts Page (`AdAccounts.tsx`)
+All fields save together with a single "Save Changes" button at the bottom.
 
-Replace the single client dropdown with a multi-client management UI:
-- Show assigned clients as a list of badges/chips under each ad account row
-- "Add Client" button opens a small popover/dialog to pick a client and enter a mapping keyword
-- Each assignment chip shows the client name and keyword, with an X to remove
-- No limit on how many clients can be assigned
+## Technical Changes
 
-### 4. Campaign Mapping Page (`CampaignMapping.tsx`)
+### File: `src/pages/ClientDetail.tsx`
 
-No major changes needed -- campaigns are already individually assignable to clients. The sync process will handle auto-assignment using the new per-account keywords.
+1. **Add editable state** for `fullName`, `phone`, `businessName`, `mappingKeyword`
+2. **Initialize from profile data** in the existing `loadAll` function
+3. **New Profile tab** with form fields in a 2-column grid layout
+4. **Move manager assignment** from header card into Profile tab
+5. **Move exchange rate** into Profile tab (keep it in Pricing tab too or just Profile)
+6. **Update `handleSave`** to include `full_name`, `phone`, `business_name`, `mapping_keyword` alongside pricing fields
+7. **Add password reset** - a button that calls `supabase.auth.admin.resetPasswordForEmail()` via a small edge function or uses the existing auth reset flow
+8. **Responsive design** - 2-column grid on desktop, stacked on mobile
 
-## Sync Logic Changes
+### File: `supabase/functions/reset-client-password/index.ts` (NEW)
+- Simple edge function that accepts `{ user_id, new_password }`
+- Validates caller is admin
+- Uses `supabase.auth.admin.updateUserById()` to set new password
+- Returns success/error
 
-### 5. Update `sync-ad-spend/index.ts`
-
-Instead of reading `account.client_id`, the sync function will:
-- Query `ad_account_clients` for all client assignments for each account
-- For each campaign, match the campaign name against the `mapping_keyword` from the junction table
-- If a keyword matches, assign that `client_id` to the spend record
-- Fall back to the profile-level `mapping_keyword` if no junction match is found
-
-## Data Isolation (RLS)
-
-The existing RLS on `daily_ad_spend`, `campaign_mappings`, and other tables already filters by `client_id` on each row. Since the sync writes the correct `client_id` per campaign based on keyword matching, each client only sees their own data. No RLS changes needed on those tables.
-
-## Technical Summary
-
-| Change | File / Location |
-|--------|----------------|
-| Create `ad_account_clients` table + RLS | Database migration |
-| Migrate existing `ad_accounts.client_id` data | Database migration |
-| Drop `client_id` from `ad_accounts` | Database migration |
-| Multi-client assignment UI | `src/pages/AdAccounts.tsx` |
-| Update sync to use junction table keywords | `supabase/functions/sync-ad-spend/index.ts` |
-
+### UI Polish
+- Use icons next to section headers (User, Key, Settings icons)
+- Read-only fields styled with muted background
+- Account type shown as a colored badge
+- Consistent spacing using the existing card/form patterns
+- Tab count increases from 5 to 6 to accommodate the new Profile tab
