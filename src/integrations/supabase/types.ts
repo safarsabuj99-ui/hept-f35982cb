@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_account_clients: {
+        Row: {
+          ad_account_id: string
+          client_id: string
+          created_at: string
+          id: string
+          mapping_keyword: string
+        }
+        Insert: {
+          ad_account_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+          mapping_keyword?: string
+        }
+        Update: {
+          ad_account_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          mapping_keyword?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_account_clients_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ad_accounts: {
         Row: {
           account_currency: Database["public"]["Enums"]["account_currency"]
