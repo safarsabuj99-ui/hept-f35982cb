@@ -140,6 +140,28 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("campaign_mappings").insert(campaignMappings);
     }
 
+    // === BILLING SIMULATION ===
+    const THRESHOLD_LIMITS = [10, 25, 250];
+    for (const acc of adAccounts) {
+      const isThreshold = Math.random() > 0.5;
+      const billingType = isThreshold ? "threshold_postpaid" : "prepaid";
+      const thresholdLimit = THRESHOLD_LIMITS[Math.floor(Math.random() * THRESHOLD_LIMITS.length)];
+      // Simulate high usage (>= 80%) for some accounts
+      const spendMultiplier = Math.random() > 0.4 ? 0.8 + Math.random() * 0.2 : Math.random() * 0.7;
+      const currentSpend = isThreshold ? Math.round(thresholdLimit * spendMultiplier * 100) / 100 : 0;
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + Math.floor(Math.random() * 3) + 1);
+      const cardLast4 = String(Math.floor(1000 + Math.random() * 9000));
+
+      await supabaseAdmin.from("ad_accounts").update({
+        billing_type: billingType,
+        threshold_limit: thresholdLimit,
+        current_threshold_spend: currentSpend,
+        next_billing_date: isThreshold ? tomorrow.toISOString().split("T")[0] : null,
+        card_last_4: isThreshold ? cardLast4 : null,
+      }).eq("id", acc.id);
+    }
+
     await supabaseAdmin.from("api_integrations")
       .update({ last_synced_at: new Date().toISOString() }).eq("is_active", true);
 
