@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { request_id, action, admin_note, selected_rate } = await req.json();
+    const { request_id, action, admin_note, selected_rate, received_in_account_id } = await req.json();
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
       return new Response(JSON.stringify({ error: "Invalid params" }), {
         status: 400,
@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
         exchange_rate_snapshot: exchangeRate,
         final_amount_usd: finalUsd,
         admin_note: admin_note || null,
+        received_in_account_id: received_in_account_id || null,
       })
       .eq("id", request_id)
       .eq("status", "pending"); // guard against double-approve
@@ -155,6 +156,22 @@ Deno.serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Credit agency account balance if specified
+    if (received_in_account_id) {
+      const { data: agencyAcc } = await adminClient
+        .from("agency_accounts")
+        .select("current_balance_bdt")
+        .eq("id", received_in_account_id)
+        .single();
+
+      if (agencyAcc) {
+        await adminClient
+          .from("agency_accounts")
+          .update({ current_balance_bdt: Number(agencyAcc.current_balance_bdt) + Number(pr.amount_bdt) })
+          .eq("id", received_in_account_id);
+      }
     }
 
     return new Response(

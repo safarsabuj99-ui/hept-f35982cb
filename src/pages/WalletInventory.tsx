@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 
 interface UsdPurchase {
@@ -35,6 +36,8 @@ export default function WalletInventory() {
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [periodLabel, setPeriodLabel] = useState("All Time");
+  const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
+  const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -49,7 +52,10 @@ export default function WalletInventory() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchPurchases(dateRange); }, []);
+  useEffect(() => {
+    fetchPurchases(dateRange);
+    supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
+  }, []);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -88,13 +94,24 @@ export default function WalletInventory() {
       usd_received: Number(usdReceived),
       notes: notes || null,
       created_by: user?.id,
+      paid_from_account_id: paidFromAccountId || null,
     } as any);
+    
+    // Debit agency account if selected
+    if (!error && paidFromAccountId) {
+      const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
+      if (acc) {
+        await supabase.from("agency_accounts" as any)
+          .update({ current_balance_bdt: Number(acc.current_balance_bdt) - Number(bdtPaid) } as any)
+          .eq("id", paidFromAccountId);
+      }
+    }
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "USD purchase recorded" });
-      setBdtPaid(""); setUsdReceived(""); setNotes("");
+      setBdtPaid(""); setUsdReceived(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
     }
@@ -137,6 +154,19 @@ export default function WalletInventory() {
                   <p className="text-xs text-muted-foreground">Calculated Rate</p>
                   <p className="text-2xl font-bold font-mono">{previewRate} <span className="text-sm font-normal text-muted-foreground">BDT/USD</span></p>
                 </div>
+                {agencyAccounts.length > 0 && (
+                  <div>
+                    <Label>Paid From Account</Label>
+                    <Select value={paidFromAccountId} onValueChange={setPaidFromAccountId}>
+                      <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                      <SelectContent>
+                        {agencyAccounts.map((a: any) => (
+                          <SelectItem key={a.id} value={a.id}>{a.name} ({a.type}) — ৳{Number(a.current_balance_bdt).toLocaleString()}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label>Notes (optional)</Label>
                   <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Source, reference..." />

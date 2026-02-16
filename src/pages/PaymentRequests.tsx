@@ -11,6 +11,13 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface AgencyAccount {
+  id: string;
+  name: string;
+  type: string;
+}
 
 interface RateOption {
   key: string;
@@ -41,6 +48,8 @@ export default function PaymentRequests() {
   const [rateOptions, setRateOptions] = useState<RateOption[]>([]);
   const [selectedRateKey, setSelectedRateKey] = useState<string>("");
   const [rateLoading, setRateLoading] = useState(false);
+  const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
@@ -75,16 +84,21 @@ export default function PaymentRequests() {
     setAdminNote("");
     setRateOptions([]);
     setSelectedRateKey("");
+    setSelectedAccountId("");
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
       setRateLoading(true);
-      const { data: profile } = await supabase.from("profiles").select("custom_exchange_rate, pricing_config").eq("user_id", request.client_id).single();
+      const [profileRes, settingRes, accRes] = await Promise.all([
+        supabase.from("profiles").select("custom_exchange_rate, pricing_config").eq("user_id", request.client_id).single(),
+        supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single(),
+        supabase.from("agency_accounts" as any).select("id, name, type").eq("is_active", true).order("name"),
+      ]);
+
+      const profile = profileRes.data;
       const pricingConfig = profile?.pricing_config as any;
       const customRate = profile?.custom_exchange_rate;
-
-      const { data: setting } = await supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single();
-      const defaultRate = setting ? Number(setting.value) : 120;
+      const defaultRate = settingRes.data ? Number(settingRes.data.value) : 120;
 
       const options: RateOption[] = [];
       if (pricingConfig?.rates?.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(pricingConfig.rates.meta) });
@@ -95,6 +109,7 @@ export default function PaymentRequests() {
 
       setRateOptions(options);
       setSelectedRateKey(options[0]?.key ?? "default");
+      setAgencyAccounts((accRes.data as any[]) ?? []);
       setRateLoading(false);
     }
   };
@@ -110,6 +125,7 @@ export default function PaymentRequests() {
         action: confirmModal.action,
         admin_note: adminNote || undefined,
         selected_rate: selectedRate?.rate ?? undefined,
+        received_in_account_id: selectedAccountId || undefined,
       },
     });
 
@@ -272,6 +288,20 @@ export default function PaymentRequests() {
                       </div>
                     </>
                   ) : null}
+                </div>
+              )}
+
+              {confirmModal.action === "approved" && agencyAccounts.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Received In Account</Label>
+                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      {agencyAccounts.map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.type})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
