@@ -6,6 +6,35 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Meta: fetch billing cycle data for a single ad account ──
+async function fetchMetaBillingCycle(adAccountId: string, token: string) {
+  try {
+    const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const cycle = json.data?.[0];
+    if (!cycle) return null;
+
+    const thresholdLimit = cycle.threshold_amount ? Number(cycle.threshold_amount) / 100 : null;
+    const currentSpend = cycle.amount_spent ? Number(cycle.amount_spent) / 100 : null;
+    let nextBillingDate: string | null = null;
+    if (cycle.end_time) {
+      // end_time can be a Unix timestamp (number) or ISO string
+      const d = typeof cycle.end_time === "number"
+        ? new Date(cycle.end_time * 1000)
+        : new Date(cycle.end_time);
+      if (!isNaN(d.getTime())) {
+        nextBillingDate = d.toISOString().split("T")[0];
+      }
+    }
+
+    return { thresholdLimit, currentSpend, nextBillingDate };
+  } catch {
+    return null;
+  }
+}
+
 // ── Meta: fetch owned ad accounts from Business Manager ──
 async function fetchMetaAccounts(appId: string, token: string) {
   const url = `https://graph.facebook.com/v21.0/${appId}/owned_ad_accounts?fields=account_id,name,currency,funding_source_details,account_status&limit=500&access_token=${token}`;
@@ -22,29 +51,47 @@ async function fetchMetaAccounts(appId: string, token: string) {
     let billingType = "prepaid";
     let thresholdLimit: number | null = null;
     let nextBillingDate: string | null = null;
+    let currentThresholdSpend: number | null = null;
 
     if (acc.funding_source_details) {
       const fsd = acc.funding_source_details;
-      // type 2 = threshold/line of credit; type 1 = credit card (prepaid behavior)
       if (fsd.type === 2 || fsd.display_string?.toLowerCase().includes("threshold")) {
         billingType = "threshold_postpaid";
-        thresholdLimit = fsd.amount ? Number(fsd.amount) / 100 : null; // amount is in cents
+        thresholdLimit = fsd.amount ? Number(fsd.amount) / 100 : null;
       }
       if (fsd.coupon?.expiration_date) {
         nextBillingDate = fsd.coupon.expiration_date;
       }
     }
 
-    // Map currency — only USD and BDT are supported in enum
+    // Map currency
     const currency = acc.currency === "BDT" ? "BDT" : "USD";
+    const formattedId = acc.account_id?.replace(/^act_/, "") ? `act_${acc.account_id.replace(/^act_/, "")}` : acc.account_id;
+
+    // Fetch billing cycle data from adspaymentcycle endpoint
+    const billingCycle = await fetchMetaBillingCycle(formattedId, token);
+    if (billingCycle) {
+      // If we got billing cycle data, this is a threshold account
+      if (billingCycle.thresholdLimit) {
+        billingType = "threshold_postpaid";
+        thresholdLimit = billingCycle.thresholdLimit;
+      }
+      if (billingCycle.nextBillingDate) {
+        nextBillingDate = billingCycle.nextBillingDate;
+      }
+      if (billingCycle.currentSpend !== null) {
+        currentThresholdSpend = billingCycle.currentSpend;
+      }
+    }
 
     accounts.push({
-      ad_account_id: acc.account_id?.replace(/^act_/, "") ? `act_${acc.account_id.replace(/^act_/, "")}` : acc.account_id,
+      ad_account_id: formattedId,
       account_name: acc.name ?? "",
       account_currency: currency,
       billing_type: billingType,
       threshold_limit: thresholdLimit,
       next_billing_date: nextBillingDate,
+      current_threshold_spend: currentThresholdSpend ?? 0,
     });
   }
 
@@ -244,10 +291,10 @@ Deno.serve(async (req) => {
             billing_type: account.billing_type,
             threshold_limit: account.threshold_limit,
             next_billing_date: account.next_billing_date,
+            current_threshold_spend: account.current_threshold_spend ?? 0,
             daily_spending_limit: 250,
             is_active: true,
             account_currency: account.account_currency,
-            // client_id is nullable now — admin assigns later
           });
           existingSet.add(key);
         }

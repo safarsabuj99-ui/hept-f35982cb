@@ -242,11 +242,49 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== Refresh billing cycle data for all Meta accounts =====
+    console.log("Refreshing billing cycle data for Meta accounts...");
+    for (const account of metaAccounts) {
+      const integration = account.api_integrations as any;
+      if (!integration?.api_token) continue;
+      const adAccountId = account.ad_account_id;
+      try {
+        const bcUrl = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${integration.api_token}`;
+        const bcRes = await fetch(bcUrl);
+        if (!bcRes.ok) continue;
+        const bcJson = await bcRes.json();
+        const cycle = bcJson.data?.[0];
+        if (!cycle) continue;
+
+        const updateFields: Record<string, any> = {};
+        if (cycle.threshold_amount) {
+          updateFields.threshold_limit = Number(cycle.threshold_amount) / 100;
+          updateFields.billing_type = "threshold_postpaid";
+        }
+        if (cycle.amount_spent !== undefined) {
+          updateFields.current_threshold_spend = Number(cycle.amount_spent) / 100;
+        }
+        if (cycle.end_time) {
+          const d = typeof cycle.end_time === "number"
+            ? new Date(cycle.end_time * 1000)
+            : new Date(cycle.end_time);
+          if (!isNaN(d.getTime())) {
+            updateFields.next_billing_date = d.toISOString().split("T")[0];
+          }
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+          await supabaseAdmin.from("ad_accounts").update(updateFields).eq("id", account.id);
+          console.log(`Updated billing data for ${adAccountId}: ${JSON.stringify(updateFields)}`);
+        }
+      } catch (err: any) {
+        console.warn(`Failed to fetch billing cycle for ${adAccountId}: ${err.message}`);
+      }
+    }
+
     // Update last_synced_at
     await supabaseAdmin.from("api_integrations")
       .update({ last_synced_at: new Date().toISOString() }).eq("is_active", true);
-
-    console.log(`Sync complete: ${totalRecords} records, ${totalSkipped} skipped, ${errors.length} errors`);
 
     return new Response(
       JSON.stringify({
