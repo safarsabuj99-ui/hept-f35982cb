@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor } from "lucide-react";
+import { Loader2, Plus, Monitor, Download } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
 
 const PLATFORMS = [
@@ -25,13 +26,19 @@ const CURRENCIES = [
 ];
 
 interface ClientProfile { user_id: string; full_name: string; }
+interface Integration { id: string; platform: string; instance_name: string | null; is_active: boolean; }
 
 export default function AdAccounts() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
+  const [importClientId, setImportClientId] = useState("");
   const [form, setForm] = useState({
     client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
     daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
@@ -40,14 +47,16 @@ export default function AdAccounts() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: accs }, { data: roles }, { data: profiles }] = await Promise.all([
+    const [{ data: accs }, { data: roles }, { data: profiles }, { data: ints }] = await Promise.all([
       supabase.from("ad_accounts" as any).select("*").order("created_at", { ascending: false }) as any,
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("profiles").select("user_id, full_name"),
+      supabase.from("api_integrations").select("id, platform, instance_name, is_active").eq("is_active", true) as any,
     ]);
     setAccounts(accs ?? []);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
+    setIntegrations(ints ?? []);
     setLoading(false);
   };
 
@@ -85,6 +94,51 @@ export default function AdAccounts() {
     }
   };
 
+  const handleAutoImport = async () => {
+    if (!importClientId || selectedIntegrations.size === 0) {
+      toast({ title: "Missing fields", description: "Select a client and at least one integration", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
+        body: {
+          integration_ids: Array.from(selectedIntegrations),
+          client_id: importClientId,
+        },
+      });
+      if (error) throw error;
+      toast({
+        title: "Import Complete",
+        description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)`,
+      });
+      setImportOpen(false);
+      setSelectedIntegrations(new Set());
+      setImportClientId("");
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const toggleIntegration = (id: string) => {
+    setSelectedIntegrations((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllIntegrations = () => {
+    if (selectedIntegrations.size === integrations.length) {
+      setSelectedIntegrations(new Set());
+    } else {
+      setSelectedIntegrations(new Set(integrations.map((i) => i.id)));
+    }
+  };
+
   const toggleActive = async (id: string, current: boolean) => {
     await (supabase.from("ad_accounts" as any) as any).update({ is_active: !current }).eq("id", id);
     fetchData();
@@ -98,6 +152,8 @@ export default function AdAccounts() {
     return "text-emerald-500";
   };
 
+  const estimatedAccounts = selectedIntegrations.size * 5; // ~average of 3-8
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -105,74 +161,141 @@ export default function AdAccounts() {
           <h1 className="text-2xl font-bold tracking-tight">Ad Accounts</h1>
           <p className="text-muted-foreground">Manage platform ad accounts linked to clients</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[85vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>New Ad Account</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Client</Label>
-                <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                  <SelectContent>{clients.map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Platform</Label>
-                <Select value={form.platform_name} onValueChange={(v) => setForm({ ...form, platform_name: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
-                  <SelectContent>{PLATFORMS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Account ID</Label>
-                <Input value={form.ad_account_id} onChange={(e) => setForm({ ...form, ad_account_id: e.target.value })} placeholder="act_123456789" />
-              </div>
-              <div className="space-y-2">
-                <Label>Currency</Label>
-                <Select value={form.account_currency} onValueChange={(v) => setForm({ ...form, account_currency: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Daily Spending Limit ($)</Label>
-                <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
-              </div>
-              <div className="space-y-2">
-                <Label>Billing Type</Label>
-                <Select value={form.billing_type} onValueChange={(v) => setForm({ ...form, billing_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="prepaid">Prepaid</SelectItem>
-                    <SelectItem value="threshold_postpaid">Threshold (Postpaid)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.billing_type === "threshold_postpaid" && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Threshold Limit ($)</Label>
-                    <Input type="number" value={form.threshold_limit} onChange={(e) => setForm({ ...form, threshold_limit: e.target.value })} placeholder="250" min="0" step="5" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Next Billing Date</Label>
-                    <Input type="date" value={form.next_billing_date} onChange={(e) => setForm({ ...form, next_billing_date: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Card Last 4</Label>
-                    <Input value={form.card_last_4} onChange={(e) => setForm({ ...form, card_last_4: e.target.value })} placeholder="4242" maxLength={4} />
-                  </div>
-                </>
-              )}
-              <Button onClick={handleCreate} className="w-full" disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
+        <div className="flex gap-2">
+          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" disabled={integrations.length === 0}>
+                <Download className="mr-2 h-4 w-4" /> Auto-Import
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Auto-Import Ad Accounts</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Default Client</Label>
+                  <Select value={importClientId} onValueChange={setImportClientId}>
+                    <SelectTrigger><SelectValue placeholder="Assign imported accounts to..." /></SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Active Integrations</Label>
+                    <Button variant="ghost" size="sm" onClick={selectAllIntegrations} className="text-xs h-7">
+                      {selectedIntegrations.size === integrations.length ? "Deselect All" : "Select All"}
+                    </Button>
+                  </div>
+                  <div className="space-y-2 rounded-md border p-3">
+                    {integrations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2 text-center">No active integrations found</p>
+                    ) : (
+                      integrations.map((int) => (
+                        <label key={int.id} className="flex items-center gap-3 py-1.5 px-1 rounded hover:bg-accent/50 cursor-pointer">
+                          <Checkbox
+                            checked={selectedIntegrations.has(int.id)}
+                            onCheckedChange={() => toggleIntegration(int.id)}
+                          />
+                          <div className="flex items-center gap-2 flex-1">
+                            <Badge variant="secondary" className="capitalize text-[10px]">{int.platform}</Badge>
+                            <span className="text-sm">{int.instance_name || `${int.platform} integration`}</span>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {selectedIntegrations.size > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedIntegrations.size} integration(s) selected — ~{estimatedAccounts} accounts expected
+                  </p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleAutoImport} disabled={importing || !importClientId || selectedIntegrations.size === 0} className="w-full">
+                  {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Import Accounts
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>New Ad Account</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Client</Label>
+                  <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                    <SelectContent>{clients.map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Platform</Label>
+                  <Select value={form.platform_name} onValueChange={(v) => setForm({ ...form, platform_name: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
+                    <SelectContent>{PLATFORMS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Account ID</Label>
+                  <Input value={form.ad_account_id} onChange={(e) => setForm({ ...form, ad_account_id: e.target.value })} placeholder="act_123456789" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Currency</Label>
+                  <Select value={form.account_currency} onValueChange={(v) => setForm({ ...form, account_currency: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Daily Spending Limit ($)</Label>
+                  <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Billing Type</Label>
+                  <Select value={form.billing_type} onValueChange={(v) => setForm({ ...form, billing_type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="prepaid">Prepaid</SelectItem>
+                      <SelectItem value="threshold_postpaid">Threshold (Postpaid)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.billing_type === "threshold_postpaid" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Threshold Limit ($)</Label>
+                      <Input type="number" value={form.threshold_limit} onChange={(e) => setForm({ ...form, threshold_limit: e.target.value })} placeholder="250" min="0" step="5" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Next Billing Date</Label>
+                      <Input type="date" value={form.next_billing_date} onChange={(e) => setForm({ ...form, next_billing_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Card Last 4</Label>
+                      <Input value={form.card_last_4} onChange={(e) => setForm({ ...form, card_last_4: e.target.value })} placeholder="4242" maxLength={4} />
+                    </div>
+                  </>
+                )}
+                <Button onClick={handleCreate} className="w-full" disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
