@@ -34,6 +34,7 @@ import OrderManagement from "@/pages/OrderManagement";
 import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
+import AdAccountDetail from "@/pages/AdAccountDetail";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ const App = () => (
                 
                 <Route path="/admin/team" element={<TeamManagement />} />
                 <Route path="/admin/ad-accounts" element={<AdAccounts />} />
+                <Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
                 <Route path="/admin/campaigns" element={<CampaignMapping />} />
                 <Route path="/admin/spend-report" element={<SpendReport />} />

@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download, X, UserPlus } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, X, UserPlus, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
@@ -53,6 +54,7 @@ export default function AdAccounts() {
   const [newAssignKeyword, setNewAssignKeyword] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const fetchData = async () => {
     const [{ data: accs }, { data: roles }, { data: profiles }, { data: ints }, { data: assigns }] = await Promise.all([
@@ -368,7 +370,12 @@ export default function AdAccounts() {
                     return (
                       <TableRow key={a.id}>
                         <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
-                        <TableCell className="font-medium text-sm">{a.account_name || <span className="text-muted-foreground italic">—</span>}</TableCell>
+                        <TableCell>
+                          <button onClick={() => navigate(`/admin/ad-accounts/${a.id}`)} className="font-medium text-sm text-primary hover:underline flex items-center gap-1">
+                            {a.account_name || a.ad_account_id}
+                            <ExternalLink className="h-3 w-3" />
+                          </button>
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
