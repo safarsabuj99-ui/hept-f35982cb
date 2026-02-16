@@ -65,8 +65,8 @@ export default function ExpenseManager() {
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
     const labels: Record<DatePreset, string> = {
-      all_time: "All Time", today: "Today", this_week: "This Week",
-      this_month: "This Month", last_month: "Last Month", custom: "Custom Range",
+      all_time: "All Time", today: "Today", yesterday: "Yesterday", this_week: "This Week",
+      last_week: "Last Week", this_month: "This Month", last_month: "Last Month", custom: "Custom Range",
     };
     setPeriodLabel(labels[preset]);
     fetchExpenses(range);
