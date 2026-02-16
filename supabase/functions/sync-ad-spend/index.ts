@@ -93,13 +93,14 @@ Deno.serve(async (req) => {
     console.log(`Syncing spend from ${sinceStr} to ${untilStr} for ${adAccounts.length} accounts`);
 
     let totalRecords = 0;
-    let totalSkipped = 0;
     let autoMapped = 0;
     let unmapped = 0;
     const errors: string[] = [];
 
     // Group accounts by platform
     const metaAccounts = adAccounts.filter((a: any) => a.platform_name === "meta");
+    const googleAccounts = adAccounts.filter((a: any) => a.platform_name === "google");
+    const tiktokAccounts = adAccounts.filter((a: any) => a.platform_name === "tiktok");
 
     // ===== META: Fetch real spend via Insights API =====
     for (const account of metaAccounts) {
@@ -114,7 +115,6 @@ Deno.serve(async (req) => {
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
       try {
-        // Fetch daily insights with campaign breakdown for 30 days
         const insightsUrl = `https://graph.facebook.com/v21.0/${adAccountId}/insights?fields=campaign_name,campaign_id,spend,date_start&time_range={"since":"${sinceStr}","until":"${untilStr}"}&time_increment=1&level=campaign&limit=500&access_token=${apiToken}`;
         
         console.log(`Fetching insights for ${adAccountId} (${account.account_name})...`);
@@ -133,67 +133,51 @@ Deno.serve(async (req) => {
         console.log(`Got ${allInsights.length} insight rows for ${account.account_name}`);
         if (allInsights.length === 0) continue;
 
-        // Check existing records to avoid duplicates
-        const { data: existingRecords } = await supabaseAdmin
-          .from("daily_ad_spend")
-          .select("date, campaign_name")
-          .eq("ad_account_id", account.id)
-          .gte("date", sinceStr)
-          .lte("date", untilStr);
-
-        const existingSet = new Set(
-          (existingRecords ?? []).map((r: any) => `${r.date}|${r.campaign_name}`)
-        );
-
-        const records: any[] = [];
+        const spendRecords: any[] = [];
         const campaignMappings: any[] = [];
 
         for (const row of allInsights) {
           const spend = parseFloat(row.spend || "0");
           if (spend <= 0) continue;
 
-          const date = row.date_start;
+          const date = row.date_start; // Use API's date, NOT new Date()
           const campaignName = row.campaign_name || "Unknown Campaign";
           const campaignId = row.campaign_id || `meta_${Date.now()}`;
-          
-          const key = `${date}|${campaignName}`;
-          if (existingSet.has(key)) { totalSkipped++; continue; }
 
           const isBDT = account.account_currency === "BDT";
-          const rawAmount = spend;
 
-          // Step 1: Match against junction table keywords for this account
+          // Match against junction table keywords
           let matchedClientId: string | null = null;
           const nameLower = campaignName.toLowerCase();
           for (const { client_id, keyword } of accountAssignments) {
             if (nameLower.includes(keyword)) { matchedClientId = client_id; break; }
           }
 
-          // Step 2: Fallback to profile-level mapping_keyword
+          // Fallback to profile-level mapping_keyword
           if (!matchedClientId) {
             for (const { keyword, userId } of profileKeywordMap) {
               if (nameLower.includes(keyword)) { matchedClientId = userId; break; }
             }
           }
 
-          // Determine effective exchange rate
           let effectiveRate = exchangeRate;
           if (matchedClientId && clientRates[matchedClientId]) {
             effectiveRate = clientRates[matchedClientId]!;
           }
 
           const finalBillableUsd = isBDT
-            ? Math.round((rawAmount / effectiveRate) * 100) / 100
-            : rawAmount;
+            ? Math.round((spend / effectiveRate) * 100) / 100
+            : spend;
 
-          records.push({
+          spendRecords.push({
             ad_account_id: account.id,
             date,
             campaign_name: campaignName,
-            raw_spend_amount: rawAmount,
+            raw_spend_amount: spend,
             raw_currency: account.account_currency,
             exchange_rate_used: isBDT ? effectiveRate : 1,
             final_billable_usd: finalBillableUsd,
+            synced_at: new Date().toISOString(),
           });
 
           campaignMappings.push({
@@ -207,15 +191,15 @@ Deno.serve(async (req) => {
 
           if (matchedClientId) autoMapped++;
           else unmapped++;
-
-          existingSet.add(key);
         }
 
-        // Insert in batches of 100
-        for (let i = 0; i < records.length; i += 100) {
-          const batch = records.slice(i, i + 100);
-          const { error: insertError } = await supabaseAdmin.from("daily_ad_spend").insert(batch);
-          if (insertError) errors.push(`${adAccountId} insert error: ${insertError.message}`);
+        // Upsert spend in batches of 100 — unique constraint handles duplicates & corrections
+        for (let i = 0; i < spendRecords.length; i += 100) {
+          const batch = spendRecords.slice(i, i + 100);
+          const { error: upsertError } = await supabaseAdmin
+            .from("daily_ad_spend")
+            .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+          if (upsertError) errors.push(`${adAccountId} upsert error: ${upsertError.message}`);
         }
 
         // Upsert campaign mappings
@@ -235,9 +219,157 @@ Deno.serve(async (req) => {
           }
         }
 
-        totalRecords += records.length;
+        totalRecords += spendRecords.length;
       } catch (err: any) {
         errors.push(`${adAccountId}: ${err.message}`);
+      }
+    }
+
+    // ===== GOOGLE: Fetch real spend via Google Ads REST API =====
+    for (const account of googleAccounts) {
+      const integration = account.api_integrations as any;
+      if (!integration?.api_token) {
+        errors.push(`${account.ad_account_id}: No API token (Google)`);
+        continue;
+      }
+
+      try {
+        const customerId = account.ad_account_id.replace(/-/g, "");
+        const developerToken = integration.app_id || "";
+        const accessToken = integration.api_token;
+
+        const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks FROM campaign WHERE segments.date BETWEEN '${sinceStr}' AND '${untilStr}'`;
+
+        const res = await fetch(
+          `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "developer-token": developerToken,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query: gaqlQuery }),
+          }
+        );
+
+        const json = await res.json();
+        if (!res.ok) {
+          errors.push(`Google ${account.ad_account_id}: ${JSON.stringify(json.error?.message || json)}`);
+          continue;
+        }
+
+        const results = json[0]?.results || [];
+        const spendRecords: any[] = [];
+
+        for (const row of results) {
+          const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
+          const spend = costMicros / 1_000_000;
+          if (spend <= 0) continue;
+
+          const date = row.segments?.date; // YYYY-MM-DD from API
+          const campaignName = row.campaign?.name || "Unknown Campaign";
+
+          spendRecords.push({
+            ad_account_id: account.id,
+            date,
+            campaign_name: campaignName,
+            raw_spend_amount: spend,
+            raw_currency: account.account_currency,
+            exchange_rate_used: 1,
+            final_billable_usd: spend,
+            synced_at: new Date().toISOString(),
+          });
+        }
+
+        for (let i = 0; i < spendRecords.length; i += 100) {
+          const batch = spendRecords.slice(i, i + 100);
+          const { error: upsertError } = await supabaseAdmin
+            .from("daily_ad_spend")
+            .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+          if (upsertError) errors.push(`Google ${account.ad_account_id} upsert: ${upsertError.message}`);
+        }
+
+        totalRecords += spendRecords.length;
+        console.log(`Google: ${spendRecords.length} rows for ${account.account_name}`);
+      } catch (err: any) {
+        errors.push(`Google ${account.ad_account_id}: ${err.message}`);
+      }
+    }
+
+    // ===== TIKTOK: Fetch real spend via TikTok Marketing API =====
+    for (const account of tiktokAccounts) {
+      const integration = account.api_integrations as any;
+      if (!integration?.api_token) {
+        errors.push(`${account.ad_account_id}: No API token (TikTok)`);
+        continue;
+      }
+
+      try {
+        const advertiserId = account.ad_account_id;
+        const accessToken = integration.api_token;
+
+        const params = new URLSearchParams({
+          advertiser_id: advertiserId,
+          report_type: "BASIC",
+          data_level: "AUCTION_CAMPAIGN",
+          dimensions: '["campaign_id","stat_time_day"]',
+          metrics: '["spend","impressions","clicks"]',
+          start_date: sinceStr,
+          end_date: untilStr,
+          page_size: "500",
+        });
+
+        const res = await fetch(
+          `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${params}`,
+          {
+            headers: {
+              "Access-Token": accessToken,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const json = await res.json();
+        if (json.code !== 0) {
+          errors.push(`TikTok ${advertiserId}: ${json.message}`);
+          continue;
+        }
+
+        const rows = json.data?.list || [];
+        const spendRecords: any[] = [];
+
+        for (const row of rows) {
+          const spend = parseFloat(row.metrics?.spend || "0");
+          if (spend <= 0) continue;
+
+          const date = (row.dimensions?.stat_time_day || "").split(" ")[0]; // "2025-02-14 00:00:00" -> "2025-02-14"
+          const campaignName = row.dimensions?.campaign_name || `Campaign ${row.dimensions?.campaign_id}`;
+
+          spendRecords.push({
+            ad_account_id: account.id,
+            date,
+            campaign_name: campaignName,
+            raw_spend_amount: spend,
+            raw_currency: account.account_currency,
+            exchange_rate_used: 1,
+            final_billable_usd: spend,
+            synced_at: new Date().toISOString(),
+          });
+        }
+
+        for (let i = 0; i < spendRecords.length; i += 100) {
+          const batch = spendRecords.slice(i, i + 100);
+          const { error: upsertError } = await supabaseAdmin
+            .from("daily_ad_spend")
+            .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+          if (upsertError) errors.push(`TikTok ${advertiserId} upsert: ${upsertError.message}`);
+        }
+
+        totalRecords += spendRecords.length;
+        console.log(`TikTok: ${spendRecords.length} rows for ${account.account_name}`);
+      } catch (err: any) {
+        errors.push(`TikTok ${account.ad_account_id}: ${err.message}`);
       }
     }
 
@@ -288,8 +420,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        records_created: totalRecords,
-        records_skipped: totalSkipped,
+        records_upserted: totalRecords,
         exchange_rate_used: exchangeRate,
         auto_mapped: autoMapped,
         unmapped,

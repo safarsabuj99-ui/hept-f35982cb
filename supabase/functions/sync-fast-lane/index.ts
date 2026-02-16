@@ -25,10 +25,10 @@ Deno.serve(async (req) => {
       } catch { /* no body is fine for cron */ }
     }
 
-    // Get active ad accounts (optionally filtered by client)
+    // Get active ad accounts with integration tokens
     let accountQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true);
 
     if (targetClientId) {
@@ -48,62 +48,201 @@ Deno.serve(async (req) => {
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
     const startDateStr = dateSetting?.value || "2025-01-01";
+    const endDateStr = new Date().toISOString().split("T")[0];
 
-    // Generate date range from start date to today
-    const dates: string[] = [];
-    const startDt = new Date(startDateStr);
-    const endDt = new Date();
-    for (let d = new Date(startDt); d <= endDt; d.setDate(d.getDate() + 1)) {
-      dates.push(d.toISOString().split("T")[0]);
-    }
+    // Get exchange rate setting
+    const { data: rateSetting } = await supabase
+      .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
+    const exchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
     let syncedCount = 0;
+    const errors: string[] = [];
 
     for (const account of accounts) {
+      const integration = (account as any).api_integrations;
       const currency = account.account_currency || "USD";
-      const exchangeRate = currency === "BDT" ? 110 : 1;
+      const platform = account.platform_name;
 
-      for (const date of dates) {
-        // Mock realistic spend for each historical date ($0.50 - $15.00)
-        const spendIncrement = Math.round((Math.random() * 14.5 + 0.5) * 100) / 100;
-        const finalUsd =
-          currency === "BDT"
-            ? Math.round((spendIncrement / exchangeRate) * 100) / 100
-            : spendIncrement;
+      try {
+        if (platform === "meta") {
+          // ===== META: Real API with time_increment=1 =====
+          if (!integration?.api_token) {
+            errors.push(`Meta ${account.ad_account_id}: No API token`);
+            continue;
+          }
 
-        // Upsert spend record with the actual platform date
-        const { error: spendErr } = await supabase
-          .from("daily_ad_spend")
-          .upsert(
-            {
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_name,spend,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
+
+          let allInsights: any[] = [];
+          let nextUrl: string | null = insightsUrl;
+
+          while (nextUrl) {
+            const res = await fetch(nextUrl);
+            const json = await res.json();
+            if (json.error) { errors.push(`Meta ${account.ad_account_id}: ${json.error.message}`); break; }
+            if (json.data?.length > 0) allInsights = allInsights.concat(json.data);
+            nextUrl = json.paging?.next || null;
+          }
+
+          const spendRecords: any[] = [];
+          for (const row of allInsights) {
+            const spend = parseFloat(row.spend || "0");
+            if (spend <= 0) continue;
+
+            const isBDT = currency === "BDT";
+            const finalUsd = isBDT ? Math.round((spend / exchangeRate) * 100) / 100 : spend;
+
+            spendRecords.push({
               ad_account_id: account.id,
-              date,
-              campaign_name: "Fast Lane Sync",
-              raw_spend_amount: spendIncrement,
+              date: row.date_start, // API's actual date
+              campaign_name: row.campaign_name || "Meta Spend",
+              raw_spend_amount: spend,
               raw_currency: currency,
-              exchange_rate_used: exchangeRate,
+              exchange_rate_used: isBDT ? exchangeRate : 1,
               final_billable_usd: finalUsd,
               synced_at: new Date().toISOString(),
-            },
-            { onConflict: "ad_account_id,date", ignoreDuplicates: false }
+            });
+          }
+
+          for (let i = 0; i < spendRecords.length; i += 100) {
+            const batch = spendRecords.slice(i, i + 100);
+            const { error } = await supabase
+              .from("daily_ad_spend")
+              .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+            if (error) errors.push(`Meta ${account.ad_account_id} upsert: ${error.message}`);
+          }
+
+          console.log(`Meta fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
+        } else if (platform === "google") {
+          // ===== GOOGLE: Real API with segments.date =====
+          if (!integration?.api_token) {
+            errors.push(`Google ${account.ad_account_id}: No API token`);
+            continue;
+          }
+
+          const customerId = account.ad_account_id.replace(/-/g, "");
+          const gaqlQuery = `SELECT campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+
+          const res = await fetch(
+            `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${integration.api_token}`,
+                "developer-token": integration.app_id || "",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ query: gaqlQuery }),
+            }
           );
 
-        if (spendErr) {
-          // If upsert fails (no unique constraint), do insert
-          await supabase.from("daily_ad_spend").insert({
-            ad_account_id: account.id,
-            date,
-            campaign_name: "Fast Lane Sync",
-            raw_spend_amount: spendIncrement,
-            raw_currency: currency,
-            exchange_rate_used: exchangeRate,
-            final_billable_usd: finalUsd,
-            synced_at: new Date().toISOString(),
-          });
-        }
-      }
+          const json = await res.json();
+          if (!res.ok) {
+            errors.push(`Google ${account.ad_account_id}: ${JSON.stringify(json.error?.message || json)}`);
+            continue;
+          }
 
-      syncedCount++;
+          const results = json[0]?.results || [];
+          const spendRecords: any[] = [];
+
+          for (const row of results) {
+            const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
+            const spend = costMicros / 1_000_000;
+            if (spend <= 0) continue;
+
+            spendRecords.push({
+              ad_account_id: account.id,
+              date: row.segments?.date,
+              campaign_name: row.campaign?.name || "Google Campaign",
+              raw_spend_amount: spend,
+              raw_currency: currency,
+              exchange_rate_used: 1,
+              final_billable_usd: spend,
+              synced_at: new Date().toISOString(),
+            });
+          }
+
+          for (let i = 0; i < spendRecords.length; i += 100) {
+            const batch = spendRecords.slice(i, i + 100);
+            const { error } = await supabase
+              .from("daily_ad_spend")
+              .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+            if (error) errors.push(`Google ${account.ad_account_id} upsert: ${error.message}`);
+          }
+
+          console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
+        } else if (platform === "tiktok") {
+          // ===== TIKTOK: Real API with stat_time_day =====
+          if (!integration?.api_token) {
+            errors.push(`TikTok ${account.ad_account_id}: No API token`);
+            continue;
+          }
+
+          const params = new URLSearchParams({
+            advertiser_id: account.ad_account_id,
+            report_type: "BASIC",
+            data_level: "AUCTION_ADVERTISER",
+            dimensions: '["stat_time_day"]',
+            metrics: '["spend"]',
+            start_date: startDateStr,
+            end_date: endDateStr,
+            page_size: "500",
+          });
+
+          const res = await fetch(
+            `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${params}`,
+            {
+              headers: {
+                "Access-Token": integration.api_token,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          const json = await res.json();
+          if (json.code !== 0) {
+            errors.push(`TikTok ${account.ad_account_id}: ${json.message}`);
+            continue;
+          }
+
+          const rows = json.data?.list || [];
+          const spendRecords: any[] = [];
+
+          for (const row of rows) {
+            const spend = parseFloat(row.metrics?.spend || "0");
+            if (spend <= 0) continue;
+
+            const date = (row.dimensions?.stat_time_day || "").split(" ")[0];
+
+            spendRecords.push({
+              ad_account_id: account.id,
+              date,
+              campaign_name: "TikTok Spend",
+              raw_spend_amount: spend,
+              raw_currency: currency,
+              exchange_rate_used: 1,
+              final_billable_usd: spend,
+              synced_at: new Date().toISOString(),
+            });
+          }
+
+          for (let i = 0; i < spendRecords.length; i += 100) {
+            const batch = spendRecords.slice(i, i + 100);
+            const { error } = await supabase
+              .from("daily_ad_spend")
+              .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
+            if (error) errors.push(`TikTok ${account.ad_account_id} upsert: ${error.message}`);
+          }
+
+          console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+        }
+
+        syncedCount++;
+      } catch (err: any) {
+        errors.push(`${platform} ${account.ad_account_id}: ${err.message}`);
+      }
     }
 
     // Update last_synced_at on api_integrations
@@ -121,7 +260,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         message: `Fast lane sync complete`,
         synced: syncedCount,
-        days_covered: dates.length,
+        errors: errors.length > 0 ? errors : undefined,
+        date_range: { from: startDateStr, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
