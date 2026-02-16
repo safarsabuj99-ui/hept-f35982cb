@@ -1,76 +1,65 @@
 
 
-# Ad Account Detail Page
+# Consolidate Finance Pages into One Tabbed View
 
 ## Overview
-Create a dedicated detail page for each ad account at `/admin/ad-accounts/:accountId`, accessible by clicking an account row in the Ad Accounts list. This page will consolidate all account data into a tabbed, editable layout -- similar to the Client Detail page pattern already established in the project.
+Merge the 4 separate finance-related pages (Finance Dashboard, Wallet & Inventory, Expenses, Cash Flow) into a single unified "Finance" page with tabs. This removes 4 sidebar items (Finance, Wallet, Expenses, Cash Flow) and replaces them with just one "Finance" entry.
 
 ## Page Structure
 
-### Header
-- Back link to Ad Accounts list
-- Account name as page title
-- Platform badge + Active/Inactive toggle
-- Account ID in monospace
+The unified Finance page at `/admin/finance` will use a top-level `Tabs` component with 4 tabs:
 
-### 4 Tabs
+| Tab | Content Source | Description |
+|-----|---------------|-------------|
+| **P&L Overview** | Current `FinanceDashboard.tsx` | Net profit, WAC, revenue vs COGS, client profitability table |
+| **Wallet & USD** | Current `WalletInventory.tsx` | USD purchase history, stock status, buy USD form |
+| **Expenses** | Current `ExpenseManager.tsx` | Agency expenses log, category breakdown, add expense |
+| **Cash Flow** | Current `CashFlowManagement.tsx` | Agency accounts, fund transfers, activity feed |
 
-**1. Details Tab** -- All editable account metadata
-- Account Name (editable)
-- Platform (read-only badge)
-- Ad Account ID (read-only)
-- Currency (editable select)
-- Daily Spending Limit (editable number input)
-- Billing Type (editable select: Prepaid / Threshold Postpaid)
-- Threshold Limit (editable, shown only for threshold accounts)
-- Current Threshold Spend (read-only display with progress bar)
-- Next Billing Date (editable date input)
-- Card Last 4 (editable)
-- Linked Integration (read-only, shows integration instance name if api_integration_id exists)
-- Active status toggle
-- "Save Changes" button
+## Changes
 
-**2. Clients Tab** -- Manage multi-client assignments
-- Table of current client assignments showing client name, mapping keyword, and remove button
-- "Add Client" form inline (client select + keyword input + assign button)
-- Shows count of assigned clients
+### 1. New wrapper: `src/pages/FinanceHub.tsx`
+- A lightweight wrapper page that renders a `Tabs` component
+- Each `TabsContent` renders the existing page component directly (no rewriting the internals)
+- Each existing page component becomes a "section" component -- just removing their own `h1` headers so the hub provides a unified title
+- Supports URL hash or query param to deep-link to a specific tab (e.g., `/admin/finance?tab=expenses`)
 
-**3. Spend Tab** -- Historical spend data for this account
-- Date range filter (reuse existing ClientDateFilter component)
-- Summary cards: Total Spend, Average Daily, Campaign Count
-- Table of daily_ad_spend records for this account with campaign name, date, raw spend, billable USD
-- Sorted by most recent first
+### 2. Modify `src/pages/FinanceDashboard.tsx`
+- Remove the outer `h1`/description header (the hub will provide it)
+- Export remains unchanged
 
-**4. Billing Health Tab** -- Threshold billing details (only meaningful for threshold accounts)
-- Visual threshold usage gauge (progress bar with percentage)
-- Days until next billing date countdown
-- Recent billing notifications for this account
-- Mark notifications as read button
+### 3. Modify `src/pages/WalletInventory.tsx`
+- Remove the outer page header
+- Export remains unchanged
 
-## Technical Plan
+### 4. Modify `src/pages/ExpenseManager.tsx`
+- Remove the outer page header
+- Export remains unchanged
 
-### New File: `src/pages/AdAccountDetail.tsx`
-- Follows the same pattern as `ClientDetail.tsx` (useParams, tabs, editable state, save handlers)
-- Fetches from: `ad_accounts`, `ad_account_clients`, `daily_ad_spend`, `billing_notifications`, `api_integrations`, `profiles` (for client names)
-- Updates `ad_accounts` table on save
-- Manages `ad_account_clients` for assignments (insert/delete)
-- Date-filtered spend query reusing `ClientDateFilter` component
+### 5. Modify `src/pages/CashFlowManagement.tsx`
+- Remove the outer page header
+- Export remains unchanged
 
-### Modified File: `src/App.tsx`
-- Add route: `<Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />`
-- Import the new `AdAccountDetail` component
+### 6. Modify `src/App.tsx`
+- Replace the 4 separate routes (`/admin/finance`, `/admin/wallet`, `/admin/expenses`, `/admin/cash-flow`) with a single route: `/admin/finance` pointing to the new `FinanceHub`
+- Remove the old individual route imports (keep the component imports since FinanceHub uses them)
 
-### Modified File: `src/pages/AdAccounts.tsx`
-- Make account rows clickable -- wrap account name or add a "View" link that navigates to `/admin/ad-accounts/${account.id}`
+### 7. Modify `src/components/AdminLayout.tsx`
+- Remove the 4 separate nav items (Finance, Wallet, Expenses, Cash Flow)
+- Add a single "Finance" nav item pointing to `/admin/finance`
+- Use `TrendingUp` icon for the consolidated entry
+- The `permKey` remains `can_manage_finance`
 
-### Data Flow
-- Load account by ID from `ad_accounts` table
-- Load assignments from `ad_account_clients` where `ad_account_id` matches
-- Load client profiles for name display
-- Load spend from `daily_ad_spend` filtered by `ad_account_id`
-- Load billing notifications filtered by `ad_account_id`
-- Load integration name if `api_integration_id` is set
+## Technical Details
 
-### No Database Changes Required
-All required tables and columns already exist. The page is a read/edit UI over existing data.
+### Tab State Management
+- Use `useState` with URL search params for tab persistence
+- When navigating to `/admin/finance?tab=cash-flow`, it auto-selects that tab
+- Default tab: "overview" (P&L)
+
+### No Database Changes
+No schema modifications needed -- this is purely a UI consolidation.
+
+### Route Redirects
+- Old bookmarks to `/admin/wallet`, `/admin/expenses`, `/admin/cash-flow` will redirect to `/admin/finance` with the appropriate tab query param using `<Navigate>` components
 
