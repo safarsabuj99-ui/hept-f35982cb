@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, Plus, ArrowUpDown } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TablePagination } from "@/components/TablePagination";
 
 interface Client {
   user_id: string;
@@ -27,6 +28,8 @@ type SortKey = "full_name" | "balance" | "todaySpend";
 export function ClientOverviewTable({ clients, loading, exchangeRate }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortAsc, setSortAsc] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -72,7 +75,7 @@ export function ClientOverviewTable({ clients, loading, exchangeRate }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((c) => (
+                {sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((c) => (
                   <TableRow key={c.user_id} className="group">
                     <TableCell className="font-medium">{c.full_name}</TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">{c.business_name || "—"}</TableCell>
@@ -101,6 +104,7 @@ export function ClientOverviewTable({ clients, loading, exchangeRate }: Props) {
                 ))}
               </TableBody>
             </Table>
+            <TablePagination totalItems={sorted.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
           </div>
         )}
       </CardContent>

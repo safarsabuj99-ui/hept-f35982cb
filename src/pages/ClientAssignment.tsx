@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserCog } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 interface Profile {
   user_id: string;
@@ -26,6 +27,8 @@ export default function ClientAssignment() {
   const [managers, setManagers] = useState<Manager[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -91,7 +94,7 @@ export default function ClientAssignment() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clients.map((client) => (
+                  {clients.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((client) => (
                     <TableRow key={client.user_id}>
                       <TableCell className="font-medium">{client.full_name}</TableCell>
                       <TableCell className="hidden sm:table-cell">{client.business_name || "—"}</TableCell>
@@ -118,6 +121,7 @@ export default function ClientAssignment() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination totalItems={clients.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
             </div>
           )}
           {managers.length === 0 && !loading && (

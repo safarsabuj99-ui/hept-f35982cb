@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 interface PendingTransaction {
   id: string;
@@ -24,6 +25,8 @@ export default function PendingApprovals() {
   const [pending, setPending] = useState<PendingTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
   
 
@@ -105,7 +108,7 @@ export default function PendingApprovals() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pending.map((t) => (
+                  {pending.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell className="font-medium">{t.client_name}</TableCell>
@@ -140,6 +143,7 @@ export default function PendingApprovals() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination totalItems={pending.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
             </div>
           )}
         </CardContent>
