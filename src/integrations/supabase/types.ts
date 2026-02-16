@@ -340,13 +340,16 @@ export type Database = {
           campaign_name: string
           clicks: number
           client_id: string | null
+          conversion_value: number
           cpc: number
           ctr: number
           date: string
           id: string
           impressions: number
+          results: number
           roas: number
           spend: number
+          status: string
           synced_at: string
         }
         Insert: {
@@ -355,13 +358,16 @@ export type Database = {
           campaign_name?: string
           clicks?: number
           client_id?: string | null
+          conversion_value?: number
           cpc?: number
           ctr?: number
           date?: string
           id?: string
           impressions?: number
+          results?: number
           roas?: number
           spend?: number
+          status?: string
           synced_at?: string
         }
         Update: {
@@ -370,13 +376,16 @@ export type Database = {
           campaign_name?: string
           clicks?: number
           client_id?: string | null
+          conversion_value?: number
           cpc?: number
           ctr?: number
           date?: string
           id?: string
           impressions?: number
+          results?: number
           roas?: number
           spend?: number
+          status?: string
           synced_at?: string
         }
         Relationships: [

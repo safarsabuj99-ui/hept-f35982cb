@@ -2,17 +2,22 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset } from "@/components/ClientDateFilter";
-import { BarChart3, DollarSign, TrendingUp, Layers } from "lucide-react";
+import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
+import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target } from "lucide-react";
 
-const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok", google: "Google" };
+const fmt = (n: number) =>
+  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 export default function ClientReports() {
   const { user } = useAuth();
-  const [adSpend, setAdSpend] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
@@ -20,80 +25,133 @@ export default function ClientReports() {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const { data: accounts } = await (supabase.from("ad_accounts" as any).select("*").eq("client_id", user.id) as any);
-    setAdAccounts(accounts ?? []);
-    const accIds = accounts?.map((a: any) => a.id) ?? [];
+    // Get ad accounts linked to client
+    const { data: accClients } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id")
+      .eq("client_id", user.id);
+    const accIds = accClients?.map((a) => a.ad_account_id) ?? [];
+
     if (accIds.length > 0) {
-      const { data: spend } = await (supabase.from("daily_ad_spend" as any).select("*").in("ad_account_id", accIds).order("date", { ascending: false }) as any);
-      setAdSpend(spend ?? []);
+      const [{ data: accounts }, { data: perf }] = await Promise.all([
+        supabase.from("ad_accounts").select("id, platform_name").in("id", accIds),
+        supabase
+          .from("campaign_performance")
+          .select("*")
+          .in("ad_account_id", accIds)
+          .order("date", { ascending: false }),
+      ]);
+      setAdAccounts(accounts ?? []);
+      setCampaigns(perf ?? []);
     }
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleRangeChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
     setPreset(p);
   };
 
-  const filteredSpend = useMemo(() => {
-    if (!dateRange) return adSpend;
-    return adSpend.filter((s: any) => {
-      const d = new Date(s.date);
+  const filteredCampaigns = useMemo(() => {
+    if (!dateRange) return campaigns;
+    return campaigns.filter((c: any) => {
+      const d = new Date(c.date);
       return d >= dateRange.from && d <= dateRange.to;
     });
-  }, [adSpend, dateRange]);
+  }, [campaigns, dateRange]);
 
-  const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  // Daily breakdown grouped by date
-  const dailyBreakdown = useMemo(() => {
-    const map: Record<string, { date: string; total: number; platforms: Record<string, number> }> = {};
-    for (const row of filteredSpend) {
-      const acc = adAccounts.find((a: any) => a.id === row.ad_account_id);
+  // Aggregate campaigns by campaign_id for the table
+  const campaignRows: CampaignRow[] = useMemo(() => {
+    const map: Record<string, CampaignRow> = {};
+    for (const row of filteredCampaigns) {
+      const acc = adAccounts.find((a) => a.id === row.ad_account_id);
       const platform = acc?.platform_name || "unknown";
-      if (!map[row.date]) map[row.date] = { date: row.date, total: 0, platforms: {} };
-      map[row.date].total += Number(row.final_billable_usd);
-      map[row.date].platforms[platform] = (map[row.date].platforms[platform] || 0) + Number(row.final_billable_usd);
+      const key = row.campaign_id;
+      if (!map[key]) {
+        map[key] = {
+          campaign_name: row.campaign_name,
+          platform,
+          status: row.status ?? "active",
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          results: 0,
+          conversion_value: 0,
+        };
+      }
+      map[key].impressions += Number(row.impressions);
+      map[key].clicks += Number(row.clicks);
+      map[key].spend += Number(row.spend);
+      map[key].results += Number(row.results ?? 0);
+      map[key].conversion_value += Number(row.conversion_value ?? 0);
     }
-    return Object.values(map).sort((a, b) => b.date.localeCompare(a.date));
-  }, [filteredSpend, adAccounts]);
+    return Object.values(map);
+  }, [filteredCampaigns, adAccounts]);
 
-  // Summary
-  const totalSpend = filteredSpend.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
-  const avgDaily = dailyBreakdown.length > 0 ? totalSpend / dailyBreakdown.length : 0;
-  const platformTotals: Record<string, number> = {};
-  for (const row of filteredSpend) {
-    const acc = adAccounts.find((a: any) => a.id === row.ad_account_id);
-    const platform = acc?.platform_name || "unknown";
-    platformTotals[platform] = (platformTotals[platform] || 0) + Number(row.final_billable_usd);
-  }
-  const topPlatform = Object.entries(platformTotals).sort((a, b) => b[1] - a[1])[0];
+  // Totals
+  const totals = useMemo(() => {
+    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    for (const r of campaignRows) {
+      t.spend += r.spend;
+      t.impressions += r.impressions;
+      t.clicks += r.clicks;
+      t.results += r.results;
+      t.convValue += r.conversion_value;
+    }
+    return t;
+  }, [campaignRows]);
+
+  const avgRoas = safeDivide(totals.convValue, totals.spend);
+  const avgCpo = safeDivide(totals.spend, totals.results);
+
+  // Platform stats for comparison
+  const platformStats = useMemo(() => {
+    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
+    for (const r of campaignRows) {
+      if (!map[r.platform]) {
+        map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
+      }
+      map[r.platform].totalSpend += r.spend;
+      map[r.platform].totalResults += r.results;
+      map[r.platform].totalConversionValue += r.conversion_value;
+    }
+    return Object.values(map);
+  }, [campaignRows]);
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="space-y-4 max-w-6xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-10 w-full" />
+        <div className="grid grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
         <Skeleton className="h-64" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-6 w-6 text-primary" /> Spend Reports
+          <BarChart3 className="h-6 w-6 text-primary" /> Performance Analytics
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">Detailed breakdown of your ad spend</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Deep dive into your campaign performance across all platforms
+        </p>
       </div>
 
       <ClientDateFilter onRangeChange={handleRangeChange} activePreset={preset} />
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      {/* KPI Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -102,88 +160,78 @@ export default function ClientReports() {
             <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold font-mono">{fmt(totalSpend)}</p>
-            <p className="text-xs text-muted-foreground mt-1">{dailyBreakdown.length} days</p>
+            <p className="text-2xl font-bold font-mono">{fmt(totals.spend)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
-              <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+              <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg Daily Spend</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold font-mono">{fmt(avgDaily)}</p>
+            <p className="text-2xl font-bold font-mono">{totals.results.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
-              <Layers className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+              <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Top Platform</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{topPlatform ? PLATFORM_LABELS[topPlatform[0]] || topPlatform[0] : "—"}</p>
-            {topPlatform && <p className="text-xs text-muted-foreground mt-1">{fmt(topPlatform[1])}</p>}
+            <p className="text-2xl font-bold font-mono">{avgRoas.toFixed(2)}x</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-3 pb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+              <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold font-mono">{fmt(avgCpo)}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Platform Summary */}
-      {Object.keys(platformTotals).length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-lg">Platform Summary</CardTitle></CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(platformTotals).sort((a, b) => b[1] - a[1]).map(([p, v]) => (
-                <div key={p} className="flex items-center gap-2 rounded-lg border px-4 py-3 min-w-[140px]">
-                  <Badge variant="secondary">{PLATFORM_LABELS[p] || p}</Badge>
-                  <span className="font-mono font-medium text-sm">{fmt(v)}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabbed Content */}
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="deep-dive">Campaign Deep Dive</TabsTrigger>
+        </TabsList>
 
-      {/* Daily Breakdown Table */}
-      <Card>
-        <CardHeader><CardTitle className="text-lg">Daily Breakdown</CardTitle></CardHeader>
-        <CardContent>
-          {dailyBreakdown.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No spend data for this period</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Meta</TableHead>
-                    <TableHead>TikTok</TableHead>
-                    <TableHead>Google</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dailyBreakdown.map((row) => (
-                    <TableRow key={row.date}>
-                      <TableCell className="whitespace-nowrap font-medium">
-                        {new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{row.platforms.meta ? fmt(row.platforms.meta) : "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{row.platforms.tiktok ? fmt(row.platforms.tiktok) : "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{row.platforms.google ? fmt(row.platforms.google) : "—"}</TableCell>
-                      <TableCell className="text-right font-mono font-medium">{fmt(row.total)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+            <SalesFunnel
+              impressions={totals.impressions}
+              clicks={totals.clicks}
+              results={totals.results}
+            />
+            <PlatformComparison data={platformStats} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="deep-dive">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span>Campaign Performance</span>
+                <Badge variant="secondary" className="font-mono">
+                  {campaignRows.length} campaigns
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DeepDiveTable data={campaignRows} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
