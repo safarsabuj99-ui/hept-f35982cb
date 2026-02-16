@@ -134,11 +134,7 @@ export default function ExpenseManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Expense Manager</h1>
-          <p className="text-sm text-muted-foreground">Track agency operational expenses and owner draws</p>
-        </div>
+      <div className="flex justify-end">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> Add Expense</Button>

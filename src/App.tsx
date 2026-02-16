@@ -27,15 +27,14 @@ import Integrations from "@/pages/Integrations";
 import CampaignMapping from "@/pages/CampaignMapping";
 import SpendReport from "@/pages/SpendReport";
 import WalletInventory from "@/pages/WalletInventory";
-import FinanceDashboard from "@/pages/FinanceDashboard";
-import ExpenseManager from "@/pages/ExpenseManager";
+import FinanceHub from "@/pages/FinanceHub";
 import PaymentRequests from "@/pages/PaymentRequests";
 import OrderManagement from "@/pages/OrderManagement";
 import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import AdAccountDetail from "@/pages/AdAccountDetail";
-import CashFlowManagement from "@/pages/CashFlowManagement";
+
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -75,10 +74,10 @@ const App = () => (
                 <Route path="/admin/integrations" element={<Integrations />} />
                 <Route path="/admin/campaigns" element={<CampaignMapping />} />
                 <Route path="/admin/spend-report" element={<SpendReport />} />
-                <Route path="/admin/wallet" element={<WalletInventory />} />
-                <Route path="/admin/finance" element={<FinanceDashboard />} />
-                <Route path="/admin/expenses" element={<ExpenseManager />} />
-                <Route path="/admin/cash-flow" element={<CashFlowManagement />} />
+                <Route path="/admin/finance" element={<FinanceHub />} />
+                <Route path="/admin/wallet" element={<Navigate to="/admin/finance?tab=wallet" replace />} />
+                <Route path="/admin/expenses" element={<Navigate to="/admin/finance?tab=expenses" replace />} />
+                <Route path="/admin/cash-flow" element={<Navigate to="/admin/finance?tab=cash-flow" replace />} />
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
               </Route>

@@ -145,11 +145,7 @@ export default function FinanceDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Finance Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Agency P&L, COGS, and client profitability</p>
-        </div>
+      <div className="flex justify-end">
         <DateRangeFilter onRangeChange={handleRangeChange} />
       </div>
 
