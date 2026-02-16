@@ -37,7 +37,14 @@ import AdAccountDetail from "@/pages/AdAccountDetail";
 
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000, // 30s - serve cached data instantly, revalidate in background
+      gcTime: 5 * 60 * 1000, // 5 min garbage collection
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

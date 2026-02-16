@@ -11,7 +11,7 @@ import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Wallet, Zap, Clock, Shield, ArrowDown, ArrowUp, Minus,
-  Plus, Loader2, Banknote, TrendingUp, BarChart3, Sparkles
+  Plus, Loader2, Banknote, TrendingUp, BarChart3, Sparkles, RefreshCw
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
@@ -135,6 +135,7 @@ export default function ClientDashboard() {
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("all_time");
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -236,6 +237,29 @@ export default function ClientDashboard() {
 
   const activeAccounts = adAccounts.filter((a: any) => a.is_active).length;
 
+  const handleSyncNow = useCallback(async () => {
+    if (lastSynced) {
+      const lastSyncTime = new Date(lastSynced).getTime();
+      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+      if (lastSyncTime > fiveMinAgo) {
+        const minutesLeft = Math.ceil((lastSyncTime - fiveMinAgo) / 60000);
+        toast({ title: "Data is up to date", description: `Please wait ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} before syncing again.` });
+        return;
+      }
+    }
+    setIsSyncing(true);
+    toast({ title: "Syncing...", description: "Fetching latest data." });
+    try {
+      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: user?.id } });
+      if (res.error) throw res.error;
+      toast({ title: "Sync complete", description: "Your data has been refreshed." });
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [lastSynced, toast, user]);
+
   if (loading) return <ShimmerLoader />;
 
   return (
@@ -263,13 +287,25 @@ export default function ClientDashboard() {
             )}
           </div>
         </div>
-        <Button
-          onClick={() => setDepositOpen(true)}
-          className="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
-          size="lg"
-        >
-          <Plus className="h-4 w-4" /> Add Funds
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncNow}
+            disabled={isSyncing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </Button>
+          <Button
+            onClick={() => setDepositOpen(true)}
+            className="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
+            size="lg"
+          >
+            <Plus className="h-4 w-4" /> Add Funds
+          </Button>
+        </div>
       </div>
 
       {/* Date Filter */}
