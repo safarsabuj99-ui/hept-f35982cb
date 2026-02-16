@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     // Get all active ad accounts
     const { data: accounts, error: accErr } = await supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id")
       .eq("is_active", true);
 
     if (accErr) throw accErr;
@@ -40,7 +40,14 @@ Deno.serve(async (req) => {
       .select("*")
       .eq("is_active", true);
 
-    const today = new Date().toISOString().split("T")[0];
+    // Generate last 7 days of dates
+    const dates: string[] = [];
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date();
+      dt.setDate(dt.getDate() - d);
+      dates.push(dt.toISOString().split("T")[0]);
+    }
+
     const BATCH_SIZE = 5;
     let totalSynced = 0;
 
@@ -67,31 +74,33 @@ Deno.serve(async (req) => {
               ];
 
         for (const campaign of campaignsToProcess) {
-          // Generate realistic mock analytics
-          const impressions = Math.floor(Math.random() * 50000) + 1000;
-          const clicks = Math.floor(impressions * (Math.random() * 0.08 + 0.01));
-          const ctr = Math.round((clicks / impressions) * 10000) / 100;
-          const spend = Math.round((Math.random() * 200 + 10) * 100) / 100;
-          const cpc = clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : 0;
-          const roas = Math.round((Math.random() * 5 + 0.5) * 100) / 100;
+          for (const date of dates) {
+            // Generate realistic mock analytics per date
+            const impressions = Math.floor(Math.random() * 50000) + 1000;
+            const clicks = Math.floor(impressions * (Math.random() * 0.08 + 0.01));
+            const ctr = Math.round((clicks / impressions) * 10000) / 100;
+            const spend = Math.round((Math.random() * 200 + 10) * 100) / 100;
+            const cpc = clicks > 0 ? Math.round((spend / clicks) * 100) / 100 : 0;
+            const roas = Math.round((Math.random() * 5 + 0.5) * 100) / 100;
 
-          await supabase.from("campaign_performance").upsert(
-            {
-              campaign_id: campaign.campaign_id,
-              campaign_name: campaign.campaign_name,
-              ad_account_id: account.id,
-              client_id: campaign.client_id || account.client_id,
-              date: today,
-              impressions,
-              clicks,
-              ctr,
-              cpc,
-              roas,
-              spend,
-              synced_at: new Date().toISOString(),
-            },
-            { onConflict: "campaign_id,date", ignoreDuplicates: false }
-          );
+            await supabase.from("campaign_performance").upsert(
+              {
+                campaign_id: campaign.campaign_id,
+                campaign_name: campaign.campaign_name,
+                ad_account_id: account.id,
+                client_id: campaign.client_id || account.client_id,
+                date,
+                impressions,
+                clicks,
+                ctr,
+                cpc,
+                roas,
+                spend,
+                synced_at: new Date().toISOString(),
+              },
+              { onConflict: "campaign_id,date", ignoreDuplicates: false }
+            );
+          }
         }
 
         totalSynced++;
@@ -118,6 +127,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
+        days_covered: dates.length,
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
