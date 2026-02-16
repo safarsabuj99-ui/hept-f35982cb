@@ -44,48 +44,58 @@ Deno.serve(async (req) => {
       );
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    // Generate last 7 days of dates
+    const dates: string[] = [];
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date();
+      dt.setDate(dt.getDate() - d);
+      dates.push(dt.toISOString().split("T")[0]);
+    }
+
     let syncedCount = 0;
 
     for (const account of accounts) {
-      // Mock realistic spend increment ($0.50 - $15.00)
-      const spendIncrement = Math.round((Math.random() * 14.5 + 0.5) * 100) / 100;
       const currency = account.account_currency || "USD";
       const exchangeRate = currency === "BDT" ? 110 : 1;
-      const finalUsd =
-        currency === "BDT"
-          ? Math.round((spendIncrement / exchangeRate) * 100) / 100
-          : spendIncrement;
 
-      // Upsert today's spend record
-      const { error: spendErr } = await supabase
-        .from("daily_ad_spend")
-        .upsert(
-          {
+      for (const date of dates) {
+        // Mock realistic spend for each historical date ($0.50 - $15.00)
+        const spendIncrement = Math.round((Math.random() * 14.5 + 0.5) * 100) / 100;
+        const finalUsd =
+          currency === "BDT"
+            ? Math.round((spendIncrement / exchangeRate) * 100) / 100
+            : spendIncrement;
+
+        // Upsert spend record with the actual platform date
+        const { error: spendErr } = await supabase
+          .from("daily_ad_spend")
+          .upsert(
+            {
+              ad_account_id: account.id,
+              date,
+              campaign_name: "Fast Lane Sync",
+              raw_spend_amount: spendIncrement,
+              raw_currency: currency,
+              exchange_rate_used: exchangeRate,
+              final_billable_usd: finalUsd,
+              synced_at: new Date().toISOString(),
+            },
+            { onConflict: "ad_account_id,date", ignoreDuplicates: false }
+          );
+
+        if (spendErr) {
+          // If upsert fails (no unique constraint), do insert
+          await supabase.from("daily_ad_spend").insert({
             ad_account_id: account.id,
-            date: today,
+            date,
             campaign_name: "Fast Lane Sync",
             raw_spend_amount: spendIncrement,
             raw_currency: currency,
             exchange_rate_used: exchangeRate,
             final_billable_usd: finalUsd,
             synced_at: new Date().toISOString(),
-          },
-          { onConflict: "ad_account_id,date", ignoreDuplicates: false }
-        );
-
-      if (spendErr) {
-        // If upsert fails (no unique constraint), do insert
-        await supabase.from("daily_ad_spend").insert({
-          ad_account_id: account.id,
-          date: today,
-          campaign_name: "Fast Lane Sync",
-          raw_spend_amount: spendIncrement,
-          raw_currency: currency,
-          exchange_rate_used: exchangeRate,
-          final_billable_usd: finalUsd,
-          synced_at: new Date().toISOString(),
-        });
+          });
+        }
       }
 
       syncedCount++;
@@ -106,6 +116,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         message: `Fast lane sync complete`,
         synced: syncedCount,
+        days_covered: dates.length,
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
