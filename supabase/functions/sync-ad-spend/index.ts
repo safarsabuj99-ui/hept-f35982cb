@@ -84,12 +84,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Date range: last 30 days
-    const today = new Date();
-    const since = new Date(today);
-    since.setDate(since.getDate() - 30);
-    const sinceStr = since.toISOString().split("T")[0];
-    const untilStr = today.toISOString().split("T")[0];
+    // Read configurable sync start date from settings
+    const { data: dateSetting } = await supabaseAdmin
+      .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
+    const sinceStr = dateSetting?.value || "2025-01-01";
+    const untilStr = new Date().toISOString().split("T")[0];
 
     console.log(`Syncing spend from ${sinceStr} to ${untilStr} for ${adAccounts.length} accounts`);
 

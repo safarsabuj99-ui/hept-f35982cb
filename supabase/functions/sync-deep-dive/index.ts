@@ -40,12 +40,17 @@ Deno.serve(async (req) => {
       .select("*")
       .eq("is_active", true);
 
-    // Generate last 7 days of dates
+    // Read configurable sync start date from settings
+    const { data: dateSetting } = await supabase
+      .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
+    const startDateStr = dateSetting?.value || "2025-01-01";
+
+    // Generate date range from start date to today
     const dates: string[] = [];
-    for (let d = 0; d < 7; d++) {
-      const dt = new Date();
-      dt.setDate(dt.getDate() - d);
-      dates.push(dt.toISOString().split("T")[0]);
+    const startDt = new Date(startDateStr);
+    const endDt = new Date();
+    for (let d = new Date(startDt); d <= endDt; d.setDate(d.getDate() + 1)) {
+      dates.push(d.toISOString().split("T")[0]);
     }
 
     const BATCH_SIZE = 5;

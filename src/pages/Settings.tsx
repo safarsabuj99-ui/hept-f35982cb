@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,11 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Settings as SettingsIcon, Percent } from "lucide-react";
+import { Loader2, Settings as SettingsIcon, Percent, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const [exchangeRate, setExchangeRate] = useState("");
   const [serviceMargin, setServiceMargin] = useState("");
+  const [syncStartDate, setSyncStartDate] = useState<Date | undefined>();
+  const [savingSyncDate, setSavingSyncDate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingMargin, setSavingMargin] = useState(false);
@@ -21,11 +27,12 @@ export default function Settings() {
     supabase
       .from("settings" as any)
       .select("key, value")
-      .in("key", ["exchange_rate", "service_margin_percentage"])
+      .in("key", ["exchange_rate", "service_margin_percentage", "sync_start_date"])
       .then(({ data }: any) => {
         for (const row of data ?? []) {
           if (row.key === "exchange_rate") setExchangeRate(row.value);
           if (row.key === "service_margin_percentage") setServiceMargin(row.value);
+          if (row.key === "sync_start_date") setSyncStartDate(new Date(row.value + "T00:00:00"));
         }
         setLoading(false);
       });
@@ -58,6 +65,21 @@ export default function Settings() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Saved", description: `Service margin set to ${serviceMargin}%` });
+    }
+  };
+
+  const handleSaveSyncDate = async () => {
+    if (!syncStartDate) return;
+    setSavingSyncDate(true);
+    const dateStr = format(syncStartDate, "yyyy-MM-dd");
+    const { error } = await (supabase.from("settings" as any) as any)
+      .update({ value: dateStr, updated_by: user?.id })
+      .eq("key", "sync_start_date");
+    setSavingSyncDate(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Saved", description: `Sync start date set to ${dateStr}. Next sync will import from this date.` });
     }
   };
 
@@ -126,6 +148,60 @@ export default function Settings() {
                 Save Margin
               </Button>
             </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <CalendarIcon className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Sync Start Date</CardTitle>
+              <CardDescription>Import ad data starting from this date</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !syncStartDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {syncStartDate ? format(syncStartDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={syncStartDate}
+                      onSelect={setSyncStartDate}
+                      disabled={(date) => date > new Date()}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">All sync functions will import data from this date to today</p>
+              </div>
+              <Button onClick={handleSaveSyncDate} className="w-full" disabled={savingSyncDate || !syncStartDate}>
+                {savingSyncDate ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Sync Date
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
