@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Monitor } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { differenceInDays } from "date-fns";
 
 const PLATFORMS = [
   { value: "meta", label: "Meta" },
@@ -31,7 +32,11 @@ export default function AdAccounts() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD", daily_spending_limit: "250" });
+  const [form, setForm] = useState({
+    client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
+    daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
+    next_billing_date: "", card_last_4: "",
+  });
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -51,17 +56,31 @@ export default function AdAccounts() {
   const handleCreate = async () => {
     if (!form.client_id || !form.platform_name || !form.ad_account_id) return;
     setSaving(true);
-    const { error } = await (supabase.from("ad_accounts" as any) as any).insert({
-      ...form,
+    const payload: any = {
+      client_id: form.client_id,
+      platform_name: form.platform_name,
+      ad_account_id: form.ad_account_id,
+      account_currency: form.account_currency,
       daily_spending_limit: form.daily_spending_limit ? Number(form.daily_spending_limit) : 250,
-    });
+      billing_type: form.billing_type,
+    };
+    if (form.billing_type === "threshold_postpaid") {
+      payload.threshold_limit = form.threshold_limit ? Number(form.threshold_limit) : 250;
+      if (form.next_billing_date) payload.next_billing_date = form.next_billing_date;
+      if (form.card_last_4) payload.card_last_4 = form.card_last_4;
+    }
+    const { error } = await (supabase.from("ad_accounts" as any) as any).insert(payload);
     setSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Created", description: "Ad account added" });
       setOpen(false);
-      setForm({ client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD", daily_spending_limit: "250" });
+      setForm({
+        client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
+        daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
+        next_billing_date: "", card_last_4: "",
+      });
       fetchData();
     }
   };
@@ -72,6 +91,12 @@ export default function AdAccounts() {
   };
 
   const getClientName = (id: string) => clients.find((c) => c.user_id === id)?.full_name ?? "—";
+
+  const getUsageColor = (pct: number) => {
+    if (pct >= 80) return "text-destructive";
+    if (pct >= 60) return "text-yellow-500";
+    return "text-emerald-500";
+  };
 
   return (
     <div className="space-y-6">
@@ -84,7 +109,7 @@ export default function AdAccounts() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>New Ad Account</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -116,6 +141,32 @@ export default function AdAccounts() {
                 <Label>Daily Spending Limit ($)</Label>
                 <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
               </div>
+              <div className="space-y-2">
+                <Label>Billing Type</Label>
+                <Select value={form.billing_type} onValueChange={(v) => setForm({ ...form, billing_type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="prepaid">Prepaid</SelectItem>
+                    <SelectItem value="threshold_postpaid">Threshold (Postpaid)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.billing_type === "threshold_postpaid" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Threshold Limit ($)</Label>
+                    <Input type="number" value={form.threshold_limit} onChange={(e) => setForm({ ...form, threshold_limit: e.target.value })} placeholder="250" min="0" step="5" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Next Billing Date</Label>
+                    <Input type="date" value={form.next_billing_date} onChange={(e) => setForm({ ...form, next_billing_date: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Card Last 4</Label>
+                    <Input value={form.card_last_4} onChange={(e) => setForm({ ...form, card_last_4: e.target.value })} placeholder="4242" maxLength={4} />
+                  </div>
+                </>
+              )}
               <Button onClick={handleCreate} className="w-full" disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create
               </Button>
@@ -134,30 +185,78 @@ export default function AdAccounts() {
               <p>No ad accounts yet</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Account ID</TableHead>
-                  <TableHead>Currency</TableHead>
-                  <TableHead>Daily Limit</TableHead>
-                  <TableHead>Active</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {accounts.map((a: any) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
-                    <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
-                    <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
-                    <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
-                    <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
-                    <TableCell><Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} /></TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Account ID</TableHead>
+                    <TableHead>Currency</TableHead>
+                    <TableHead>Daily Limit</TableHead>
+                    <TableHead>Billing</TableHead>
+                    <TableHead>Threshold</TableHead>
+                    <TableHead>Next Bill</TableHead>
+                    <TableHead>Active</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {accounts.map((a: any) => {
+                    const isThreshold = a.billing_type === "threshold_postpaid";
+                    const usagePct = isThreshold && a.threshold_limit > 0
+                      ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
+                      : 0;
+                    const daysUntilBill = a.next_billing_date
+                      ? differenceInDays(new Date(a.next_billing_date), new Date())
+                      : null;
+
+                    return (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
+                        <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
+                        <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
+                        <TableCell>
+                          <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
+                            {isThreshold ? "Threshold" : "Prepaid"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {isThreshold ? (
+                            <div className="flex items-center gap-2 min-w-[120px]">
+                              <div className="relative h-2 w-16 overflow-hidden rounded-full bg-secondary">
+                                <div
+                                  className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-yellow-500" : "bg-emerald-500"}`}
+                                  style={{ width: `${Math.min(usagePct, 100)}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs font-mono ${getUsageColor(usagePct)}`}>
+                                {usagePct}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {daysUntilBill !== null && daysUntilBill >= 0 ? (
+                            <Badge variant={daysUntilBill <= 2 ? "destructive" : "outline"} className="text-[10px]">
+                              {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill}d`}
+                            </Badge>
+                          ) : a.next_billing_date ? (
+                            <span className="text-xs text-muted-foreground">{a.next_billing_date}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell><Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} /></TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

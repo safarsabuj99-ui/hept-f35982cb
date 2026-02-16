@@ -19,34 +19,49 @@ export type Database = {
           account_currency: Database["public"]["Enums"]["account_currency"]
           ad_account_id: string
           api_integration_id: string | null
+          billing_type: Database["public"]["Enums"]["billing_type"]
+          card_last_4: string | null
           client_id: string
           created_at: string
+          current_threshold_spend: number | null
           daily_spending_limit: number | null
           id: string
           is_active: boolean
+          next_billing_date: string | null
           platform_name: Database["public"]["Enums"]["ad_platform"]
+          threshold_limit: number | null
         }
         Insert: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           ad_account_id: string
           api_integration_id?: string | null
+          billing_type?: Database["public"]["Enums"]["billing_type"]
+          card_last_4?: string | null
           client_id: string
           created_at?: string
+          current_threshold_spend?: number | null
           daily_spending_limit?: number | null
           id?: string
           is_active?: boolean
+          next_billing_date?: string | null
           platform_name: Database["public"]["Enums"]["ad_platform"]
+          threshold_limit?: number | null
         }
         Update: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           ad_account_id?: string
           api_integration_id?: string | null
+          billing_type?: Database["public"]["Enums"]["billing_type"]
+          card_last_4?: string | null
           client_id?: string
           created_at?: string
+          current_threshold_spend?: number | null
           daily_spending_limit?: number | null
           id?: string
           is_active?: boolean
+          next_billing_date?: string | null
           platform_name?: Database["public"]["Enums"]["ad_platform"]
+          threshold_limit?: number | null
         }
         Relationships: [
           {
@@ -156,6 +171,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      billing_notifications: {
+        Row: {
+          ad_account_id: string
+          alert_type: string
+          client_id: string
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          priority: string
+          usage_percent: number | null
+        }
+        Insert: {
+          ad_account_id: string
+          alert_type: string
+          client_id: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          priority?: string
+          usage_percent?: number | null
+        }
+        Update: {
+          ad_account_id?: string
+          alert_type?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          priority?: string
+          usage_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_notifications_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaign_mappings: {
         Row: {
@@ -574,6 +633,7 @@ export type Database = {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       app_role: "admin" | "client" | "manager"
+      billing_type: "prepaid" | "threshold_postpaid"
       campaign_objective:
         | "Message"
         | "Traffic/Website"
@@ -725,6 +785,7 @@ export const Constants = {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       app_role: ["admin", "client", "manager"],
+      billing_type: ["prepaid", "threshold_postpaid"],
       campaign_objective: [
         "Message",
         "Traffic/Website",
