@@ -43,7 +43,7 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex">
+      <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex sticky top-0 h-screen">
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
           <BarChart3 className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-bold text-sidebar-primary-foreground">AdSpend</span>
@@ -65,7 +65,7 @@ export function AdminLayout() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center justify-between border-t border-sidebar-border p-4">
+        <div className="flex shrink-0 items-center justify-between border-t border-sidebar-border p-4">
           <Button
             variant="ghost"
             className="flex-1 justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
