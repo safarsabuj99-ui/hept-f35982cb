@@ -1,75 +1,62 @@
 
 
-# Redesign Client Detail Page - Full Profile Management
+# Fix: Auto-Populate Billing Data for Imported Ad Accounts
 
-## Overview
+## Problem
 
-Redesign the Client Detail page to show all client information (account type, full name, email, phone, business name, mapping keyword, custom exchange rate, pricing model) in an editable format, with a clean modern layout.
+When ad accounts are auto-imported from Meta, the **threshold limit**, **next billing date**, and **current threshold spend** are not being populated because:
 
-## Current Issues
-- Profile details (name, email, phone, business) are display-only in the header with no way to edit
-- Account type (role) is not shown at all
-- Mapping keyword is not visible or editable
-- No password reset option
-- Pricing and profile info are split awkwardly
+1. The import function relies on `funding_source_details` which rarely returns threshold billing data
+2. Meta provides billing threshold info via a separate `adspaymentcycle` edge endpoint
+3. After import, the `current_threshold_spend` field is **never updated** during spend syncs -- it stays at 0 forever
 
-## New Layout Design
+## Solution
 
-### Header Section
-- Back button + client name as page title
-- Account type badge (Client/Manager) next to name
-- "Add Funds" button stays in header area
+Two changes are needed:
 
-### Tab Structure (6 tabs)
-1. **Profile** (NEW - first tab) - All editable client details
-2. **Pricing** - Pricing model configuration (existing)
-3. **Ad Guard** - Automation config (existing)
-4. **Spend** - Ad spend data (existing)
-5. **Payments** - Payment requests (existing)
-6. **Transactions** - Transaction history (existing)
+### 1. Update `auto-import-accounts` Edge Function
 
-### Profile Tab Design
-A clean card-based form with grouped sections:
+After fetching ad accounts via `owned_ad_accounts`, make a second API call per account to the `adspaymentcycle` endpoint:
 
-**Section 1: Account Info**
-- Account Type (read-only badge showing Client/Manager)
-- Full Name (editable input)
-- Email (read-only, shown as text)
-- Phone (editable input)
-- Business Name (editable input)
+```text
+GET /v21.0/{ad_account_id}/adspaymentcycle
+  ?fields=threshold_amount,created_time,end_time,amount_spent
+```
 
-**Section 2: Password**
-- "Reset Password" button that triggers a password reset email via the `create-client` edge function or a new simple edge function
+This returns the current billing cycle with:
+- `threshold_amount` -- the billing threshold in cents (e.g., 75000 = $750)
+- `end_time` -- the next billing/charge date
+- `amount_spent` -- current spend within this billing cycle (in cents)
 
-**Section 3: Mapping & Assignment**
-- Mapping Keyword (editable input with helper text)
-- Assigned Manager (dropdown selector - moved here from header)
-- Custom Exchange Rate (editable input - moved here from Pricing tab)
+Use this data to populate `threshold_limit`, `next_billing_date`, and `current_threshold_spend` for each imported account.
 
-All fields save together with a single "Save Changes" button at the bottom.
+### 2. Update `sync-ad-spend` Edge Function
 
-## Technical Changes
+After syncing daily spend data, also refresh each Meta account's billing cycle info by calling the same `adspaymentcycle` endpoint. Update the `ad_accounts` table with the latest `current_threshold_spend`, `threshold_limit`, and `next_billing_date`.
 
-### File: `src/pages/ClientDetail.tsx`
+This ensures the Billing Health widget always shows accurate, up-to-date threshold usage.
 
-1. **Add editable state** for `fullName`, `phone`, `businessName`, `mappingKeyword`
-2. **Initialize from profile data** in the existing `loadAll` function
-3. **New Profile tab** with form fields in a 2-column grid layout
-4. **Move manager assignment** from header card into Profile tab
-5. **Move exchange rate** into Profile tab (keep it in Pricing tab too or just Profile)
-6. **Update `handleSave`** to include `full_name`, `phone`, `business_name`, `mapping_keyword` alongside pricing fields
-7. **Add password reset** - a button that calls `supabase.auth.admin.resetPasswordForEmail()` via a small edge function or uses the existing auth reset flow
-8. **Responsive design** - 2-column grid on desktop, stacked on mobile
+## Files Changed
 
-### File: `supabase/functions/reset-client-password/index.ts` (NEW)
-- Simple edge function that accepts `{ user_id, new_password }`
-- Validates caller is admin
-- Uses `supabase.auth.admin.updateUserById()` to set new password
-- Returns success/error
+| File | Change |
+|------|--------|
+| `supabase/functions/auto-import-accounts/index.ts` | Add `adspaymentcycle` API call per Meta account to fetch threshold, billing date, and current spend |
+| `supabase/functions/sync-ad-spend/index.ts` | After syncing spend, call `adspaymentcycle` to refresh billing fields on each Meta ad account |
 
-### UI Polish
-- Use icons next to section headers (User, Key, Settings icons)
-- Read-only fields styled with muted background
-- Account type shown as a colored badge
-- Consistent spacing using the existing card/form patterns
-- Tab count increases from 5 to 6 to accommodate the new Profile tab
+## Technical Details
+
+**Meta `adspaymentcycle` API call:**
+- Endpoint: `https://graph.facebook.com/v21.0/{ad_account_id}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token={token}`
+- `threshold_amount` and `amount_spent` are returned in **cents** -- divide by 100 for dollars
+- `end_time` is a Unix timestamp or date string -- convert to `YYYY-MM-DD`
+- Only applies to threshold/postpaid accounts; prepaid accounts may return empty data (handled gracefully)
+
+**Import flow change:**
+- After discovering accounts, loop through Meta accounts and call `adspaymentcycle` for each
+- Merge the billing data into the account object before inserting into `ad_accounts`
+- If the API call fails for an account, fall back to defaults (no crash)
+
+**Sync flow change:**
+- After all spend records are synced, batch-update `ad_accounts` with fresh billing cycle data
+- This runs every sync, so the Billing Health widget stays current
+
