@@ -6,14 +6,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CAMPAIGN_NAMES = [
-  "Summer Sale 2026", "Brand Awareness Q1", "Retargeting - Cart Abandon",
-  "Lookalike Audience - US", "Video Views Campaign", "Lead Gen - Webinar",
-  "Product Launch", "Holiday Promo", "App Install Drive", "Engagement Boost",
-];
-
-const EXPENSE_CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"];
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -48,16 +40,19 @@ Deno.serve(async (req) => {
       .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
     const exchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
-    // Get active ad accounts
+    // Get active ad accounts with their integration tokens
     const { data: adAccounts } = await supabaseAdmin
-      .from("ad_accounts").select("*").eq("is_active", true);
+      .from("ad_accounts")
+      .select("*, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .eq("is_active", true);
+
     if (!adAccounts || adAccounts.length === 0) {
       return new Response(JSON.stringify({ error: "No active ad accounts found. Create ad accounts first." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get client profiles with mapping keywords, custom rates, and pricing configs
+    // Get client profiles with mapping keywords and custom rates
     const { data: clientProfiles } = await supabaseAdmin
       .from("profiles").select("user_id, mapping_keyword, custom_exchange_rate, pricing_config");
 
@@ -72,166 +67,197 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Date range: last 30 days
     const today = new Date();
-    const records: any[] = [];
-    const campaignMappings: any[] = [];
-    let autoMapped = 0, unmapped = 0;
+    const since = new Date(today);
+    since.setDate(since.getDate() - 30);
+    const sinceStr = since.toISOString().split("T")[0];
+    const untilStr = today.toISOString().split("T")[0];
 
-    // Generate 5-15 random spend entries
-    const count = Math.floor(Math.random() * 11) + 5;
-    for (let i = 0; i < count; i++) {
-      const account = adAccounts[Math.floor(Math.random() * adAccounts.length)];
-      const daysAgo = Math.floor(Math.random() * 7);
-      const spendDate = new Date(today);
-      spendDate.setDate(spendDate.getDate() - daysAgo);
+    console.log(`Syncing spend from ${sinceStr} to ${untilStr} for ${adAccounts.length} accounts`);
 
-      const isBDT = account.account_currency === "BDT";
-      const rawAmount = isBDT
-        ? Math.round((Math.random() * 50000 + 1000) * 100) / 100
-        : Math.round((Math.random() * 500 + 10) * 100) / 100;
+    let totalRecords = 0;
+    let totalSkipped = 0;
+    let autoMapped = 0;
+    let unmapped = 0;
+    const errors: string[] = [];
 
-      let campaignName = CAMPAIGN_NAMES[Math.floor(Math.random() * CAMPAIGN_NAMES.length)];
-      if (keywordMap.length > 0 && Math.random() < 0.3) {
-        const kw = keywordMap[Math.floor(Math.random() * keywordMap.length)];
-        campaignName = `${kw.keyword.toUpperCase()}_${campaignName}`;
+    // Group accounts by platform
+    const metaAccounts = adAccounts.filter((a: any) => a.platform_name === "meta");
+
+    // ===== META: Fetch real spend via Insights API =====
+    for (const account of metaAccounts) {
+      const integration = account.api_integrations as any;
+      if (!integration?.api_token) {
+        errors.push(`${account.ad_account_id}: No API token found`);
+        continue;
       }
 
-      // Auto-mapping
-      let matchedClientId: string | null = null;
-      const nameLower = campaignName.toLowerCase();
-      for (const { keyword, userId } of keywordMap) {
-        if (nameLower.includes(keyword)) { matchedClientId = userId; break; }
+      const apiToken = integration.api_token;
+      const adAccountId = account.ad_account_id;
+
+      try {
+        // Fetch daily insights with campaign breakdown for 30 days
+        const insightsUrl = `https://graph.facebook.com/v21.0/${adAccountId}/insights?fields=campaign_name,campaign_id,spend,date_start&time_range={"since":"${sinceStr}","until":"${untilStr}"}&time_increment=1&level=campaign&limit=500&access_token=${apiToken}`;
+        
+        console.log(`Fetching insights for ${adAccountId} (${account.account_name})...`);
+        
+        let allInsights: any[] = [];
+        let nextUrl: string | null = insightsUrl;
+
+        // Paginate through all results
+        while (nextUrl) {
+          const res = await fetch(nextUrl);
+          const json = await res.json();
+
+          if (json.error) {
+            errors.push(`${adAccountId}: ${json.error.message}`);
+            break;
+          }
+
+          if (json.data && json.data.length > 0) {
+            allInsights = allInsights.concat(json.data);
+          }
+
+          // Check for next page
+          nextUrl = json.paging?.next || null;
+        }
+
+        console.log(`Got ${allInsights.length} insight rows for ${account.account_name}`);
+
+        if (allInsights.length === 0) continue;
+
+        // Check existing records to avoid duplicates
+        const { data: existingRecords } = await supabaseAdmin
+          .from("daily_ad_spend")
+          .select("date, campaign_name")
+          .eq("ad_account_id", account.id)
+          .gte("date", sinceStr)
+          .lte("date", untilStr);
+
+        const existingSet = new Set(
+          (existingRecords ?? []).map((r: any) => `${r.date}|${r.campaign_name}`)
+        );
+
+        const records: any[] = [];
+        const campaignMappings: any[] = [];
+
+        for (const row of allInsights) {
+          const spend = parseFloat(row.spend || "0");
+          if (spend <= 0) continue;
+
+          const date = row.date_start;
+          const campaignName = row.campaign_name || "Unknown Campaign";
+          const campaignId = row.campaign_id || `meta_${Date.now()}`;
+          
+          // Dedup check
+          const key = `${date}|${campaignName}`;
+          if (existingSet.has(key)) {
+            totalSkipped++;
+            continue;
+          }
+
+          const isBDT = account.account_currency === "BDT";
+          const rawAmount = spend;
+
+          // Auto-mapping by keyword
+          let matchedClientId: string | null = account.client_id || null;
+          if (!matchedClientId) {
+            const nameLower = campaignName.toLowerCase();
+            for (const { keyword, userId } of keywordMap) {
+              if (nameLower.includes(keyword)) { matchedClientId = userId; break; }
+            }
+          }
+
+          // Determine effective exchange rate
+          let effectiveRate = exchangeRate;
+          if (matchedClientId && clientRates[matchedClientId]) {
+            effectiveRate = clientRates[matchedClientId]!;
+          }
+
+          const finalBillableUsd = isBDT
+            ? Math.round((rawAmount / effectiveRate) * 100) / 100
+            : rawAmount;
+
+          records.push({
+            ad_account_id: account.id,
+            date,
+            campaign_name: campaignName,
+            raw_spend_amount: rawAmount,
+            raw_currency: account.account_currency,
+            exchange_rate_used: isBDT ? effectiveRate : 1,
+            final_billable_usd: finalBillableUsd,
+          });
+
+          campaignMappings.push({
+            campaign_id: campaignId,
+            campaign_name: campaignName,
+            platform: "meta",
+            ad_account_id: account.id,
+            client_id: matchedClientId,
+            is_active: true,
+          });
+
+          if (matchedClientId) autoMapped++;
+          else unmapped++;
+
+          existingSet.add(key); // prevent duplicates within same batch
+        }
+
+        // Insert in batches of 100
+        for (let i = 0; i < records.length; i += 100) {
+          const batch = records.slice(i, i + 100);
+          const { error: insertError } = await supabaseAdmin.from("daily_ad_spend").insert(batch);
+          if (insertError) {
+            errors.push(`${adAccountId} insert error: ${insertError.message}`);
+          }
+        }
+
+        // Upsert campaign mappings (deduplicate by campaign_id + platform)
+        if (campaignMappings.length > 0) {
+          // Check existing campaign mappings
+          const campaignIds = campaignMappings.map((c: any) => c.campaign_id);
+          const { data: existingMappings } = await supabaseAdmin
+            .from("campaign_mappings")
+            .select("campaign_id")
+            .in("campaign_id", campaignIds)
+            .eq("platform", "meta");
+
+          const existingCampaignIds = new Set((existingMappings ?? []).map((m: any) => m.campaign_id));
+          const newMappings = campaignMappings.filter((c: any) => !existingCampaignIds.has(c.campaign_id));
+
+          if (newMappings.length > 0) {
+            await supabaseAdmin.from("campaign_mappings").insert(newMappings);
+          }
+        }
+
+        totalRecords += records.length;
+      } catch (err: any) {
+        errors.push(`${adAccountId}: ${err.message}`);
       }
-
-      // Tiered rate
-      let effectiveRate = exchangeRate;
-      if (matchedClientId && clientRates[matchedClientId]) {
-        effectiveRate = clientRates[matchedClientId]!;
-      }
-
-      const finalBillableUsd = isBDT
-        ? Math.round((rawAmount / effectiveRate) * 100) / 100
-        : rawAmount;
-
-      records.push({
-        ad_account_id: account.id, date: spendDate.toISOString().split("T")[0],
-        campaign_name: campaignName, raw_spend_amount: rawAmount,
-        raw_currency: account.account_currency, exchange_rate_used: isBDT ? effectiveRate : 1,
-        final_billable_usd: finalBillableUsd,
-      });
-
-      campaignMappings.push({
-        campaign_id: `sim_${Date.now()}_${i}`, campaign_name: campaignName,
-        platform: account.platform_name, ad_account_id: account.id,
-        client_id: matchedClientId, is_active: true,
-      });
-
-      if (matchedClientId) autoMapped++; else unmapped++;
     }
 
-    const { error: insertError } = await supabaseAdmin.from("daily_ad_spend").insert(records);
-    if (insertError) {
-      return new Response(JSON.stringify({ error: insertError.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (campaignMappings.length > 0) {
-      await supabaseAdmin.from("campaign_mappings").insert(campaignMappings);
-    }
-
-    // === BILLING SIMULATION ===
-    const THRESHOLD_LIMITS = [10, 25, 250];
-    for (const acc of adAccounts) {
-      const isThreshold = Math.random() > 0.5;
-      const billingType = isThreshold ? "threshold_postpaid" : "prepaid";
-      const thresholdLimit = THRESHOLD_LIMITS[Math.floor(Math.random() * THRESHOLD_LIMITS.length)];
-      // Simulate high usage (>= 80%) for some accounts
-      const spendMultiplier = Math.random() > 0.4 ? 0.8 + Math.random() * 0.2 : Math.random() * 0.7;
-      const currentSpend = isThreshold ? Math.round(thresholdLimit * spendMultiplier * 100) / 100 : 0;
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + Math.floor(Math.random() * 3) + 1);
-      const cardLast4 = String(Math.floor(1000 + Math.random() * 9000));
-
-      await supabaseAdmin.from("ad_accounts").update({
-        billing_type: billingType,
-        threshold_limit: thresholdLimit,
-        current_threshold_spend: currentSpend,
-        next_billing_date: isThreshold ? tomorrow.toISOString().split("T")[0] : null,
-        card_last_4: isThreshold ? cardLast4 : null,
-      }).eq("id", acc.id);
-    }
-
+    // Update last_synced_at on integrations
     await supabaseAdmin.from("api_integrations")
       .update({ last_synced_at: new Date().toISOString() }).eq("is_active", true);
 
-    // === FINANCE SIMULATION ===
-    // Generate USD purchases to establish WAC
-    const usdPurchases: any[] = [];
-    const purchaseCount = Math.floor(Math.random() * 3) + 2;
-    for (let i = 0; i < purchaseCount; i++) {
-      const daysAgo = Math.floor(Math.random() * 30);
-      const pDate = new Date(today);
-      pDate.setDate(pDate.getDate() - daysAgo);
-      const bdtPaid = Math.round((Math.random() * 50000 + 10000) * 100) / 100;
-      const usdReceived = Math.round((bdtPaid / (120 + Math.random() * 20 - 10)) * 100) / 100;
-      usdPurchases.push({
-        date: pDate.toISOString().split("T")[0],
-        bdt_amount_paid: bdtPaid,
-        usd_received: usdReceived,
-        notes: `Simulation purchase #${i + 1}`,
-        created_by: caller.id,
-      });
-    }
-    await supabaseAdmin.from("usd_purchases").insert(usdPurchases);
-
-    // Generate expenses
-    const expenseEntries: any[] = [];
-    const expCount = Math.floor(Math.random() * 5) + 3;
-    for (let i = 0; i < expCount; i++) {
-      const daysAgo = Math.floor(Math.random() * 30);
-      const eDate = new Date(today);
-      eDate.setDate(eDate.getDate() - daysAgo);
-      const cat = EXPENSE_CATEGORIES[Math.floor(Math.random() * EXPENSE_CATEGORIES.length)];
-      const amt = cat === "Salary" ? Math.round(Math.random() * 30000 + 15000)
-        : cat === "Rent" ? Math.round(Math.random() * 10000 + 5000)
-        : cat === "Owner_Draw" ? Math.round(Math.random() * 20000 + 5000)
-        : Math.round(Math.random() * 5000 + 500);
-      expenseEntries.push({
-        date: eDate.toISOString().split("T")[0],
-        amount_bdt: amt,
-        category: cat,
-        description: `Sim: ${cat} expense`,
-        created_by: caller.id,
-      });
-    }
-    await supabaseAdmin.from("agency_expenses").insert(expenseEntries);
-
-    // Assign random pricing_config to clients that don't have one
-    const { data: allClientRoles } = await supabaseAdmin
-      .from("user_roles").select("user_id").eq("role", "client");
-    for (const cr of allClientRoles ?? []) {
-      const { data: profile } = await supabaseAdmin
-        .from("profiles").select("pricing_config").eq("user_id", cr.user_id).single();
-      if (!profile?.pricing_config) {
-        const isFlat = Math.random() > 0.5;
-        const config = isFlat
-          ? { mode: "flat_rate", rates: { meta: 140 + Math.round(Math.random() * 20), tiktok: 145 + Math.round(Math.random() * 15), google: 150 + Math.round(Math.random() * 15) } }
-          : { mode: "percentage", markup: Math.round(10 + Math.random() * 15) };
-        await supabaseAdmin.from("profiles")
-          .update({ pricing_config: config }).eq("user_id", cr.user_id);
-      }
-    }
+    console.log(`Sync complete: ${totalRecords} records, ${totalSkipped} skipped, ${errors.length} errors`);
 
     return new Response(
       JSON.stringify({
-        success: true, records_created: records.length,
-        exchange_rate_used: exchangeRate, auto_mapped: autoMapped, unmapped,
-        finance_sim: { usd_purchases: usdPurchases.length, expenses: expenseEntries.length },
+        success: true,
+        records_created: totalRecords,
+        records_skipped: totalSkipped,
+        exchange_rate_used: exchangeRate,
+        auto_mapped: autoMapped,
+        unmapped,
+        errors: errors.length > 0 ? errors : undefined,
+        date_range: { from: sinceStr, to: untilStr },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Sync error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
