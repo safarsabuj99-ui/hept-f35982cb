@@ -35,6 +35,7 @@ import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import AdAccountDetail from "@/pages/AdAccountDetail";
+import CashFlowManagement from "@/pages/CashFlowManagement";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="/admin/wallet" element={<WalletInventory />} />
                 <Route path="/admin/finance" element={<FinanceDashboard />} />
                 <Route path="/admin/expenses" element={<ExpenseManager />} />
+                <Route path="/admin/cash-flow" element={<CashFlowManagement />} />
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
               </Route>

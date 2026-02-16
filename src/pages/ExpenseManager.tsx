@@ -46,6 +46,8 @@ export default function ExpenseManager() {
   const [expDate, setExpDate] = useState(new Date().toISOString().split("T")[0]);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [periodLabel, setPeriodLabel] = useState("All Time");
+  const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
+  const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -60,7 +62,10 @@ export default function ExpenseManager() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchExpenses(dateRange); }, []);
+  useEffect(() => {
+    fetchExpenses(dateRange);
+    supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
+  }, []);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -84,13 +89,24 @@ export default function ExpenseManager() {
       category,
       description: description || null,
       created_by: user?.id,
+      paid_from_account_id: paidFromAccountId || null,
     } as any);
+
+    // Debit agency account if selected
+    if (!error && paidFromAccountId) {
+      const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
+      if (acc) {
+        await supabase.from("agency_accounts" as any)
+          .update({ current_balance_bdt: Number(acc.current_balance_bdt) - Number(amount) } as any)
+          .eq("id", paidFromAccountId);
+      }
+    }
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Expense recorded" });
-      setAmount(""); setDescription("");
+      setAmount(""); setDescription(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchExpenses(dateRange);
     }
@@ -149,6 +165,19 @@ export default function ExpenseManager() {
                   </Select>
                 </div>
               </div>
+              {agencyAccounts.length > 0 && (
+                <div>
+                  <Label>Paid From Account</Label>
+                  <Select value={paidFromAccountId} onValueChange={setPaidFromAccountId}>
+                    <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      {agencyAccounts.map((a: any) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.type}) — ৳{Number(a.current_balance_bdt).toLocaleString()}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Label>Description (optional)</Label>
                 <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Details..." />

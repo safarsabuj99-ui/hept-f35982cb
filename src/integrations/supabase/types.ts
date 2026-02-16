@@ -108,6 +108,36 @@ export type Database = {
           },
         ]
       }
+      agency_accounts: {
+        Row: {
+          account_number: string | null
+          created_at: string
+          current_balance_bdt: number
+          id: string
+          is_active: boolean
+          name: string
+          type: Database["public"]["Enums"]["agency_account_type"]
+        }
+        Insert: {
+          account_number?: string | null
+          created_at?: string
+          current_balance_bdt?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          type: Database["public"]["Enums"]["agency_account_type"]
+        }
+        Update: {
+          account_number?: string | null
+          created_at?: string
+          current_balance_bdt?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          type?: Database["public"]["Enums"]["agency_account_type"]
+        }
+        Relationships: []
+      }
       agency_expenses: {
         Row: {
           amount_bdt: number
@@ -117,6 +147,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          paid_from_account_id: string | null
         }
         Insert: {
           amount_bdt: number
@@ -126,6 +157,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          paid_from_account_id?: string | null
         }
         Update: {
           amount_bdt?: number
@@ -135,8 +167,17 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          paid_from_account_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "agency_expenses_paid_from_account_id_fkey"
+            columns: ["paid_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       api_integrations: {
         Row: {
@@ -390,6 +431,51 @@ export type Database = {
           },
         ]
       }
+      fund_transfers: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          from_account_id: string
+          id: string
+          note: string | null
+          to_account_id: string
+        }
+        Insert: {
+          amount_bdt: number
+          created_at?: string
+          created_by: string
+          from_account_id: string
+          id?: string
+          note?: string | null
+          to_account_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          from_account_id?: string
+          id?: string
+          note?: string | null
+          to_account_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_transfers_from_account_id_fkey"
+            columns: ["from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_transfers_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manager_permissions: {
         Row: {
           can_add_funds: boolean
@@ -433,6 +519,7 @@ export type Database = {
           final_amount_usd: number | null
           id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          received_in_account_id: string | null
           status: Database["public"]["Enums"]["payment_request_status"]
           transaction_id: string | null
           updated_at: string
@@ -446,6 +533,7 @@ export type Database = {
           final_amount_usd?: number | null
           id?: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
           transaction_id?: string | null
           updated_at?: string
@@ -459,11 +547,20 @@ export type Database = {
           final_amount_usd?: number | null
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
           transaction_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payment_requests_received_in_account_id_fkey"
+            columns: ["received_in_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -597,6 +694,7 @@ export type Database = {
           date: string
           id: string
           notes: string | null
+          paid_from_account_id: string | null
           usd_received: number
         }
         Insert: {
@@ -607,6 +705,7 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
+          paid_from_account_id?: string | null
           usd_received: number
         }
         Update: {
@@ -617,9 +716,18 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
+          paid_from_account_id?: string | null
           usd_received?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "usd_purchases_paid_from_account_id_fkey"
+            columns: ["paid_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -667,6 +775,7 @@ export type Database = {
     Enums: {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
+      agency_account_type: "Cash" | "Bank" | "MFS"
       app_role: "admin" | "client" | "manager"
       billing_type: "prepaid" | "threshold_postpaid"
       campaign_objective:
@@ -819,6 +928,7 @@ export const Constants = {
     Enums: {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
+      agency_account_type: ["Cash", "Bank", "MFS"],
       app_role: ["admin", "client", "manager"],
       billing_type: ["prepaid", "threshold_postpaid"],
       campaign_objective: [

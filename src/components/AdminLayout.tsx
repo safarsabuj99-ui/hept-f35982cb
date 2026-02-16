@@ -7,6 +7,7 @@ import {
   BarChart3, Users, PlusCircle, DollarSign, LogOut, Menu, X,
   Settings, ScrollText, ClipboardCheck, UserCog, Monitor, Plug,
   MapPin, FileText, Wallet, TrendingUp, Receipt, Banknote, Megaphone,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionK
   { to: "/admin/wallet", icon: Wallet, label: "Wallet", permKey: "can_manage_finance" },
   { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
   { to: "/admin/expenses", icon: Receipt, label: "Expenses", permKey: "can_manage_finance" },
+  { to: "/admin/cash-flow", icon: ArrowLeftRight, label: "Cash Flow", permKey: "can_manage_finance" },
   { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_manage_finance" },
   { to: "/admin/orders", icon: Megaphone, label: "Orders", permKey: "can_manage_campaigns" },
   { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
