@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Users, PlusCircle, Shield, Loader2 } from "lucide-react";
 import { ALL_PERMISSION_KEYS, PERMISSION_GROUPS, type PermissionKey } from "@/hooks/usePermissions";
+import { TablePagination } from "@/components/TablePagination";
 
 interface ManagerRow {
   user_id: string;
@@ -30,6 +31,8 @@ export default function TeamManagement() {
   const [editPerms, setEditPerms] = useState<Record<string, boolean>>({});
   const [fullAccess, setFullAccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
 
   const fetchManagers = async () => {
@@ -117,6 +120,8 @@ export default function TeamManagement() {
     return `${count}/${ALL_PERMISSION_KEYS.length} enabled`;
   };
 
+  const paginatedManagers = managers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -150,37 +155,46 @@ export default function TeamManagement() {
           ) : managers.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">No managers yet. Create one to get started.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Clients</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {managers.map((m) => (
-                  <TableRow key={m.user_id}>
-                    <TableCell className="font-medium">{m.full_name}</TableCell>
-                    <TableCell>{m.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{m.client_count}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {enabledCount(m.permissions)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(m)}>
-                        <Shield className="mr-1.5 h-3.5 w-3.5" />
-                        Permissions
-                      </Button>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Clients</TableHead>
+                    <TableHead>Permissions</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedManagers.map((m) => (
+                    <TableRow key={m.user_id}>
+                      <TableCell className="font-medium">{m.full_name}</TableCell>
+                      <TableCell>{m.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{m.client_count}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {enabledCount(m.permissions)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => openEdit(m)}>
+                          <Shield className="mr-1.5 h-3.5 w-3.5" />
+                          Permissions
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePagination
+                totalItems={managers.length}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -193,7 +207,6 @@ export default function TeamManagement() {
           </DialogHeader>
 
           <div className="space-y-5 py-2">
-            {/* Full Access Toggle */}
             <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-4">
               <div>
                 <p className="text-sm font-semibold">Full Access</p>
@@ -204,7 +217,6 @@ export default function TeamManagement() {
 
             <Separator />
 
-            {/* Grouped Permissions */}
             {PERMISSION_GROUPS.map((group) => (
               <div key={group.label} className="space-y-3">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

@@ -14,6 +14,7 @@ import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2 } from "lucide-r
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
+import { TablePagination } from "@/components/TablePagination";
 
 interface UsdPurchase {
   id: string;
@@ -38,6 +39,8 @@ export default function WalletInventory() {
   const [periodLabel, setPeriodLabel] = useState("All Time");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -65,6 +68,7 @@ export default function WalletInventory() {
     };
     setPeriodLabel(labels[preset]);
     fetchPurchases(range);
+    setCurrentPage(1);
   };
 
   // WAC from filtered purchases
@@ -243,6 +247,7 @@ export default function WalletInventory() {
           ) : purchases.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No purchases in this period. Click "Buy USD" to get started.</p>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -255,7 +260,7 @@ export default function WalletInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchases.map(p => (
+                  {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-sm">{p.date}</TableCell>
                       <TableCell className="text-right font-mono">৳{Number(p.bdt_amount_paid).toLocaleString()}</TableCell>
@@ -269,6 +274,14 @@ export default function WalletInventory() {
                 </TableBody>
               </Table>
             </div>
+            <TablePagination
+              totalItems={purchases.length}
+              pageSize={pageSize}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
+            </>
           )}
         </CardContent>
       </Card>

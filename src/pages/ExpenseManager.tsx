@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Loader2, Trash2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
+import { TablePagination } from "@/components/TablePagination";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -48,6 +49,8 @@ export default function ExpenseManager() {
   const [periodLabel, setPeriodLabel] = useState("All Time");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -75,6 +78,7 @@ export default function ExpenseManager() {
     };
     setPeriodLabel(labels[preset]);
     fetchExpenses(range);
+    setCurrentPage(1);
   };
 
   const handleSubmit = async () => {
@@ -246,7 +250,8 @@ export default function ExpenseManager() {
             ) : expenses.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No expenses in this period</p>
             ) : (
-              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+              <>
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -257,7 +262,7 @@ export default function ExpenseManager() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {expenses.slice(0, 20).map(e => (
+                    {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
                       <TableRow key={e.id}>
                         <TableCell className="font-mono text-sm">{e.date}</TableCell>
                         <TableCell>
@@ -276,6 +281,14 @@ export default function ExpenseManager() {
                   </TableBody>
                 </Table>
               </div>
+              <TablePagination
+                totalItems={expenses.length}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+              </>
             )}
           </CardContent>
         </Card>

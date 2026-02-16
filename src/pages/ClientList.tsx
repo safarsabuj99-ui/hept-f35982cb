@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Users, ChevronRight, Plus } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
+import { TablePagination } from "@/components/TablePagination";
 
 interface ClientRow {
   user_id: string;
@@ -25,10 +26,12 @@ export default function ClientList() {
   const [search, setSearch] = useState("");
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositClientId, setDepositClientId] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const location = useLocation();
+
   useEffect(() => {
     async function load() {
-      // Get client user_ids
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -48,6 +51,8 @@ export default function ClientList() {
     load();
   }, [location.key]);
 
+  useEffect(() => { setCurrentPage(1); }, [search]);
+
   const getPricingLabel = (config: any) => {
     if (!config) return "Default";
     if (config.mode === "flat") return "Flat Rate";
@@ -61,6 +66,8 @@ export default function ClientList() {
       (c.business_name || "").toLowerCase().includes(search.toLowerCase()) ||
       c.email.toLowerCase().includes(search.toLowerCase())
   );
+
+  const paginatedData = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6">
@@ -100,67 +107,76 @@ export default function ClientList() {
               {search ? "No clients match your search." : "No clients found."}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="hidden sm:table-cell">Business</TableHead>
-                    <TableHead className="hidden md:table-cell">Email</TableHead>
-                    <TableHead>Pricing</TableHead>
-                    <TableHead className="hidden lg:table-cell">Exchange Rate</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((c) => (
-                    <TableRow key={c.user_id} className="group cursor-pointer hover:bg-muted/50">
-                      <TableCell className="font-medium">
-                        <Link to={`/admin/clients/${c.user_id}`} className="hover:underline">
-                          {c.full_name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground">
-                        {c.business_name || "—"}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                        {c.email}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {getPricingLabel(c.pricing_config)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell font-mono text-sm">
-                        {c.custom_exchange_rate ? `৳${c.custom_exchange_rate}` : "Global"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1 h-7 px-2 text-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDepositClientId(c.user_id);
-                              setDepositOpen(true);
-                            }}
-                          >
-                            <Plus className="h-3 w-3" /> Funds
-                          </Button>
-                          <Link
-                            to={`/admin/clients/${c.user_id}`}
-                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                          >
-                            View <ChevronRight className="h-3 w-3" />
-                          </Link>
-                        </div>
-                      </TableCell>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="hidden sm:table-cell">Business</TableHead>
+                      <TableHead className="hidden md:table-cell">Email</TableHead>
+                      <TableHead>Pricing</TableHead>
+                      <TableHead className="hidden lg:table-cell">Exchange Rate</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedData.map((c) => (
+                      <TableRow key={c.user_id} className="group cursor-pointer hover:bg-muted/50">
+                        <TableCell className="font-medium">
+                          <Link to={`/admin/clients/${c.user_id}`} className="hover:underline">
+                            {c.full_name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-muted-foreground">
+                          {c.business_name || "—"}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                          {c.email}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {getPricingLabel(c.pricing_config)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell font-mono text-sm">
+                          {c.custom_exchange_rate ? `৳${c.custom_exchange_rate}` : "Global"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 h-7 px-2 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDepositClientId(c.user_id);
+                                setDepositOpen(true);
+                              }}
+                            >
+                              <Plus className="h-3 w-3" /> Funds
+                            </Button>
+                            <Link
+                              to={`/admin/clients/${c.user_id}`}
+                              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                            >
+                              View <ChevronRight className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </CardContent>
       </Card>

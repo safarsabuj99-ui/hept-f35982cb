@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollText } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 interface AuditLog {
   id: string;
@@ -27,35 +28,39 @@ const ACTION_COLORS: Record<string, string> = {
 export default function AuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      const { data } = await supabase
-        .from("audit_logs" as any)
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(200);
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    const from = (currentPage - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-      if (!data || data.length === 0) {
-        setLogs([]);
-        setLoading(false);
-        return;
-      }
+    // Get count and data in parallel
+    const [countRes, dataRes] = await Promise.all([
+      supabase.from("audit_logs" as any).select("*", { count: "exact", head: true }),
+      supabase.from("audit_logs" as any).select("*").order("created_at", { ascending: false }).range(from, to),
+    ]);
 
-      const userIds = [...new Set((data as any[]).map((l) => l.user_id))];
-      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", userIds);
-      const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name]));
+    setTotalCount(countRes.count ?? 0);
+    const data = (dataRes.data as any[]) ?? [];
 
-      setLogs(
-        (data as any[]).map((l) => ({
-          ...l,
-          user_name: nameMap[l.user_id] || "System",
-        }))
-      );
+    if (data.length === 0) {
+      setLogs([]);
       setLoading(false);
-    };
-    fetchLogs();
-  }, []);
+      return;
+    }
+
+    const userIds = [...new Set(data.map((l) => l.user_id))];
+    const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", userIds);
+    const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name]));
+
+    setLogs(data.map((l) => ({ ...l, user_name: nameMap[l.user_id] || "System" })));
+    setLoading(false);
+  }, [currentPage, pageSize]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   return (
     <div className="space-y-6">
@@ -74,36 +79,45 @@ export default function AuditLogs() {
           ) : logs.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">No audit logs yet</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead className="hidden md:table-cell">Description</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="whitespace-nowrap text-sm">
-                        {new Date(log.created_at).toLocaleString("en-US", {
-                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell className="font-medium">{log.user_name}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_COLORS[log.action_type] || "bg-muted text-muted-foreground"}`}>
-                          {log.action_type.replace(/_/g, " ")}
-                        </span>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{log.description}</TableCell>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Timestamp</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead className="hidden md:table-cell">Description</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {logs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {new Date(log.created_at).toLocaleString("en-US", {
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </TableCell>
+                        <TableCell className="font-medium">{log.user_name}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_COLORS[log.action_type] || "bg-muted text-muted-foreground"}`}>
+                            {log.action_type.replace(/_/g, " ")}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{log.description}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination
+                totalItems={totalCount}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </CardContent>
       </Card>

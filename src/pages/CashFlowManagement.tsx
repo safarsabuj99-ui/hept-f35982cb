@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 interface AgencyAccount {
   id: string;
@@ -72,6 +73,8 @@ export default function CashFlowManagement() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferNote, setTransferNote] = useState("");
   const [transferring, setTransferring] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -474,6 +477,7 @@ export default function CashFlowManagement() {
               ) : transfers.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No transfers yet</p>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -485,7 +489,7 @@ export default function CashFlowManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transfers.map(t => {
+                      {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
                         const from = accounts.find(a => a.id === t.from_account_id);
                         const to = accounts.find(a => a.id === t.to_account_id);
                         return (
@@ -500,6 +504,14 @@ export default function CashFlowManagement() {
                     </TableBody>
                   </Table>
                 </div>
+                <TablePagination
+                  totalItems={transfers.length}
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
+                </>
               )}
             </CardContent>
           </Card>
