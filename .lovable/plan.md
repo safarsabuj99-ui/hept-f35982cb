@@ -1,53 +1,71 @@
 
 
-## Fix: Use Original Platform Date for Synced Spend Data
+## Clear Data & Add Configurable Sync Start Date
 
 ### Problem
-The `sync-fast-lane` and `sync-deep-dive` background functions always record spend on **today's date** (`new Date().toISOString().split("T")[0]`), regardless of when the actual spend occurred on Meta/TikTok/Google. When a campaign spent $30 on February 10th, it should appear as February 10th in the system -- not the date the sync ran.
-
-The main `sync-ad-spend` function already handles this correctly for Meta by using `row.date_start` from the Insights API. The two background cron functions need the same fix.
+Currently, the sync functions use hardcoded date ranges (last 7 or 30 days). You want to:
+1. Clear all existing synced data from the system
+2. Set a custom start date in Settings (e.g., February 1st)
+3. All sync functions pull data from that date forward instead of hardcoded ranges
 
 ### What Changes
 
-**File: `supabase/functions/sync-fast-lane/index.ts`**
-- Instead of syncing only "today", fetch the **last 7 days** of spend data per account
-- For each day in the range, generate or fetch the spend and upsert with the **actual date** from the platform
-- This ensures that if a sync runs on Feb 12, spend from Feb 10 is recorded as Feb 10
-- The upsert on `ad_account_id,date` prevents duplicates
+**1. Database: Add `sync_start_date` setting + Clear old data**
 
-**File: `supabase/functions/sync-deep-dive/index.ts`**
-- Same approach: iterate over the **last 7 days** instead of using only today
-- For each campaign and each day, upsert performance metrics with the **correct historical date**
-- The upsert on `campaign_id,date` prevents duplicates
+- Insert a new row in the `settings` table: `key = 'sync_start_date'`, `value = '2025-01-01'` (default)
+- Truncate (clear) these tables of all existing synced data:
+  - `daily_ad_spend`
+  - `campaign_performance`
+  - `campaign_mappings`
+
+**2. Settings Page: Add Date Picker**
+
+Add a new card in `src/pages/Settings.tsx` with a date picker where the admin can set the "Sync Start Date". When saved, all future syncs will pull data from this date to today.
+
+**3. Edge Functions: Read `sync_start_date` from settings**
+
+Update three edge functions to read the `sync_start_date` setting and use it as the start of the date range:
+
+- **`sync-ad-spend/index.ts`**: Change `since.setDate(since.getDate() - 30)` to read from the setting. The Meta Insights API call will use this date as the `since` parameter.
+- **`sync-fast-lane/index.ts`**: Replace the hardcoded 7-day loop with a dynamic range from `sync_start_date` to today.
+- **`sync-deep-dive/index.ts`**: Same -- replace the 7-day loop with the configurable date range.
 
 ### Technical Details
 
-Both functions currently do:
-```
-const today = new Date().toISOString().split("T")[0];
-// ... uses `date: today` for all records
+**Database migration:**
+```sql
+INSERT INTO settings (key, value)
+VALUES ('sync_start_date', '2025-01-01')
+ON CONFLICT (key) DO NOTHING;
+
+TRUNCATE daily_ad_spend;
+TRUNCATE campaign_performance;
+TRUNCATE campaign_mappings;
 ```
 
-Updated to:
-```
-// Generate last 7 days of dates
+**Settings UI addition:** A date picker card using the Shadcn Calendar/Popover component, saving the selected date as a string (YYYY-MM-DD) to the `settings` table.
+
+**Edge function date logic (all three functions):**
+```typescript
+// Read configurable start date
+const { data: dateSetting } = await supabase
+  .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
+const startDate = dateSetting?.value || "2025-01-01";
+
+// Generate date range from startDate to today
 const dates: string[] = [];
-for (let d = 0; d < 7; d++) {
-  const dt = new Date();
-  dt.setDate(dt.getDate() - d);
-  dates.push(dt.toISOString().split("T")[0]);
-}
-
-// For each account, upsert spend for EACH date
-for (const date of dates) {
-  // upsert with date from the platform, not today
+const start = new Date(startDate);
+const end = new Date();
+for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+  dates.push(d.toISOString().split("T")[0]);
 }
 ```
 
-This means:
-1. When the cron job runs, it backfills the last 7 days with correct dates
-2. The upsert ensures no duplicate records (same account + same date = update, not insert)
-3. The Spend Report and Client Reports pages will show data on the correct dates automatically since they already read the `date` column
+**Files to modify:**
+- `src/pages/Settings.tsx` -- add Sync Start Date card
+- `supabase/functions/sync-ad-spend/index.ts` -- use setting for date range
+- `supabase/functions/sync-fast-lane/index.ts` -- use setting for date range
+- `supabase/functions/sync-deep-dive/index.ts` -- use setting for date range
 
-No database schema changes needed. No frontend changes needed -- the UI already displays the `date` field from the database.
+**Database:** One migration to insert the setting and clear existing data.
 
