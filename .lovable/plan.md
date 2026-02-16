@@ -1,65 +1,91 @@
 
-
-# Consolidate Finance Pages into One Tabbed View
+# Add Pagination to All List Views
 
 ## Overview
-Merge the 4 separate finance-related pages (Finance Dashboard, Wallet & Inventory, Expenses, Cash Flow) into a single unified "Finance" page with tabs. This removes 4 sidebar items (Finance, Wallet, Expenses, Cash Flow) and replaces them with just one "Finance" entry.
+Add a reusable pagination system with a "rows per page" selector (10, 20, 30, 50) to every table/list view in the app. This will improve load times and keep the UI responsive as data grows.
 
-## Page Structure
+## Approach
+Create one reusable `TablePagination` component, then integrate it into each page. Most pages will use **client-side pagination** (fetch data, paginate in memory) since the datasets are moderate. For pages with potentially large datasets (Audit Logs, Spend Report), we'll use **server-side pagination** with Supabase `.range()` for true performance gains.
 
-The unified Finance page at `/admin/finance` will use a top-level `Tabs` component with 4 tabs:
+## New Component
 
-| Tab | Content Source | Description |
-|-----|---------------|-------------|
-| **P&L Overview** | Current `FinanceDashboard.tsx` | Net profit, WAC, revenue vs COGS, client profitability table |
-| **Wallet & USD** | Current `WalletInventory.tsx` | USD purchase history, stock status, buy USD form |
-| **Expenses** | Current `ExpenseManager.tsx` | Agency expenses log, category breakdown, add expense |
-| **Cash Flow** | Current `CashFlowManagement.tsx` | Agency accounts, fund transfers, activity feed |
+### `src/components/TablePagination.tsx`
+A self-contained pagination bar with:
+- **Rows per page selector**: Dropdown with options 10, 20, 30, 50
+- **Page info**: "Showing 1-20 of 156 results"
+- **Navigation**: Previous / Next buttons with page numbers
+- Uses the existing `src/components/ui/pagination.tsx` primitives under the hood
 
-## Changes
+Props:
+```text
+totalItems: number
+pageSize: number
+currentPage: number
+onPageChange: (page: number) => void
+onPageSizeChange: (size: number) => void
+```
 
-### 1. New wrapper: `src/pages/FinanceHub.tsx`
-- A lightweight wrapper page that renders a `Tabs` component
-- Each `TabsContent` renders the existing page component directly (no rewriting the internals)
-- Each existing page component becomes a "section" component -- just removing their own `h1` headers so the hub provides a unified title
-- Supports URL hash or query param to deep-link to a specific tab (e.g., `/admin/finance?tab=expenses`)
+## Pages to Update
 
-### 2. Modify `src/pages/FinanceDashboard.tsx`
-- Remove the outer `h1`/description header (the hub will provide it)
-- Export remains unchanged
+### Client-Side Pagination (slice displayed data)
+These pages fetch manageable datasets; we paginate the filtered array in memory:
 
-### 3. Modify `src/pages/WalletInventory.tsx`
-- Remove the outer page header
-- Export remains unchanged
+| Page | Current Behavior | Change |
+|------|-----------------|--------|
+| **ClientList** | Fetches all clients, no limit | Add pagination below table |
+| **PaymentRequests** | Fetches all, no limit | Add pagination below table |
+| **OrderManagement** | Fetches all, filters by tab | Add pagination per tab |
+| **TeamManagement** | Fetches all managers | Add pagination below table |
+| **WalletInventory** | Fetches all USD purchases | Add pagination below purchase table |
+| **ExpenseManager** | Fetches all expenses | Add pagination below expense table |
+| **CashFlowManagement** | Fetches all transfers | Add pagination to transfers/activity lists |
 
-### 4. Modify `src/pages/ExpenseManager.tsx`
-- Remove the outer page header
-- Export remains unchanged
+For each page:
+1. Add `pageSize` and `currentPage` state (default: page 1, size 20)
+2. Replace rendering of `filtered.map(...)` with `filtered.slice(start, end).map(...)`
+3. Add `<TablePagination>` below the table
+4. Reset `currentPage` to 1 when filters/search change
 
-### 5. Modify `src/pages/CashFlowManagement.tsx`
-- Remove the outer page header
-- Export remains unchanged
+### Server-Side Pagination (fetch only what's needed)
+These pages can have thousands of rows; we'll use Supabase `.range(from, to)` to fetch only the current page:
 
-### 6. Modify `src/App.tsx`
-- Replace the 4 separate routes (`/admin/finance`, `/admin/wallet`, `/admin/expenses`, `/admin/cash-flow`) with a single route: `/admin/finance` pointing to the new `FinanceHub`
-- Remove the old individual route imports (keep the component imports since FinanceHub uses them)
+| Page | Current Behavior | Change |
+|------|-----------------|--------|
+| **AuditLogs** | `.limit(200)` | Use `.range()` with count query |
+| **SpendReport** | Fetches all, `.slice(0, 100)` | Use `.range()` with count query |
 
-### 7. Modify `src/components/AdminLayout.tsx`
-- Remove the 4 separate nav items (Finance, Wallet, Expenses, Cash Flow)
-- Add a single "Finance" nav item pointing to `/admin/finance`
-- Use `TrendingUp` icon for the consolidated entry
-- The `permKey` remains `can_manage_finance`
+For each page:
+1. Add a count query: `.select('*', { count: 'exact', head: true })` to get total rows
+2. Fetch only the current page: `.range(start, end)`
+3. Re-fetch when page or pageSize changes
+4. Add `<TablePagination>` below the table
 
 ## Technical Details
 
-### Tab State Management
-- Use `useState` with URL search params for tab persistence
-- When navigating to `/admin/finance?tab=cash-flow`, it auto-selects that tab
-- Default tab: "overview" (P&L)
+### Default Page Size
+- Default: **20 rows** for all views
+- Stored in component state (not persisted across sessions to keep it simple)
 
-### No Database Changes
-No schema modifications needed -- this is purely a UI consolidation.
+### Page Reset Logic
+- When a search/filter input changes, `currentPage` resets to 1
+- When `pageSize` changes, `currentPage` resets to 1
 
-### Route Redirects
-- Old bookmarks to `/admin/wallet`, `/admin/expenses`, `/admin/cash-flow` will redirect to `/admin/finance` with the appropriate tab query param using `<Navigate>` components
+### Server-Side Count Query Pattern
+For AuditLogs and SpendReport:
+```text
+// First: get total count
+const { count } = await supabase
+  .from("audit_logs")
+  .select("*", { count: "exact", head: true });
 
+// Then: fetch current page
+const { data } = await supabase
+  .from("audit_logs")
+  .select("*")
+  .order("created_at", { ascending: false })
+  .range(from, to);
+```
+
+### File Changes Summary
+- **New**: `src/components/TablePagination.tsx`
+- **Modified** (9 files): `ClientList.tsx`, `PaymentRequests.tsx`, `OrderManagement.tsx`, `TeamManagement.tsx`, `WalletInventory.tsx`, `ExpenseManager.tsx`, `CashFlowManagement.tsx`, `AuditLogs.tsx`, `SpendReport.tsx`
