@@ -1,62 +1,76 @@
 
 
-# Fix: Auto-Populate Billing Data for Imported Ad Accounts
+# Ad Account Detail Page
 
-## Problem
+## Overview
+Create a dedicated detail page for each ad account at `/admin/ad-accounts/:accountId`, accessible by clicking an account row in the Ad Accounts list. This page will consolidate all account data into a tabbed, editable layout -- similar to the Client Detail page pattern already established in the project.
 
-When ad accounts are auto-imported from Meta, the **threshold limit**, **next billing date**, and **current threshold spend** are not being populated because:
+## Page Structure
 
-1. The import function relies on `funding_source_details` which rarely returns threshold billing data
-2. Meta provides billing threshold info via a separate `adspaymentcycle` edge endpoint
-3. After import, the `current_threshold_spend` field is **never updated** during spend syncs -- it stays at 0 forever
+### Header
+- Back link to Ad Accounts list
+- Account name as page title
+- Platform badge + Active/Inactive toggle
+- Account ID in monospace
 
-## Solution
+### 4 Tabs
 
-Two changes are needed:
+**1. Details Tab** -- All editable account metadata
+- Account Name (editable)
+- Platform (read-only badge)
+- Ad Account ID (read-only)
+- Currency (editable select)
+- Daily Spending Limit (editable number input)
+- Billing Type (editable select: Prepaid / Threshold Postpaid)
+- Threshold Limit (editable, shown only for threshold accounts)
+- Current Threshold Spend (read-only display with progress bar)
+- Next Billing Date (editable date input)
+- Card Last 4 (editable)
+- Linked Integration (read-only, shows integration instance name if api_integration_id exists)
+- Active status toggle
+- "Save Changes" button
 
-### 1. Update `auto-import-accounts` Edge Function
+**2. Clients Tab** -- Manage multi-client assignments
+- Table of current client assignments showing client name, mapping keyword, and remove button
+- "Add Client" form inline (client select + keyword input + assign button)
+- Shows count of assigned clients
 
-After fetching ad accounts via `owned_ad_accounts`, make a second API call per account to the `adspaymentcycle` endpoint:
+**3. Spend Tab** -- Historical spend data for this account
+- Date range filter (reuse existing ClientDateFilter component)
+- Summary cards: Total Spend, Average Daily, Campaign Count
+- Table of daily_ad_spend records for this account with campaign name, date, raw spend, billable USD
+- Sorted by most recent first
 
-```text
-GET /v21.0/{ad_account_id}/adspaymentcycle
-  ?fields=threshold_amount,created_time,end_time,amount_spent
-```
+**4. Billing Health Tab** -- Threshold billing details (only meaningful for threshold accounts)
+- Visual threshold usage gauge (progress bar with percentage)
+- Days until next billing date countdown
+- Recent billing notifications for this account
+- Mark notifications as read button
 
-This returns the current billing cycle with:
-- `threshold_amount` -- the billing threshold in cents (e.g., 75000 = $750)
-- `end_time` -- the next billing/charge date
-- `amount_spent` -- current spend within this billing cycle (in cents)
+## Technical Plan
 
-Use this data to populate `threshold_limit`, `next_billing_date`, and `current_threshold_spend` for each imported account.
+### New File: `src/pages/AdAccountDetail.tsx`
+- Follows the same pattern as `ClientDetail.tsx` (useParams, tabs, editable state, save handlers)
+- Fetches from: `ad_accounts`, `ad_account_clients`, `daily_ad_spend`, `billing_notifications`, `api_integrations`, `profiles` (for client names)
+- Updates `ad_accounts` table on save
+- Manages `ad_account_clients` for assignments (insert/delete)
+- Date-filtered spend query reusing `ClientDateFilter` component
 
-### 2. Update `sync-ad-spend` Edge Function
+### Modified File: `src/App.tsx`
+- Add route: `<Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />`
+- Import the new `AdAccountDetail` component
 
-After syncing daily spend data, also refresh each Meta account's billing cycle info by calling the same `adspaymentcycle` endpoint. Update the `ad_accounts` table with the latest `current_threshold_spend`, `threshold_limit`, and `next_billing_date`.
+### Modified File: `src/pages/AdAccounts.tsx`
+- Make account rows clickable -- wrap account name or add a "View" link that navigates to `/admin/ad-accounts/${account.id}`
 
-This ensures the Billing Health widget always shows accurate, up-to-date threshold usage.
+### Data Flow
+- Load account by ID from `ad_accounts` table
+- Load assignments from `ad_account_clients` where `ad_account_id` matches
+- Load client profiles for name display
+- Load spend from `daily_ad_spend` filtered by `ad_account_id`
+- Load billing notifications filtered by `ad_account_id`
+- Load integration name if `api_integration_id` is set
 
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/auto-import-accounts/index.ts` | Add `adspaymentcycle` API call per Meta account to fetch threshold, billing date, and current spend |
-| `supabase/functions/sync-ad-spend/index.ts` | After syncing spend, call `adspaymentcycle` to refresh billing fields on each Meta ad account |
-
-## Technical Details
-
-**Meta `adspaymentcycle` API call:**
-- Endpoint: `https://graph.facebook.com/v21.0/{ad_account_id}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token={token}`
-- `threshold_amount` and `amount_spent` are returned in **cents** -- divide by 100 for dollars
-- `end_time` is a Unix timestamp or date string -- convert to `YYYY-MM-DD`
-- Only applies to threshold/postpaid accounts; prepaid accounts may return empty data (handled gracefully)
-
-**Import flow change:**
-- After discovering accounts, loop through Meta accounts and call `adspaymentcycle` for each
-- Merge the billing data into the account object before inserting into `ad_accounts`
-- If the API call fails for an account, fall back to defaults (no crash)
-
-**Sync flow change:**
-- After all spend records are synced, batch-update `ad_accounts` with fresh billing cycle data
-- This runs every sync, so the Billing Health widget stays current
+### No Database Changes Required
+All required tables and columns already exist. The page is a read/edit UI over existing data.
 
