@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
+import { TablePagination } from "@/components/TablePagination";
 
 const PLATFORMS = [
   { value: "meta", label: "Meta" },
@@ -53,6 +54,8 @@ export default function AdAccounts() {
   const [newAssignClient, setNewAssignClient] = useState("");
   const [newAssignKeyword, setNewAssignKeyword] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -355,7 +358,7 @@ export default function AdAccounts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.map((a: any) => {
+                  {accounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
                     const isThreshold = a.billing_type === "threshold_postpaid";
                     const usagePct = isThreshold && a.threshold_limit > 0
                       ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
@@ -484,6 +487,7 @@ export default function AdAccounts() {
                   })}
                 </TableBody>
               </Table>
+              <TablePagination totalItems={accounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
             </div>
           )}
         </CardContent>

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Filter } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 export default function CampaignMapping() {
   const [mappings, setMappings] = useState<any[]>([]);
@@ -14,6 +15,8 @@ export default function CampaignMapping() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState("all");
   const [saving, setSaving] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -46,6 +49,9 @@ export default function CampaignMapping() {
 
   const filtered = platformFilter === "all" ? mappings : mappings.filter((m: any) => m.platform === platformFilter);
 
+  // Reset page when filter changes
+  useEffect(() => { setCurrentPage(1); }, [platformFilter]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -77,6 +83,7 @@ export default function CampaignMapping() {
               <p>No campaigns found. Run a sync to generate campaigns.</p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -87,7 +94,7 @@ export default function CampaignMapping() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((m: any) => (
+                {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((m: any) => (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">{m.campaign_name}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{m.platform}</Badge></TableCell>
@@ -109,6 +116,8 @@ export default function CampaignMapping() {
                 ))}
               </TableBody>
             </Table>
+            <TablePagination totalItems={filtered.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
+            </>
           )}
         </CardContent>
       </Card>

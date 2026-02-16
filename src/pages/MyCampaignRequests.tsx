@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Megaphone, Clock, Loader2, CheckCircle2, XCircle, ChevronDown, ExternalLink, Target, FileText } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 
 const STATUS_BADGE: Record<string, { className: string; label: string }> = {
   pending: { className: "bg-yellow-500/10 text-yellow-600 border-yellow-500/30", label: "Pending" },
@@ -23,6 +24,8 @@ export default function MyCampaignRequests() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchRequests = useCallback(async () => {
     if (!user) return;
@@ -99,8 +102,9 @@ export default function MyCampaignRequests() {
               <Button asChild variant="outline"><Link to="/dashboard/campaigns/new">Submit your first request</Link></Button>
             </div>
           ) : (
+            <>
             <div className="space-y-2">
-              {requests.map((r: any) => {
+              {requests.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((r: any) => {
                 const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                 return (
                   <Collapsible key={r.id}>
@@ -173,6 +177,8 @@ export default function MyCampaignRequests() {
                 );
               })}
             </div>
+            <TablePagination totalItems={requests.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
+            </>
           )}
         </CardContent>
       </Card>
