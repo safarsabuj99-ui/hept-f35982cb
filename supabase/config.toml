@@ -1,1 +1,4 @@
 project_id = "hhpiimnvkgmpfnldgdhc"
+
+[functions.auto-import-accounts]
+verify_jwt = false
