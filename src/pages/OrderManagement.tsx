@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TablePagination } from "@/components/TablePagination";
 
 const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok", google: "Google" };
 
@@ -40,6 +41,8 @@ export default function OrderManagement() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchAll = useCallback(async () => {
     const [{ data: reqs }, { data: profs }] = await Promise.all([
@@ -86,10 +89,14 @@ export default function OrderManagement() {
     setRejectId(null);
   };
 
+  useEffect(() => { setCurrentPage(1); }, [tab]);
+
   const filtered = requests.filter((r: any) => {
     if (tab === "all") return true;
     return r.status === tab;
   });
+
+  const paginatedFiltered = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
     pending: requests.filter((r: any) => r.status === "pending").length,
@@ -138,6 +145,7 @@ export default function OrderManagement() {
               {filtered.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No requests in this category</p>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -152,7 +160,7 @@ export default function OrderManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filtered.map((r: any) => {
+                      {paginatedFiltered.map((r: any) => {
                         const client = profiles[r.client_id];
                         const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                         return (
@@ -199,7 +207,15 @@ export default function OrderManagement() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
+                <TablePagination
+                  totalItems={filtered.length}
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </>
+            )}
             </CardContent>
           </Card>
         </TabsContent>

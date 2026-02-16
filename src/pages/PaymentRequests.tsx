@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TablePagination } from "@/components/TablePagination";
 
 interface AgencyAccount {
   id: string;
@@ -50,6 +51,8 @@ export default function PaymentRequests() {
   const [rateLoading, setRateLoading] = useState(false);
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
@@ -153,6 +156,8 @@ export default function PaymentRequests() {
 
   const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const paginatedRequests = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-6">
       <div>
@@ -169,56 +174,65 @@ export default function PaymentRequests() {
           ) : requests.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Amount (BDT)</TableHead>
-                    <TableHead className="hidden md:table-cell">TrxID</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {requests.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                      <TableCell className="font-medium">{r.client_name}</TableCell>
-                      <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
-                      <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
-                      <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
-                      <TableCell>{statusBadge(r.status)}</TableCell>
-                      <TableCell className="hidden lg:table-cell text-right font-mono">
-                        {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {r.status === "pending" && canManageFinance ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1">
-                              {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1">
-                              <XCircle className="h-3 w-3" /> Reject
-                            </Button>
-                          </div>
-                        ) : r.status === "pending" ? (
-                          <span className="text-xs text-muted-foreground text-center block">View only</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground text-center block">
-                            {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
-                          </span>
-                        )}
-                      </TableCell>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead className="text-right">Amount (BDT)</TableHead>
+                      <TableHead className="hidden md:table-cell">TrxID</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRequests.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                        <TableCell className="font-medium">{r.client_name}</TableCell>
+                        <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
+                        <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
+                        <TableCell>{statusBadge(r.status)}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-right font-mono">
+                          {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {r.status === "pending" && canManageFinance ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1">
+                                {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                                Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1">
+                                <XCircle className="h-3 w-3" /> Reject
+                              </Button>
+                            </div>
+                          ) : r.status === "pending" ? (
+                            <span className="text-xs text-muted-foreground text-center block">View only</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground text-center block">
+                              {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination
+                totalItems={requests.length}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </CardContent>
       </Card>
