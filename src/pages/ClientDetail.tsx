@@ -162,18 +162,22 @@ export default function ClientDetail() {
       pricingConfig.percentage = percentage ? parseFloat(percentage) : 0;
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .update({
         pricing_config: pricingConfig as unknown as Json,
         custom_exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
       })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     setSaving(false);
     if (error) {
       toast({ title: "Error saving", description: error.message, variant: "destructive" });
+    } else if (!data || data.length === 0) {
+      toast({ title: "Update failed", description: "No rows were updated. You may not have permission.", variant: "destructive" });
     } else {
+      setProfile(data[0]);
       toast({ title: "Saved", description: "Client pricing updated successfully." });
     }
   }

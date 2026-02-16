@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ export default function ClientList() {
   const [search, setSearch] = useState("");
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositClientId, setDepositClientId] = useState<string>("");
+  const location = useLocation();
   useEffect(() => {
     async function load() {
       // Get client user_ids
@@ -45,7 +46,7 @@ export default function ClientList() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [location.key]);
 
   const getPricingLabel = (config: any) => {
     if (!config) return "Default";
