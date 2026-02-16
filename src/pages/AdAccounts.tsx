@@ -38,7 +38,7 @@ export default function AdAccounts() {
   const [importing, setImporting] = useState(false);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
-  const [importClientId, setImportClientId] = useState("");
+  const [importStatus, setImportStatus] = useState("");
   const [form, setForm] = useState({
     client_id: "", platform_name: "", ad_account_id: "", account_currency: "USD",
     daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
@@ -95,31 +95,41 @@ export default function AdAccounts() {
   };
 
   const handleAutoImport = async () => {
-    if (!importClientId || selectedIntegrations.size === 0) {
-      toast({ title: "Missing fields", description: "Select a client and at least one integration", variant: "destructive" });
+    if (selectedIntegrations.size === 0) {
+      toast({ title: "Missing fields", description: "Select at least one integration", variant: "destructive" });
       return;
     }
     setImporting(true);
+    setImportStatus("Fetching accounts from platforms...");
     try {
       const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
         body: {
           integration_ids: Array.from(selectedIntegrations),
-          client_id: importClientId,
         },
       });
       if (error) throw error;
+      const errMsg = data.errors?.length ? `\nWarnings: ${data.errors.join("; ")}` : "";
       toast({
         title: "Import Complete",
-        description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)`,
+        description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)${errMsg}`,
       });
       setImportOpen(false);
       setSelectedIntegrations(new Set());
-      setImportClientId("");
       fetchData();
     } catch (err: any) {
       toast({ title: "Import Failed", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
+      setImportStatus("");
+    }
+  };
+
+  const updateAccountClient = async (accountId: string, clientId: string | null) => {
+    const { error } = await (supabase.from("ad_accounts" as any) as any).update({ client_id: clientId || null }).eq("id", accountId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      fetchData();
     }
   };
 
@@ -152,7 +162,7 @@ export default function AdAccounts() {
     return "text-emerald-500";
   };
 
-  const estimatedAccounts = selectedIntegrations.size * 5; // ~average of 3-8
+  
 
   return (
     <div className="space-y-6">
@@ -173,18 +183,6 @@ export default function AdAccounts() {
                 <DialogTitle>Auto-Import Ad Accounts</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Default Client</Label>
-                  <Select value={importClientId} onValueChange={setImportClientId}>
-                    <SelectTrigger><SelectValue placeholder="Assign imported accounts to..." /></SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Active Integrations</Label>
@@ -214,12 +212,18 @@ export default function AdAccounts() {
 
                 {selectedIntegrations.size > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {selectedIntegrations.size} integration(s) selected — ~{estimatedAccounts} accounts expected
+                    {selectedIntegrations.size} integration(s) selected — accounts will be fetched via API
+                  </p>
+                )}
+
+                {importStatus && (
+                  <p className="text-xs text-primary flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin" /> {importStatus}
                   </p>
                 )}
               </div>
               <DialogFooter>
-                <Button onClick={handleAutoImport} disabled={importing || !importClientId || selectedIntegrations.size === 0} className="w-full">
+                <Button onClick={handleAutoImport} disabled={importing || selectedIntegrations.size === 0} className="w-full">
                   {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Import Accounts
                 </Button>
@@ -312,9 +316,10 @@ export default function AdAccounts() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Client</TableHead>
                     <TableHead>Platform</TableHead>
+                    <TableHead>Account Name</TableHead>
                     <TableHead>Account ID</TableHead>
+                    <TableHead>Client</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead>Daily Limit</TableHead>
                     <TableHead>Billing</TableHead>
@@ -335,9 +340,21 @@ export default function AdAccounts() {
 
                     return (
                       <TableRow key={a.id}>
-                        <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
                         <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
+                        <TableCell className="font-medium text-sm">{a.account_name || <span className="text-muted-foreground italic">—</span>}</TableCell>
                         <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
+                        <TableCell>
+                          <Select value={a.client_id || ""} onValueChange={(v) => updateAccountClient(a.id, v)}>
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="Assign client" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {clients.map((c) => (
+                                <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
                         <TableCell>

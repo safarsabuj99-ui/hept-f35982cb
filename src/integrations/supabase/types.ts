@@ -17,11 +17,12 @@ export type Database = {
       ad_accounts: {
         Row: {
           account_currency: Database["public"]["Enums"]["account_currency"]
+          account_name: string
           ad_account_id: string
           api_integration_id: string | null
           billing_type: Database["public"]["Enums"]["billing_type"]
           card_last_4: string | null
-          client_id: string
+          client_id: string | null
           created_at: string
           current_threshold_spend: number | null
           daily_spending_limit: number | null
@@ -33,11 +34,12 @@ export type Database = {
         }
         Insert: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
+          account_name?: string
           ad_account_id: string
           api_integration_id?: string | null
           billing_type?: Database["public"]["Enums"]["billing_type"]
           card_last_4?: string | null
-          client_id: string
+          client_id?: string | null
           created_at?: string
           current_threshold_spend?: number | null
           daily_spending_limit?: number | null
@@ -49,11 +51,12 @@ export type Database = {
         }
         Update: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
+          account_name?: string
           ad_account_id?: string
           api_integration_id?: string | null
           billing_type?: Database["public"]["Enums"]["billing_type"]
           card_last_4?: string | null
-          client_id?: string
+          client_id?: string | null
           created_at?: string
           current_threshold_spend?: number | null
           daily_spending_limit?: number | null
