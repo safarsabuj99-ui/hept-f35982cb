@@ -6,27 +6,130 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-function generateAccountIds(platform: string): string[] {
-  const count = 3 + Math.floor(Math.random() * 6); // 3-8 accounts
-  const ids: string[] = [];
-  for (let i = 0; i < count; i++) {
-    switch (platform) {
-      case "meta":
-        ids.push(`act_${Math.floor(100000000 + Math.random() * 900000000)}`);
-        break;
-      case "tiktok":
-        ids.push(`${Math.floor(7000000000 + Math.random() * 999999999)}`);
-        break;
-      case "google":
-        ids.push(
-          `${Math.floor(100 + Math.random() * 900)}-${Math.floor(100 + Math.random() * 900)}-${Math.floor(1000 + Math.random() * 9000)}`
-        );
-        break;
-      default:
-        ids.push(`unknown_${Math.floor(Math.random() * 999999)}`);
+// ── Meta: fetch owned ad accounts from Business Manager ──
+async function fetchMetaAccounts(appId: string, token: string) {
+  const url = `https://graph.facebook.com/v21.0/${appId}/owned_ad_accounts?fields=account_id,name,currency,funding_source_details,account_status&limit=500&access_token=${token}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Meta API error: ${err}`);
+  }
+  const json = await res.json();
+  const accounts: any[] = [];
+
+  for (const acc of json.data ?? []) {
+    // Determine billing type from funding_source_details
+    let billingType = "prepaid";
+    let thresholdLimit: number | null = null;
+    let nextBillingDate: string | null = null;
+
+    if (acc.funding_source_details) {
+      const fsd = acc.funding_source_details;
+      // type 2 = threshold/line of credit; type 1 = credit card (prepaid behavior)
+      if (fsd.type === 2 || fsd.display_string?.toLowerCase().includes("threshold")) {
+        billingType = "threshold_postpaid";
+        thresholdLimit = fsd.amount ? Number(fsd.amount) / 100 : null; // amount is in cents
+      }
+      if (fsd.coupon?.expiration_date) {
+        nextBillingDate = fsd.coupon.expiration_date;
+      }
+    }
+
+    // Map currency — only USD and BDT are supported in enum
+    const currency = acc.currency === "BDT" ? "BDT" : "USD";
+
+    accounts.push({
+      ad_account_id: acc.account_id?.replace(/^act_/, "") ? `act_${acc.account_id.replace(/^act_/, "")}` : acc.account_id,
+      account_name: acc.name ?? "",
+      account_currency: currency,
+      billing_type: billingType,
+      threshold_limit: thresholdLimit,
+      next_billing_date: nextBillingDate,
+    });
+  }
+
+  return accounts;
+}
+
+// ── TikTok: fetch advertiser accounts ──
+async function fetchTikTokAccounts(appId: string, token: string) {
+  // appId stores comma-separated advertiser IDs or a single app/bc ID
+  const advertiserIds = appId.split(",").map((s) => s.trim()).filter(Boolean);
+  if (advertiserIds.length === 0) return [];
+
+  const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify(advertiserIds)}`;
+  const res = await fetch(url, {
+    headers: { "Access-Token": token, "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`TikTok API error: ${err}`);
+  }
+  const json = await res.json();
+  const accounts: any[] = [];
+
+  for (const adv of json.data?.list ?? []) {
+    const currency = adv.currency === "BDT" ? "BDT" : "USD";
+    accounts.push({
+      ad_account_id: String(adv.advertiser_id),
+      account_name: adv.advertiser_name ?? "",
+      account_currency: currency,
+      billing_type: "prepaid", // TikTok is generally prepaid
+      threshold_limit: null,
+      next_billing_date: null,
+    });
+  }
+
+  return accounts;
+}
+
+// ── Google: fetch accessible customer accounts ──
+async function fetchGoogleAccounts(appId: string, token: string) {
+  // appId = manager customer ID (without dashes)
+  const customerId = appId.replace(/-/g, "");
+  const url = `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "developer-token": Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN") ?? "",
+      "Content-Type": "application/json",
+      "login-customer-id": customerId,
+    },
+    body: JSON.stringify({
+      query: `SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.status FROM customer_client WHERE customer_client.status = 'ENABLED'`,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Google Ads API error: ${err}`);
+  }
+
+  const json = await res.json();
+  const accounts: any[] = [];
+
+  // searchStream returns an array of result batches
+  for (const batch of json) {
+    for (const row of batch.results ?? []) {
+      const cc = row.customerClient;
+      if (!cc) continue;
+      const id = String(cc.id);
+      const formatted = `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}`;
+      const currency = cc.currencyCode === "BDT" ? "BDT" : "USD";
+
+      accounts.push({
+        ad_account_id: formatted,
+        account_name: cc.descriptiveName ?? "",
+        account_currency: currency,
+        billing_type: "threshold_postpaid", // Google typically uses threshold billing
+        threshold_limit: null,
+        next_billing_date: null,
+      });
     }
   }
-  return ids;
+
+  return accounts;
 }
 
 Deno.serve(async (req) => {
@@ -46,7 +149,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify caller is admin
+    // Verify caller
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -76,14 +179,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { integration_ids, client_id } = body;
-
-    if (!client_id) {
-      return new Response(JSON.stringify({ error: "client_id is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { integration_ids } = body;
 
     // Fetch selected integrations
     let query = adminClient.from("api_integrations").select("*").eq("is_active", true);
@@ -95,7 +191,7 @@ Deno.serve(async (req) => {
 
     if (!integrations?.length) {
       return new Response(
-        JSON.stringify({ created: 0, skipped: 0, accounts: [], message: "No active integrations found" }),
+        JSON.stringify({ created: 0, skipped: 0, errors: [], message: "No active integrations found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -111,29 +207,59 @@ Deno.serve(async (req) => {
 
     let created = 0;
     let skipped = 0;
+    const errors: string[] = [];
     const newAccounts: any[] = [];
 
     for (const integration of integrations) {
-      const discoveredIds = generateAccountIds(integration.platform);
+      try {
+        let discovered: any[] = [];
 
-      for (const accountId of discoveredIds) {
-        const key = `${integration.platform}:${accountId}`;
-        if (existingSet.has(key)) {
-          skipped++;
-          continue;
+        switch (integration.platform) {
+          case "meta":
+            discovered = await fetchMetaAccounts(integration.app_id, integration.api_token);
+            break;
+          case "tiktok":
+            discovered = await fetchTikTokAccounts(integration.app_id, integration.api_token);
+            break;
+          case "google":
+            discovered = await fetchGoogleAccounts(integration.app_id, integration.api_token);
+            break;
+          default:
+            errors.push(`Unknown platform: ${integration.platform}`);
+            continue;
         }
 
-        newAccounts.push({
-          ad_account_id: accountId,
-          platform_name: integration.platform,
-          client_id,
-          api_integration_id: integration.id,
-          billing_type: "prepaid",
-          daily_spending_limit: 250,
-          is_active: true,
-          account_currency: "USD",
-        });
-        existingSet.add(key); // prevent dupes within same batch
+        for (const account of discovered) {
+          const key = `${integration.platform}:${account.ad_account_id}`;
+          if (existingSet.has(key)) {
+            skipped++;
+            continue;
+          }
+
+          newAccounts.push({
+            ad_account_id: account.ad_account_id,
+            account_name: account.account_name,
+            platform_name: integration.platform,
+            api_integration_id: integration.id,
+            billing_type: account.billing_type,
+            threshold_limit: account.threshold_limit,
+            next_billing_date: account.next_billing_date,
+            daily_spending_limit: 250,
+            is_active: true,
+            account_currency: account.account_currency,
+            // client_id is nullable now — admin assigns later
+          });
+          existingSet.add(key);
+        }
+
+        // Update last_synced_at
+        await adminClient
+          .from("api_integrations")
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq("id", integration.id);
+
+      } catch (err: any) {
+        errors.push(`${integration.platform} (${integration.instance_name ?? integration.id}): ${err.message}`);
       }
     }
 
@@ -146,7 +272,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ created, skipped, accounts: newAccounts }),
+      JSON.stringify({ created, skipped, errors, accounts: newAccounts }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
