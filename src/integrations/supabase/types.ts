@@ -333,6 +333,62 @@ export type Database = {
           },
         ]
       }
+      campaign_performance: {
+        Row: {
+          ad_account_id: string
+          campaign_id: string
+          campaign_name: string
+          clicks: number
+          client_id: string | null
+          cpc: number
+          ctr: number
+          date: string
+          id: string
+          impressions: number
+          roas: number
+          spend: number
+          synced_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          campaign_id: string
+          campaign_name?: string
+          clicks?: number
+          client_id?: string | null
+          cpc?: number
+          ctr?: number
+          date?: string
+          id?: string
+          impressions?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          campaign_id?: string
+          campaign_name?: string
+          clicks?: number
+          client_id?: string | null
+          cpc?: number
+          ctr?: number
+          date?: string
+          id?: string
+          impressions?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_performance_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_requests: {
         Row: {
           ad_caption: string | null

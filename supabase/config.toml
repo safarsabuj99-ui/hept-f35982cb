@@ -2,3 +2,9 @@ project_id = "hhpiimnvkgmpfnldgdhc"
 
 [functions.auto-import-accounts]
 verify_jwt = false
+
+[functions.sync-fast-lane]
+verify_jwt = false
+
+[functions.sync-deep-dive]
+verify_jwt = false
