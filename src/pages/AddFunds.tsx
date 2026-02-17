@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useCurrency } from "@/hooks/useCurrency";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ export default function AddFunds() {
   const [isLoading, setIsLoading] = useState(false);
   const { user, role } = useAuth();
   const { toast } = useToast();
-  const { exchangeRate } = useCurrency();
+  
   const { permissions } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,7 +74,7 @@ export default function AddFunds() {
       description: description || "Funds deposit",
       created_by: user!.id,
       status,
-      exchange_rate: exchangeRate,
+      exchange_rate: null,
     } as any);
 
     setIsLoading(false);
@@ -138,7 +138,7 @@ export default function AddFunds() {
               <Label>Amount (USD)</Label>
               <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
               {amount && Number(amount) > 0 && (
-                <p className="text-xs text-muted-foreground">≈ ৳{(Number(amount) * exchangeRate).toFixed(2)} BDT</p>
+                <p className="text-xs text-muted-foreground">Amount: ${Number(amount).toFixed(2)} USD</p>
               )}
             </div>
             <div className="space-y-2">

@@ -1,43 +1,28 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useState, ReactNode } from "react";
 
 type Currency = "USD" | "BDT";
 
 interface CurrencyContextType {
   currency: Currency;
-  exchangeRate: number;
   toggleCurrency: () => void;
-  formatAmount: (usdAmount: number, rateOverride?: number | null) => string;
-  convertAmount: (usdAmount: number, rateOverride?: number | null) => number;
+  formatAmount: (usdAmount: number, rate?: number) => string;
+  convertAmount: (usdAmount: number, rate?: number) => number;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [currency, setCurrency] = useState<Currency>("USD");
-  const [exchangeRate, setExchangeRate] = useState(120);
-
-  useEffect(() => {
-    supabase
-      .from("settings" as any)
-      .select("value")
-      .eq("key", "exchange_rate")
-      .maybeSingle()
-      .then(({ data }: any) => {
-        if (data?.value) setExchangeRate(Number(data.value));
-      });
-  }, []);
 
   const toggleCurrency = () => setCurrency((c) => (c === "USD" ? "BDT" : "USD"));
 
-  const convertAmount = (usdAmount: number, rateOverride?: number | null) => {
+  const convertAmount = (usdAmount: number, rate?: number) => {
     if (currency === "USD") return usdAmount;
-    const rate = rateOverride ?? exchangeRate;
-    return usdAmount * rate;
+    return usdAmount * (rate ?? 120);
   };
 
-  const formatAmount = (usdAmount: number, rateOverride?: number | null) => {
-    const converted = convertAmount(usdAmount, rateOverride);
+  const formatAmount = (usdAmount: number, rate?: number) => {
+    const converted = convertAmount(usdAmount, rate);
     if (currency === "USD") {
       return `$${converted.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
@@ -45,7 +30,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <CurrencyContext.Provider value={{ currency, exchangeRate, toggleCurrency, formatAmount, convertAmount }}>
+    <CurrencyContext.Provider value={{ currency, toggleCurrency, formatAmount, convertAmount }}>
       {children}
     </CurrencyContext.Provider>
   );

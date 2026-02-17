@@ -19,9 +19,8 @@ import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
-  mode: "default" | "flat" | "percentage";
+  platform_rates?: { meta?: number; tiktok?: number; google?: number };
   percentage?: number;
-  flat_rates?: { meta?: number; tiktok?: number; google?: number };
 }
 
 export default function ClientDetail() {
@@ -45,12 +44,10 @@ export default function ClientDetail() {
   const [preferredTimezone, setPreferredTimezone] = useState("Asia/Dhaka");
 
   // Pricing state
-  const [pricingMode, setPricingMode] = useState<"default" | "flat" | "percentage">("default");
-  const [flatMeta, setFlatMeta] = useState("");
-  const [flatTiktok, setFlatTiktok] = useState("");
-  const [flatGoogle, setFlatGoogle] = useState("");
+  const [flatMeta, setFlatMeta] = useState("145");
+  const [flatTiktok, setFlatTiktok] = useState("150");
+  const [flatGoogle, setFlatGoogle] = useState("155");
   const [percentage, setPercentage] = useState("");
-  const [exchangeRate, setExchangeRate] = useState("");
 
   // Manager assignment
   const [managers, setManagers] = useState<{ user_id: string; full_name: string }[]>([]);
@@ -107,15 +104,13 @@ export default function ClientDetail() {
       setBusinessName(p.business_name || "");
       setMappingKeyword(p.mapping_keyword || "");
       setAssignedManager(p.manager_id || "unassigned");
-      setExchangeRate(p.custom_exchange_rate ? String(p.custom_exchange_rate) : "");
       setFilterTag((p as any).ad_account_filter_tag || "");
       setDataFetchStartDate((p as any).data_fetch_start_date || "");
       setPreferredTimezone((p as any).preferred_timezone || "Asia/Dhaka");
-      const pc = (p.pricing_config as unknown as PricingConfig) || { mode: "default" };
-      setPricingMode(pc.mode || "default");
-      setFlatMeta(String(pc.flat_rates?.meta ?? ""));
-      setFlatTiktok(String(pc.flat_rates?.tiktok ?? ""));
-      setFlatGoogle(String(pc.flat_rates?.google ?? ""));
+      const pc = (p.pricing_config as unknown as PricingConfig) || {};
+      setFlatMeta(String(pc.platform_rates?.meta ?? "145"));
+      setFlatTiktok(String(pc.platform_rates?.tiktok ?? "150"));
+      setFlatGoogle(String(pc.platform_rates?.google ?? "155"));
       setPercentage(String(pc.percentage ?? ""));
     }
 
@@ -194,7 +189,7 @@ export default function ClientDetail() {
         business_name: businessName || null,
         mapping_keyword: mappingKeyword || null,
         manager_id: assignedManager === "unassigned" ? null : assignedManager,
-        custom_exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
+        custom_exchange_rate: null,
         ad_account_filter_tag: filterTag || null,
         data_fetch_start_date: dataFetchStartDate || null,
         preferred_timezone: preferredTimezone || "Asia/Dhaka",
@@ -217,22 +212,19 @@ export default function ClientDetail() {
     if (!userId) return;
     setSaving(true);
 
-    const pricingConfig: PricingConfig = { mode: pricingMode };
-    if (pricingMode === "flat") {
-      pricingConfig.flat_rates = {
-        meta: flatMeta ? parseFloat(flatMeta) : undefined,
-        tiktok: flatTiktok ? parseFloat(flatTiktok) : undefined,
-        google: flatGoogle ? parseFloat(flatGoogle) : undefined,
-      };
-    } else if (pricingMode === "percentage") {
-      pricingConfig.percentage = percentage ? parseFloat(percentage) : 0;
-    }
+    const pricingConfig: PricingConfig = {
+      platform_rates: {
+        meta: flatMeta ? parseFloat(flatMeta) : 145,
+        tiktok: flatTiktok ? parseFloat(flatTiktok) : 150,
+        google: flatGoogle ? parseFloat(flatGoogle) : 155,
+      },
+      percentage: percentage ? parseFloat(percentage) : 0,
+    };
 
     const { data, error } = await supabase
       .from("profiles")
       .update({
         pricing_config: pricingConfig as unknown as Json,
-        custom_exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
       })
       .eq("user_id", userId)
       .select();
@@ -493,55 +485,33 @@ export default function ClientDetail() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Pricing Configuration</CardTitle>
-              <CardDescription>Set per-platform dollar rates or percentage markup for this client.</CardDescription>
+              <CardDescription>Set per-platform billing rates and optional percentage markup.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Pricing Mode</Label>
-                  <Select value={pricingMode} onValueChange={(v) => setPricingMode(v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default (Global Rate)</SelectItem>
-                      <SelectItem value="flat">Flat Rate (per platform)</SelectItem>
-                      <SelectItem value="percentage">Percentage Markup</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Custom Exchange Rate (BDT/USD)</Label>
-                  <Input
-                    type="number"
-                    placeholder="Leave empty for global rate"
-                    value={exchangeRate}
-                    onChange={(e) => setExchangeRate(e.target.value)}
-                  />
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Platform Rates (USD → BDT)</Label>
+                <p className="text-xs text-muted-foreground mb-2">How much BDT to charge per USD of ad spend on each platform</p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Meta Rate</Label>
+                    <Input type="number" placeholder="145" value={flatMeta} onChange={(e) => setFlatMeta(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>TikTok Rate</Label>
+                    <Input type="number" placeholder="150" value={flatTiktok} onChange={(e) => setFlatTiktok(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Google Rate</Label>
+                    <Input type="number" placeholder="155" value={flatGoogle} onChange={(e) => setFlatGoogle(e.target.value)} />
+                  </div>
                 </div>
               </div>
 
-              {pricingMode === "flat" && (
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Meta Rate ($/unit)</Label>
-                    <Input type="number" placeholder="e.g. 120" value={flatMeta} onChange={(e) => setFlatMeta(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>TikTok Rate ($/unit)</Label>
-                    <Input type="number" placeholder="e.g. 125" value={flatTiktok} onChange={(e) => setFlatTiktok(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Google Rate ($/unit)</Label>
-                    <Input type="number" placeholder="e.g. 118" value={flatGoogle} onChange={(e) => setFlatGoogle(e.target.value)} />
-                  </div>
-                </div>
-              )}
-
-              {pricingMode === "percentage" && (
-                <div className="max-w-xs space-y-2">
-                  <Label>Markup Percentage (%)</Label>
-                  <Input type="number" placeholder="e.g. 10" value={percentage} onChange={(e) => setPercentage(e.target.value)} />
-                </div>
-              )}
+              <div className="max-w-xs space-y-2">
+                <Label>Percentage Markup (optional)</Label>
+                <Input type="number" placeholder="e.g. 10" value={percentage} onChange={(e) => setPercentage(e.target.value)} />
+                <p className="text-xs text-muted-foreground">For USD-billing — % on top of spend (0 = none)</p>
+              </div>
 
               <Button onClick={handleSavePricing} disabled={saving} className="gap-2">
                 <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Changes"}

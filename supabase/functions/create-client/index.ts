@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: Super Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, custom_exchange_rate, pricing_config } = await req.json();
+    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, pricing_config } = await req.json();
 
     if (!email || !password || !full_name) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -61,21 +61,23 @@ Deno.serve(async (req) => {
     if (mapping_keyword) {
       profileUpdate.mapping_keyword = mapping_keyword;
     }
-    if (custom_exchange_rate) {
-      profileUpdate.custom_exchange_rate = custom_exchange_rate;
-    }
     if (pricing_config) {
-      // Normalize pricing_config to standardized schema
-      const normalized = { ...pricing_config };
-      if (normalized.mode === "flat_rate") normalized.mode = "flat";
-      if (normalized.rates && !normalized.flat_rates) {
-        normalized.flat_rates = normalized.rates;
-        delete normalized.rates;
+      // Normalize to standard { platform_rates: { meta, tiktok, google }, percentage } format
+      const normalized: any = {};
+
+      // Handle legacy formats
+      if (pricing_config.platform_rates) {
+        normalized.platform_rates = pricing_config.platform_rates;
+      } else if (pricing_config.flat_rates) {
+        normalized.platform_rates = pricing_config.flat_rates;
+      } else if (pricing_config.rates) {
+        normalized.platform_rates = pricing_config.rates;
+      } else {
+        normalized.platform_rates = { meta: 145, tiktok: 150, google: 155 };
       }
-      if (normalized.markup !== undefined && normalized.percentage === undefined) {
-        normalized.percentage = normalized.markup;
-        delete normalized.markup;
-      }
+
+      normalized.percentage = pricing_config.percentage ?? pricing_config.markup ?? 0;
+
       profileUpdate.pricing_config = normalized;
     }
 

@@ -93,23 +93,18 @@ Deno.serve(async (req) => {
       // Admin explicitly chose a rate from the UI
       exchangeRate = selected_rate;
     } else {
-      // Fallback: client custom rate → global default
+      // Fallback: read platform_rates from client's pricing_config
       const { data: profile } = await adminClient
         .from("profiles")
-        .select("custom_exchange_rate")
+        .select("pricing_config")
         .eq("user_id", pr.client_id)
         .single();
 
-      exchangeRate = profile?.custom_exchange_rate ?? null;
+      const pricingConfig = profile?.pricing_config as any;
+      const platformRates = pricingConfig?.platform_rates;
 
-      if (!exchangeRate) {
-        const { data: setting } = await adminClient
-          .from("settings")
-          .select("value")
-          .eq("key", "default_bdt_to_usd_rate")
-          .single();
-        exchangeRate = setting ? Number(setting.value) : 120;
-      }
+      // Use meta rate as default fallback, then 120
+      exchangeRate = platformRates?.meta ? Number(platformRates.meta) : 120;
     }
 
     const finalUsd = Math.round((Number(pr.amount_bdt) / exchangeRate) * 100) / 100;
