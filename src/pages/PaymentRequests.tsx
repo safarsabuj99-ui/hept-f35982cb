@@ -32,6 +32,7 @@ interface PaymentRequest {
   amount_bdt: number;
   payment_method: string;
   transaction_id: string | null;
+  platform: string | null;
   status: string;
   admin_note: string | null;
   exchange_rate_snapshot: number | null;
@@ -109,7 +110,9 @@ export default function PaymentRequests() {
       if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
 
       setRateOptions(options);
-      setSelectedRateKey(options[0]?.key ?? "default");
+      // Auto-select matching platform rate if request has a platform
+      const matchingKey = request.platform && options.find(o => o.key === request.platform) ? request.platform : options[0]?.key;
+      setSelectedRateKey(matchingKey ?? "default");
       setAgencyAccounts((accRes.data as any[]) ?? []);
       setRateLoading(false);
     }
@@ -180,6 +183,7 @@ export default function PaymentRequests() {
                       <TableHead>Date</TableHead>
                       <TableHead>Client</TableHead>
                       <TableHead>Method</TableHead>
+                      <TableHead>Platform</TableHead>
                       <TableHead className="text-right">Amount (BDT)</TableHead>
                       <TableHead className="hidden md:table-cell">TrxID</TableHead>
                       <TableHead>Status</TableHead>
@@ -193,6 +197,9 @@ export default function PaymentRequests() {
                         <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                         <TableCell className="font-medium">{r.client_name}</TableCell>
                         <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
+                        <TableCell>
+                          {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
+                        </TableCell>
                         <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
                         <TableCell>{statusBadge(r.status)}</TableCell>

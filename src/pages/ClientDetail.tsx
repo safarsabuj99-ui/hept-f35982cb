@@ -645,6 +645,43 @@ export default function ClientDetail() {
 
         {/* TRANSACTIONS TAB */}
         <TabsContent value="transactions">
+          {/* Platform Sub-Balances */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
+            {(() => {
+              const txCredits = transactions.reduce((s: number, t: any) => s + (t.type === "credit" ? Number(t.amount) : 0), 0);
+              const txDebits = transactions.reduce((s: number, t: any) => s + (t.type === "debit" ? Number(t.amount) : 0), 0);
+              const mainBal = txCredits - txDebits;
+              const platforms = ["meta", "tiktok", "google"];
+              const labels: Record<string, string> = { meta: "Meta", tiktok: "TikTok", google: "Google" };
+              const colors: Record<string, string> = { meta: "hsl(214, 80%, 52%)", tiktok: "hsl(340, 75%, 55%)", google: "hsl(142, 60%, 45%)" };
+              return (
+                <>
+                  <Card>
+                    <CardContent className="pt-4 text-center">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Main Balance</p>
+                      <p className={`text-2xl font-bold font-mono mt-1 ${mainBal < 0 ? "text-destructive" : ""}`}>{fmt(mainBal)}</p>
+                    </CardContent>
+                  </Card>
+                  {platforms.map((p) => {
+                    const pC = transactions.filter((t: any) => t.type === "credit" && t.platform === p).reduce((s: number, t: any) => s + Number(t.amount), 0);
+                    const pD = transactions.filter((t: any) => t.type === "debit" && t.platform === p).reduce((s: number, t: any) => s + Number(t.amount), 0);
+                    const bal = pC - pD;
+                    return (
+                      <Card key={p}>
+                        <CardContent className="pt-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5 mb-1">
+                            <span className="h-2 w-2 rounded-full" style={{ background: colors[p] }} />
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{labels[p]}</p>
+                          </div>
+                          <p className={`text-xl font-bold font-mono ${bal < 0 ? "text-destructive" : ""}`}>{fmt(bal)}</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </>
+              );
+            })()}
+          </div>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Transaction History</CardTitle>
