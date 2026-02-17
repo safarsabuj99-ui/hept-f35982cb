@@ -39,6 +39,11 @@ export default function ClientDetail() {
   const [businessName, setBusinessName] = useState("");
   const [mappingKeyword, setMappingKeyword] = useState("");
 
+  // New sync config fields
+  const [filterTag, setFilterTag] = useState("");
+  const [dataFetchStartDate, setDataFetchStartDate] = useState("");
+  const [preferredTimezone, setPreferredTimezone] = useState("Asia/Dhaka");
+
   // Pricing state
   const [pricingMode, setPricingMode] = useState<"default" | "flat" | "percentage">("default");
   const [flatMeta, setFlatMeta] = useState("");
@@ -103,6 +108,9 @@ export default function ClientDetail() {
       setMappingKeyword(p.mapping_keyword || "");
       setAssignedManager(p.manager_id || "unassigned");
       setExchangeRate(p.custom_exchange_rate ? String(p.custom_exchange_rate) : "");
+      setFilterTag((p as any).ad_account_filter_tag || "");
+      setDataFetchStartDate((p as any).data_fetch_start_date || "");
+      setPreferredTimezone((p as any).preferred_timezone || "Asia/Dhaka");
       const pc = (p.pricing_config as unknown as PricingConfig) || { mode: "default" };
       setPricingMode(pc.mode || "default");
       setFlatMeta(String(pc.flat_rates?.meta ?? ""));
@@ -111,7 +119,7 @@ export default function ClientDetail() {
       setPercentage(String(pc.percentage ?? ""));
     }
 
-    // Spend data
+    // Spend data - load from new campaigns + daily_metrics tables
     if (adAccountsRes.data?.length) {
       const accountIds = adAccountsRes.data.map((a) => a.id);
       await loadSpendData(accountIds, null);
@@ -123,17 +131,44 @@ export default function ClientDetail() {
   }
 
   async function loadSpendData(accountIds: string[], range: ClientDateRange | null) {
-    let query = supabase
-      .from("daily_ad_spend")
-      .select("*, ad_accounts!inner(platform_name)")
-      .in("ad_account_id", accountIds)
-      .order("date", { ascending: false })
-      .limit(500);
-    if (range) {
-      query = query.gte("date", format(range.from, "yyyy-MM-dd")).lte("date", format(range.to, "yyyy-MM-dd"));
+    // Get campaigns for these ad accounts
+    const { data: campaignsData } = await supabase
+      .from("campaigns")
+      .select("id, name, platform, ad_account_id")
+      .in("ad_account_id", accountIds);
+
+    if (!campaignsData || campaignsData.length === 0) {
+      setSpendData([]);
+      return;
     }
-    const { data: spend } = await query;
-    setSpendData(spend || []);
+
+    const campaignIds = campaignsData.map((c: any) => c.id);
+    let metricsQuery = supabase
+      .from("daily_metrics")
+      .select("*")
+      .in("campaign_id", campaignIds)
+      .order("data_date", { ascending: false })
+      .limit(500);
+
+    if (range) {
+      metricsQuery = metricsQuery
+        .gte("data_date", format(range.from, "yyyy-MM-dd"))
+        .lte("data_date", format(range.to, "yyyy-MM-dd"));
+    }
+
+    const { data: metricsData } = await metricsQuery;
+
+    // Enrich with campaign info
+    const enriched = (metricsData ?? []).map((m: any) => {
+      const campaign = campaignsData.find((c: any) => c.id === m.campaign_id);
+      return {
+        ...m,
+        campaign_name: campaign?.name || "Unknown",
+        platform_name: campaign?.platform || "unknown",
+        date: m.data_date,
+      };
+    });
+    setSpendData(enriched);
   }
 
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
@@ -160,7 +195,10 @@ export default function ClientDetail() {
         mapping_keyword: mappingKeyword || null,
         manager_id: assignedManager === "unassigned" ? null : assignedManager,
         custom_exchange_rate: exchangeRate ? parseFloat(exchangeRate) : null,
-      })
+        ad_account_filter_tag: filterTag || null,
+        data_fetch_start_date: dataFetchStartDate || null,
+        preferred_timezone: preferredTimezone || "Asia/Dhaka",
+      } as any)
       .eq("user_id", userId)
       .select();
 
@@ -241,8 +279,8 @@ export default function ClientDetail() {
 
   const spendByPlatform: Record<string, number> = spendData.reduce(
     (acc: Record<string, number>, s: any) => {
-      const plat = s.ad_accounts?.platform_name || "unknown";
-      acc[plat] = (acc[plat] || 0) + (s.final_billable_usd || 0);
+      const plat = s.platform_name || "unknown";
+      acc[plat] = (acc[plat] || 0) + Number(s.spend || 0);
       return acc;
     },
     {} as Record<string, number>
@@ -406,6 +444,49 @@ export default function ClientDetail() {
             </CardContent>
           </Card>
 
+          {/* Sync Configuration */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Sync Configuration</CardTitle>
+              </div>
+              <CardDescription>Configure how ad data is synced for this client.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="filterTag" className="text-muted-foreground text-xs uppercase tracking-wide">Filter Tag</Label>
+                  <Input id="filterTag" value={filterTag} onChange={(e) => setFilterTag(e.target.value)} placeholder='e.g. [ASIF]' />
+                  <p className="text-xs text-muted-foreground">Only sync campaigns containing this tag in their name.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dataStartDate" className="text-muted-foreground text-xs uppercase tracking-wide">Data Start Date</Label>
+                  <Input id="dataStartDate" type="date" value={dataFetchStartDate} onChange={(e) => setDataFetchStartDate(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Ignore API data before this date.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Timezone</Label>
+                  <Select value={preferredTimezone} onValueChange={setPreferredTimezone}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Dhaka">Asia/Dhaka (UTC+6)</SelectItem>
+                      <SelectItem value="UTC">UTC</SelectItem>
+                      <SelectItem value="America/New_York">America/New_York (ET)</SelectItem>
+                      <SelectItem value="America/Los_Angeles">America/Los_Angeles (PT)</SelectItem>
+                      <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
+                      <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
+                      <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Timezone for date normalization during sync.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Button onClick={handleSaveProfile} disabled={saving} className="gap-2">
             <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Changes"}
           </Button>
@@ -516,8 +597,10 @@ export default function ClientDetail() {
                         <TableHead>Date</TableHead>
                         <TableHead>Campaign</TableHead>
                         <TableHead>Platform</TableHead>
-                        <TableHead className="text-right">Raw Spend</TableHead>
-                        <TableHead className="text-right">Billable USD</TableHead>
+                        <TableHead className="text-right">Spend (USD)</TableHead>
+                        <TableHead className="text-right">Impressions</TableHead>
+                        <TableHead className="text-right">Clicks</TableHead>
+                        <TableHead className="text-right">Results</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -527,13 +610,13 @@ export default function ClientDetail() {
                           <TableCell className="text-sm">{s.campaign_name || "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className="text-xs capitalize">
-                              {s.ad_accounts?.platform_name}
+                              {s.platform_name}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {s.raw_spend_amount} {s.raw_currency}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">{fmt(s.final_billable_usd)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{fmt(Number(s.spend))}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{Number(s.impressions).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{Number(s.clicks).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{Number(s.results).toLocaleString()}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

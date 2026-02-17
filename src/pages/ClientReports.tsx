@@ -10,6 +10,7 @@ import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDi
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target } from "lucide-react";
+import { format } from "date-fns";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -17,15 +18,16 @@ const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 export default function ClientReports() {
   const { user } = useAuth();
-  const [campaigns, setCampaigns] = useState<any[]>([]);
-  const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [rawMetrics, setRawMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
   const [preset, setPreset] = useState<ClientDatePreset>("all_time");
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    // Get ad accounts linked to client
+    setLoading(true);
+
+    // Get campaigns linked to client's ad accounts via ad_account_clients
     const { data: accClients } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id")
@@ -33,19 +35,44 @@ export default function ClientReports() {
     const accIds = accClients?.map((a) => a.ad_account_id) ?? [];
 
     if (accIds.length > 0) {
-      const [{ data: accounts }, { data: perf }] = await Promise.all([
-        supabase.from("ad_accounts").select("id, platform_name").in("id", accIds),
-        supabase
-          .from("campaign_performance")
+      // Query campaigns table for this client's ad accounts
+      const { data: campaigns } = await supabase
+        .from("campaigns")
+        .select("id, name, platform, status, ad_account_id")
+        .in("ad_account_id", accIds);
+
+      if (campaigns && campaigns.length > 0) {
+        const campaignIds = campaigns.map((c) => c.id);
+
+        // Query daily_metrics with optional date filtering
+        let metricsQuery = supabase
+          .from("daily_metrics")
           .select("*")
-          .in("ad_account_id", accIds)
-          .order("date", { ascending: false }),
-      ]);
-      setAdAccounts(accounts ?? []);
-      setCampaigns(perf ?? []);
+          .in("campaign_id", campaignIds);
+
+        if (dateRange) {
+          metricsQuery = metricsQuery
+            .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+            .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+        }
+
+        const { data: metrics } = await metricsQuery;
+
+        // Combine campaigns + metrics
+        const enriched = (metrics ?? []).map((m: any) => {
+          const campaign = campaigns.find((c) => c.id === m.campaign_id);
+          return { ...m, campaign };
+        });
+
+        setRawMetrics(enriched);
+      } else {
+        setRawMetrics([]);
+      }
+    } else {
+      setRawMetrics([]);
     }
     setLoading(false);
-  }, [user]);
+  }, [user, dateRange]);
 
   useEffect(() => {
     fetchData();
@@ -56,26 +83,16 @@ export default function ClientReports() {
     setPreset(p);
   };
 
-  const filteredCampaigns = useMemo(() => {
-    if (!dateRange) return campaigns;
-    return campaigns.filter((c: any) => {
-      const d = new Date(c.date);
-      return d >= dateRange.from && d <= dateRange.to;
-    });
-  }, [campaigns, dateRange]);
-
-  // Aggregate campaigns by campaign_id for the table
+  // Aggregate by campaign_id for the table (one row per campaign)
   const campaignRows: CampaignRow[] = useMemo(() => {
     const map: Record<string, CampaignRow> = {};
-    for (const row of filteredCampaigns) {
-      const acc = adAccounts.find((a) => a.id === row.ad_account_id);
-      const platform = acc?.platform_name || "unknown";
+    for (const row of rawMetrics) {
       const key = row.campaign_id;
       if (!map[key]) {
         map[key] = {
-          campaign_name: row.campaign_name,
-          platform,
-          status: row.status ?? "active",
+          campaign_name: row.campaign?.name || "Unknown",
+          platform: row.campaign?.platform || "unknown",
+          status: row.campaign?.status ?? "active",
           impressions: 0,
           clicks: 0,
           spend: 0,
@@ -90,7 +107,7 @@ export default function ClientReports() {
       map[key].conversion_value += Number(row.conversion_value ?? 0);
     }
     return Object.values(map);
-  }, [filteredCampaigns, adAccounts]);
+  }, [rawMetrics]);
 
   // Totals
   const totals = useMemo(() => {

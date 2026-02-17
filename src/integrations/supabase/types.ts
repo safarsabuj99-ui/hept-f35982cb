@@ -452,6 +452,53 @@ export type Database = {
         }
         Relationships: []
       }
+      campaigns: {
+        Row: {
+          ad_account_id: string
+          client_id: string | null
+          created_at: string
+          id: string
+          name: string
+          original_name_tag: string
+          platform: Database["public"]["Enums"]["ad_platform"]
+          platform_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          original_name_tag?: string
+          platform: Database["public"]["Enums"]["ad_platform"]
+          platform_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          original_name_tag?: string
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          platform_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_ad_spend: {
         Row: {
           ad_account_id: string
@@ -492,6 +539,59 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_metrics: {
+        Row: {
+          campaign_id: string
+          clicks: number
+          conversion_value: number
+          cpc: number
+          ctr: number
+          data_date: string
+          id: string
+          impressions: number
+          results: number
+          roas: number
+          spend: number
+          synced_at: string
+        }
+        Insert: {
+          campaign_id: string
+          clicks?: number
+          conversion_value?: number
+          cpc?: number
+          ctr?: number
+          data_date: string
+          id?: string
+          impressions?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          clicks?: number
+          conversion_value?: number
+          cpc?: number
+          ctr?: number
+          data_date?: string
+          id?: string
+          impressions?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
             referencedColumns: ["id"]
           },
         ]
@@ -629,10 +729,12 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ad_account_filter_tag: string | null
           auto_pause_threshold_pct: number
           business_name: string | null
           created_at: string
           custom_exchange_rate: number | null
+          data_fetch_start_date: string | null
           email: string
           full_name: string
           id: string
@@ -642,15 +744,18 @@ export type Database = {
           overdraft_limit_usd: number
           permissions: Json
           phone: string | null
+          preferred_timezone: string
           pricing_config: Json | null
           system_paused_campaigns: Json
           user_id: string
         }
         Insert: {
+          ad_account_filter_tag?: string | null
           auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string
           custom_exchange_rate?: number | null
+          data_fetch_start_date?: string | null
           email: string
           full_name: string
           id?: string
@@ -660,15 +765,18 @@ export type Database = {
           overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
+          preferred_timezone?: string
           pricing_config?: Json | null
           system_paused_campaigns?: Json
           user_id: string
         }
         Update: {
+          ad_account_filter_tag?: string | null
           auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string
           custom_exchange_rate?: number | null
+          data_fetch_start_date?: string | null
           email?: string
           full_name?: string
           id?: string
@@ -678,6 +786,7 @@ export type Database = {
           overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
+          preferred_timezone?: string
           pricing_config?: Json | null
           system_paused_campaigns?: Json
           user_id?: string
