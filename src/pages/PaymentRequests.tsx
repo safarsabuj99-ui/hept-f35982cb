@@ -272,6 +272,20 @@ export default function PaymentRequests() {
                   <span className="font-mono font-semibold">৳{fmt(confirmModal.request.amount_bdt)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Platform</span>
+                  <span>
+                    {confirmModal.request.platform ? (
+                      <Badge variant="outline" className={`capitalize text-xs ${
+                        confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
+                        confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
+                        'bg-red-500/10 text-red-600 border-red-500/30'
+                      }`}>{confirmModal.request.platform}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground italic">Not specified</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Method</span>
                   <span>{confirmModal.request.payment_method}</span>
                 </div>
@@ -295,7 +309,12 @@ export default function PaymentRequests() {
                           <div key={opt.key} className="flex items-center justify-between rounded-md border p-3 cursor-pointer hover:bg-muted/50" onClick={() => setSelectedRateKey(opt.key)}>
                             <div className="flex items-center gap-2">
                               <RadioGroupItem value={opt.key} id={`rate-${opt.key}`} />
-                              <Label htmlFor={`rate-${opt.key}`} className="cursor-pointer font-normal">{opt.label}</Label>
+                              <Label htmlFor={`rate-${opt.key}`} className="cursor-pointer font-normal">
+                                {opt.label}
+                                {confirmModal.request?.platform && opt.key === confirmModal.request.platform && (
+                                  <span className="ml-1.5 text-xs text-primary font-medium">(matches request)</span>
+                                )}
+                              </Label>
                             </div>
                             <span className="font-mono text-sm text-muted-foreground">৳{opt.rate}</span>
                           </div>
