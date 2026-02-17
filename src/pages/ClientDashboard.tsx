@@ -198,6 +198,16 @@ export default function ClientDashboard() {
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
   const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
   const balance = credits - debits;
+
+  // Per-platform sub-balances
+  const platformBalances = useMemo(() => {
+    const platforms = ["meta", "tiktok", "google"] as const;
+    return platforms.map((p) => {
+      const pCredits = transactions.filter((t) => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      const pDebits = transactions.filter((t) => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      return { platform: p, label: PLATFORM_LABELS[p], balance: pCredits - pDebits, color: PLATFORM_COLORS[p] };
+    });
+  }, [transactions]);
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
@@ -341,6 +351,19 @@ export default function ClientDashboard() {
             </div>
             <p className="text-4xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
             <WalletHealthBar balance={balance} avgDailySpend={avgDailySpend} />
+          </div>
+
+          {/* Platform Sub-Balances */}
+          <div className="sm:col-span-2 grid grid-cols-3 gap-3">
+            {platformBalances.map((pb) => (
+              <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
+                <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
+                <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
+                  {fmt(pb.balance)}
+                </p>
+              </div>
+            ))}
           </div>
 
           {/* Spend Card */}

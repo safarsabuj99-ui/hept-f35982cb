@@ -138,6 +138,7 @@ Deno.serve(async (req) => {
       created_by: user.id,
       status: "completed",
       exchange_rate: exchangeRate,
+      platform: pr.platform || null,
     });
 
     if (txErr) {

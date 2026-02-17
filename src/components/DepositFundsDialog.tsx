@@ -28,6 +28,7 @@ export function DepositFundsDialog({
   const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [platform, setPlatform] = useState("");
   const [selectedClient, setSelectedClient] = useState(clientId || "");
   const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
 
@@ -59,6 +60,7 @@ export function DepositFundsDialog({
       setAmount("");
       setMethod("");
       setTrxId("");
+      setPlatform("");
       setSubmitting(false);
       if (!clientId) setSelectedClient("");
     }
@@ -68,13 +70,14 @@ export function DepositFundsDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0 || !method || !resolvedClientId) return;
+    if (!amount || Number(amount) <= 0 || !method || !platform || !resolvedClientId) return;
     setSubmitting(true);
     const { error } = await (supabase.from("payment_requests" as any).insert({
       client_id: resolvedClientId,
       amount_bdt: Number(amount),
       payment_method: method,
       transaction_id: trxId || null,
+      platform,
     }) as any);
     setSubmitting(false);
     if (error) {
@@ -109,6 +112,17 @@ export function DepositFundsDialog({
             </div>
           )}
           <div className="space-y-2">
+            <Label>Platform</Label>
+            <Select value={platform} onValueChange={setPlatform} required>
+              <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="meta">Meta</SelectItem>
+                <SelectItem value="tiktok">TikTok</SelectItem>
+                <SelectItem value="google">Google</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <Label>Amount (BDT)</Label>
             <Input
               type="number" step="0.01" min="1"
@@ -137,7 +151,7 @@ export function DepositFundsDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !method || !amount || !resolvedClientId}>
+            <Button type="submit" disabled={submitting || !method || !amount || !platform || !resolvedClientId}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit Request
             </Button>

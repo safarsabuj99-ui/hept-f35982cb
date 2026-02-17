@@ -684,6 +684,7 @@ export type Database = {
           final_amount_usd: number | null
           id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          platform: string | null
           received_in_account_id: string | null
           status: Database["public"]["Enums"]["payment_request_status"]
           transaction_id: string | null
@@ -698,6 +699,7 @@ export type Database = {
           final_amount_usd?: number | null
           id?: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          platform?: string | null
           received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
           transaction_id?: string | null
@@ -712,6 +714,7 @@ export type Database = {
           final_amount_usd?: number | null
           id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          platform?: string | null
           received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
           transaction_id?: string | null
