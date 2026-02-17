@@ -30,7 +30,44 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get campaign mappings for client_id resolution
+    // Load all ad_account_clients with client configs from profiles
+    const { data: aacRows } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id");
+
+    // Build map: ad_account_id -> client_ids
+    const accountClientMap: Record<string, string[]> = {};
+    for (const row of aacRows ?? []) {
+      if (!accountClientMap[row.ad_account_id]) accountClientMap[row.ad_account_id] = [];
+      accountClientMap[row.ad_account_id].push(row.client_id);
+    }
+
+    // Load all client profiles that have filter tags or start dates
+    const allClientIds = [...new Set((aacRows ?? []).map(r => r.client_id))];
+    const clientConfigs: Record<string, { filter_tag: string | null; start_date: string | null; timezone: string }> = {};
+
+    if (allClientIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, ad_account_filter_tag, data_fetch_start_date, preferred_timezone")
+        .in("user_id", allClientIds);
+
+      for (const p of profiles ?? []) {
+        clientConfigs[p.user_id] = {
+          filter_tag: p.ad_account_filter_tag,
+          start_date: p.data_fetch_start_date,
+          timezone: p.preferred_timezone || "Asia/Dhaka",
+        };
+      }
+    }
+
+    // Read global sync start date
+    const { data: dateSetting } = await supabase
+      .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
+    const globalStartDate = dateSetting?.value || "2025-01-01";
+    const endDateStr = new Date().toISOString().split("T")[0];
+
+    // Also load campaign mappings for legacy client_id resolution
     const { data: campaignMappings } = await supabase
       .from("campaign_mappings")
       .select("campaign_id, client_id")
@@ -41,12 +78,6 @@ Deno.serve(async (req) => {
       campaignClientMap[m.campaign_id] = m.client_id;
     }
 
-    // Read configurable sync start date
-    const { data: dateSetting } = await supabase
-      .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
-    const startDateStr = dateSetting?.value || "2025-01-01";
-    const endDateStr = new Date().toISOString().split("T")[0];
-
     let totalSynced = 0;
     const errors: string[] = [];
 
@@ -55,8 +86,131 @@ Deno.serve(async (req) => {
       const platform = account.platform_name;
 
       try {
+        // Determine per-account client configs
+        const linkedClientIds = accountClientMap[account.id] || [];
+        const clientFilterTags: { clientId: string; tag: string }[] = [];
+        let effectiveStartDate = globalStartDate;
+
+        for (const cid of linkedClientIds) {
+          const cfg = clientConfigs[cid];
+          if (cfg?.filter_tag) {
+            clientFilterTags.push({ clientId: cid, tag: cfg.filter_tag });
+          }
+          if (cfg?.start_date && cfg.start_date > effectiveStartDate) {
+            // Use the earliest client start date that's still after global
+          }
+          if (cfg?.start_date && cfg.start_date < effectiveStartDate) {
+            // Keep global as minimum
+          } else if (cfg?.start_date) {
+            effectiveStartDate = cfg.start_date > effectiveStartDate ? effectiveStartDate : cfg.start_date;
+          }
+        }
+
+        // Use the earliest start date among all linked clients (but not before global)
+        for (const cid of linkedClientIds) {
+          const cfg = clientConfigs[cid];
+          if (cfg?.start_date) {
+            if (cfg.start_date >= globalStartDate && cfg.start_date < effectiveStartDate) {
+              effectiveStartDate = cfg.start_date;
+            }
+          }
+        }
+
+        const startDateStr = effectiveStartDate;
+
+        // Helper: resolve client_id for a campaign name
+        const resolveClientId = (campaignName: string, rawCampaignId: string): string | null => {
+          // First check filter tags
+          for (const { clientId, tag } of clientFilterTags) {
+            if (campaignName.includes(tag)) return clientId;
+          }
+          // Then check campaign mappings
+          if (campaignClientMap[rawCampaignId]) return campaignClientMap[rawCampaignId];
+          // Fallback to account's direct client
+          if (linkedClientIds.length === 1) return linkedClientIds[0];
+          return account.client_id;
+        };
+
+        // Helper: upsert campaign into campaigns table (ID locking)
+        const upsertCampaign = async (
+          platformId: string,
+          name: string,
+          status: string,
+          clientId: string | null
+        ) => {
+          // Try to find existing
+          const { data: existing } = await supabase
+            .from("campaigns")
+            .select("id, original_name_tag")
+            .eq("platform_id", platformId)
+            .maybeSingle();
+
+          if (existing) {
+            // Update name and status, keep original_name_tag
+            await supabase
+              .from("campaigns")
+              .update({ name, status, client_id: clientId, updated_at: new Date().toISOString() })
+              .eq("id", existing.id);
+            return existing.id;
+          } else {
+            // Insert new with original_name_tag = current name
+            const { data: inserted, error: insErr } = await supabase
+              .from("campaigns")
+              .insert({
+                platform_id: platformId,
+                name,
+                original_name_tag: name,
+                platform,
+                status,
+                ad_account_id: account.id,
+                client_id: clientId,
+              })
+              .select("id")
+              .single();
+
+            if (insErr) {
+              // Could be a race condition, try select again
+              const { data: retry } = await supabase
+                .from("campaigns")
+                .select("id")
+                .eq("platform_id", platformId)
+                .single();
+              return retry?.id;
+            }
+            return inserted?.id;
+          }
+        };
+
+        // Helper: upsert daily metrics
+        const upsertMetrics = async (
+          campaignDbId: string,
+          dataDate: string,
+          metrics: {
+            spend: number;
+            impressions: number;
+            clicks: number;
+            results: number;
+            conversion_value: number;
+            ctr: number;
+            cpc: number;
+            roas: number;
+          }
+        ) => {
+          const { error } = await supabase
+            .from("daily_metrics")
+            .upsert(
+              {
+                campaign_id: campaignDbId,
+                data_date: dataDate,
+                ...metrics,
+                synced_at: new Date().toISOString(),
+              },
+              { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
+            );
+          if (error) errors.push(`Metrics upsert: ${error.message}`);
+        };
+
         if (platform === "meta") {
-          // ===== META: Campaign-level insights with time_increment=1 =====
           if (!integration?.api_token) {
             errors.push(`Meta ${account.ad_account_id}: No API token`);
             continue;
@@ -81,9 +235,15 @@ Deno.serve(async (req) => {
             const clicks = parseInt(row.clicks || "0", 10);
             const ctr = parseFloat(row.ctr || "0");
             const cpc = parseFloat(row.cpc || "0");
-            const campaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
+            const rawCampaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
             const campaignName = row.campaign_name || "Unknown Campaign";
-            const date = row.date_start; // API's actual date
+            const dataDate = row.date_start; // API's actual date
+
+            // Filter by tag: if tags exist, campaign must match at least one
+            if (clientFilterTags.length > 0) {
+              const matchesAnyTag = clientFilterTags.some(({ tag }) => campaignName.includes(tag));
+              if (!matchesAnyTag) continue;
+            }
 
             // Extract results and conversion_value from actions
             let results = 0;
@@ -104,36 +264,39 @@ Deno.serve(async (req) => {
             }
 
             const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
-            const clientId = campaignClientMap[campaignId] || account.client_id;
+            const platformId = `meta_${rawCampaignId}`;
+            const clientId = resolveClientId(campaignName, rawCampaignId);
 
+            // ID Locking: upsert into campaigns table
+            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+
+            // Upsert daily metrics
+            await upsertMetrics(campaignDbId, dataDate, {
+              spend, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc, roas,
+            });
+
+            // Also write to legacy campaign_performance for backward compatibility
             const { error } = await supabase.from("campaign_performance").upsert(
               {
-                campaign_id: campaignId,
+                campaign_id: rawCampaignId,
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date,
-                impressions,
-                clicks,
-                ctr,
-                cpc,
-                spend,
-                results,
-                conversion_value: conversionValue,
-                roas,
+                date: dataDate,
+                impressions, clicks, ctr, cpc, spend, results,
+                conversion_value: conversionValue, roas,
                 status: "active",
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
-
-            if (error) errors.push(`Meta campaign upsert: ${error.message}`);
+            if (error) errors.push(`Meta legacy upsert: ${error.message}`);
           }
 
           console.log(`Meta deep-dive: ${allInsights.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "google") {
-          // ===== GOOGLE: Campaign metrics with segments.date =====
           if (!integration?.api_token) {
             errors.push(`Google ${account.ad_account_id}: No API token`);
             continue;
@@ -161,8 +324,8 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const results = json[0]?.results || [];
-          for (const row of results) {
+          const gResults = json[0]?.results || [];
+          for (const row of gResults) {
             const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
             const spend = costMicros / 1_000_000;
             const impressions = parseInt(row.metrics?.impressions || "0", 10);
@@ -171,41 +334,50 @@ Deno.serve(async (req) => {
             const cpc = parseInt(row.metrics?.averageCpc || "0", 10) / 1_000_000;
             const conversions = parseFloat(row.metrics?.conversions || "0");
             const conversionValue = parseFloat(row.metrics?.conversionsValue || "0");
-            const campaignId = `google_${row.campaign?.id}`;
-            const date = row.segments?.date;
+            const rawCampaignId = row.campaign?.id;
+            const campaignName = row.campaign?.name || "Google Campaign";
+            const dataDate = row.segments?.date;
             const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
-            const clientId = campaignClientMap[campaignId] || account.client_id;
 
+            // Filter by tag
+            if (clientFilterTags.length > 0) {
+              const matchesAnyTag = clientFilterTags.some(({ tag }) => campaignName.includes(tag));
+              if (!matchesAnyTag) continue;
+            }
+
+            const platformId = `google_${rawCampaignId}`;
+            const clientId = resolveClientId(campaignName, platformId);
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
+            const status = statusMap[row.campaign?.status] || "active";
 
+            const campaignDbId = await upsertCampaign(platformId, campaignName, status, clientId);
+            if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+
+            await upsertMetrics(campaignDbId, dataDate, {
+              spend, impressions, clicks, results: Math.round(conversions),
+              conversion_value: conversionValue, ctr, cpc, roas,
+            });
+
+            // Legacy write
             const { error } = await supabase.from("campaign_performance").upsert(
               {
-                campaign_id: campaignId,
-                campaign_name: row.campaign?.name || "Google Campaign",
+                campaign_id: platformId,
+                campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date,
-                impressions,
-                clicks,
-                ctr,
-                cpc,
-                spend,
-                results: Math.round(conversions),
-                conversion_value: conversionValue,
-                roas,
-                status: statusMap[row.campaign?.status] || "active",
+                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                results: Math.round(conversions), conversion_value: conversionValue,
+                roas, status,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
-
-            if (error) errors.push(`Google campaign upsert: ${error.message}`);
+            if (error) errors.push(`Google legacy upsert: ${error.message}`);
           }
 
-          console.log(`Google deep-dive: ${results.length} rows for ${account.ad_account_id}`);
+          console.log(`Google deep-dive: ${gResults.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "tiktok") {
-          // ===== TIKTOK: Campaign metrics with stat_time_day =====
           if (!integration?.api_token) {
             errors.push(`TikTok ${account.ad_account_id}: No API token`);
             continue;
@@ -247,33 +419,42 @@ Deno.serve(async (req) => {
             const cpc = parseFloat(row.metrics?.cpc || "0");
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
-            const campaignId = `tiktok_${row.dimensions?.campaign_id}`;
-            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${row.dimensions?.campaign_id}`;
-            const date = (row.dimensions?.stat_time_day || "").split(" ")[0];
-            const clientId = campaignClientMap[campaignId] || account.client_id;
+            const rawCampaignId = row.dimensions?.campaign_id;
+            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
+            const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
 
+            // Filter by tag
+            if (clientFilterTags.length > 0) {
+              const matchesAnyTag = clientFilterTags.some(({ tag }) => campaignName.includes(tag));
+              if (!matchesAnyTag) continue;
+            }
+
+            const platformId = `tiktok_${rawCampaignId}`;
+            const clientId = resolveClientId(campaignName, platformId);
+
+            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+
+            await upsertMetrics(campaignDbId, dataDate, {
+              spend, impressions, clicks, results: conversions,
+              conversion_value: 0, ctr, cpc, roas,
+            });
+
+            // Legacy write
             const { error } = await supabase.from("campaign_performance").upsert(
               {
-                campaign_id: campaignId,
+                campaign_id: platformId,
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date,
-                impressions,
-                clicks,
-                ctr,
-                cpc,
-                spend,
-                results: conversions,
-                conversion_value: 0,
-                roas,
+                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                results: conversions, conversion_value: 0, roas,
                 status: "active",
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
-
-            if (error) errors.push(`TikTok campaign upsert: ${error.message}`);
+            if (error) errors.push(`TikTok legacy upsert: ${error.message}`);
           }
 
           console.log(`TikTok deep-dive: ${rows.length} rows for ${account.ad_account_id}`);
@@ -301,7 +482,7 @@ Deno.serve(async (req) => {
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
         errors: errors.length > 0 ? errors : undefined,
-        date_range: { from: startDateStr, to: endDateStr },
+        date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
