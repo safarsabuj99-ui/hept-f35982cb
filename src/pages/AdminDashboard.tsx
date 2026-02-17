@@ -56,7 +56,7 @@ export default function AdminDashboard() {
     const channel = supabase
       .channel("admin-dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -69,16 +69,16 @@ export default function AdminDashboard() {
       (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
       supabase.from("api_integrations").select("last_synced_at").order("last_synced_at", { ascending: false }).limit(1),
       supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
-      supabase.from("daily_ad_spend").select("final_billable_usd, ad_account_id").eq("date", today),
-      supabase.from("daily_ad_spend").select("final_billable_usd").eq("date", yesterday),
+      supabase.from("daily_metrics").select("spend, campaign_id").eq("data_date", today),
+      supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
     ]);
 
     // Fetch last 7 days spend for sparkline
     const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
-    const { data: weekSpend } = await supabase.from("daily_ad_spend").select("date, final_billable_usd").gte("date", sevenAgo).order("date");
+    const { data: weekSpend } = await supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
     const dailySpendMap: Record<string, number> = {};
     for (const r of (weekSpend ?? []) as any[]) {
-      dailySpendMap[r.date] = (dailySpendMap[r.date] || 0) + Number(r.final_billable_usd);
+      dailySpendMap[r.data_date] = (dailySpendMap[r.data_date] || 0) + Number(r.spend);
     }
     const spark = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
@@ -90,19 +90,27 @@ export default function AdminDashboard() {
     const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
     const transactions = txnsRes.data ?? [];
 
-    const spendByAccount: Record<string, number> = {};
-    for (const row of (spendTodayRes.data ?? []) as any[]) {
-      spendByAccount[row.ad_account_id] = (spendByAccount[row.ad_account_id] || 0) + Number(row.final_billable_usd);
+    // Map today's spend to clients via campaigns -> ad_account_clients
+    const todaySpendRows = (spendTodayRes.data ?? []) as any[];
+    const campaignIdsToday = [...new Set(todaySpendRows.map((r: any) => r.campaign_id))];
+    
+    // Get campaigns to find ad_account_ids
+    let campaignToAccount: Record<string, string> = {};
+    if (campaignIdsToday.length > 0) {
+      const { data: camps } = await supabase.from("campaigns").select("id, ad_account_id").in("id", campaignIdsToday);
+      for (const c of camps ?? []) campaignToAccount[c.id] = c.ad_account_id;
     }
-
-    const { data: allAccounts } = await supabase.from("ad_accounts").select("id, client_id");
+    
+    // Get ad_account_clients for mapping
+    const { data: allMappings } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
     const accountToClient: Record<string, string> = {};
-    for (const acc of allAccounts ?? []) accountToClient[acc.id] = acc.client_id;
+    for (const m of allMappings ?? []) accountToClient[m.ad_account_id] = m.client_id;
 
     const clientSpendToday: Record<string, number> = {};
-    for (const [accId, spend] of Object.entries(spendByAccount)) {
-      const cid = accountToClient[accId];
-      if (cid) clientSpendToday[cid] = (clientSpendToday[cid] || 0) + spend;
+    for (const row of todaySpendRows) {
+      const accId = campaignToAccount[row.campaign_id];
+      const cid = accId ? accountToClient[accId] : null;
+      if (cid) clientSpendToday[cid] = (clientSpendToday[cid] || 0) + Number(row.spend);
     }
 
     const result: ClientWithBalance[] = clientProfiles.map((p) => {
@@ -112,8 +120,8 @@ export default function AdminDashboard() {
       return { ...p, balance: credits - debits, todaySpend: clientSpendToday[p.user_id] || 0 };
     });
 
-    const todaySpendTotal = (spendTodayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
-    const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
+    const todaySpendTotal = (spendTodayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
 
     const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
     const todayCollect = todayTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
@@ -261,18 +269,7 @@ export default function AdminDashboard() {
       {/* Zone 7: Data Tables */}
       <div>
         <p className="section-label">Client Data</p>
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="mb-4 w-full sm:w-auto">
-            <TabsTrigger value="overview">Client Overview</TabsTrigger>
-            <TabsTrigger value="profitability">All Clients</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview">
-            <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
-          </TabsContent>
-          <TabsContent value="profitability">
-            <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
-          </TabsContent>
-        </Tabs>
+        <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
       </div>
 
       <DepositFundsDialog

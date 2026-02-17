@@ -21,7 +21,7 @@ export default function NewClient() {
   const [role, setRole] = useState<"client" | "manager">("client");
   const [managerId, setManagerId] = useState("");
   const [mappingKeyword, setMappingKeyword] = useState("");
-  const [pricingMode, setPricingMode] = useState<"flat_rate" | "percentage" | "default">("default");
+  const [pricingMode, setPricingMode] = useState<"flat" | "percentage" | "default">("default");
   const [flatMeta, setFlatMeta] = useState("");
   const [flatTiktok, setFlatTiktok] = useState("");
   const [flatGoogle, setFlatGoogle] = useState("");
@@ -52,10 +52,10 @@ export default function NewClient() {
     setIsLoading(true);
 
     let pricingConfig = null;
-    if (role === "client" && pricingMode === "flat_rate") {
-      pricingConfig = { mode: "flat_rate", rates: { meta: Number(flatMeta) || 145, tiktok: Number(flatTiktok) || 150, google: Number(flatGoogle) || 155 } };
+    if (role === "client" && pricingMode === "flat") {
+      pricingConfig = { mode: "flat", flat_rates: { meta: Number(flatMeta) || 145, tiktok: Number(flatTiktok) || 150, google: Number(flatGoogle) || 155 } };
     } else if (role === "client" && pricingMode === "percentage") {
-      pricingConfig = { mode: "percentage", markup: Number(markupPercent) || 15 };
+      pricingConfig = { mode: "percentage", percentage: Number(markupPercent) || 15 };
     }
 
     const res = await supabase.functions.invoke("create-client", {
@@ -138,16 +138,16 @@ export default function NewClient() {
                 </div>
                 <div className="space-y-2">
                   <Label>Pricing Model</Label>
-                  <Select value={pricingMode} onValueChange={(v) => setPricingMode(v as any)}>
+                   <Select value={pricingMode} onValueChange={(v) => setPricingMode(v as any)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="default">Default (Custom Rate)</SelectItem>
-                      <SelectItem value="flat_rate">Flat Rate per Platform</SelectItem>
+                      <SelectItem value="flat">Flat Rate per Platform</SelectItem>
                       <SelectItem value="percentage">Percentage Markup</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {pricingMode === "flat_rate" && (
+                {pricingMode === "flat" && (
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Meta Rate</Label>

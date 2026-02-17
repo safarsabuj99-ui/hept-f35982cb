@@ -148,18 +148,32 @@ export default function ClientDashboard() {
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
-    const [{ data: txData }, { data: accounts }] = await Promise.all([
+    const [{ data: txData }, { data: accountLinks }] = await Promise.all([
       supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
-      supabase.from("ad_accounts" as any).select("*").eq("client_id", user.id) as any,
+      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", user.id),
     ]);
     setTransactions((txData as Transaction[]) ?? []);
-    setAdAccounts(accounts ?? []);
 
-    const accIds = accounts?.map((a: any) => a.id) ?? [];
+    const accIds = accountLinks?.map((a: any) => a.ad_account_id) ?? [];
+    
+    // Fetch ad accounts metadata
     if (accIds.length > 0) {
-      const { data: spend } = await (supabase.from("daily_ad_spend" as any).select("*").in("ad_account_id", accIds).order("date", { ascending: false }) as any);
-      setAdSpend(spend ?? []);
-      if (spend?.[0]?.synced_at) setLastSynced(new Date(spend[0].synced_at).toLocaleString());
+      const { data: accounts } = await supabase.from("ad_accounts").select("*").in("id", accIds);
+      setAdAccounts(accounts ?? []);
+      
+      // Fetch spend from daily_metrics via campaigns
+      const { data: campaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform").in("ad_account_id", accIds);
+      const campIds = campaigns?.map((c: any) => c.id) ?? [];
+      if (campIds.length > 0) {
+        const { data: metrics } = await supabase.from("daily_metrics").select("*").in("campaign_id", campIds).order("data_date", { ascending: false });
+        // Enrich metrics with platform from campaign
+        const enriched = (metrics ?? []).map((m: any) => {
+          const camp = campaigns?.find((c: any) => c.id === m.campaign_id);
+          return { ...m, ad_account_id: camp?.ad_account_id, platform_name: camp?.platform, date: m.data_date, final_billable_usd: m.spend };
+        });
+        setAdSpend(enriched);
+        if (enriched[0]?.synced_at) setLastSynced(new Date(enriched[0].synced_at).toLocaleString());
+      }
     }
     const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
     setPaymentRequests(prs ?? []);
@@ -174,7 +188,7 @@ export default function ClientDashboard() {
     const channel = supabase
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_ad_spend' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

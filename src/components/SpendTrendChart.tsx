@@ -12,22 +12,39 @@ export function SpendTrendChart({ clientId }: { clientId?: string }) {
 
   useEffect(() => {
     const fetch = async () => {
-      let query = supabase.from("daily_ad_spend").select("date, final_billable_usd, ad_account_id") as any;
+      let campaignIds: string[] = [];
 
       if (clientId) {
-        const { data: accounts } = await supabase
-          .from("ad_accounts")
-          .select("id")
-          .eq("client_id", clientId) as any;
-        const ids = accounts?.map((a: any) => a.id) ?? [];
-        if (ids.length > 0) query = query.in("ad_account_id", ids);
+        // Get ad accounts for this client via junction table
+        const { data: links } = await supabase
+          .from("ad_account_clients")
+          .select("ad_account_id")
+          .eq("client_id", clientId);
+        const accIds = links?.map((l: any) => l.ad_account_id) ?? [];
+        if (accIds.length > 0) {
+          const { data: camps } = await supabase
+            .from("campaigns")
+            .select("id")
+            .in("ad_account_id", accIds);
+          campaignIds = camps?.map((c: any) => c.id) ?? [];
+        }
+      } else {
+        // All campaigns
+        const { data: camps } = await supabase.from("campaigns").select("id");
+        campaignIds = camps?.map((c: any) => c.id) ?? [];
       }
 
-      const { data: spendData } = await query.order("date", { ascending: true });
+      if (campaignIds.length === 0) { setLoading(false); return; }
+
+      const { data: metricsData } = await supabase
+        .from("daily_metrics")
+        .select("data_date, spend")
+        .in("campaign_id", campaignIds)
+        .order("data_date", { ascending: true });
 
       const grouped: Record<string, number> = {};
-      for (const row of spendData ?? []) {
-        grouped[row.date] = (grouped[row.date] || 0) + Number(row.final_billable_usd);
+      for (const row of metricsData ?? []) {
+        grouped[row.data_date] = (grouped[row.data_date] || 0) + Number(row.spend);
       }
 
       setData(
