@@ -100,7 +100,7 @@ export default function PaymentRequests() {
 
       const profile = profileRes.data;
       const pricingConfig = profile?.pricing_config as any;
-      const platformRates = pricingConfig?.platform_rates || {};
+      const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || {};
 
       const options: RateOption[] = [];
       if (platformRates.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(platformRates.meta) });

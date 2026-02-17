@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
         .single();
 
       const pricingConfig = profile?.pricing_config as any;
-      const platformRates = pricingConfig?.platform_rates;
+      const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates;
 
       // Use meta rate as default fallback, then 120
       exchangeRate = platformRates?.meta ? Number(platformRates.meta) : 120;
