@@ -11,14 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2 } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw } from "lucide-react";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
+import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
+  flat_rates?: { meta?: number; tiktok?: number; google?: number };
   platform_rates?: { meta?: number; tiktok?: number; google?: number };
   percentage?: number;
 }
@@ -27,6 +29,7 @@ export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const [depositOpen, setDepositOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -108,9 +111,10 @@ export default function ClientDetail() {
       setDataFetchStartDate((p as any).data_fetch_start_date || "");
       setPreferredTimezone((p as any).preferred_timezone || "Asia/Dhaka");
       const pc = (p.pricing_config as unknown as PricingConfig) || {};
-      setFlatMeta(String(pc.platform_rates?.meta ?? "145"));
-      setFlatTiktok(String(pc.platform_rates?.tiktok ?? "150"));
-      setFlatGoogle(String(pc.platform_rates?.google ?? "155"));
+      const fr = pc.flat_rates || pc.platform_rates || {};
+      setFlatMeta(String(fr.meta ?? "145"));
+      setFlatTiktok(String(fr.tiktok ?? "150"));
+      setFlatGoogle(String(fr.google ?? "155"));
       setPercentage(String(pc.percentage ?? ""));
     }
 
@@ -213,7 +217,7 @@ export default function ClientDetail() {
     setSaving(true);
 
     const pricingConfig: PricingConfig = {
-      platform_rates: {
+      flat_rates: {
         meta: flatMeta ? parseFloat(flatMeta) : 145,
         tiktok: flatTiktok ? parseFloat(flatTiktok) : 150,
         google: flatGoogle ? parseFloat(flatGoogle) : 155,
@@ -645,7 +649,13 @@ export default function ClientDetail() {
 
         {/* TRANSACTIONS TAB */}
         <TabsContent value="transactions">
-          {/* Platform Sub-Balances */}
+          {/* Platform Sub-Balances + Transfer */}
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-muted-foreground">Platform Balances</h3>
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => setTransferOpen(true)}>
+              <RefreshCw className="h-3.5 w-3.5" /> Transfer
+            </Button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
             {(() => {
               const txCredits = transactions.reduce((s: number, t: any) => s + (t.type === "credit" ? Number(t.amount) : 0), 0);
@@ -731,6 +741,12 @@ export default function ClientDetail() {
       <DepositFundsDialog
         open={depositOpen}
         onOpenChange={setDepositOpen}
+        clientId={userId}
+        onSuccess={loadAll}
+      />
+      <PlatformTransferDialog
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
         clientId={userId}
         onSuccess={loadAll}
       />
