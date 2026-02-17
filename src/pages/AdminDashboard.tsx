@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { useCurrency } from "@/hooks/useCurrency";
+
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -43,7 +43,7 @@ export default function AdminDashboard() {
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const { exchangeRate } = useCurrency();
+  
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -148,7 +148,7 @@ export default function AdminDashboard() {
       setLastSynced(new Date((syncRes.data as any)[0].last_synced_at).toLocaleString());
     }
     setLoading(false);
-  }, [exchangeRate, today, yesterday]);
+  }, [today, yesterday]);
 
   const handleSyncNow = useCallback(async () => {
     // Rate limit: check if last sync was < 5 min ago
@@ -209,8 +209,8 @@ export default function AdminDashboard() {
         />
         <KpiCard
           title="Today's Collections"
-          value={`৳${(todayCollections * exchangeRate).toLocaleString("en-US", { minimumFractionDigits: 0 })}`}
-          subtitle={`$${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          value={`$${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          subtitle="USD"
           icon={Banknote}
           loading={loading}
           accentColor="hsl(var(--success))"
@@ -218,8 +218,8 @@ export default function AdminDashboard() {
         />
         <KpiCard
           title="Payment Due"
-          value={`৳${(totalDue * exchangeRate).toLocaleString("en-US", { minimumFractionDigits: 0 })}`}
-          subtitle={`$${totalDue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          value={`$${totalDue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          subtitle="USD"
           icon={AlertCircle}
           loading={loading}
           accentColor="hsl(var(--destructive))"
@@ -269,7 +269,7 @@ export default function AdminDashboard() {
       {/* Zone 7: Data Tables */}
       <div>
         <p className="section-label">Client Data</p>
-        <ClientOverviewTable clients={clients} loading={loading} exchangeRate={exchangeRate} />
+        <ClientOverviewTable clients={clients} loading={loading} />
       </div>
 
       <DepositFundsDialog

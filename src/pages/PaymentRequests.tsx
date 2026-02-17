@@ -92,23 +92,21 @@ export default function PaymentRequests() {
 
     if (action === "approved") {
       setRateLoading(true);
-      const [profileRes, settingRes, accRes] = await Promise.all([
-        supabase.from("profiles").select("custom_exchange_rate, pricing_config").eq("user_id", request.client_id).single(),
-        supabase.from("settings").select("value").eq("key", "default_bdt_to_usd_rate").single(),
+      const [profileRes, accRes] = await Promise.all([
+        supabase.from("profiles").select("pricing_config").eq("user_id", request.client_id).single(),
         supabase.from("agency_accounts" as any).select("id, name, type").eq("is_active", true).order("name"),
       ]);
 
       const profile = profileRes.data;
       const pricingConfig = profile?.pricing_config as any;
-      const customRate = profile?.custom_exchange_rate;
-      const defaultRate = settingRes.data ? Number(settingRes.data.value) : 120;
+      const platformRates = pricingConfig?.platform_rates || {};
 
       const options: RateOption[] = [];
-      if (pricingConfig?.rates?.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(pricingConfig.rates.meta) });
-      if (pricingConfig?.rates?.tiktok) options.push({ key: "tiktok", label: "TikTok Rate", rate: Number(pricingConfig.rates.tiktok) });
-      if (pricingConfig?.rates?.google) options.push({ key: "google", label: "Google Rate", rate: Number(pricingConfig.rates.google) });
-      if (customRate) options.push({ key: "custom", label: "Custom Rate", rate: Number(customRate) });
-      options.push({ key: "default", label: "Default Rate", rate: defaultRate });
+      if (platformRates.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(platformRates.meta) });
+      if (platformRates.tiktok) options.push({ key: "tiktok", label: "TikTok Rate", rate: Number(platformRates.tiktok) });
+      if (platformRates.google) options.push({ key: "google", label: "Google Rate", rate: Number(platformRates.google) });
+
+      if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
 
       setRateOptions(options);
       setSelectedRateKey(options[0]?.key ?? "default");

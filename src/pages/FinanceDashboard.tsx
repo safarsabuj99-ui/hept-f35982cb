@@ -33,24 +33,20 @@ export default function FinanceDashboard() {
 
     // Build date-filtered queries
     let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
-    let spendQuery = supabase.from("daily_ad_spend").select("final_billable_usd, ad_account_id, campaign_name, date");
     let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date");
 
     if (range) {
       const from = toISODate(range.from);
       const to = toISODate(range.to);
       purchasesQuery = purchasesQuery.gte("date", from).lte("date", to);
-      spendQuery = spendQuery.gte("date", from).lte("date", to);
       expensesQuery = expensesQuery.gte("date", from).lte("date", to);
     }
 
-    const [purchasesRes, spendRes, profilesRes, rolesRes, expensesRes, settingsRes] = await Promise.all([
+    const [purchasesRes, profilesRes, rolesRes, expensesRes] = await Promise.all([
       purchasesQuery,
-      spendQuery,
-      supabase.from("profiles").select("user_id, full_name, pricing_config, custom_exchange_rate"),
+      supabase.from("profiles").select("user_id, full_name, pricing_config"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       expensesQuery,
-      supabase.from("settings").select("key, value").eq("key", "exchange_rate").maybeSingle(),
     ]);
 
     // WAC from filtered purchases
@@ -60,48 +56,85 @@ export default function FinanceDashboard() {
     const calculatedWac = totalUsd > 0 ? Math.round((totalBdt / totalUsd) * 100) / 100 : 0;
     setWac(calculatedWac);
 
-    const globalRate = settingsRes.data?.value ? Number(settingsRes.data.value) : 120;
-
-    const { data: adAccounts } = await supabase.from("ad_accounts").select("id, client_id");
-    const accToClient: Record<string, string> = {};
-    for (const a of adAccounts ?? []) accToClient[a.id] = a.client_id;
-
     const clientIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
     const profileMap: Record<string, any> = {};
     for (const p of (profilesRes.data ?? []) as any[]) {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    const clientSpend: Record<string, number> = {};
-    for (const s of (spendRes.data ?? []) as any[]) {
-      const cid = accToClient[s.ad_account_id];
-      if (cid) clientSpend[cid] = (clientSpend[cid] || 0) + Number(s.final_billable_usd);
+    // Get client-to-ad-account mapping via junction table
+    const { data: adAccountClients } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
+    const accToClients: Record<string, string[]> = {};
+    for (const aac of (adAccountClients ?? []) as any[]) {
+      if (!accToClients[aac.ad_account_id]) accToClients[aac.ad_account_id] = [];
+      accToClients[aac.ad_account_id].push(aac.client_id);
+    }
+
+    // Get ad accounts to know platform
+    const { data: adAccounts } = await supabase.from("ad_accounts").select("id, platform_name");
+    const accToPlatform: Record<string, string> = {};
+    for (const a of adAccounts ?? []) accToPlatform[a.id] = a.platform_name;
+
+    // Get campaigns
+    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform");
+
+    if (!allCampaigns?.length) {
+      setLoading(false);
+      return;
+    }
+
+    const campaignToAccount: Record<string, string> = {};
+    const campaignToPlatform: Record<string, string> = {};
+    for (const c of allCampaigns) {
+      campaignToAccount[c.id] = c.ad_account_id;
+      campaignToPlatform[c.id] = c.platform;
+    }
+
+    // Get daily_metrics with date filter
+    let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
+    if (range) {
+      metricsQuery = metricsQuery.gte("data_date", toISODate(range.from)).lte("data_date", toISODate(range.to));
+    }
+    const { data: metricsData } = await metricsQuery;
+
+    // Aggregate spend per client per platform
+    const clientPlatformSpend: Record<string, Record<string, number>> = {};
+    for (const m of (metricsData ?? []) as any[]) {
+      const accountId = campaignToAccount[m.campaign_id];
+      if (!accountId) continue;
+      const platform = campaignToPlatform[m.campaign_id] || "meta";
+      const clientIdsForAccount = accToClients[accountId] || [];
+      for (const cid of clientIdsForAccount) {
+        if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
+        clientPlatformSpend[cid][platform] = (clientPlatformSpend[cid][platform] || 0) + Number(m.spend);
+      }
     }
 
     let aggRevenue = 0, aggCogs = 0;
     const profits: ClientProfit[] = [];
-    for (const [cid, spendUsd] of Object.entries(clientSpend)) {
+    for (const [cid, platformSpends] of Object.entries(clientPlatformSpend)) {
       const profile = profileMap[cid];
       if (!profile) continue;
 
       const pricingConfig = profile.pricing_config as any;
-      let revenueBdt = 0;
+      const platformRates = pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+      const percentageMarkup = Number(pricingConfig?.percentage || 0);
 
-      if (pricingConfig?.mode === "flat_rate") {
-        const rates = pricingConfig.rates || {};
-        const rateValues = Object.values(rates).map(Number).filter((v: number) => v > 0);
-        const avgRate = rateValues.length > 0 ? rateValues.reduce((a: number, b: number) => a + b, 0) / rateValues.length : globalRate;
-        revenueBdt = spendUsd * avgRate;
-      } else if (pricingConfig?.mode === "percentage") {
-        const markup = Number(pricingConfig.markup || 0) / 100;
-        const marketRate = Number(profile.custom_exchange_rate) || globalRate;
-        revenueBdt = spendUsd * marketRate * (1 + markup);
-      } else {
-        const rate = Number(profile.custom_exchange_rate) || globalRate;
-        revenueBdt = spendUsd * rate;
+      let revenueBdt = 0;
+      let totalSpendUsd = 0;
+
+      for (const [platform, spendUsd] of Object.entries(platformSpends)) {
+        const rate = Number(platformRates[platform] || 120);
+        revenueBdt += (spendUsd as number) * rate;
+        totalSpendUsd += spendUsd as number;
       }
 
-      const cogsBdt = spendUsd * calculatedWac;
+      // Add percentage markup revenue if applicable
+      if (percentageMarkup > 0) {
+        revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
+      }
+
+      const cogsBdt = totalSpendUsd * calculatedWac;
       const profit = revenueBdt - cogsBdt;
       const margin = revenueBdt > 0 ? (profit / revenueBdt) * 100 : 0;
 
@@ -110,7 +143,7 @@ export default function FinanceDashboard() {
 
       profits.push({
         name: profile.full_name,
-        totalSpendUsd: Math.round(spendUsd * 100) / 100,
+        totalSpendUsd: Math.round(totalSpendUsd * 100) / 100,
         revenueBdt: Math.round(revenueBdt),
         cogsBdt: Math.round(cogsBdt),
         netProfit: Math.round(profit),

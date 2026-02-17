@@ -17,14 +17,12 @@ export default function NewClient() {
   const [phone, setPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [password, setPassword] = useState("");
-  const [customRate, setCustomRate] = useState("");
   const [role, setRole] = useState<"client" | "manager">("client");
   const [managerId, setManagerId] = useState("");
   const [mappingKeyword, setMappingKeyword] = useState("");
-  const [pricingMode, setPricingMode] = useState<"flat" | "percentage" | "default">("default");
-  const [flatMeta, setFlatMeta] = useState("");
-  const [flatTiktok, setFlatTiktok] = useState("");
-  const [flatGoogle, setFlatGoogle] = useState("");
+  const [flatMeta, setFlatMeta] = useState("145");
+  const [flatTiktok, setFlatTiktok] = useState("150");
+  const [flatGoogle, setFlatGoogle] = useState("155");
   const [markupPercent, setMarkupPercent] = useState("");
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,10 +50,15 @@ export default function NewClient() {
     setIsLoading(true);
 
     let pricingConfig = null;
-    if (role === "client" && pricingMode === "flat") {
-      pricingConfig = { mode: "flat", flat_rates: { meta: Number(flatMeta) || 145, tiktok: Number(flatTiktok) || 150, google: Number(flatGoogle) || 155 } };
-    } else if (role === "client" && pricingMode === "percentage") {
-      pricingConfig = { mode: "percentage", percentage: Number(markupPercent) || 15 };
+    if (role === "client") {
+      pricingConfig = {
+        platform_rates: {
+          meta: Number(flatMeta) || 145,
+          tiktok: Number(flatTiktok) || 150,
+          google: Number(flatGoogle) || 155,
+        },
+        percentage: markupPercent ? Number(markupPercent) : 0,
+      };
     }
 
     const res = await supabase.functions.invoke("create-client", {
@@ -64,7 +67,6 @@ export default function NewClient() {
         role,
         manager_id: role === "client" && managerId ? managerId : null,
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
-        custom_exchange_rate: role === "client" && customRate ? Number(customRate) : null,
         pricing_config: pricingConfig,
       },
     });
@@ -131,45 +133,29 @@ export default function NewClient() {
                   <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
                   <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Custom Exchange Rate (optional)</Label>
-                  <Input type="number" value={customRate} onChange={(e) => setCustomRate(e.target.value)} placeholder="e.g. 118 — overrides global rate" step="0.5" min="1" />
-                  <p className="text-xs text-muted-foreground">Leave blank to use the global BDT/USD rate</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Pricing Model</Label>
-                   <Select value={pricingMode} onValueChange={(v) => setPricingMode(v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default (Custom Rate)</SelectItem>
-                      <SelectItem value="flat">Flat Rate per Platform</SelectItem>
-                      <SelectItem value="percentage">Percentage Markup</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {pricingMode === "flat" && (
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Platform Rates (USD → BDT)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">Set billing rate per dollar for each platform</p>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-xs">Meta Rate</Label>
+                      <Label className="text-xs">Meta</Label>
                       <Input type="number" placeholder="145" value={flatMeta} onChange={e => setFlatMeta(e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">TikTok Rate</Label>
+                      <Label className="text-xs">TikTok</Label>
                       <Input type="number" placeholder="150" value={flatTiktok} onChange={e => setFlatTiktok(e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Google Rate</Label>
+                      <Label className="text-xs">Google</Label>
                       <Input type="number" placeholder="155" value={flatGoogle} onChange={e => setFlatGoogle(e.target.value)} />
                     </div>
                   </div>
-                )}
-                {pricingMode === "percentage" && (
-                  <div className="space-y-2">
-                    <Label>Markup %</Label>
-                    <Input type="number" placeholder="15" value={markupPercent} onChange={e => setMarkupPercent(e.target.value)} />
-                    <p className="text-xs text-muted-foreground">Service charge added on top of market rate spend</p>
-                  </div>
-                )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Percentage Markup (optional)</Label>
+                  <Input type="number" placeholder="e.g. 10" value={markupPercent} onChange={e => setMarkupPercent(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">For USD-billing clients — service charge % on top of spend (0 = none)</p>
+                </div>
               </>
             )}
             {role === "client" && managers.length > 0 && (

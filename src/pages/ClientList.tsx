@@ -54,10 +54,15 @@ export default function ClientList() {
   useEffect(() => { setCurrentPage(1); }, [search]);
 
   const getPricingLabel = (config: any) => {
-    if (!config) return "Default";
-    if (config.mode === "flat") return "Flat Rate";
-    if (config.mode === "percentage") return `+${config.percentage ?? 0}%`;
-    return "Default";
+    if (!config?.platform_rates) return "Not Set";
+    const pr = config.platform_rates;
+    const parts = [];
+    if (pr.meta) parts.push(`M:${pr.meta}`);
+    if (pr.tiktok) parts.push(`T:${pr.tiktok}`);
+    if (pr.google) parts.push(`G:${pr.google}`);
+    let label = parts.join(" ");
+    if (config.percentage && config.percentage > 0) label += ` +${config.percentage}%`;
+    return label || "Default";
   };
 
   const filtered = clients.filter(
@@ -116,7 +121,7 @@ export default function ClientList() {
                       <TableHead className="hidden sm:table-cell">Business</TableHead>
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead>Pricing</TableHead>
-                      <TableHead className="hidden lg:table-cell">Exchange Rate</TableHead>
+                      <TableHead>Pricing</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -139,8 +144,8 @@ export default function ClientList() {
                             {getPricingLabel(c.pricing_config)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell font-mono text-sm">
-                          {c.custom_exchange_rate ? `৳${c.custom_exchange_rate}` : "Global"}
+                        <TableCell className="font-mono text-xs">
+                          {getPricingLabel(c.pricing_config)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
