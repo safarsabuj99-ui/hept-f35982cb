@@ -4,13 +4,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Filter } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 
 export default function CampaignMapping() {
-  const [mappings, setMappings] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -20,12 +19,12 @@ export default function CampaignMapping() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: maps }, { data: roles }, { data: profiles }] = await Promise.all([
-      supabase.from("campaign_mappings" as any).select("*").order("created_at", { ascending: false }) as any,
+    const [{ data: camps }, { data: roles }, { data: profiles }] = await Promise.all([
+      supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("profiles").select("user_id, full_name"),
     ]);
-    setMappings(maps ?? []);
+    setCampaigns(camps ?? []);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
     setLoading(false);
@@ -33,23 +32,23 @@ export default function CampaignMapping() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const assignClient = async (mappingId: string, clientId: string) => {
-    setSaving(mappingId);
-    const { error } = await (supabase.from("campaign_mappings" as any) as any)
-      .update({ client_id: clientId === "unassigned" ? null : clientId })
-      .eq("id", mappingId);
+  const assignClient = async (campaignId: string, clientId: string) => {
+    setSaving(campaignId);
+    const { error } = await supabase
+      .from("campaigns")
+      .update({ client_id: clientId === "unassigned" ? null : clientId } as any)
+      .eq("id", campaignId);
     setSaving(null);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Updated", description: "Campaign mapping saved" });
+      toast({ title: "Updated", description: "Campaign assignment saved" });
       fetchData();
     }
   };
 
-  const filtered = platformFilter === "all" ? mappings : mappings.filter((m: any) => m.platform === platformFilter);
+  const filtered = platformFilter === "all" ? campaigns : campaigns.filter((m: any) => m.platform === platformFilter);
 
-  // Reset page when filter changes
   useEffect(() => { setCurrentPage(1); }, [platformFilter]);
 
   return (
@@ -80,7 +79,7 @@ export default function CampaignMapping() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <MapPin className="h-10 w-10" />
-              <p>No campaigns found. Run a sync to generate campaigns.</p>
+              <p>No campaigns found. Run a sync to discover campaigns.</p>
             </div>
           ) : (
             <>
@@ -89,16 +88,18 @@ export default function CampaignMapping() {
                 <TableRow>
                   <TableHead>Campaign</TableHead>
                   <TableHead>Platform</TableHead>
-                  <TableHead>Campaign ID</TableHead>
+                  <TableHead>Platform ID</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Assigned Client</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((m: any) => (
                   <TableRow key={m.id}>
-                    <TableCell className="font-medium">{m.campaign_name}</TableCell>
+                    <TableCell className="font-medium">{m.name || m.original_name_tag}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{m.platform}</Badge></TableCell>
-                    <TableCell className="font-mono text-xs">{m.campaign_id}</TableCell>
+                    <TableCell className="font-mono text-xs">{m.platform_id}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs capitalize">{m.status}</Badge></TableCell>
                     <TableCell>
                       <Select value={m.client_id || "unassigned"} onValueChange={(v) => assignClient(m.id, v)}>
                         <SelectTrigger className="w-44">

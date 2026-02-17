@@ -65,7 +65,18 @@ Deno.serve(async (req) => {
       profileUpdate.custom_exchange_rate = custom_exchange_rate;
     }
     if (pricing_config) {
-      profileUpdate.pricing_config = pricing_config;
+      // Normalize pricing_config to standardized schema
+      const normalized = { ...pricing_config };
+      if (normalized.mode === "flat_rate") normalized.mode = "flat";
+      if (normalized.rates && !normalized.flat_rates) {
+        normalized.flat_rates = normalized.rates;
+        delete normalized.rates;
+      }
+      if (normalized.markup !== undefined && normalized.percentage === undefined) {
+        normalized.percentage = normalized.markup;
+        delete normalized.markup;
+      }
+      profileUpdate.pricing_config = normalized;
     }
 
     await supabaseAdmin

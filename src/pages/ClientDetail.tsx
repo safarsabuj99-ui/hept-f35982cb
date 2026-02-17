@@ -78,7 +78,7 @@ export default function ClientDetail() {
     setLoading(true);
     const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes, roleRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
-      supabase.from("ad_accounts").select("id, platform_name").eq("client_id", userId!),
+      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!),
       supabase.from("payment_requests").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
@@ -121,7 +121,7 @@ export default function ClientDetail() {
 
     // Spend data - load from new campaigns + daily_metrics tables
     if (adAccountsRes.data?.length) {
-      const accountIds = adAccountsRes.data.map((a) => a.id);
+      const accountIds = adAccountsRes.data.map((a: any) => a.ad_account_id);
       await loadSpendData(accountIds, null);
     }
 
@@ -174,9 +174,9 @@ export default function ClientDetail() {
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendDateRange(range);
     setSpendDatePreset(preset);
-    const { data: accounts } = await supabase.from("ad_accounts").select("id").eq("client_id", userId!);
+    const { data: accounts } = await supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!);
     if (accounts?.length) {
-      await loadSpendData(accounts.map((a) => a.id), range);
+      await loadSpendData(accounts.map((a: any) => a.ad_account_id), range);
     } else {
       setSpendData([]);
     }
@@ -435,10 +435,6 @@ export default function ClientDetail() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="exchangeRate" className="text-muted-foreground text-xs uppercase tracking-wide">Custom Exchange Rate (BDT/USD)</Label>
-                  <Input id="exchangeRate" type="number" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="Leave empty for global rate" />
                 </div>
               </div>
             </CardContent>
