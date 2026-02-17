@@ -1,22 +1,36 @@
 
 
-# Fix: Show Platform in Approval Modal + Auto-Select Rate
+# Fix: Approval Modal Shows Default Rate Instead of Client's Actual Rates
 
 ## Problem
-When a client submits a payment request with a platform (Meta/TikTok/Google), the approval modal doesn't display which platform the payment is for. The admin can't see the client's chosen platform and the rate isn't clearly auto-matched.
+The client's per-platform rates (Meta: 145, TikTok: 150, Google: 155) are stored in `pricing_config.flat_rates`, but the approval modal code reads from `pricing_config.platform_rates` -- a key that doesn't exist. This causes it to always fall back to "Default Rate 120".
 
-## Changes
+## Root Cause
+In `PaymentRequests.tsx` line 103:
+```text
+const platformRates = pricingConfig?.platform_rates || {};  // WRONG key
+```
+The actual data structure is:
+```text
+{ "flat_rates": { "meta": 145, "tiktok": 150, "google": 155 }, "mode": "flat" }
+```
 
-### PaymentRequests.tsx -- Approval Modal
-1. **Show platform in the summary section** -- Add a "Platform" row in the info card (between "Amount Sent" and "Method") showing the client's selected platform with a colored badge (e.g., "Meta", "TikTok", "Google")
-2. **Highlight the auto-selected rate** -- The code already auto-selects the matching platform rate (line 114), but add a small note like "(matches request)" next to the auto-selected rate label so the admin knows why it was pre-selected
-3. **If no platform was set** (old requests), show "Not specified" in the platform row
+## Fix
+One line change in `src/pages/PaymentRequests.tsx` (line 103): read from `flat_rates` instead of `platform_rates`, with a fallback to `platform_rates` for safety.
 
-### Files Modified
+```text
+const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || {};
+```
+
+This will correctly pick up the Meta: 145, TikTok: 150, Google: 155 rates that were set during client creation.
+
+### Also fix in approve-payment Edge Function
+The same wrong key is used in `supabase/functions/approve-payment/index.ts` (the fallback logic when no `selected_rate` is provided). Update to read `flat_rates` there too.
 
 | File | Change |
 |------|--------|
-| `src/pages/PaymentRequests.tsx` | Add platform display in approval modal summary; add "(matches request)" indicator on auto-selected rate |
+| `src/pages/PaymentRequests.tsx` | Line 103: Change `platform_rates` to `flat_rates` |
+| `supabase/functions/approve-payment/index.ts` | Update fallback rate lookup to use `flat_rates` key |
 
-No database or edge function changes needed -- the `platform` column already exists on `payment_requests` and the data is already being saved correctly from the deposit dialog.
+No database changes needed.
 
