@@ -1,142 +1,141 @@
 
+# Full SaaS Audit & Fix Plan
 
-# High-Precision Ad Data Sync & Aggregation Engine
+## Issues Found
 
-## Overview
+### Issue 1: Pricing Config Mode Mismatch (Critical Data Bug)
+The NewClient page sends `mode: "flat_rate"` but the ClientDetail page expects `mode: "flat"`. This means pricing set during client creation is not recognized when editing later.
 
-This plan restructures the data sync pipeline to eliminate duplicate rows, enforce per-client start dates and filter tags, lock campaign identity by platform ID, and aggregate daily metrics in the frontend so users see one row per campaign (not one row per day).
+- **NewClient.tsx** (line 56): `{ mode: "flat_rate", rates: { meta, tiktok, google } }`
+- **ClientDetail.tsx** (line 21-25): expects `mode: "flat"` and `flat_rates: { meta, tiktok, google }`
+- **ClientList.tsx** (line 58): checks `config.mode === "flat"` only
 
----
+**Fix:** Standardize to `mode: "flat"` everywhere. Also standardize the nested key to `flat_rates` (not `rates`). Update NewClient.tsx and create-client edge function to match ClientDetail format.
 
-## Part 1: Database Schema Changes
+### Issue 2: Pricing Config Keys Mismatch (Flat Rate Sub-Keys)
+NewClient sends `rates: { meta, tiktok, google }` but ClientDetail reads `flat_rates: { meta, tiktok, google }`. Flat rates set during creation are lost when viewing/editing later.
 
-### 1A. Add columns to `profiles` table (client config)
+**Fix:** Standardize to `flat_rates` in both NewClient.tsx and the create-client edge function.
 
-Instead of creating a new `clients` table, we add three columns to the existing `profiles` table (which already stores client-specific settings like `mapping_keyword`, `custom_exchange_rate`):
+### Issue 3: Percentage Key Mismatch
+NewClient sends `markup` for percentage mode, but ClientDetail reads `percentage`.
 
-- `ad_account_filter_tag` (text, nullable) -- e.g. "[ASIF]". Only sync campaigns whose name contains this tag.
-- `data_fetch_start_date` (date, nullable) -- Per-client override of global `sync_start_date`. Ignore API data before this date.
-- `preferred_timezone` (text, default 'Asia/Dhaka') -- For date normalization during sync.
+**Fix:** Standardize to `percentage` everywhere.
 
-### 1B. Create `campaigns` table (the parent identity store)
+### Issue 4: Duplicate "Client Assignment" Feature (3 Places)
+Manager assignment for a client exists in three separate places:
+1. **NewClient.tsx** -- "Assign Manager" dropdown during creation
+2. **ClientDetail.tsx** -- "Assigned Manager" dropdown in Profile tab
+3. **ClientAssignment.tsx** -- Full dedicated page (`/admin/team` area concept but exists as a standalone page)
 
-A new table that locks campaign identity by platform ID:
+The ClientAssignment page is redundant since ClientDetail already has this capability, and the Client List + ClientDetail provides a better workflow.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid (PK) | Internal ID |
-| platform_id | text (unique) | External platform ID (e.g. "meta_123456") |
-| name | text | Current name from API |
-| original_name_tag | text | Snapshot of the name at first discovery -- locks the filter-tag match even if renamed |
-| platform | enum | meta / tiktok / google |
-| status | text | active / paused / removed |
-| ad_account_id | uuid | FK to ad_accounts |
-| client_id | uuid, nullable | Resolved client |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+**Fix:** Remove the standalone ClientAssignment page and route. The feature already works well in ClientDetail.
 
-Unique constraint on `platform_id`. RLS policies mirroring `campaign_performance`.
+### Issue 5: Duplicate Dashboard Tabs Show Same Data
+AdminDashboard.tsx (lines 264-275): The "Client Data" section has two tabs -- "Client Overview" and "All Clients" -- but both render the exact same `ClientOverviewTable` component with identical data.
 
-### 1C. Create `daily_metrics` table (child data)
+**Fix:** Remove the duplicate tab. Keep only one "Client Overview" tab.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid (PK) | |
-| campaign_id | uuid | FK to campaigns.id |
-| data_date | date | The actual platform date |
-| spend | numeric | |
-| impressions | bigint | |
-| clicks | bigint | |
-| results | integer | |
-| conversion_value | numeric | |
-| ctr | numeric | |
-| cpc | numeric | |
-| roas | numeric | |
-| synced_at | timestamptz | |
+### Issue 6: ClientDashboard Uses Legacy `daily_ad_spend` Table
+ClientDashboard.tsx (line 160): Still reads from the old `daily_ad_spend` table instead of the new `campaigns` + `daily_metrics` tables. This means client-facing spend data may not match what admins see.
 
-Composite unique index on `(campaign_id, data_date)` to enable upserts and prevent duplicates. RLS policies via campaign -> ad_account -> ad_account_clients chain.
+**Fix:** Update ClientDashboard to query `daily_metrics` via `campaigns` joined through `ad_account_clients`, matching the pattern already used in ClientReports.
 
-### 1D. Migration strategy
+### Issue 7: AdminDashboard Uses Legacy `daily_ad_spend` Table
+AdminDashboard.tsx (lines 72-78): Reads spend from `daily_ad_spend` for KPIs and sparklines instead of the new `daily_metrics` table.
 
-The old `campaign_performance` and `daily_ad_spend` tables remain untouched initially. New sync writes to the new tables. Once validated, old tables can be deprecated.
+**Fix:** Update AdminDashboard to use `daily_metrics` joined with `campaigns` for spend calculations.
 
----
+### Issue 8: AdminDashboard Realtime Watches Legacy Table
+AdminDashboard.tsx (line 59): Realtime subscription listens to `daily_ad_spend` changes. Should listen to `daily_metrics` instead.
 
-## Part 2: Backend -- Rewritten `sync-deep-dive` Edge Function
+**Fix:** Change realtime channel to watch `daily_metrics`.
 
-The current function iterates by ad_account. The new version adds per-client config awareness.
+### Issue 9: ClientDashboard Realtime Watches Legacy Table
+ClientDashboard.tsx (line 177): Same issue -- realtime watches `daily_ad_spend`.
 
-### Sync Flow (per ad account):
+**Fix:** Change to watch `daily_metrics`.
 
-1. **Load client configs**: For each client linked to this ad account (via `ad_account_clients`), load their `ad_account_filter_tag`, `data_fetch_start_date`, and `preferred_timezone` from `profiles`.
+### Issue 10: Custom Exchange Rate Appears in Two Places
+In ClientDetail, the "Custom Exchange Rate" field appears in both:
+1. Profile tab > "Mapping & Assignment" card (line 440-442)
+2. Pricing tab > alongside pricing mode (line 515-522)
 
-2. **Determine date range**: Use the most restrictive of `MAX(client.data_fetch_start_date, global sync_start_date)` as the start, and today as the end.
+Both save the same `custom_exchange_rate` field. This is confusing.
 
-3. **API request**: Same as current (Meta Insights with `time_increment=1`, Google with `segments.date`, TikTok with `stat_time_day`).
+**Fix:** Remove the exchange rate from the Profile tab. Keep it only in the Pricing tab where it logically belongs alongside pricing configuration.
 
-4. **Filter by tag (Step A)**: If a client has `ad_account_filter_tag`, only process campaigns whose name contains that tag. Campaigns not matching any client's tag are skipped.
+### Issue 11: CampaignMapping Page Uses Legacy `campaign_mappings` Table
+CampaignMapping.tsx reads from the old `campaign_mappings` table which is empty and disconnected from the new `campaigns` table. The new engine uses `campaigns` table with ID locking.
 
-5. **ID Locking (Step B)**:
-   - Build `platform_id` (e.g. `meta_{campaign_id}`).
-   - Check if `platform_id` exists in `campaigns` table.
-   - If yes: update `name` and `status` (but keep `original_name_tag` unchanged).
-   - If no: insert new row, setting both `name` and `original_name_tag` to the current name.
+**Fix:** Update CampaignMapping page to read from the `campaigns` table instead, showing campaigns with their `client_id` assignment.
 
-6. **Timezone-aware date mapping**: Convert the API's `date_start` / `segments.date` / `stat_time_day` to the client's `preferred_timezone` before writing to `daily_metrics.data_date`.
+### Issue 12: SpendTrendChart Missing Context
+The SpendTrendChart component is used in both AdminDashboard and ClientDashboard but may also be reading from legacy tables.
 
-7. **Upsert daily metrics**: Using the composite unique index `(campaign_id, data_date)`. If Feb 10 data already exists, it gets updated in place -- no duplicate rows.
+**Fix:** Verify and update SpendTrendChart to use `daily_metrics`.
 
-### Sync Flow Diagram
+### Issue 13: ClientDetail Spend Tab Loads by `client_id` on `ad_accounts` (Broken)
+ClientDetail.tsx line 81: `supabase.from("ad_accounts").select("id, platform_name").eq("client_id", userId!)` -- But looking at the data, all ad_accounts have `client_id: null`. The real client-to-account mapping is through the `ad_account_clients` junction table.
 
-The function processes: Ad Account -> API Call -> Filter by Tag -> Lock Campaign ID -> Convert Timezone -> Upsert Metrics.
+**Fix:** Use `ad_account_clients` to find the client's ad accounts, matching the pattern in ClientReports.
 
 ---
 
-## Part 3: Frontend -- Dynamic Aggregation
+## Implementation Steps
 
-### 3A. ClientReports page changes
+### Step 1: Fix Pricing Config Schema Mismatch
+- **NewClient.tsx**: Change `mode: "flat_rate"` to `mode: "flat"`, `rates` to `flat_rates`, `markup` to `percentage`
+- **create-client edge function**: Same normalization
+- Redeploy edge function
 
-Currently `ClientReports.tsx` fetches raw `campaign_performance` rows and aggregates in JS by `campaign_id`. The new version will:
+### Step 2: Fix ClientDetail Spend Tab (ad_accounts query)
+- Change from querying `ad_accounts` by `client_id` to querying `ad_account_clients` by `client_id`, then getting the ad_account_ids
 
-1. Query from `daily_metrics` joined with `campaigns` instead.
-2. Apply date filtering server-side with `.gte('data_date', start).lte('data_date', end)`.
-3. Continue client-side aggregation via `useMemo` (grouping by `campaign_id`) -- this is already the pattern used, just pointed at the new tables.
+### Step 3: Remove Duplicate Exchange Rate Field
+- Remove "Custom Exchange Rate" from the Profile tab's "Mapping & Assignment" card (keep it in Pricing tab only)
 
-The key fix: since `daily_metrics` has the composite unique constraint, there will never be duplicate rows for the same campaign+date, so the aggregation produces exactly one summary row per campaign.
+### Step 4: Remove Duplicate Dashboard Tab
+- In AdminDashboard, remove the "All Clients" tab that duplicates "Client Overview"
 
-### 3B. SpendReport page changes
+### Step 5: Update ClientDashboard to Use New Tables
+- Replace `daily_ad_spend` queries with `daily_metrics` + `campaigns` via `ad_account_clients`
+- Update realtime subscription from `daily_ad_spend` to `daily_metrics`
 
-Same pattern: query `daily_metrics` joined with `campaigns`, aggregate by campaign for the selected date range.
+### Step 6: Update AdminDashboard to Use New Tables
+- Replace `daily_ad_spend` queries with `daily_metrics` + `campaigns`
+- Update realtime subscription
 
-### 3C. Admin ClientDetail Spend tab
+### Step 7: Update CampaignMapping to Use `campaigns` Table
+- Read from `campaigns` table instead of `campaign_mappings`
+- Allow client assignment on the new table
 
-Update to read from the new `daily_metrics` + `campaigns` tables.
+### Step 8: Update SpendTrendChart
+- Verify and update to use `daily_metrics`
+
+### Step 9: Remove ClientAssignment Page
+- Remove the redundant standalone page
+- Remove route from App.tsx (Note: it doesn't appear in App.tsx routes, but check if it's accessible via navigation -- it's not in AdminLayout nav either, so it may already be orphaned)
 
 ---
 
-## Part 4: Admin UI -- Client Config Fields
+## Technical Details
 
-### In ClientDetail page (Profile tab):
+### Pricing Config Standardized Schema
+```text
+Flat Rate:  { mode: "flat", flat_rates: { meta: 145, tiktok: 150, google: 155 } }
+Percentage: { mode: "percentage", percentage: 15 }
+Default:    { mode: "default" }
+```
 
-Add three new fields to the existing profile editor:
-
-- **Filter Tag** -- text input for `ad_account_filter_tag` (e.g. "[ASIF]")
-- **Data Start Date** -- date picker for `data_fetch_start_date`
-- **Timezone** -- dropdown for `preferred_timezone` with common options (Asia/Dhaka, UTC, America/New_York, etc.)
-
-These get saved alongside existing profile fields.
-
----
-
-## Technical Summary of Changes
-
-| Area | Files Changed |
-|------|--------------|
-| Database | 1 migration: add `profiles` columns, create `campaigns` table, create `daily_metrics` table with indexes and RLS |
-| Edge Function | `supabase/functions/sync-deep-dive/index.ts` -- full rewrite with tag filtering, ID locking, timezone conversion |
-| Edge Function | `supabase/functions/sync-fast-lane/index.ts` -- update to write to new tables |
-| Frontend | `src/pages/ClientReports.tsx` -- query new tables |
-| Frontend | `src/pages/SpendReport.tsx` -- query new tables |
-| Frontend | `src/pages/ClientDetail.tsx` -- add filter tag, start date, timezone fields |
-| Frontend | `src/components/client-analytics/DeepDiveTable.tsx` -- no structural change needed |
-
+### Files Modified
+| File | Change |
+|------|--------|
+| src/pages/NewClient.tsx | Fix pricing mode/keys to match standard |
+| supabase/functions/create-client/index.ts | Normalize pricing_config keys |
+| src/pages/ClientDetail.tsx | Remove duplicate exchange rate, fix ad_accounts query |
+| src/pages/AdminDashboard.tsx | Use daily_metrics, remove duplicate tab |
+| src/pages/ClientDashboard.tsx | Use daily_metrics via ad_account_clients |
+| src/pages/CampaignMapping.tsx | Use campaigns table |
+| src/components/SpendTrendChart.tsx | Use daily_metrics |
