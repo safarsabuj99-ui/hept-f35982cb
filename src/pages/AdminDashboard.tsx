@@ -123,13 +123,14 @@ export default function AdminDashboard() {
     const todaySpendTotal = (spendTodayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
 
-    const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+    const isNotTransfer = (t: any) => !(t.description && t.description.startsWith("Platform transfer:"));
+    const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed" && isNotTransfer(t));
     const todayCollect = todayTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
 
     // Collections sparkline
     const dailyCollMap: Record<string, number> = {};
     for (const t of transactions as any[]) {
-      if (t.type === "credit" && t.status === "completed" && t.date >= sevenAgo) {
+      if (t.type === "credit" && t.status === "completed" && t.date >= sevenAgo && !(t.description && t.description.startsWith("Platform transfer:"))) {
         dailyCollMap[t.date] = (dailyCollMap[t.date] || 0) + Number(t.amount);
       }
     }
