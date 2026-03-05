@@ -30,11 +30,11 @@ export default function MyCampaignRequests() {
   const [pageSize, setPageSize] = useState(20);
 
   const fetchRequests = useCallback(async () => {
-    if (!user) return;
-    const { data } = await (supabase.from("campaign_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
+    if (!effectiveClientId) return;
+    const { data } = await (supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any);
     setRequests(data ?? []);
     setLoading(false);
-  }, [user]);
+  }, [effectiveClientId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
