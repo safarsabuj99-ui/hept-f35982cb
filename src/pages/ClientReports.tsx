@@ -10,7 +10,7 @@ import { ClientDateFilter, ClientDateRange, ClientDatePreset } from "@/component
 import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
-import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target } from "lucide-react";
+import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target, Radio } from "lucide-react";
 import { format } from "date-fns";
 
 const fmt = (n: number) =>
@@ -21,6 +21,7 @@ export default function ClientReports() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
+  const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
   const [preset, setPreset] = useState<ClientDatePreset>("all_time");
@@ -36,6 +37,18 @@ export default function ClientReports() {
     const accIds = accClients?.map((a) => a.ad_account_id) ?? [];
 
     if (accIds.length > 0) {
+      // Fetch ad account names
+      const { data: adAccounts } = await supabase
+        .from("ad_accounts")
+        .select("id, account_name")
+        .in("id", accIds);
+      
+      const nameMap: Record<string, string> = {};
+      for (const acc of adAccounts ?? []) {
+        nameMap[acc.id] = acc.account_name;
+      }
+      setAdAccountMap(nameMap);
+
       // Query campaigns table for this client's ad accounts
       const { data: campaigns } = await supabase
         .from("campaigns")
@@ -90,10 +103,12 @@ export default function ClientReports() {
     for (const row of rawMetrics) {
       const key = row.campaign_id;
       if (!map[key]) {
+        const adAccountId = row.campaign?.ad_account_id;
         map[key] = {
           campaign_name: row.campaign?.name || "Unknown",
           platform: row.campaign?.platform || "unknown",
           status: row.campaign?.status ?? "active",
+          ad_account_name: adAccountId ? adAccountMap[adAccountId] || "" : "",
           impressions: 0,
           clicks: 0,
           spend: 0,
@@ -108,7 +123,7 @@ export default function ClientReports() {
       map[key].conversion_value += Number(row.conversion_value ?? 0);
     }
     return Object.values(map);
-  }, [rawMetrics]);
+  }, [rawMetrics, adAccountMap]);
 
   // Totals
   const totals = useMemo(() => {
@@ -139,6 +154,9 @@ export default function ClientReports() {
     }
     return Object.values(map);
   }, [campaignRows]);
+
+  // Active campaigns count
+  const activeCampaigns = campaignRows.filter(r => r.status === "active").length;
 
   if (loading) {
     return (
@@ -217,11 +235,36 @@ export default function ClientReports() {
       </div>
 
       {/* Tabbed Content */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue="live" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="live" className="gap-1.5">
+            <Radio className="h-4 w-4" /> Live Campaigns
+            {activeCampaigns > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{activeCampaigns}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="deep-dive">Campaign Deep Dive</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="live">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Radio className="h-5 w-5 text-green-500" />
+                  Live Campaign Performance
+                </span>
+                <Badge variant="secondary" className="font-mono">
+                  {activeCampaigns} active / {campaignRows.length} total
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DeepDiveTable data={campaignRows} />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
