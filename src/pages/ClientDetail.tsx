@@ -11,7 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
@@ -453,8 +456,30 @@ export default function ClientDetail() {
                   <p className="text-xs text-muted-foreground">Only sync campaigns containing this tag in their name.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dataStartDate" className="text-muted-foreground text-xs uppercase tracking-wide">Data Start Date</Label>
-                  <Input id="dataStartDate" type="date" value={dataFetchStartDate} onChange={(e) => setDataFetchStartDate(e.target.value)} />
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Data Start Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !dataFetchStartDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dataFetchStartDate ? format(new Date(dataFetchStartDate + "T00:00:00"), "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dataFetchStartDate ? new Date(dataFetchStartDate + "T00:00:00") : undefined}
+                        onSelect={(date) => setDataFetchStartDate(date ? format(date, "yyyy-MM-dd") : "")}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <p className="text-xs text-muted-foreground">Ignore API data before this date.</p>
                 </div>
                 <div className="space-y-2">

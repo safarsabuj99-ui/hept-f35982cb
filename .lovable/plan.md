@@ -1,20 +1,34 @@
 
 
-# Replace Plain Date Input with Calendar Date Picker on Client Detail
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Current State
-The Client Detail Profile tab already has a "Data Start Date" field (line 457), but it uses a plain `<Input type="date">` HTML input. This is inconsistent with the NewClient form which now uses a proper Popover + Calendar date picker.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Change
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-**File: `src/pages/ClientDetail.tsx`**
+## Technical Change
 
-Replace the `<Input type="date">` at line 457 with a Popover + Calendar date picker (same pattern used in `NewClient.tsx`):
-- Add imports for `Calendar`, `Popover`, `PopoverTrigger`, `PopoverContent`, `CalendarIcon`, `format`, `cn`
-- Convert the string-based `dataFetchStartDate` state to work with the Calendar component (parse string to Date for display, format Date back to `yyyy-MM-dd` string on select)
-- Keep the existing save logic unchanged since it already saves `dataFetchStartDate` as a string to the database
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
+
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/ClientDetail.tsx` | Replace plain date input with Popover + Calendar picker |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
