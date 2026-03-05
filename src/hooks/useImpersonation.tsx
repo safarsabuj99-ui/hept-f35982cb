@@ -16,14 +16,20 @@ export function useImpersonation() {
   // On mount, pick up ?impersonate= param if admin
   useEffect(() => {
     const paramId = searchParams.get("impersonate");
-    if (paramId && role === "admin") {
+    if (paramId && role === "admin" && user) {
       sessionStorage.setItem(STORAGE_KEY, paramId);
       setImpersonatingClientId(paramId);
       // Remove query param from URL
       searchParams.delete("impersonate");
       setSearchParams(searchParams, { replace: true });
+      // Log the impersonation event
+      supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action_type: "client_impersonation",
+        description: `Admin viewed client dashboard: ${paramId}`,
+      }).then();
     }
-  }, [searchParams, role, setSearchParams]);
+  }, [searchParams, role, user, setSearchParams]);
 
   const isImpersonating = role === "admin" && !!impersonatingClientId;
 
