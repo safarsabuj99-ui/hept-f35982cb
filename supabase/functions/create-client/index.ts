@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: Super Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, pricing_config } = await req.json();
+    const { email, password, full_name, phone, business_name, role = "client", manager_id, mapping_keyword, pricing_config, data_fetch_start_date } = await req.json();
 
     if (!email || !password || !full_name) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
