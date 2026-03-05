@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset } from "@/components/ClientDateFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
