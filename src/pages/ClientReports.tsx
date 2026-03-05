@@ -73,7 +73,7 @@ export default function ClientReports() {
       setRawMetrics([]);
     }
     setLoading(false);
-  }, [user, dateRange]);
+  }, [effectiveClientId, dateRange]);
 
   useEffect(() => {
     fetchData();

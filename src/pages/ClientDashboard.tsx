@@ -276,7 +276,7 @@ export default function ClientDashboard() {
     setIsSyncing(true);
     toast({ title: "Syncing...", description: "Fetching latest data." });
     try {
-      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: user?.id } });
+      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: effectiveClientId } });
       if (res.error) throw res.error;
       toast({ title: "Sync complete", description: "Your data has been refreshed." });
     } catch (err: any) {

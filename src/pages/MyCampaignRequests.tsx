@@ -39,13 +39,13 @@ export default function MyCampaignRequests() {
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const channel = supabase
       .channel("my-campaign-requests")
-      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests", filter: `client_id=eq.${user.id}` }, () => fetchRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests", filter: `client_id=eq.${effectiveClientId}` }, () => fetchRequests())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchRequests]);
+  }, [effectiveClientId, fetchRequests]);
 
   if (loading) return <div className="space-y-4 max-w-4xl mx-auto"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
 
