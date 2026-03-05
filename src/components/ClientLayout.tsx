@@ -14,6 +14,15 @@ export function ClientLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* Impersonation banner */}
+      {isImpersonating && (
+        <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950">
+          <span className="text-sm font-medium">You are viewing this dashboard as a client</span>
+          <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={stopImpersonating}>
+            <ArrowLeft className="h-3 w-3" /> Back to Admin
+          </Button>
+        </div>
+      )}
       {/* Gradient accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-accent" />
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card/95 backdrop-blur-sm px-4 md:px-8">
