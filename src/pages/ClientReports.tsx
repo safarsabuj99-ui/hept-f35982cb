@@ -19,6 +19,7 @@ const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 export default function ClientReports() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
