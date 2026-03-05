@@ -23,6 +23,7 @@ const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok"
 
 export default function MyCampaignRequests() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
