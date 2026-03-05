@@ -47,8 +47,45 @@ Deno.serve(async (req) => {
     // Read configurable sync start date from settings
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
-    const startDateStr = dateSetting?.value || "2025-01-01";
+    const globalStartDate = dateSetting?.value || "2025-01-01";
     const endDateStr = new Date().toISOString().split("T")[0];
+
+    // Load ad_account_clients junction + client profiles for per-client start dates
+    const { data: aacRows } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id");
+
+    const accountClientMap: Record<string, string[]> = {};
+    for (const row of aacRows ?? []) {
+      if (!accountClientMap[row.ad_account_id]) accountClientMap[row.ad_account_id] = [];
+      accountClientMap[row.ad_account_id].push(row.client_id);
+    }
+
+    const allClientIds = [...new Set((aacRows ?? []).map(r => r.client_id))];
+    const clientStartDates: Record<string, string | null> = {};
+
+    if (allClientIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, data_fetch_start_date")
+        .in("user_id", allClientIds);
+      for (const p of profiles ?? []) {
+        clientStartDates[p.user_id] = p.data_fetch_start_date;
+      }
+    }
+
+    // Helper: get per-account start date (earliest linked client date >= global)
+    const getAccountStartDate = (accountId: string): string => {
+      const linkedClients = accountClientMap[accountId] || [];
+      const dates = linkedClients
+        .map(cid => clientStartDates[cid])
+        .filter((d): d is string => !!d && d >= globalStartDate);
+      if (dates.length > 0) {
+        dates.sort();
+        return dates[0];
+      }
+      return globalStartDate;
+    };
 
     // Get exchange rate setting
     const { data: rateSetting } = await supabase
@@ -62,6 +99,8 @@ Deno.serve(async (req) => {
       const integration = (account as any).api_integrations;
       const currency = account.account_currency || "USD";
       const platform = account.platform_name;
+
+      const startDateStr = getAccountStartDate(account.id);
 
       try {
         if (platform === "meta") {
@@ -261,7 +300,7 @@ Deno.serve(async (req) => {
         message: `Fast lane sync complete`,
         synced: syncedCount,
         errors: errors.length > 0 ? errors : undefined,
-        date_range: { from: startDateStr, to: endDateStr },
+        date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

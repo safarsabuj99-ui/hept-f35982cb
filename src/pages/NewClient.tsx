@@ -1,13 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ManagerOption { user_id: string; full_name: string; }
 
@@ -24,6 +28,7 @@ export default function NewClient() {
   const [flatTiktok, setFlatTiktok] = useState("150");
   const [flatGoogle, setFlatGoogle] = useState("155");
   const [markupPercent, setMarkupPercent] = useState("");
+  const [syncStartDate, setSyncStartDate] = useState<Date>(new Date());
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -68,6 +73,7 @@ export default function NewClient() {
         manager_id: role === "client" && managerId ? managerId : null,
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
         pricing_config: pricingConfig,
+        data_fetch_start_date: role === "client" ? format(syncStartDate, "yyyy-MM-dd") : null,
       },
     });
 
@@ -128,8 +134,23 @@ export default function NewClient() {
             </div>
             {role === "client" && (
               <>
-                <div className="space-y-2">
-                  <Label>Mapping Keyword</Label>
+                 <div className="space-y-2">
+                   <Label>Data Sync Start Date</Label>
+                   <Popover>
+                     <PopoverTrigger asChild>
+                       <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !syncStartDate && "text-muted-foreground")}>
+                         <CalendarIcon className="mr-2 h-4 w-4" />
+                         {syncStartDate ? format(syncStartDate, "PPP") : <span>Pick a date</span>}
+                       </Button>
+                     </PopoverTrigger>
+                     <PopoverContent className="w-auto p-0" align="start">
+                       <Calendar mode="single" selected={syncStartDate} onSelect={(d) => d && setSyncStartDate(d)} disabled={(date) => date > new Date()} initialFocus className={cn("p-3 pointer-events-auto")} />
+                     </PopoverContent>
+                   </Popover>
+                   <p className="text-xs text-muted-foreground">Historical ad data will be fetched starting from this date</p>
+                 </div>
+                 <div className="space-y-2">
+                   <Label>Mapping Keyword</Label>
                   <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
                   <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
                 </div>
