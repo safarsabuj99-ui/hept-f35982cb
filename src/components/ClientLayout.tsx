@@ -1,17 +1,28 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart } from "lucide-react";
+import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export function ClientLayout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
+  const { isImpersonating, stopImpersonating } = useImpersonation();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* Impersonation banner */}
+      {isImpersonating && (
+        <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950">
+          <span className="text-sm font-medium">You are viewing this dashboard as a client</span>
+          <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={stopImpersonating}>
+            <ArrowLeft className="h-3 w-3" /> Back to Admin
+          </Button>
+        </div>
+      )}
       {/* Gradient accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-accent" />
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card/95 backdrop-blur-sm px-4 md:px-8">
@@ -27,10 +38,12 @@ export function ClientLayout() {
             {user?.email}
           </span>
           <ThemeToggle />
-          <Button variant="ghost" size="sm" onClick={signOut} className="gap-2">
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </Button>
+          {!isImpersonating && (
+            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2">
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </Button>
+          )}
         </div>
       </header>
       {/* Sub-nav */}

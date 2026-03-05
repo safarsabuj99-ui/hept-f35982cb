@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset } from "@/components/ClientDateFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,6 +123,7 @@ function ShimmerLoader() {
 
 export default function ClientDashboard() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
@@ -141,16 +143,16 @@ export default function ClientDashboard() {
 
   // Fetch client name
   useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("full_name").eq("user_id", user.id).single()
+    if (!effectiveClientId) return;
+    supabase.from("profiles").select("full_name").eq("user_id", effectiveClientId).single()
       .then(({ data }) => { if (data?.full_name) setClientName(data.full_name); });
-  }, [user]);
+  }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const [{ data: txData }, { data: accountLinks }] = await Promise.all([
-      supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
-      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", user.id),
+      supabase.from("transactions").select("*").eq("client_id", effectiveClientId).order("date", { ascending: false }),
+      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", effectiveClientId),
     ]);
     setTransactions((txData as Transaction[]) ?? []);
 
@@ -175,16 +177,16 @@ export default function ClientDashboard() {
         if (enriched[0]?.synced_at) setLastSynced(new Date(enriched[0].synced_at).toLocaleString());
       }
     }
-    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
+    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any);
     setPaymentRequests(prs ?? []);
     setLoading(false);
-  }, [user]);
+  }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const channel = supabase
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
@@ -192,7 +194,7 @@ export default function ClientDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchAll]);
+  }, [effectiveClientId, fetchAll]);
 
   // Balance always uses ALL transactions (unfiltered)
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
@@ -274,7 +276,7 @@ export default function ClientDashboard() {
     setIsSyncing(true);
     toast({ title: "Syncing...", description: "Fetching latest data." });
     try {
-      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: user?.id } });
+      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: effectiveClientId } });
       if (res.error) throw res.error;
       toast({ title: "Sync complete", description: "Your data has been refreshed." });
     } catch (err: any) {

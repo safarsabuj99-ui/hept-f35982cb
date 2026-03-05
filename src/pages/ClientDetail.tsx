@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -324,9 +324,14 @@ export default function ClientDetail() {
             {clientRole || "client"}
           </Badge>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
-          <Plus className="h-3.5 w-3.5" /> Add Funds
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => navigate(`/dashboard?impersonate=${userId}`)}>
+            <Eye className="h-3.5 w-3.5" /> View as Client
+          </Button>
+          <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add Funds
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">

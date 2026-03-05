@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -18,20 +19,20 @@ const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 export default function ClientReports() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
   const [preset, setPreset] = useState<ClientDatePreset>("all_time");
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     setLoading(true);
 
-    // Get campaigns linked to client's ad accounts via ad_account_clients
     const { data: accClients } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id")
-      .eq("client_id", user.id);
+      .eq("client_id", effectiveClientId);
     const accIds = accClients?.map((a) => a.ad_account_id) ?? [];
 
     if (accIds.length > 0) {
@@ -72,7 +73,7 @@ export default function ClientReports() {
       setRawMetrics([]);
     }
     setLoading(false);
-  }, [user, dateRange]);
+  }, [effectiveClientId, dateRange]);
 
   useEffect(() => {
     fetchData();

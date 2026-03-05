@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,28 +23,29 @@ const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok"
 
 export default function MyCampaignRequests() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
   const fetchRequests = useCallback(async () => {
-    if (!user) return;
-    const { data } = await (supabase.from("campaign_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
+    if (!effectiveClientId) return;
+    const { data } = await (supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any);
     setRequests(data ?? []);
     setLoading(false);
-  }, [user]);
+  }, [effectiveClientId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const channel = supabase
       .channel("my-campaign-requests")
-      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests", filter: `client_id=eq.${user.id}` }, () => fetchRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests", filter: `client_id=eq.${effectiveClientId}` }, () => fetchRequests())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchRequests]);
+  }, [effectiveClientId, fetchRequests]);
 
   if (loading) return <div className="space-y-4 max-w-4xl mx-auto"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
 
