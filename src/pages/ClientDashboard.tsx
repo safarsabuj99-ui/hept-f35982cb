@@ -143,10 +143,10 @@ export default function ClientDashboard() {
 
   // Fetch client name
   useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("full_name").eq("user_id", user.id).single()
+    if (!effectiveClientId) return;
+    supabase.from("profiles").select("full_name").eq("user_id", effectiveClientId).single()
       .then(({ data }) => { if (data?.full_name) setClientName(data.full_name); });
-  }, [user]);
+  }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
