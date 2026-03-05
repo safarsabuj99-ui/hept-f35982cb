@@ -186,7 +186,7 @@ export default function ClientDashboard() {
 
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const channel = supabase
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
@@ -194,7 +194,7 @@ export default function ClientDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchAll]);
+  }, [effectiveClientId, fetchAll]);
 
   // Balance always uses ALL transactions (unfiltered)
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
