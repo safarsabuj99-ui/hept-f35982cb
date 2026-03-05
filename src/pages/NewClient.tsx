@@ -28,6 +28,7 @@ export default function NewClient() {
   const [flatTiktok, setFlatTiktok] = useState("150");
   const [flatGoogle, setFlatGoogle] = useState("155");
   const [markupPercent, setMarkupPercent] = useState("");
+  const [syncStartDate, setSyncStartDate] = useState<Date>(new Date());
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
