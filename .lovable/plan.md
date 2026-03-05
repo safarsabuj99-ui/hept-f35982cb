@@ -1,27 +1,34 @@
 
 
-# Merge Live Campaigns into Reports Page
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What Changes
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-1. **Remove** the "Live Campaigns" tab from `MyCampaignRequests.tsx` — revert it to just showing campaign requests (no tabs needed)
-2. **Delete** `src/components/client-analytics/LiveCampaignsTable.tsx` — no longer needed
-3. **Upgrade** `ClientReports.tsx` to include ad account name in the data pipeline and add a third tab "Live Campaigns" with the enhanced table
-4. **Upgrade** `DeepDiveTable.tsx` — add ad account name column, platform color badges (instead of emoji), status dots, ROAS color badges, totals summary row at bottom
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## File Changes
+## Technical Change
 
-| File | Action |
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
+
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
 |------|--------|
-| `src/pages/MyCampaignRequests.tsx` | Remove tabs, LiveCampaignsTable import, revert to requests-only page |
-| `src/components/client-analytics/LiveCampaignsTable.tsx` | Delete |
-| `src/pages/ClientReports.tsx` | Fetch ad account names, pass to DeepDiveTable; add new "Live Campaigns" tab showing the campaign table with ad account grouping, date filter already shared |
-| `src/components/client-analytics/DeepDiveTable.tsx` | Add `ad_account_name` to CampaignRow interface; add platform color badges, status dots, ROAS color-coded badges, totals summary row; keep sortable columns |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-## Upgraded Reports Page Structure
-
-- **KPI Cards**: Total Spend, Results, ROAS, CPO (unchanged)
-- **Tab: Overview** — Sales Funnel + Platform Comparison (unchanged)
-- **Tab: Campaign Deep Dive** — Enhanced table with ad account name, platform badges, status dots, color-coded ROAS, totals row
-- **MyCampaignRequests** — Back to simple requests list with status cards, no tabs
-
+No database or edge function changes needed.
