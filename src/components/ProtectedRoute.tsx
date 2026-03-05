@@ -28,7 +28,8 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
 
   if (requiredRole && role !== requiredRole) {
     // Allow admin to access client routes when impersonating
-    if (requiredRole === "client" && role === "admin" && sessionStorage.getItem("impersonate_client_id")) {
+    const hasImpersonateParam = new URLSearchParams(window.location.search).has("impersonate");
+    if (requiredRole === "client" && role === "admin" && (sessionStorage.getItem("impersonate_client_id") || hasImpersonateParam)) {
       // Admin is impersonating a client — allow through
     } else {
       const home = role ? roleHomeMap[role] || "/login" : "/login";
