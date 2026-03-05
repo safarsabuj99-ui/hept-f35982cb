@@ -26,14 +26,13 @@ export default function ClientReports() {
   const [preset, setPreset] = useState<ClientDatePreset>("all_time");
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     setLoading(true);
 
-    // Get campaigns linked to client's ad accounts via ad_account_clients
     const { data: accClients } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id")
-      .eq("client_id", user.id);
+      .eq("client_id", effectiveClientId);
     const accIds = accClients?.map((a) => a.ad_account_id) ?? [];
 
     if (accIds.length > 0) {
