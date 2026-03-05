@@ -1,8 +1,9 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart } from "lucide-react";
+import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
