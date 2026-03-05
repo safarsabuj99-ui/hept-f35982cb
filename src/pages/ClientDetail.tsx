@@ -324,9 +324,14 @@ export default function ClientDetail() {
             {clientRole || "client"}
           </Badge>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
-          <Plus className="h-3.5 w-3.5" /> Add Funds
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => navigate(`/dashboard?impersonate=${userId}`)}>
+            <Eye className="h-3.5 w-3.5" /> View as Client
+          </Button>
+          <Button size="sm" className="gap-2" onClick={() => setDepositOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add Funds
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
