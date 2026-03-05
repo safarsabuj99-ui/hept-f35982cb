@@ -177,10 +177,10 @@ export default function ClientDashboard() {
         if (enriched[0]?.synced_at) setLastSynced(new Date(enriched[0].synced_at).toLocaleString());
       }
     }
-    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", user.id).order("created_at", { ascending: false }) as any);
+    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any);
     setPaymentRequests(prs ?? []);
     setLoading(false);
-  }, [user]);
+  }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
