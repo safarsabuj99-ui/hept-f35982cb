@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
         message: `Fast lane sync complete`,
         synced: syncedCount,
         errors: errors.length > 0 ? errors : undefined,
-        date_range: { from: startDateStr, to: endDateStr },
+        date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
