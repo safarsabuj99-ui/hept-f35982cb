@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 export function ClientLayout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
+  const { isImpersonating, stopImpersonating } = useImpersonation();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
