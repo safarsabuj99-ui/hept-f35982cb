@@ -123,6 +123,7 @@ function ShimmerLoader() {
 
 export default function ClientDashboard() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
