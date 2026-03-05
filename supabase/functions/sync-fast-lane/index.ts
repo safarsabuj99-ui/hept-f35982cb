@@ -100,6 +100,8 @@ Deno.serve(async (req) => {
       const currency = account.account_currency || "USD";
       const platform = account.platform_name;
 
+      const startDateStr = getAccountStartDate(account.id);
+
       try {
         if (platform === "meta") {
           // ===== META: Real API with time_increment=1 =====

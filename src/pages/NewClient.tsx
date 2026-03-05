@@ -134,8 +134,23 @@ export default function NewClient() {
             </div>
             {role === "client" && (
               <>
-                <div className="space-y-2">
-                  <Label>Mapping Keyword</Label>
+                 <div className="space-y-2">
+                   <Label>Data Sync Start Date</Label>
+                   <Popover>
+                     <PopoverTrigger asChild>
+                       <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !syncStartDate && "text-muted-foreground")}>
+                         <CalendarIcon className="mr-2 h-4 w-4" />
+                         {syncStartDate ? format(syncStartDate, "PPP") : <span>Pick a date</span>}
+                       </Button>
+                     </PopoverTrigger>
+                     <PopoverContent className="w-auto p-0" align="start">
+                       <Calendar mode="single" selected={syncStartDate} onSelect={(d) => d && setSyncStartDate(d)} disabled={(date) => date > new Date()} initialFocus className={cn("p-3 pointer-events-auto")} />
+                     </PopoverContent>
+                   </Popover>
+                   <p className="text-xs text-muted-foreground">Historical ad data will be fetched starting from this date</p>
+                 </div>
+                 <div className="space-y-2">
+                   <Label>Mapping Keyword</Label>
                   <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
                   <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
                 </div>

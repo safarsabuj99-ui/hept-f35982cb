@@ -96,24 +96,16 @@ Deno.serve(async (req) => {
           if (cfg?.filter_tag) {
             clientFilterTags.push({ clientId: cid, tag: cfg.filter_tag });
           }
-          if (cfg?.start_date && cfg.start_date > effectiveStartDate) {
-            // Use the earliest client start date that's still after global
-          }
-          if (cfg?.start_date && cfg.start_date < effectiveStartDate) {
-            // Keep global as minimum
-          } else if (cfg?.start_date) {
-            effectiveStartDate = cfg.start_date > effectiveStartDate ? effectiveStartDate : cfg.start_date;
-          }
         }
 
-        // Use the earliest start date among all linked clients (but not before global)
-        for (const cid of linkedClientIds) {
-          const cfg = clientConfigs[cid];
-          if (cfg?.start_date) {
-            if (cfg.start_date >= globalStartDate && cfg.start_date < effectiveStartDate) {
-              effectiveStartDate = cfg.start_date;
-            }
-          }
+        // Pick the earliest client start date that's >= globalStartDate
+        const clientDates = linkedClientIds
+          .map(cid => clientConfigs[cid]?.start_date)
+          .filter((d): d is string => !!d && d >= globalStartDate);
+
+        if (clientDates.length > 0) {
+          clientDates.sort();
+          effectiveStartDate = clientDates[0]; // earliest
         }
 
         const startDateStr = effectiveStartDate;

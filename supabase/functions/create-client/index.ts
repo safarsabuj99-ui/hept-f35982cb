@@ -61,6 +61,9 @@ Deno.serve(async (req) => {
     if (mapping_keyword) {
       profileUpdate.mapping_keyword = mapping_keyword;
     }
+    if (data_fetch_start_date) {
+      profileUpdate.data_fetch_start_date = data_fetch_start_date;
+    }
     if (pricing_config) {
       // Normalize to standard { platform_rates: { meta, tiktok, google }, percentage } format
       const normalized: any = {};
