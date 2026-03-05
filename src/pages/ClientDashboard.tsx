@@ -149,10 +149,10 @@ export default function ClientDashboard() {
   }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveClientId) return;
     const [{ data: txData }, { data: accountLinks }] = await Promise.all([
-      supabase.from("transactions").select("*").eq("client_id", user.id).order("date", { ascending: false }),
-      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", user.id),
+      supabase.from("transactions").select("*").eq("client_id", effectiveClientId).order("date", { ascending: false }),
+      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", effectiveClientId),
     ]);
     setTransactions((txData as Transaction[]) ?? []);
 
