@@ -52,6 +52,7 @@ export default function PaymentRequests() {
   const [rateLoading, setRateLoading] = useState(false);
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const { hasPermission } = usePermissions();
