@@ -11,20 +11,24 @@ export function QuickActions({ pendingCount, onAddFunds }: QuickActionsProps) {
   const navigate = useNavigate();
 
   return (
-    <div className="glass-card p-3 px-4 flex items-center gap-2">
-      <Button size="sm" className="gap-2" onClick={onAddFunds ?? (() => navigate("/admin/add-funds"))}>
+    <div className="glass-card p-3 px-4 flex items-center gap-2 opacity-0 animate-slide-up-fade" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
+      <Button
+        size="sm"
+        className="gap-2 shimmer-btn press-effect transition-all duration-200"
+        onClick={onAddFunds ?? (() => navigate("/admin/add-funds"))}
+      >
         <Plus className="h-3.5 w-3.5" /> Add Funds
       </Button>
       <Button
         size="sm"
         variant={pendingCount > 0 ? "default" : "outline"}
-        className="gap-2"
+        className="gap-2 shimmer-btn press-effect transition-all duration-200"
         onClick={() => navigate("/admin/payment-requests")}
       >
         <CheckCircle className="h-3.5 w-3.5" />
         <span className="hidden xs:inline">Approve</span> Pending
         {pendingCount > 0 && (
-          <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary-foreground/20 text-xs font-bold">
+          <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary-foreground/20 text-xs font-bold animate-scale-bounce">
             {pendingCount}
           </span>
         )}
