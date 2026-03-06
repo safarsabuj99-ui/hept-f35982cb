@@ -497,9 +497,12 @@ Deno.serve(async (req) => {
             const campaignDbId = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results: conversions,
-              conversion_value: 0, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results: conversions,
+              conversion_value: 0, ctr, cpc: cpcUsd, roas,
             });
 
             // Legacy write
@@ -509,7 +512,7 @@ Deno.serve(async (req) => {
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
                 results: conversions, conversion_value: 0, roas,
                 status: tiktokCampaignStatus,
                 synced_at: new Date().toISOString(),
