@@ -339,7 +339,7 @@ export default function PaymentRequests() {
           <Card>
             <CardContent className="pt-6">
               {depositsLoading ? (
-                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <TableSkeleton rows={4} columns={6} />
               ) : deposits.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No pending fund deposits</p>
               ) : (

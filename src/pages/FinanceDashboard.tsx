@@ -277,7 +277,7 @@ export default function FinanceDashboard() {
         <CardHeader><CardTitle className="text-base">Client Profitability</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            <TableSkeleton rows={4} columns={6} />
           ) : clientProfits.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No spend data. Run a sync simulation first.</p>
           ) : (

@@ -106,7 +106,7 @@ export default function OrderManagement() {
     rejected: requests.filter((r: any) => r.status === "rejected").length,
   };
 
-  if (loading) return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>;
+  if (loading) return <DataPageSkeleton />;
 
   return (
     <div className="space-y-6">

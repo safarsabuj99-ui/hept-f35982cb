@@ -345,7 +345,7 @@ export default function AdAccounts() {
       <Card>
         <CardContent className="pt-6">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            <TableSkeleton rows={5} columns={8} />
           ) : accounts.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <Monitor className="h-10 w-10" />
