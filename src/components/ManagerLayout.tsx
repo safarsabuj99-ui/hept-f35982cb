@@ -2,6 +2,7 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   BarChart3, Users, DollarSign, LogOut, Menu, X, Megaphone,
 } from "lucide-react";
@@ -26,9 +27,9 @@ export function ManagerLayout() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex">
+      <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex sticky top-0 h-screen">
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-          <BarChart3 className="h-6 w-6 text-sidebar-primary" />
+          <BarChart3 className="h-6 w-6 text-sidebar-primary breathing-glow" />
           <span className="text-lg font-bold text-sidebar-primary-foreground">AdSpend</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
@@ -37,10 +38,10 @@ export function ManagerLayout() {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 location.pathname === item.to
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  ? "nav-active-indicator bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5"
               )}
             >
               <item.icon className="h-4 w-4" />
@@ -48,31 +49,35 @@ export function ManagerLayout() {
             </Link>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border p-4">
+        <div className="flex shrink-0 items-center justify-between border-t border-sidebar-border p-4">
           <Button
             variant="ghost"
-            className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="flex-1 justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground press-effect"
             onClick={signOut}
           >
             <LogOut className="h-4 w-4" />
             Sign Out
           </Button>
+          <ThemeToggle />
         </div>
       </aside>
 
       <div className="flex flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b bg-card px-4 lg:hidden">
+        <header className="flex h-16 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 lg:hidden">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
             <span className="text-lg font-bold">AdSpend</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)}>
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)} className="press-effect">
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </header>
 
         {mobileOpen && (
-          <div className="absolute inset-x-0 top-16 z-50 border-b bg-card p-4 shadow-lg lg:hidden">
+          <div className="absolute inset-x-0 top-16 z-50 border-b bg-card/95 backdrop-blur-xl p-4 shadow-lg lg:hidden animate-slide-up-fade">
             <nav className="space-y-1">
               {navItems.map((item) => (
                 <Link
@@ -80,7 +85,7 @@ export function ManagerLayout() {
                   to={item.to}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                     location.pathname === item.to
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground hover:bg-accent"
@@ -102,7 +107,9 @@ export function ManagerLayout() {
         )}
 
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          <Outlet />
+          <div className="page-enter">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

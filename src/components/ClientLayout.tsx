@@ -18,16 +18,16 @@ export function ClientLayout() {
       {isImpersonating && (
         <div className="flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-amber-950">
           <span className="text-sm font-medium">You are viewing this dashboard as a client</span>
-          <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs" onClick={stopImpersonating}>
+          <Button size="sm" variant="secondary" className="gap-1.5 h-7 text-xs press-effect" onClick={stopImpersonating}>
             <ArrowLeft className="h-3 w-3" /> Back to Admin
           </Button>
         </div>
       )}
       {/* Gradient accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-accent" />
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card/95 backdrop-blur-sm px-4 md:px-8">
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 md:px-8">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
+          <BarChart3 className="h-5 w-5 text-primary breathing-glow" />
           <span className="text-lg font-bold tracking-tight">AdSpend Portal</span>
           <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex gap-1 ml-1">
             <Shield className="h-2.5 w-2.5" /> Client
@@ -39,7 +39,7 @@ export function ClientLayout() {
           </span>
           <ThemeToggle />
           {!isImpersonating && (
-            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2">
+            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 press-effect">
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Sign Out</span>
             </Button>
@@ -52,10 +52,10 @@ export function ClientLayout() {
           <Link
             to="/dashboard"
             className={cn(
-              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200",
               location.pathname === "/dashboard"
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
             )}
           >
             <LayoutDashboard className="h-4 w-4" /> Dashboard
@@ -63,10 +63,10 @@ export function ClientLayout() {
           <Link
             to="/dashboard/campaigns"
             className={cn(
-              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200",
               location.pathname.startsWith("/dashboard/campaigns")
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
             )}
           >
             <Megaphone className="h-4 w-4" /> Campaigns
@@ -74,10 +74,10 @@ export function ClientLayout() {
           <Link
             to="/dashboard/reports"
             className={cn(
-              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+              "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200",
               location.pathname.startsWith("/dashboard/reports")
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
             )}
           >
             <FileBarChart className="h-4 w-4" /> Reports
@@ -85,7 +85,7 @@ export function ClientLayout() {
         </nav>
       </div>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <div className="animate-fade-in">
+        <div className="page-enter">
           <Outlet />
         </div>
       </main>

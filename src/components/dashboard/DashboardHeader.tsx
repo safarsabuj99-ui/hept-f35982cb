@@ -25,11 +25,16 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount, onSy
   });
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-            {greeting}, <span className="text-primary">{displayName}</span>
+            <span className="inline-block overflow-hidden">
+              <span className="inline-block typewriter">
+                {greeting},{" "}
+              </span>
+            </span>
+            <span className="text-primary">{displayName}</span>
           </h1>
           <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
             <span className="hidden sm:inline">{today}</span>
@@ -48,19 +53,21 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount, onSy
             size="sm"
             onClick={onSyncNow}
             disabled={isSyncing}
-            className="gap-2 shrink-0"
+            className={`gap-2 shrink-0 press-effect transition-all duration-300 ${
+              isSyncing ? "animate-glow-pulse" : ""
+            }`}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 transition-transform duration-500 ${isSyncing ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync Now"}</span>
           </Button>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="stat-pill">
+        <div className="stat-pill opacity-0 animate-scale-bounce" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
           <MonitorSmartphone className="h-3.5 w-3.5 text-primary" />
           <span className="font-mono">{activeAccounts}</span> <span className="hidden xs:inline">Accounts</span>
         </div>
-        <div className="stat-pill">
+        <div className="stat-pill opacity-0 animate-scale-bounce" style={{ animationDelay: "350ms", animationFillMode: "forwards" }}>
           <ClipboardCheck className="h-3.5 w-3.5 text-warning" />
           <span className="font-mono">{pendingCount}</span> <span className="hidden xs:inline">Pending</span>
         </div>
