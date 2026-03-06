@@ -80,7 +80,7 @@ const App = () => (
                 <Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
                 <Route path="/admin/campaigns" element={<CampaignMapping />} />
-                <Route path="/admin/spend-report" element={<SpendReport />} />
+                
                 <Route path="/admin/finance" element={<FinanceHub />} />
                 <Route path="/admin/wallet" element={<Navigate to="/admin/finance?tab=wallet" replace />} />
                 <Route path="/admin/expenses" element={<Navigate to="/admin/finance?tab=expenses" replace />} />
