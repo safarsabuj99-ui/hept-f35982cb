@@ -22,7 +22,7 @@ const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionK
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
   { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
   { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
-  { to: "/admin/spend-report", icon: FileText, label: "Spend Report" },
+  
   { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
   { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_manage_finance" },
   { to: "/admin/orders", icon: Megaphone, label: "Orders", permKey: "can_manage_campaigns" },

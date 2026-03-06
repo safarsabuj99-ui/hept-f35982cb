@@ -25,7 +25,7 @@ import TeamManagement from "@/pages/TeamManagement";
 import AdAccounts from "@/pages/AdAccounts";
 import Integrations from "@/pages/Integrations";
 import CampaignMapping from "@/pages/CampaignMapping";
-import SpendReport from "@/pages/SpendReport";
+
 import WalletInventory from "@/pages/WalletInventory";
 import FinanceHub from "@/pages/FinanceHub";
 import PaymentRequests from "@/pages/PaymentRequests";
@@ -80,7 +80,7 @@ const App = () => (
                 <Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
                 <Route path="/admin/campaigns" element={<CampaignMapping />} />
-                <Route path="/admin/spend-report" element={<SpendReport />} />
+                
                 <Route path="/admin/finance" element={<FinanceHub />} />
                 <Route path="/admin/wallet" element={<Navigate to="/admin/finance?tab=wallet" replace />} />
                 <Route path="/admin/expenses" element={<Navigate to="/admin/finance?tab=expenses" replace />} />
