@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
               campaign_name: row.campaign_name || "Meta Spend",
               raw_spend_amount: spend,
               raw_currency: currency,
-              exchange_rate_used: isBDT ? exchangeRate : 1,
+              exchange_rate_used: isBDT ? accountRate : 1,
               final_billable_usd: finalUsd,
               synced_at: new Date().toISOString(),
             });

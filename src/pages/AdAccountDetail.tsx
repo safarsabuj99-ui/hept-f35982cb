@@ -277,6 +277,13 @@ export default function AdAccountDetail() {
                     <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {currency === "BDT" && (
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wide">Exchange Rate (BDT→USD)</Label>
+                    <Input type="number" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="e.g. 120" min="1" step="0.01" />
+                    <p className="text-xs text-muted-foreground">1 USD = X BDT. Used to convert BDT spend to USD.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Daily Spending Limit ($)</Label>
                   <Input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} min="0" step="10" />

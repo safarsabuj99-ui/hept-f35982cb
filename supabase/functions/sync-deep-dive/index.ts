@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens
     const { data: accounts, error: accErr } = await supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true);
 
     if (accErr) throw accErr;
