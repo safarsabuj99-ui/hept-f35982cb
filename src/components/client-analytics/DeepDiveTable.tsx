@@ -212,7 +212,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       t.convValue += r.conversion_value;
     }
     return t;
-  }, [data]);
+  }, [filteredData]);
 
   const totalRoas = safeDivide(totals.convValue, totals.spend);
   const totalCpm = safeDivide(totals.spend, totals.impressions) * 1000;
