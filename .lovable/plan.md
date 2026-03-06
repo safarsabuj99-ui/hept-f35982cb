@@ -1,34 +1,27 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Remove "Campaign Deep Dive" Tab and Add Pagination
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Changes
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### 1. Remove "Campaign Deep Dive" tab from ClientReports
+**`src/pages/ClientReports.tsx`**
+- Remove the `<TabsTrigger value="deep-dive">Campaign Deep Dive</TabsTrigger>` tab button
+- Remove the entire `<TabsContent value="deep-dive">...</TabsContent>` block
+- Keep only "Live Campaigns" and "Overview" tabs
 
-## Technical Change
+### 2. Add pagination to DeepDiveTable (10 rows per page)
+**`src/components/client-analytics/DeepDiveTable.tsx`**
+- Add `currentPage` state (default 1), reset to 1 when filters change
+- Default page size: 10 rows
+- Slice `filteredData` to show only current page rows
+- Add pagination controls below the table (Previous / page numbers / Next) using the existing `TablePagination` component
+- Totals row should still reflect **all** filtered data (not just current page)
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/ClientReports.tsx` | Remove "Campaign Deep Dive" tab |
+| `src/components/client-analytics/DeepDiveTable.tsx` | Add pagination with 10 rows per page |
 
-No database or edge function changes needed.
