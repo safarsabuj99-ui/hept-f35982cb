@@ -41,6 +41,7 @@ export default function AdAccountDetail() {
   const [thresholdLimit, setThresholdLimit] = useState("");
   const [nextBillingDate, setNextBillingDate] = useState("");
   const [cardLast4, setCardLast4] = useState("");
+  const [exchangeRate, setExchangeRate] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   // Related data
