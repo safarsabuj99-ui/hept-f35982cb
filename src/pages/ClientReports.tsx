@@ -23,8 +23,8 @@ export default function ClientReports() {
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
-  const [preset, setPreset] = useState<ClientDatePreset>("all_time");
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [preset, setPreset] = useState<ClientDatePreset>("today");
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;

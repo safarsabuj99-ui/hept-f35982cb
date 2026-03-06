@@ -61,10 +61,17 @@ function getPresetRange(preset: ClientDatePreset): ClientDateRange | null {
 }
 
 export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset }: ClientDateFilterProps) {
-  const [internalPreset, setInternalPreset] = useState<ClientDatePreset>("all_time");
+  const [internalPreset, setInternalPreset] = useState<ClientDatePreset>("today");
   const activePreset = controlledPreset ?? internalPreset;
   const [customFrom, setCustomFrom] = useState<Date | undefined>();
   const [customTo, setCustomTo] = useState<Date | undefined>();
+
+  useEffect(() => {
+    if (!controlledPreset) {
+      const range = getPresetRange("today");
+      onRangeChange(range!, "today");
+    }
+  }, []);
 
   const handlePreset = (preset: ClientDatePreset) => {
     setInternalPreset(preset);

@@ -57,9 +57,14 @@ function getPresetRange(preset: DatePreset): DateRange | null {
 }
 
 export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
-  const [activePreset, setActivePreset] = useState<DatePreset>("all_time");
+  const [activePreset, setActivePreset] = useState<DatePreset>("today");
   const [customFrom, setCustomFrom] = useState<Date | undefined>();
   const [customTo, setCustomTo] = useState<Date | undefined>();
+
+  useEffect(() => {
+    const range = getPresetRange("today");
+    onRangeChange(range, "today");
+  }, []);
 
   const handlePreset = (preset: DatePreset) => {
     setActivePreset(preset);

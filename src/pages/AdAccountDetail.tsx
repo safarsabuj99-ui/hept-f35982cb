@@ -57,7 +57,7 @@ export default function AdAccountDetail() {
   const [assignSaving, setAssignSaving] = useState(false);
 
   // Spend filter
-  const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("all_time");
+  const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {
     if (accountId) loadAll();
