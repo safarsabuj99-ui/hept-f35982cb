@@ -125,12 +125,14 @@ Deno.serve(async (req) => {
     let apiMessage = "";
 
     if (platform === "meta") {
-      const params = new URLSearchParams();
-      params.append("status", "PAUSED");
-      params.append("access_token", integration.api_token);
+      console.log("Meta pause: rawId =", rawId, "platform_id =", platformId);
       const res = await fetch(
-        `https://graph.facebook.com/v21.0/${rawId}`,
-        { method: "POST", body: params }
+        `https://graph.facebook.com/v21.0/${rawId}?access_token=${integration.api_token}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ status: "PAUSED" }).toString(),
+        }
       );
       const json = await res.json();
       if (json.success || res.ok) {
