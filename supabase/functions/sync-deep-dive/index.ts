@@ -208,6 +208,24 @@ Deno.serve(async (req) => {
             continue;
           }
 
+          // Fetch real campaign statuses from Meta
+          const metaStatusMap: Record<string, string> = {};
+          try {
+            const statusUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
+            const statusRes = await fetch(statusUrl);
+            const statusJson = await statusRes.json();
+            if (statusJson.data) {
+              for (const c of statusJson.data) {
+                const rawStatus = (c.effective_status || "").toUpperCase();
+                if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
+                else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED") metaStatusMap[c.id] = "paused";
+                else metaStatusMap[c.id] = rawStatus.toLowerCase();
+              }
+            }
+          } catch (e: any) {
+            errors.push(`Meta status fetch: ${e.message}`);
+          }
+
           const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
