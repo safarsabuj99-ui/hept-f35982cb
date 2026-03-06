@@ -1,34 +1,28 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Handle Already-Paused Campaigns on Platform
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+When a campaign is already off/paused on the actual ads platform but the local database still shows it as "active" (due to sync delay or mismatch), clicking the pause button fails with a platform API error. The function should detect this scenario and gracefully update the local status instead of returning an error.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Plan
 
-## Technical Change
+### 1. Update pause-campaign edge function
+**`supabase/functions/pause-campaign/index.ts`**
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+For each platform's API response, handle the case where the campaign is **already paused** on the platform:
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+- **Meta**: If the API call succeeds (campaign set to PAUSED) or returns an error indicating it's already paused/inactive, treat it as success
+- **Google**: Same — if status is already PAUSED, the mutate call typically succeeds anyway
+- **TikTok**: Same approach
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+**Key change**: After the platform API call, if it fails, check if the failure reason is because the campaign is already paused/disabled on the platform. If so, treat it as a success and update the local DB status to match.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+Additionally, before calling the platform API, **first query the platform to get the current status**. If it's already paused/off, skip the pause call and just update the local DB.
+
+**Simplified approach** (more robust): Wrap the API call so that if pausing fails, we do a **GET request** to check the campaign's actual status on the platform. If it's already paused/off, update local DB and return success with a message like "Campaign was already off on the platform — local status updated."
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `supabase/functions/pause-campaign/index.ts` | After a failed pause API call, check actual platform status; if already off, update local DB and return success |
 
-No database or edge function changes needed.
