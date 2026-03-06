@@ -10,7 +10,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -63,8 +64,20 @@ interface DeepDiveTableProps {
 
 export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [pausingId, setPausingId] = useState<string | null>(null);
   const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
+
+  const filteredData = useMemo(() => {
+    if (!searchQuery.trim()) return data;
+    const q = searchQuery.toLowerCase();
+    return data.filter(
+      (r) =>
+        r.campaign_name.toLowerCase().includes(q) ||
+        r.platform.toLowerCase().includes(q) ||
+        (r.ad_account_name && r.ad_account_name.toLowerCase().includes(q))
+    );
+  }, [data, searchQuery]);
 
   const handlePause = async (row: CampaignRow) => {
     if (!row.campaign_id) return;
@@ -182,7 +195,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   ], [pausingId]);
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -192,14 +205,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
 
   const totals = useMemo(() => {
     const t = { spend: 0, impressions: 0, results: 0, convValue: 0 };
-    for (const r of data) {
+    for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
       t.results += r.results;
       t.convValue += r.conversion_value;
     }
     return t;
-  }, [data]);
+  }, [filteredData]);
 
   const totalRoas = safeDivide(totals.convValue, totals.spend);
   const totalCpm = safeDivide(totals.spend, totals.impressions) * 1000;
@@ -207,6 +220,15 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
 
   return (
     <>
+      <div className="relative mb-3 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search campaigns, platforms..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+      </div>
       <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
@@ -251,7 +273,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                     ))}
                   </TableRow>
                 ))}
-                {data.length > 1 && (
+                {filteredData.length > 1 && (
                   <TableRow className="bg-muted/40 font-semibold border-t-2">
                     <TableCell className="text-sm">Totals</TableCell>
                     <TableCell />
