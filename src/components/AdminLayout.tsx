@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { usePendingCounts } from "@/hooks/usePendingCounts";
 
 const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionKey }[] = [
   { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
