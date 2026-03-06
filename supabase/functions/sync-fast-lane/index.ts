@@ -129,7 +129,8 @@ Deno.serve(async (req) => {
             if (spend <= 0) continue;
 
             const isBDT = currency === "BDT";
-            const finalUsd = isBDT ? Math.round((spend / exchangeRate) * 100) / 100 : spend;
+            const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
+            const finalUsd = isBDT ? Math.round((spend / accountRate) * 100) / 100 : spend;
 
             spendRecords.push({
               ad_account_id: account.id,
