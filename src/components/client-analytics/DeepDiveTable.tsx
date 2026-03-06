@@ -205,7 +205,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
 
   const totals = useMemo(() => {
     const t = { spend: 0, impressions: 0, results: 0, convValue: 0 };
-    for (const r of data) {
+    for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
       t.results += r.results;
