@@ -208,6 +208,24 @@ Deno.serve(async (req) => {
             continue;
           }
 
+          // Fetch real campaign statuses from Meta
+          const metaStatusMap: Record<string, string> = {};
+          try {
+            const statusUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
+            const statusRes = await fetch(statusUrl);
+            const statusJson = await statusRes.json();
+            if (statusJson.data) {
+              for (const c of statusJson.data) {
+                const rawStatus = (c.effective_status || "").toUpperCase();
+                if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
+                else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED") metaStatusMap[c.id] = "paused";
+                else metaStatusMap[c.id] = rawStatus.toLowerCase();
+              }
+            }
+          } catch (e: any) {
+            errors.push(`Meta status fetch: ${e.message}`);
+          }
+
           const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
@@ -260,7 +278,8 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, rawCampaignId);
 
             // ID Locking: upsert into campaigns table
-            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
+            const campaignDbId = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             // Upsert daily metrics
@@ -278,7 +297,7 @@ Deno.serve(async (req) => {
                 date: dataDate,
                 impressions, clicks, ctr, cpc, spend, results,
                 conversion_value: conversionValue, roas,
-                status: "active",
+                status: metaCampaignStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
@@ -402,6 +421,32 @@ Deno.serve(async (req) => {
             continue;
           }
 
+          // Fetch real campaign statuses from TikTok
+          const tiktokStatusMap: Record<string, string> = {};
+          try {
+            const statusParams = new URLSearchParams({
+              advertiser_id: account.ad_account_id,
+              page_size: "500",
+            });
+            const statusRes = await fetch(
+              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
+              { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+            );
+            const statusJson = await statusRes.json();
+            if (statusJson.code === 0 && statusJson.data?.list) {
+              for (const c of statusJson.data.list) {
+                const opStatus = c.operation_status || c.secondary_status || "";
+                if (opStatus === "CAMPAIGN_STATUS_ENABLE" || opStatus === "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL") {
+                  tiktokStatusMap[c.campaign_id] = "active";
+                } else {
+                  tiktokStatusMap[c.campaign_id] = "paused";
+                }
+              }
+            }
+          } catch (e: any) {
+            errors.push(`TikTok status fetch: ${e.message}`);
+          }
+
           const rows = json.data?.list || [];
           for (const row of rows) {
             const spend = parseFloat(row.metrics?.spend || "0");
@@ -424,7 +469,8 @@ Deno.serve(async (req) => {
             const platformId = `tiktok_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
 
-            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
+            const campaignDbId = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             await upsertMetrics(campaignDbId, dataDate, {
@@ -441,7 +487,7 @@ Deno.serve(async (req) => {
                 client_id: clientId,
                 date: dataDate, impressions, clicks, ctr, cpc, spend,
                 results: conversions, conversion_value: 0, roas,
-                status: "active",
+                status: tiktokCampaignStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
