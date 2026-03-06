@@ -184,7 +184,6 @@ export default function ClientDashboard() {
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-import { startOfDay, endOfDay } from "date-fns";
 
   useEffect(() => {
     if (!effectiveClientId) return;
