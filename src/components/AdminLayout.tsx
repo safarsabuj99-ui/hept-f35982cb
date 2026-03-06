@@ -4,9 +4,9 @@ import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
-  BarChart3, Users, PlusCircle, DollarSign, LogOut, Menu, X,
-  Settings, ScrollText, ClipboardCheck, UserCog, Monitor, Plug,
-  MapPin, FileText, TrendingUp, Banknote, Megaphone,
+  BarChart3, Users, PlusCircle, LogOut, Menu, X,
+  Settings, ScrollText, UserCog, Monitor, Plug,
+  MapPin, TrendingUp, Banknote, Megaphone,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
