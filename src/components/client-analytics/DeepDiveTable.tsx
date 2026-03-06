@@ -64,8 +64,20 @@ interface DeepDiveTableProps {
 
 export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [pausingId, setPausingId] = useState<string | null>(null);
   const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
+
+  const filteredData = useMemo(() => {
+    if (!searchQuery.trim()) return data;
+    const q = searchQuery.toLowerCase();
+    return data.filter(
+      (r) =>
+        r.campaign_name.toLowerCase().includes(q) ||
+        r.platform.toLowerCase().includes(q) ||
+        (r.ad_account_name && r.ad_account_name.toLowerCase().includes(q))
+    );
+  }, [data, searchQuery]);
 
   const handlePause = async (row: CampaignRow) => {
     if (!row.campaign_id) return;
