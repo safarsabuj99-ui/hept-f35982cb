@@ -17,7 +17,7 @@ import ClientDetail from "@/pages/ClientDetail";
 import NewClient from "@/pages/NewClient";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ManagerDashboard from "@/pages/ManagerDashboard";
-import PendingApprovals from "@/pages/PendingApprovals";
+
 import Settings from "@/pages/Settings";
 import AuditLogs from "@/pages/AuditLogs";
 
