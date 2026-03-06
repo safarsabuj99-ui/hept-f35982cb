@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Filter, FileText, BarChart3 } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { DateRangeFilter, DateRange } from "@/components/DateRangeFilter";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
