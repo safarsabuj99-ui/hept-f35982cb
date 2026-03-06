@@ -36,6 +36,12 @@ export function AdminLayout() {
   const { hasPermission } = usePermissions();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { pendingPayments, pendingOrders } = usePendingCounts();
+
+  const badgeCounts: Record<string, number> = {
+    "/admin/payment-requests": pendingPayments,
+    "/admin/orders": pendingOrders,
+  };
 
   const navItems = useMemo(
     () => allNavItems.filter((item) => !item.permKey || hasPermission(item.permKey)),
