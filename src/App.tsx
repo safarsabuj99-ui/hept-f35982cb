@@ -25,7 +25,7 @@ import TeamManagement from "@/pages/TeamManagement";
 import AdAccounts from "@/pages/AdAccounts";
 import Integrations from "@/pages/Integrations";
 import CampaignMapping from "@/pages/CampaignMapping";
-import SpendReport from "@/pages/SpendReport";
+
 import WalletInventory from "@/pages/WalletInventory";
 import FinanceHub from "@/pages/FinanceHub";
 import PaymentRequests from "@/pages/PaymentRequests";
