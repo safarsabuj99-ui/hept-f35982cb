@@ -19,7 +19,7 @@ import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
@@ -69,8 +69,8 @@ export default function ClientDetail() {
   const [transactions, setTransactions] = useState<any[]>([]);
 
   // Spend date filter
-  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(null);
-  const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("all_time");
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {
     if (!userId) return;

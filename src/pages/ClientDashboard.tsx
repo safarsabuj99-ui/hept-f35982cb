@@ -17,6 +17,7 @@ import {
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { startOfDay, endOfDay } from "date-fns";
 
 const PLATFORM_COLORS: Record<string, string> = {
   meta: "hsl(214, 80%, 52%)",
@@ -135,8 +136,8 @@ export default function ClientDashboard() {
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
-  const [datePreset, setDatePreset] = useState<ClientDatePreset>("all_time");
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
   const [isSyncing, setIsSyncing] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
@@ -183,7 +184,6 @@ export default function ClientDashboard() {
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-
 
   useEffect(() => {
     if (!effectiveClientId) return;

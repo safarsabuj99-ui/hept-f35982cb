@@ -11,7 +11,7 @@ import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDi
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target, Radio } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -23,8 +23,8 @@ export default function ClientReports() {
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
-  const [preset, setPreset] = useState<ClientDatePreset>("all_time");
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [preset, setPreset] = useState<ClientDatePreset>("today");
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;
