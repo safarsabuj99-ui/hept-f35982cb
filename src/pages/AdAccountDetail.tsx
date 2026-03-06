@@ -134,6 +134,7 @@ export default function AdAccountDetail() {
       billing_type: billingType,
       is_active: isActive,
       card_last_4: cardLast4 || null,
+      exchange_rate: currency === "BDT" && exchangeRate ? Number(exchangeRate) : null,
     };
     if (billingType === "threshold_postpaid") {
       payload.threshold_limit = thresholdLimit ? Number(thresholdLimit) : 250;
