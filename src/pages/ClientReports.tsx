@@ -253,7 +253,38 @@ export default function ClientReports() {
       </TabsList>
 
         <TabsContent value="live">
-          <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
+          <Tabs defaultValue="all" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all">
+                All
+                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{campaignRows.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="meta">
+                Meta
+                {metaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{metaRows.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="tiktok">
+                TikTok
+                {tiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{tiktokRows.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="google">
+                Google
+                {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="all">
+              <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
+            </TabsContent>
+            <TabsContent value="meta">
+              <DeepDiveTable data={metaRows} onCampaignPaused={fetchData} />
+            </TabsContent>
+            <TabsContent value="tiktok">
+              <DeepDiveTable data={tiktokRows} onCampaignPaused={fetchData} />
+            </TabsContent>
+            <TabsContent value="google">
+              <DeepDiveTable data={googleRows} onCampaignPaused={fetchData} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="overview">
