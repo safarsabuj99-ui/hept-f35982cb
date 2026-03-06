@@ -218,8 +218,15 @@ Deno.serve(async (req) => {
               for (const c of statusJson.data) {
                 const rawStatus = (c.effective_status || "").toUpperCase();
                 if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
-                else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED") metaStatusMap[c.id] = "paused";
-                else metaStatusMap[c.id] = rawStatus.toLowerCase();
+                else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED" || rawStatus === "ADSET_PAUSED") metaStatusMap[c.id] = "paused";
+                else if (rawStatus === "NOT_DELIVERING") metaStatusMap[c.id] = "not delivering";
+                else if (rawStatus === "WITH_ISSUES") metaStatusMap[c.id] = "with issues";
+                else if (rawStatus === "IN_PROCESS") metaStatusMap[c.id] = "in process";
+                else if (rawStatus === "PENDING_REVIEW") metaStatusMap[c.id] = "pending review";
+                else if (rawStatus === "DISAPPROVED") metaStatusMap[c.id] = "disapproved";
+                else if (rawStatus === "ARCHIVED") metaStatusMap[c.id] = "archived";
+                else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
+                else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
               }
             }
           } catch (e: any) {

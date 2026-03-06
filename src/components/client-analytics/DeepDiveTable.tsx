@@ -118,18 +118,29 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       },
     }),
     columnHelper.accessor("status", {
-      header: "Status",
+      header: "Delivery",
       cell: (info) => {
         const row = info.row.original;
-        const active = info.getValue() === "active";
+        const status = info.getValue();
         const isPausing = pausingId === row.campaign_id;
+
+        const redStatuses = ["not delivering", "disapproved", "with issues"];
+        const yellowStatuses = ["in process", "pending review"];
+        const dimStatuses = ["archived", "deleted"];
+
+        let dotClass = "bg-muted-foreground/40"; // default gray for paused
+        if (status === "active") dotClass = "bg-green-500";
+        else if (redStatuses.includes(status)) dotClass = "bg-red-500";
+        else if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
+        else if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
+
         return (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${active ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-              <span className="text-xs text-muted-foreground capitalize">{info.getValue()}</span>
+              <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+              <span className="text-xs text-muted-foreground capitalize">{status}</span>
             </div>
-            {active && row.campaign_id && (
+            {status === "active" && row.campaign_id && (
               <Button
                 variant="ghost"
                 size="icon"

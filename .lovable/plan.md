@@ -1,43 +1,34 @@
 
 
-# Show Meta Delivery Status in Status Column
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-Currently, the sync function maps Meta's `effective_status` into only two values: "active" or "paused". Meta's API returns richer delivery statuses like `NOT_DELIVERING`, `WITH_ISSUES`, `IN_PROCESS`, `PENDING_REVIEW`, `DISAPPROVED`, `ADSET_PAUSED`, etc. The user wants these real delivery statuses displayed in the Status column.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Plan
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. Update sync to preserve Meta's delivery status as-is
-**`supabase/functions/sync-deep-dive/index.ts`**
+## Technical Change
 
-Instead of collapsing all statuses to "active"/"paused", store the human-readable delivery status directly:
-- `ACTIVE` → `"active"`
-- `PAUSED` → `"paused"`
-- `CAMPAIGN_PAUSED` → `"paused"`
-- `NOT_DELIVERING` → `"not delivering"`
-- `WITH_ISSUES` → `"with issues"`
-- `IN_PROCESS` → `"in process"`
-- `PENDING_REVIEW` → `"pending review"`
-- `DISAPPROVED` → `"disapproved"`
-- `ARCHIVED` → `"archived"`
-- `DELETED` → `"deleted"`
-- Everything else → lowercase of raw status
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 2. Update DeepDiveTable UI to handle multiple statuses
-**`src/components/client-analytics/DeepDiveTable.tsx`**
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-- Update the status cell to use color-coded dots:
-  - Green dot for `"active"`
-  - Gray dot for `"paused"`
-  - Red dot for `"not delivering"`, `"disapproved"`, `"with issues"`
-  - Yellow dot for `"in process"`, `"pending review"`
-  - Dim dot for `"archived"`, `"deleted"`
-- The pause button remains visible only for `"active"` campaigns (unchanged)
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### Files Changed
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/sync-deep-dive/index.ts` | Preserve full delivery status from Meta API |
-| `src/components/client-analytics/DeepDiveTable.tsx` | Color-code status dots for all delivery statuses |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
