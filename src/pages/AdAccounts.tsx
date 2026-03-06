@@ -295,6 +295,13 @@ export default function AdAccounts() {
                     <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {form.account_currency === "BDT" && (
+                  <div className="space-y-2">
+                    <Label>Exchange Rate (BDT→USD)</Label>
+                    <Input type="number" value={form.exchange_rate} onChange={(e) => setForm({ ...form, exchange_rate: e.target.value })} placeholder="e.g. 120" min="1" step="0.01" />
+                    <p className="text-xs text-muted-foreground">1 USD = X BDT. Used to convert BDT spend to USD in reports.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Daily Spending Limit ($)</Label>
                   <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
