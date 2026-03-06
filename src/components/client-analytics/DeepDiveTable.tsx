@@ -273,7 +273,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                     ))}
                   </TableRow>
                 ))}
-                {data.length > 1 && (
+                {filteredData.length > 1 && (
                   <TableRow className="bg-muted/40 font-semibold border-t-2">
                     <TableCell className="text-sm">Totals</TableCell>
                     <TableCell />
