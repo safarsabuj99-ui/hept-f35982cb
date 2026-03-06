@@ -4,9 +4,9 @@ import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
-  BarChart3, Users, PlusCircle, DollarSign, LogOut, Menu, X,
-  Settings, ScrollText, ClipboardCheck, UserCog, Monitor, Plug,
-  MapPin, FileText, TrendingUp, Banknote, Megaphone,
+  BarChart3, Users, PlusCircle, LogOut, Menu, X,
+  Settings, ScrollText, UserCog, Monitor, Plug,
+  MapPin, TrendingUp, Banknote, Megaphone,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -16,8 +16,6 @@ const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionK
   { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
   { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
   { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
-  { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
-  { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_manage_finance" },
   { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
   
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },

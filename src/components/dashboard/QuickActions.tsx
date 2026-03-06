@@ -19,7 +19,7 @@ export function QuickActions({ pendingCount, onAddFunds }: QuickActionsProps) {
         size="sm"
         variant={pendingCount > 0 ? "default" : "outline"}
         className="gap-2"
-        onClick={() => navigate("/admin/pending")}
+        onClick={() => navigate("/admin/payment-requests")}
       >
         <CheckCircle className="h-3.5 w-3.5" />
         <span className="hidden xs:inline">Approve</span> Pending

@@ -1,48 +1,34 @@
 
 
-# Remove Pending Approvals Page & Add Funds Nav Item
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What Changes
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-The "Pending Approvals" page approves `transactions` with `status = 'pending_approval'` (fund deposits by managers). The "Payments" page already handles `payment_requests` approvals with a richer UI. These are related approval workflows that belong together. The "Add Funds" page is still needed by managers and as a quick action, but doesn't need its own admin nav slot.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Plan
+## Technical Change
 
-### 1. Merge Pending Approvals into Payments page
-**`src/pages/PaymentRequests.tsx`**
-- Add a second tab: "Fund Deposits" alongside the existing payment requests list
-- This tab shows `transactions` where `type = 'credit'` and `status = 'pending_approval'` with Approve/Reject actions (current PendingApprovals logic)
-- Reuse the existing table pattern already in the file
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 2. Update `usePendingCounts` hook
-**`src/hooks/usePendingCounts.tsx`**
-- Add a third count: `pendingDeposits` querying `transactions` where `status = 'pending_approval'`
-- Combine `pendingPayments + pendingDeposits` into the Payments badge so the nav badge reflects both types
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 3. Remove nav items
-**`src/components/AdminLayout.tsx`**
-- Remove `{ to: "/admin/pending", ... }` (Approvals)
-- Remove `{ to: "/admin/add-funds", ... }` (Add Funds)
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 4. Update routes
-**`src/App.tsx`**
-- Remove `PendingApprovals` import
-- Remove `/admin/pending` route
-- Keep `/admin/add-funds` route (still used by QuickActions and ClientOverviewTable links)
-
-### 5. Redirect QuickActions
-**`src/components/dashboard/QuickActions.tsx`**
-- Change "Approve Pending" button to navigate to `/admin/payment-requests` instead of `/admin/pending`
-
-### 6. Cleanup
-- Delete `src/pages/PendingApprovals.tsx`
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/PaymentRequests.tsx` | Add "Fund Deposits" tab with pending transaction approvals |
-| `src/hooks/usePendingCounts.tsx` | Add deposit count, combine into payments badge |
-| `src/components/AdminLayout.tsx` | Remove Approvals & Add Funds nav items |
-| `src/App.tsx` | Remove PendingApprovals route (keep add-funds route) |
-| `src/components/dashboard/QuickActions.tsx` | Redirect pending button to `/admin/payment-requests` |
-| `src/pages/PendingApprovals.tsx` | Delete |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
