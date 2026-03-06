@@ -220,6 +220,15 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
 
   return (
     <>
+      <div className="relative mb-3 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search campaigns, platforms..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+      </div>
       <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
