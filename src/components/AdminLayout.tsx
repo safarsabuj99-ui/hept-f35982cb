@@ -16,8 +16,6 @@ const allNavItems: { to: string; icon: any; label: string; permKey?: PermissionK
   { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
   { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
   { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
-  { to: "/admin/pending", icon: ClipboardCheck, label: "Approvals" },
-  { to: "/admin/add-funds", icon: DollarSign, label: "Add Funds", permKey: "can_manage_finance" },
   { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
   
   { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },

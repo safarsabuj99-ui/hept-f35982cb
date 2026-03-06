@@ -226,88 +226,183 @@ export default function PaymentRequests() {
 
   const paginatedRequests = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const pendingDeposits = deposits.filter(d => true); // all are pending_approval already
+  const paginatedDeposits = pendingDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Banknote className="h-6 w-6 text-primary" /> Payment Requests
+          <Banknote className="h-6 w-6 text-primary" /> Payments & Deposits
         </h1>
-        <p className="text-muted-foreground">Approve or reject client offline payment deposits</p>
+        <p className="text-muted-foreground">Manage client payment requests and fund deposit approvals</p>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : requests.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Platform</TableHead>
-                      <TableHead className="text-right">Amount (BDT)</TableHead>
-                      <TableHead className="hidden md:table-cell">TrxID</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
-                      <TableHead className="text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedRequests.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                        <TableCell className="font-medium">{r.client_name}</TableCell>
-                        <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
-                        <TableCell>
-                          {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
-                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
-                        <TableCell>{statusBadge(r.status)}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-right font-mono">
-                          {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {r.status === "pending" && canManageFinance ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1">
-                                {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
-                                Approve
-                              </Button>
-                              <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1">
-                                <XCircle className="h-3 w-3" /> Reject
-                              </Button>
-                            </div>
-                          ) : r.status === "pending" ? (
-                            <span className="text-xs text-muted-foreground text-center block">View only</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground text-center block">
-                              {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination
-                totalItems={requests.length}
-                pageSize={pageSize}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onPageSizeChange={setPageSize}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="payments" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="payments" className="gap-2">
+            Payment Requests
+            {requests.filter(r => r.status === "pending").length > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                {requests.filter(r => r.status === "pending").length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="deposits" className="gap-2">
+            Fund Deposits
+            {deposits.length > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                {deposits.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payments">
+          <Card>
+            <CardContent className="pt-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : requests.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Client</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Platform</TableHead>
+                          <TableHead className="text-right">Amount (BDT)</TableHead>
+                          <TableHead className="hidden md:table-cell">TrxID</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedRequests.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                            <TableCell className="font-medium">{r.client_name}</TableCell>
+                            <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
+                            <TableCell>
+                              {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
+                            <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
+                            <TableCell>{statusBadge(r.status)}</TableCell>
+                            <TableCell className="hidden lg:table-cell text-right font-mono">
+                              {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
+                            </TableCell>
+                            <TableCell>
+                              {r.status === "pending" && canManageFinance ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1">
+                                    {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                                    Approve
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1">
+                                    <XCircle className="h-3 w-3" /> Reject
+                                  </Button>
+                                </div>
+                              ) : r.status === "pending" ? (
+                                <span className="text-xs text-muted-foreground text-center block">View only</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground text-center block">
+                                  {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={requests.length}
+                    pageSize={pageSize}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                  />
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="deposits">
+          <Card>
+            <CardContent className="pt-6">
+              {depositsLoading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : deposits.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">No pending fund deposits</p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Client</TableHead>
+                          <TableHead className="hidden sm:table-cell">Submitted By</TableHead>
+                          <TableHead className="hidden md:table-cell">Description</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedDeposits.map((t) => (
+                          <TableRow key={t.id}>
+                            <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                            <TableCell className="font-medium">{t.client_name}</TableCell>
+                            <TableCell className="hidden sm:table-cell">{t.creator_name}</TableCell>
+                            <TableCell className="hidden md:table-cell">{t.description || "—"}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold">${Number(t.amount).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleDepositAction(t.id, "completed")}
+                                  disabled={processing === t.id}
+                                  className="gap-1"
+                                >
+                                  {processing === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDepositAction(t.id, "rejected")}
+                                  disabled={processing === t.id}
+                                  className="gap-1"
+                                >
+                                  <XCircle className="h-3 w-3" /> Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={deposits.length}
+                    pageSize={depositPageSize}
+                    currentPage={depositPage}
+                    onPageChange={setDepositPage}
+                    onPageSizeChange={(s) => { setDepositPageSize(s); setDepositPage(1); }}
+                  />
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Confirmation Modal */}
       <Dialog open={confirmModal.open} onOpenChange={(open) => !open && setConfirmModal({ open: false, request: null, action: "approved" })}>
