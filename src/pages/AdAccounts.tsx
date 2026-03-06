@@ -92,6 +92,9 @@ export default function AdAccounts() {
       if (form.next_billing_date) payload.next_billing_date = form.next_billing_date;
       if (form.card_last_4) payload.card_last_4 = form.card_last_4;
     }
+    if (form.account_currency === "BDT" && form.exchange_rate) {
+      payload.exchange_rate = Number(form.exchange_rate);
+    }
     const { error } = await (supabase.from("ad_accounts" as any) as any).insert(payload);
     setSaving(false);
     if (error) {
