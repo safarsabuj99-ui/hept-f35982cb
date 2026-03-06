@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { TablePagination } from "@/components/TablePagination";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +71,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
 
   const uniqueStatuses = useMemo(() => {
     const set = new Set(data.map((r) => r.status));
@@ -219,8 +225,13 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     }),
   ], [pausingId]);
 
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
   const table = useReactTable({
-    data: filteredData,
+    data: paginatedData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -336,6 +347,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        totalItems={filteredData.length}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
 
       <AlertDialog open={!!confirmPause} onOpenChange={() => setConfirmPause(null)}>
         <AlertDialogContent>

@@ -245,54 +245,7 @@ export default function ClientReports() {
             )}
           </TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="deep-dive">Campaign Deep Dive</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="live">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Radio className="h-5 w-5 text-green-500" />
-                  Live Campaign Performance
-                </span>
-                <Badge variant="secondary" className="font-mono">
-                  {activeCampaigns} active / {campaignRows.length} total
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-            <SalesFunnel
-              impressions={totals.impressions}
-              clicks={totals.clicks}
-              results={totals.results}
-            />
-            <PlatformComparison data={platformStats} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="deep-dive">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span>Campaign Performance</span>
-                <Badge variant="secondary" className="font-mono">
-                  {campaignRows.length} campaigns
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
