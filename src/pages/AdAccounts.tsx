@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
 import { TablePagination } from "@/components/TablePagination";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 const PLATFORMS = [
   { value: "meta", label: "Meta" },
