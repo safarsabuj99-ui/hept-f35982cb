@@ -370,7 +370,9 @@ Deno.serve(async (req) => {
             const rawCampaignId = row.campaign?.id;
             const campaignName = row.campaign?.name || "Google Campaign";
             const dataDate = row.segments?.date;
-            const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+            const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
 
             // Filter by tag
             if (clientFilterTags.length > 0) {
@@ -387,8 +389,8 @@ Deno.serve(async (req) => {
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results: Math.round(conversions),
-              conversion_value: conversionValue, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results: Math.round(conversions),
+              conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
             });
 
             // Legacy write
@@ -398,7 +400,7 @@ Deno.serve(async (req) => {
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
                 results: Math.round(conversions), conversion_value: conversionValue,
                 roas, status,
                 synced_at: new Date().toISOString(),
