@@ -195,7 +195,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   ], [pausingId]);
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
