@@ -1,21 +1,34 @@
 
 
-# Fix Missing Tab Content in ClientReports
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-When the "Campaign Deep Dive" tab was removed, the `TabsContent` blocks for both "Live Campaigns" and "Overview" were accidentally removed too. The `Tabs` component now only has trigger buttons with no content panels, so nothing renders below the tabs.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Plan
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### `src/pages/ClientReports.tsx`
-Add back the `TabsContent` blocks inside the `Tabs` component:
+## Technical Change
 
-- **`TabsContent value="live"`**: Render `<DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />` — this is the full campaign table with search, status filter, pagination, and pause functionality.
-- **`TabsContent value="overview"`**: Render the `<SalesFunnel>` and `<PlatformComparison>` components with the existing `totals` and `platformStats` data.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-The fix is simply moving the closing `</Tabs>` tag from line 249 down to after the two `TabsContent` blocks, and adding the content panels back in.
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
+
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/ClientReports.tsx` | Add `TabsContent` for "live" (DeepDiveTable) and "overview" (SalesFunnel + PlatformComparison) inside the Tabs component |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
