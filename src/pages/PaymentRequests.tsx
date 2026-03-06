@@ -52,6 +52,7 @@ export default function PaymentRequests() {
   const [rateLoading, setRateLoading] = useState(false);
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const { hasPermission } = usePermissions();
@@ -89,6 +90,7 @@ export default function PaymentRequests() {
     setRateOptions([]);
     setSelectedRateKey("");
     setSelectedAccountId("");
+    setOverriddenPlatform(request.platform || "");
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
@@ -110,8 +112,9 @@ export default function PaymentRequests() {
       if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
 
       setRateOptions(options);
-      // Auto-select matching platform rate if request has a platform
-      const matchingKey = request.platform && options.find(o => o.key === request.platform) ? request.platform : options[0]?.key;
+      // Auto-select matching platform rate
+      const platform = request.platform || "";
+      const matchingKey = platform && options.find(o => o.key === platform) ? platform : options[0]?.key;
       setSelectedRateKey(matchingKey ?? "default");
       setAgencyAccounts((accRes.data as any[]) ?? []);
       setRateLoading(false);
@@ -123,6 +126,7 @@ export default function PaymentRequests() {
     const reqId = confirmModal.request.id;
     setProcessing(reqId);
 
+    const platformToSend = overriddenPlatform || confirmModal.request.platform || undefined;
     const { data, error } = await supabase.functions.invoke("approve-payment", {
       body: {
         request_id: reqId,
@@ -130,6 +134,7 @@ export default function PaymentRequests() {
         admin_note: adminNote || undefined,
         selected_rate: selectedRate?.rate ?? undefined,
         received_in_account_id: selectedAccountId || undefined,
+        platform_override: platformToSend,
       },
     });
 
@@ -271,19 +276,36 @@ export default function PaymentRequests() {
                   <span className="text-muted-foreground">Amount Sent</span>
                   <span className="font-mono font-semibold">৳{fmt(confirmModal.request.amount_bdt)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm items-center">
                   <span className="text-muted-foreground">Platform</span>
-                  <span>
-                    {confirmModal.request.platform ? (
-                      <Badge variant="outline" className={`capitalize text-xs ${
-                        confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
-                        confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
-                        'bg-red-500/10 text-red-600 border-red-500/30'
-                      }`}>{confirmModal.request.platform}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground italic">Not specified</span>
-                    )}
-                  </span>
+                  {confirmModal.action === "approved" ? (
+                    <Select value={overriddenPlatform} onValueChange={(val) => {
+                      setOverriddenPlatform(val);
+                      const matchingRate = rateOptions.find(o => o.key === val);
+                      if (matchingRate) setSelectedRateKey(matchingRate.key);
+                    }}>
+                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="meta">Meta</SelectItem>
+                        <SelectItem value="tiktok">TikTok</SelectItem>
+                        <SelectItem value="google">Google</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span>
+                      {confirmModal.request.platform ? (
+                        <Badge variant="outline" className={`capitalize text-xs ${
+                          confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
+                          confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
+                          'bg-red-500/10 text-red-600 border-red-500/30'
+                        }`}>{confirmModal.request.platform}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground italic">Not specified</span>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Method</span>
@@ -310,10 +332,10 @@ export default function PaymentRequests() {
                             <div className="flex items-center gap-2">
                               <RadioGroupItem value={opt.key} id={`rate-${opt.key}`} />
                               <Label htmlFor={`rate-${opt.key}`} className="cursor-pointer font-normal">
-                                {opt.label}
-                                {confirmModal.request?.platform && opt.key === confirmModal.request.platform && (
-                                  <span className="ml-1.5 text-xs text-primary font-medium">(matches request)</span>
-                                )}
+                                 {opt.label}
+                                {overriddenPlatform && opt.key === overriddenPlatform && (
+                                   <span className="ml-1.5 text-xs text-primary font-medium">(matches platform)</span>
+                                 )}
                               </Label>
                             </div>
                             <span className="font-mono text-sm text-muted-foreground">৳{opt.rate}</span>

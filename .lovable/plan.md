@@ -1,34 +1,34 @@
 
 
-# Auto-Select Platform Rate & Allow Platform Override in Approval Modal
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-When approving a payment request, the modal only shows a "Default Rate" instead of auto-selecting the client's platform-specific exchange rate from their pricing config. Additionally, if the client chose the wrong platform, there's no way to change it during approval.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Current Behavior
-The code at line 114 already attempts to match the platform rate, but if rates aren't found in `flat_rates`, it falls back to a single "Default Rate: ৳120". The platform is displayed as a read-only badge.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Plan
+## Technical Change
 
-### 1. Make Platform Editable in Approval Modal
-**`src/pages/PaymentRequests.tsx`**
-- Replace the read-only platform badge in the approval summary with a `Select` dropdown (Meta / TikTok / Google)
-- Pre-fill with the client's requested platform
-- When the admin changes the platform, auto-update `selectedRateKey` to match the new platform's rate
-- Pass the (possibly overridden) platform to the edge function so the transaction records the correct platform
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 2. Ensure Rate Auto-Selection Works
-- When platform changes in the dropdown, find the matching rate option and auto-select it
-- Keep the radio group visible so admin can still manually pick a different rate if needed
-- Add a visual indicator showing which rate matches the selected platform
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 3. Update Edge Function to Accept Platform Override
-**`supabase/functions/approve-payment/index.ts`**
-- Accept an optional `platform_override` field in the request body
-- Use it (if provided) instead of `pr.platform` when recording the transaction description and platform field
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/PaymentRequests.tsx` | Platform dropdown in approval modal, auto-select matching rate on change |
-| `supabase/functions/approve-payment/index.ts` | Accept `platform_override` param, use it in transaction record |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.

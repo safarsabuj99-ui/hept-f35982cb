@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { request_id, action, admin_note, selected_rate, received_in_account_id } = await req.json();
+    const { request_id, action, admin_note, selected_rate, received_in_account_id, platform_override } = await req.json();
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
       return new Response(JSON.stringify({ error: "Invalid params" }), {
         status: 400,
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
       created_by: user.id,
       status: "completed",
       exchange_rate: exchangeRate,
-      platform: pr.platform || null,
+      platform: platform_override || pr.platform || null,
     });
 
     if (txErr) {
