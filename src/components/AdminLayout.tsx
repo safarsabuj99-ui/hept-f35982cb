@@ -61,7 +61,7 @@ export function AdminLayout() {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 location.pathname === item.to
                   ? "bg-sidebar-accent text-sidebar-primary"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -69,6 +69,11 @@ export function AdminLayout() {
             >
               <item.icon className="h-4 w-4" />
               {item.label}
+              {badgeCounts[item.to] > 0 && (
+                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                  {badgeCounts[item.to]}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
