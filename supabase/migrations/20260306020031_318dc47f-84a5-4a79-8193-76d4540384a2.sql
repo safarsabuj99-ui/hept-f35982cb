@@ -1,0 +1,1 @@
+ALTER TABLE public.ad_accounts ADD COLUMN exchange_rate numeric DEFAULT NULL;

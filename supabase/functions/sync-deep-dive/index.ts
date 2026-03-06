@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens
     const { data: accounts, error: accErr } = await supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true);
 
     if (accErr) throw accErr;
@@ -66,6 +66,11 @@ Deno.serve(async (req) => {
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
     const globalStartDate = dateSetting?.value || "2025-01-01";
     const endDateStr = new Date().toISOString().split("T")[0];
+
+    // Get global exchange rate setting (fallback for BDT accounts without per-account rate)
+    const { data: rateSetting } = await supabase
+      .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
+    const globalExchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
     // Also load campaign mappings for legacy client_id resolution
     const { data: campaignMappings } = await supabase
@@ -121,6 +126,14 @@ Deno.serve(async (req) => {
           // Fallback to account's direct client
           if (linkedClientIds.length === 1) return linkedClientIds[0];
           return account.client_id;
+        };
+
+        // Helper: convert BDT spend to USD using per-account or global rate
+        const isBDT = (account as any).account_currency === "BDT";
+        const bdtRate = isBDT ? ((account as any).exchange_rate ?? globalExchangeRate) : 1;
+        const convertSpend = (rawSpend: number): number => {
+          if (!isBDT) return rawSpend;
+          return Math.round((rawSpend / bdtRate) * 100) / 100;
         };
 
         // Helper: upsert campaign into campaigns table (ID locking)
@@ -280,7 +293,9 @@ Deno.serve(async (req) => {
               }
             }
 
-            const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+            const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
             const platformId = `meta_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, rawCampaignId);
 
@@ -291,7 +306,7 @@ Deno.serve(async (req) => {
 
             // Upsert daily metrics
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
             });
 
             // Also write to legacy campaign_performance for backward compatibility
@@ -302,7 +317,7 @@ Deno.serve(async (req) => {
                 ad_account_id: account.id,
                 client_id: clientId,
                 date: dataDate,
-                impressions, clicks, ctr, cpc, spend, results,
+                impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
                 conversion_value: conversionValue, roas,
                 status: metaCampaignStatus,
                 synced_at: new Date().toISOString(),
@@ -355,7 +370,9 @@ Deno.serve(async (req) => {
             const rawCampaignId = row.campaign?.id;
             const campaignName = row.campaign?.name || "Google Campaign";
             const dataDate = row.segments?.date;
-            const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+            const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
 
             // Filter by tag
             if (clientFilterTags.length > 0) {
@@ -372,8 +389,8 @@ Deno.serve(async (req) => {
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results: Math.round(conversions),
-              conversion_value: conversionValue, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results: Math.round(conversions),
+              conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
             });
 
             // Legacy write
@@ -383,7 +400,7 @@ Deno.serve(async (req) => {
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
                 results: Math.round(conversions), conversion_value: conversionValue,
                 roas, status,
                 synced_at: new Date().toISOString(),
@@ -480,9 +497,12 @@ Deno.serve(async (req) => {
             const campaignDbId = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results: conversions,
-              conversion_value: 0, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results: conversions,
+              conversion_value: 0, ctr, cpc: cpcUsd, roas,
             });
 
             // Legacy write
@@ -492,7 +512,7 @@ Deno.serve(async (req) => {
                 campaign_name: campaignName,
                 ad_account_id: account.id,
                 client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc, spend,
+                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
                 results: conversions, conversion_value: 0, roas,
                 status: tiktokCampaignStatus,
                 synced_at: new Date().toISOString(),

@@ -47,7 +47,7 @@ export default function AdAccounts() {
   const [form, setForm] = useState({
     platform_name: "", ad_account_id: "", account_currency: "USD",
     daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
-    next_billing_date: "", card_last_4: "",
+    next_billing_date: "", card_last_4: "", exchange_rate: "",
   });
   // Add client popover state
   const [addClientPopover, setAddClientPopover] = useState<string | null>(null);
@@ -92,6 +92,9 @@ export default function AdAccounts() {
       if (form.next_billing_date) payload.next_billing_date = form.next_billing_date;
       if (form.card_last_4) payload.card_last_4 = form.card_last_4;
     }
+    if (form.account_currency === "BDT" && form.exchange_rate) {
+      payload.exchange_rate = Number(form.exchange_rate);
+    }
     const { error } = await (supabase.from("ad_accounts" as any) as any).insert(payload);
     setSaving(false);
     if (error) {
@@ -102,7 +105,7 @@ export default function AdAccounts() {
       setForm({
         platform_name: "", ad_account_id: "", account_currency: "USD",
         daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
-        next_billing_date: "", card_last_4: "",
+        next_billing_date: "", card_last_4: "", exchange_rate: "",
       });
       fetchData();
     }
@@ -292,6 +295,13 @@ export default function AdAccounts() {
                     <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {form.account_currency === "BDT" && (
+                  <div className="space-y-2">
+                    <Label>Exchange Rate (BDT→USD)</Label>
+                    <Input type="number" value={form.exchange_rate} onChange={(e) => setForm({ ...form, exchange_rate: e.target.value })} placeholder="e.g. 120" min="1" step="0.01" />
+                    <p className="text-xs text-muted-foreground">1 USD = X BDT. Used to convert BDT spend to USD in reports.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Daily Spending Limit ($)</Label>
                   <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />

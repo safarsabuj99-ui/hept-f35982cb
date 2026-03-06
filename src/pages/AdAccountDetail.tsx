@@ -41,6 +41,7 @@ export default function AdAccountDetail() {
   const [thresholdLimit, setThresholdLimit] = useState("");
   const [nextBillingDate, setNextBillingDate] = useState("");
   const [cardLast4, setCardLast4] = useState("");
+  const [exchangeRate, setExchangeRate] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   // Related data
@@ -82,6 +83,7 @@ export default function AdAccountDetail() {
       setThresholdLimit(String(a.threshold_limit ?? "250"));
       setNextBillingDate(a.next_billing_date || "");
       setCardLast4(a.card_last_4 || "");
+      setExchangeRate(a.exchange_rate ? String(a.exchange_rate) : "");
       setIsActive(a.is_active);
 
       // Load integration name
@@ -132,6 +134,7 @@ export default function AdAccountDetail() {
       billing_type: billingType,
       is_active: isActive,
       card_last_4: cardLast4 || null,
+      exchange_rate: currency === "BDT" && exchangeRate ? Number(exchangeRate) : null,
     };
     if (billingType === "threshold_postpaid") {
       payload.threshold_limit = thresholdLimit ? Number(thresholdLimit) : 250;
@@ -274,6 +277,13 @@ export default function AdAccountDetail() {
                     <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {currency === "BDT" && (
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wide">Exchange Rate (BDT→USD)</Label>
+                    <Input type="number" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="e.g. 120" min="1" step="0.01" />
+                    <p className="text-xs text-muted-foreground">1 USD = X BDT. Used to convert BDT spend to USD.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Daily Spending Limit ($)</Label>
                   <Input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} min="0" step="10" />

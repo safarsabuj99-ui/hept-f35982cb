@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens
     let accountQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true);
 
     if (targetClientId) {
@@ -129,7 +129,8 @@ Deno.serve(async (req) => {
             if (spend <= 0) continue;
 
             const isBDT = currency === "BDT";
-            const finalUsd = isBDT ? Math.round((spend / exchangeRate) * 100) / 100 : spend;
+            const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
+            const finalUsd = isBDT ? Math.round((spend / accountRate) * 100) / 100 : spend;
 
             spendRecords.push({
               ad_account_id: account.id,
@@ -137,7 +138,7 @@ Deno.serve(async (req) => {
               campaign_name: row.campaign_name || "Meta Spend",
               raw_spend_amount: spend,
               raw_currency: currency,
-              exchange_rate_used: isBDT ? exchangeRate : 1,
+              exchange_rate_used: isBDT ? accountRate : 1,
               final_billable_usd: finalUsd,
               synced_at: new Date().toISOString(),
             });

@@ -58,6 +58,7 @@ export type Database = {
           created_at: string
           current_threshold_spend: number | null
           daily_spending_limit: number | null
+          exchange_rate: number | null
           id: string
           is_active: boolean
           next_billing_date: string | null
@@ -75,6 +76,7 @@ export type Database = {
           created_at?: string
           current_threshold_spend?: number | null
           daily_spending_limit?: number | null
+          exchange_rate?: number | null
           id?: string
           is_active?: boolean
           next_billing_date?: string | null
@@ -92,6 +94,7 @@ export type Database = {
           created_at?: string
           current_threshold_spend?: number | null
           daily_spending_limit?: number | null
+          exchange_rate?: number | null
           id?: string
           is_active?: boolean
           next_billing_date?: string | null
