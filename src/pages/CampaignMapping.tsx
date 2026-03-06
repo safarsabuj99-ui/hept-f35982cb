@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Filter, FileText, BarChart3 } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { DateRangeFilter, DateRange } from "@/components/DateRangeFilter";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
@@ -172,7 +173,7 @@ export default function CampaignMapping() {
           <Card>
             <CardContent className="pt-6">
               {loading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                <TableSkeleton rows={6} columns={5} />
               ) : filteredCampaigns.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
                   <MapPin className="h-10 w-10" />
@@ -238,7 +239,7 @@ export default function CampaignMapping() {
           <Card>
             <CardContent className="pt-6">
               {loading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                <TableSkeleton rows={6} columns={8} />
               ) : filteredSpend.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
                   <FileText className="h-10 w-10" />

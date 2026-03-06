@@ -14,6 +14,7 @@ import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-r
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 interface AgencyAccount {
   id: string;
@@ -262,7 +263,7 @@ export default function PaymentRequests() {
           <Card>
             <CardContent className="pt-6">
               {loading ? (
-                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <TableSkeleton rows={5} columns={9} />
               ) : requests.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
               ) : (
@@ -338,7 +339,7 @@ export default function PaymentRequests() {
           <Card>
             <CardContent className="pt-6">
               {depositsLoading ? (
-                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                <TableSkeleton rows={4} columns={6} />
               ) : deposits.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No pending fund deposits</p>
               ) : (

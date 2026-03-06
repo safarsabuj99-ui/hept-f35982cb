@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
 import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 interface ClientProfit {
   name: string;
@@ -27,6 +28,8 @@ export default function FinanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [periodLabel, setPeriodLabel] = useState("All Time");
+
+  // Import premium skeletons
 
   const fetchAll = useCallback(async (range: DateRange | null) => {
     setLoading(true);
@@ -274,7 +277,7 @@ export default function FinanceDashboard() {
         <CardHeader><CardTitle className="text-base">Client Profitability</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            <TableSkeleton rows={4} columns={6} />
           ) : clientProfits.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No spend data. Run a sync simulation first.</p>
           ) : (

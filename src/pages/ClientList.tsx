@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Users, ChevronRight, Plus } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
+import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
 
 interface ClientRow {
   user_id: string;
@@ -102,11 +103,7 @@ export default function ClientList() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
+            <DataPageSkeleton title={false} />
           ) : filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {search ? "No clients match your search." : "No clients found."}
