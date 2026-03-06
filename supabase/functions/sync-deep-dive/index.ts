@@ -67,6 +67,11 @@ Deno.serve(async (req) => {
     const globalStartDate = dateSetting?.value || "2025-01-01";
     const endDateStr = new Date().toISOString().split("T")[0];
 
+    // Get global exchange rate setting (fallback for BDT accounts without per-account rate)
+    const { data: rateSetting } = await supabase
+      .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
+    const globalExchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
+
     // Also load campaign mappings for legacy client_id resolution
     const { data: campaignMappings } = await supabase
       .from("campaign_mappings")
