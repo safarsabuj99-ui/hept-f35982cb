@@ -421,6 +421,32 @@ Deno.serve(async (req) => {
             continue;
           }
 
+          // Fetch real campaign statuses from TikTok
+          const tiktokStatusMap: Record<string, string> = {};
+          try {
+            const statusParams = new URLSearchParams({
+              advertiser_id: account.ad_account_id,
+              page_size: "500",
+            });
+            const statusRes = await fetch(
+              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
+              { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+            );
+            const statusJson = await statusRes.json();
+            if (statusJson.code === 0 && statusJson.data?.list) {
+              for (const c of statusJson.data.list) {
+                const opStatus = c.operation_status || c.secondary_status || "";
+                if (opStatus === "CAMPAIGN_STATUS_ENABLE" || opStatus === "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL") {
+                  tiktokStatusMap[c.campaign_id] = "active";
+                } else {
+                  tiktokStatusMap[c.campaign_id] = "paused";
+                }
+              }
+            }
+          } catch (e: any) {
+            errors.push(`TikTok status fetch: ${e.message}`);
+          }
+
           const rows = json.data?.list || [];
           for (const row of rows) {
             const spend = parseFloat(row.metrics?.spend || "0");
