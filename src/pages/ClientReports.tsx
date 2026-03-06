@@ -159,6 +159,11 @@ export default function ClientReports() {
   // Active campaigns count
   const activeCampaigns = campaignRows.filter(r => r.status === "active").length;
 
+  // Platform-filtered rows
+  const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
+  const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
+  const googleRows = useMemo(() => campaignRows.filter(r => r.platform === "google"), [campaignRows]);
+
   if (loading) {
     return (
       <div className="space-y-4 max-w-6xl mx-auto">
