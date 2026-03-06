@@ -278,7 +278,8 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, rawCampaignId);
 
             // ID Locking: upsert into campaigns table
-            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
+            const campaignDbId = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             // Upsert daily metrics
@@ -296,7 +297,7 @@ Deno.serve(async (req) => {
                 date: dataDate,
                 impressions, clicks, ctr, cpc, spend, results,
                 conversion_value: conversionValue, roas,
-                status: "active",
+                status: metaCampaignStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
