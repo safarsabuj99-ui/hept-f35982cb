@@ -469,7 +469,8 @@ Deno.serve(async (req) => {
             const platformId = `tiktok_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
 
-            const campaignDbId = await upsertCampaign(platformId, campaignName, "active", clientId);
+            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
+            const campaignDbId = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId);
             if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
 
             await upsertMetrics(campaignDbId, dataDate, {
@@ -486,7 +487,7 @@ Deno.serve(async (req) => {
                 client_id: clientId,
                 date: dataDate, impressions, clicks, ctr, cpc, spend,
                 results: conversions, conversion_value: 0, roas,
-                status: "active",
+                status: tiktokCampaignStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }

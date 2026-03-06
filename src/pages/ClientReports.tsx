@@ -289,7 +289,7 @@ export default function ClientReports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <DeepDiveTable data={campaignRows} />
+              <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
             </CardContent>
           </Card>
         </TabsContent>
