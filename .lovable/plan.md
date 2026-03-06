@@ -1,34 +1,29 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Add Pending Count Badges to Navigation
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What
+Show red badge circles with pending counts on the **Payments** and **Orders** nav items in the admin sidebar, so admins immediately see how many items need attention.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## How
 
-## Technical Change
+### 1. Create a custom hook `usePendingCounts`
+**New file: `src/hooks/usePendingCounts.tsx`**
+- Query `payment_requests` where `status = 'pending'` → count
+- Query `campaign_requests` where `status = 'pending'` → count
+- Return `{ pendingPayments: number, pendingOrders: number }`
+- Use `@tanstack/react-query` with a reasonable refetch interval (30s) so counts stay fresh
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### 2. Update `AdminLayout.tsx`
+- Call `usePendingCounts()` in the layout component
+- Build a `badgeCounts` map: `{ "/admin/payment-requests": pendingPayments, "/admin/orders": pendingOrders }`
+- In both desktop and mobile nav link renders, check if `badgeCounts[item.to] > 0` and render a small red circle badge with the count next to the label
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+Badge styling: `absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center` (or inline with relative positioning on the nav item).
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
+### Files
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/hooks/usePendingCounts.tsx` | New hook querying pending counts |
+| `src/components/AdminLayout.tsx` | Import hook, render red badges on Payments & Orders nav items |
 
-No database or edge function changes needed.
