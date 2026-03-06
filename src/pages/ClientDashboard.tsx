@@ -105,22 +105,7 @@ function GrowthIndicator({ current, previous }: { current: number; previous: num
 }
 
 function ShimmerLoader() {
-  return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
-      <div className="space-y-2">
-        <div className="shimmer h-8 w-64 rounded-lg" />
-        <div className="shimmer h-4 w-40 rounded-md" />
-      </div>
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-        <div className="shimmer h-48 rounded-xl" />
-        <div className="shimmer h-48 rounded-xl" />
-      </div>
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-        <div className="shimmer h-72 rounded-xl" />
-        <div className="shimmer h-72 rounded-xl" />
-      </div>
-    </div>
-  );
+  return <DashboardSkeleton />;
 }
 
 export default function ClientDashboard() {
