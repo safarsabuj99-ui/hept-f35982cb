@@ -64,19 +64,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify user owns this campaign via ad_account_clients
-    const { data: ownership } = await supabase
-      .from("ad_account_clients")
-      .select("id")
-      .eq("ad_account_id", campaign.ad_account_id)
-      .eq("client_id", user.id)
+    // Verify user owns this campaign via ad_account_clients OR is an admin
+    const { data: roleData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
       .maybeSingle();
 
-    if (!ownership) {
-      return new Response(JSON.stringify({ error: "You don't have permission to pause this campaign" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const isAdmin = !!roleData;
+
+    if (!isAdmin) {
+      const { data: ownership } = await supabase
+        .from("ad_account_clients")
+        .select("id")
+        .eq("ad_account_id", campaign.ad_account_id)
+        .eq("client_id", user.id)
+        .maybeSingle();
+
+      if (!ownership) {
+        return new Response(JSON.stringify({ error: "You don't have permission to pause this campaign" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Get API integration credentials
