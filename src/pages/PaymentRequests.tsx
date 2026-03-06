@@ -92,15 +92,60 @@ export default function PaymentRequests() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchRequests(); }, []);
+  const fetchDeposits = async () => {
+    const { data: txns } = await (supabase
+      .from("transactions")
+      .select("*")
+      .eq("type", "credit") as any)
+      .eq("status", "pending_approval")
+      .order("created_at", { ascending: false });
+
+    if (!txns || txns.length === 0) {
+      setDeposits([]);
+      setDepositsLoading(false);
+      return;
+    }
+
+    const userIds = [...new Set([...txns.map((t: any) => t.client_id), ...txns.map((t: any) => t.created_by)])];
+    const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", userIds);
+    const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name]));
+
+    setDeposits(
+      txns.map((t: any) => ({
+        ...t,
+        client_name: nameMap[t.client_id] || "Unknown",
+        creator_name: nameMap[t.created_by] || "Unknown",
+      }))
+    );
+    setDepositsLoading(false);
+  };
+
+  useEffect(() => { fetchRequests(); fetchDeposits(); }, []);
 
   useEffect(() => {
     const channel = supabase
       .channel("payment-requests-admin")
       .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, () => fetchRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchDeposits())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const handleDepositAction = async (id: string, status: "completed" | "rejected") => {
+    setProcessing(id);
+    const { error } = await supabase
+      .from("transactions")
+      .update({ status } as any)
+      .eq("id", id);
+
+    setProcessing(null);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: status === "completed" ? "Approved" : "Rejected", description: `Deposit ${status}` });
+      fetchDeposits();
+    }
+  };
 
   const openConfirm = async (request: PaymentRequest, action: "approved" | "rejected") => {
     setAdminNote("");
