@@ -14,6 +14,7 @@ import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-r
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TableSkeleton } from "@/components/ui/premium-skeletons";
 
 interface AgencyAccount {
   id: string;
