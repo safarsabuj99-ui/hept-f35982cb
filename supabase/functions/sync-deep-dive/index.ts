@@ -128,6 +128,14 @@ Deno.serve(async (req) => {
           return account.client_id;
         };
 
+        // Helper: convert BDT spend to USD using per-account or global rate
+        const isBDT = (account as any).account_currency === "BDT";
+        const bdtRate = isBDT ? ((account as any).exchange_rate ?? globalExchangeRate) : 1;
+        const convertSpend = (rawSpend: number): number => {
+          if (!isBDT) return rawSpend;
+          return Math.round((rawSpend / bdtRate) * 100) / 100;
+        };
+
         // Helper: upsert campaign into campaigns table (ID locking)
         const upsertCampaign = async (
           platformId: string,
