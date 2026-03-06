@@ -1,34 +1,37 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Combine Campaigns & Spend Report into One Page
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+Two separate nav items ("Campaigns" and "Spend Report") serve overlapping purposes — both list campaigns with platform filters. The user wants a single, smarter page.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Design
+Merge into one **"Campaigns"** page (`/admin/campaigns`) using **two tabs**:
 
-## Technical Change
+| Tab | Purpose |
+|-----|---------|
+| **Overview** | Campaign list with client assignment (current CampaignMapping) + status badges |
+| **Spend Analytics** | Aggregated spend metrics per campaign with date range filter, KPI summary cards (current SpendReport) |
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+Both tabs share a **common filter bar** at the top (Platform, Client).
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+## Changes
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### 1. `src/pages/CampaignMapping.tsx` — Rewrite as unified tabbed page
+- Add `Tabs` with "Overview" and "Spend Analytics"
+- **Overview tab**: Current campaign list with client assignment dropdowns (existing CampaignMapping logic)
+- **Spend Analytics tab**: Date range filter + KPI summary cards (Total Spend, Campaign Count) + spend table with Impressions, Clicks, Results, Spend, Days columns (existing SpendReport logic)
+- Shared filters (Platform, Client) apply to both tabs
+- Single data fetch: load campaigns, daily_metrics, clients once
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### 2. Remove `src/pages/SpendReport.tsx`
+- Delete the file entirely
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### 3. `src/App.tsx`
+- Remove the SpendReport import and `/admin/spend-report` route
+- Keep `/admin/campaigns` pointing to CampaignMapping
 
-No database or edge function changes needed.
+### 4. `src/components/AdminLayout.tsx`
+- Remove the "Spend Report" nav item (line 25)
+- The "Campaigns" nav item stays
+
