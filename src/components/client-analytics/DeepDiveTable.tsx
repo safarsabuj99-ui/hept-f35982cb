@@ -225,8 +225,13 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     }),
   ], [pausingId]);
 
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
   const table = useReactTable({
-    data: filteredData,
+    data: paginatedData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
