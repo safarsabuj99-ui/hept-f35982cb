@@ -245,7 +245,18 @@ export default function ClientReports() {
             )}
           </TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-        </TabsList>
+      </TabsList>
+
+        <TabsContent value="live">
+          <DeepDiveTable data={campaignRows} onCampaignPaused={fetchData} />
+        </TabsContent>
+
+        <TabsContent value="overview">
+          <div className="space-y-6">
+            <SalesFunnel impressions={totals.impressions} clicks={totals.clicks} results={totals.results} />
+            <PlatformComparison data={platformStats} />
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );
