@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Users, ChevronRight, Plus } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
+import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
 
 interface ClientRow {
   user_id: string;
