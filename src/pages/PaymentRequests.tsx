@@ -276,19 +276,36 @@ export default function PaymentRequests() {
                   <span className="text-muted-foreground">Amount Sent</span>
                   <span className="font-mono font-semibold">৳{fmt(confirmModal.request.amount_bdt)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm items-center">
                   <span className="text-muted-foreground">Platform</span>
-                  <span>
-                    {confirmModal.request.platform ? (
-                      <Badge variant="outline" className={`capitalize text-xs ${
-                        confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
-                        confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
-                        'bg-red-500/10 text-red-600 border-red-500/30'
-                      }`}>{confirmModal.request.platform}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground italic">Not specified</span>
-                    )}
-                  </span>
+                  {confirmModal.action === "approved" ? (
+                    <Select value={overriddenPlatform} onValueChange={(val) => {
+                      setOverriddenPlatform(val);
+                      const matchingRate = rateOptions.find(o => o.key === val);
+                      if (matchingRate) setSelectedRateKey(matchingRate.key);
+                    }}>
+                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="meta">Meta</SelectItem>
+                        <SelectItem value="tiktok">TikTok</SelectItem>
+                        <SelectItem value="google">Google</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span>
+                      {confirmModal.request.platform ? (
+                        <Badge variant="outline" className={`capitalize text-xs ${
+                          confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
+                          confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
+                          'bg-red-500/10 text-red-600 border-red-500/30'
+                        }`}>{confirmModal.request.platform}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground italic">Not specified</span>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Method</span>
