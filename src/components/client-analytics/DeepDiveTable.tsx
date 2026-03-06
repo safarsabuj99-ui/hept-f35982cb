@@ -348,6 +348,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         </Table>
       </div>
 
+      <TablePagination
+        totalItems={filteredData.length}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
+
       <AlertDialog open={!!confirmPause} onOpenChange={() => setConfirmPause(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
