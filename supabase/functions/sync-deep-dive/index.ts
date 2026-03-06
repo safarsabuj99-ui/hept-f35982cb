@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
                 ad_account_id: account.id,
                 client_id: clientId,
                 date: dataDate,
-                impressions, clicks, ctr, cpc, spend, results,
+                impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
                 conversion_value: conversionValue, roas,
                 status: metaCampaignStatus,
                 synced_at: new Date().toISOString(),
