@@ -332,10 +332,10 @@ export default function PaymentRequests() {
                             <div className="flex items-center gap-2">
                               <RadioGroupItem value={opt.key} id={`rate-${opt.key}`} />
                               <Label htmlFor={`rate-${opt.key}`} className="cursor-pointer font-normal">
-                                {opt.label}
-                                {confirmModal.request?.platform && opt.key === confirmModal.request.platform && (
-                                  <span className="ml-1.5 text-xs text-primary font-medium">(matches request)</span>
-                                )}
+                                 {opt.label}
+                                {overriddenPlatform && opt.key === overriddenPlatform && (
+                                   <span className="ml-1.5 text-xs text-primary font-medium">(matches platform)</span>
+                                 )}
                               </Label>
                             </div>
                             <span className="font-mono text-sm text-muted-foreground">৳{opt.rate}</span>
