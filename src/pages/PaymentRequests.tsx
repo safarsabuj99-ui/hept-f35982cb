@@ -42,6 +42,18 @@ interface PaymentRequest {
   client_name?: string;
 }
 
+interface PendingDeposit {
+  id: string;
+  client_id: string;
+  amount: number;
+  description: string | null;
+  date: string;
+  created_at: string;
+  created_by: string;
+  client_name?: string;
+  creator_name?: string;
+}
+
 export default function PaymentRequests() {
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +68,10 @@ export default function PaymentRequests() {
   const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [deposits, setDeposits] = useState<PendingDeposit[]>([]);
+  const [depositsLoading, setDepositsLoading] = useState(true);
+  const [depositPage, setDepositPage] = useState(1);
+  const [depositPageSize, setDepositPageSize] = useState(20);
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
