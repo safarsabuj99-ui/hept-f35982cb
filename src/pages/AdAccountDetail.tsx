@@ -83,6 +83,7 @@ export default function AdAccountDetail() {
       setThresholdLimit(String(a.threshold_limit ?? "250"));
       setNextBillingDate(a.next_billing_date || "");
       setCardLast4(a.card_last_4 || "");
+      setExchangeRate(a.exchange_rate ? String(a.exchange_rate) : "");
       setIsActive(a.is_active);
 
       // Load integration name
