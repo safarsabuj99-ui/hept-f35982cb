@@ -112,8 +112,9 @@ export default function PaymentRequests() {
       if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
 
       setRateOptions(options);
-      // Auto-select matching platform rate if request has a platform
-      const matchingKey = request.platform && options.find(o => o.key === request.platform) ? request.platform : options[0]?.key;
+      // Auto-select matching platform rate
+      const platform = request.platform || "";
+      const matchingKey = platform && options.find(o => o.key === platform) ? platform : options[0]?.key;
       setSelectedRateKey(matchingKey ?? "default");
       setAgencyAccounts((accRes.data as any[]) ?? []);
       setRateLoading(false);
