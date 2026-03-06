@@ -69,16 +69,29 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [pausingId, setPausingId] = useState<string | null>(null);
   const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
 
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const uniqueStatuses = useMemo(() => {
+    const set = new Set(data.map((r) => r.status));
+    return Array.from(set).sort();
+  }, [data]);
+
   const filteredData = useMemo(() => {
-    if (!searchQuery.trim()) return data;
-    const q = searchQuery.toLowerCase();
-    return data.filter(
-      (r) =>
-        r.campaign_name.toLowerCase().includes(q) ||
-        r.platform.toLowerCase().includes(q) ||
-        (r.ad_account_name && r.ad_account_name.toLowerCase().includes(q))
-    );
-  }, [data, searchQuery]);
+    let filtered = data;
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((r) => r.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (r) =>
+          r.campaign_name.toLowerCase().includes(q) ||
+          r.platform.toLowerCase().includes(q) ||
+          (r.ad_account_name && r.ad_account_name.toLowerCase().includes(q))
+      );
+    }
+    return filtered;
+  }, [data, searchQuery, statusFilter]);
 
   const handlePause = async (row: CampaignRow) => {
     if (!row.campaign_id) return;
