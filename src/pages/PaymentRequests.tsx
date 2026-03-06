@@ -126,6 +126,7 @@ export default function PaymentRequests() {
     const reqId = confirmModal.request.id;
     setProcessing(reqId);
 
+    const platformToSend = overriddenPlatform || confirmModal.request.platform || undefined;
     const { data, error } = await supabase.functions.invoke("approve-payment", {
       body: {
         request_id: reqId,
@@ -133,6 +134,7 @@ export default function PaymentRequests() {
         admin_note: adminNote || undefined,
         selected_rate: selectedRate?.rate ?? undefined,
         received_in_account_id: selectedAccountId || undefined,
+        platform_override: platformToSend,
       },
     });
 
