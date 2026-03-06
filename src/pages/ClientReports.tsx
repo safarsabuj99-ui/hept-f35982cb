@@ -11,7 +11,7 @@ import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDi
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target, Radio } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

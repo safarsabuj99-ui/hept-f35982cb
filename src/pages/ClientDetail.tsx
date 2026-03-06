@@ -19,7 +19,7 @@ import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
 interface PricingConfig {
