@@ -71,6 +71,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
 
   const uniqueStatuses = useMemo(() => {
     const set = new Set(data.map((r) => r.status));
