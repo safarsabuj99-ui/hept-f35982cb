@@ -293,7 +293,9 @@ Deno.serve(async (req) => {
               }
             }
 
-            const roas = spend > 0 ? Math.round((conversionValue / spend) * 100) / 100 : 0;
+            const spendUsd = convertSpend(spend);
+            const cpcUsd = convertSpend(cpc);
+            const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
             const platformId = `meta_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, rawCampaignId);
 
@@ -304,7 +306,7 @@ Deno.serve(async (req) => {
 
             // Upsert daily metrics
             await upsertMetrics(campaignDbId, dataDate, {
-              spend, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc, roas,
+              spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
             });
 
             // Also write to legacy campaign_performance for backward compatibility
