@@ -105,7 +105,7 @@ export default function AdAccounts() {
       setForm({
         platform_name: "", ad_account_id: "", account_currency: "USD",
         daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
-        next_billing_date: "", card_last_4: "",
+        next_billing_date: "", card_last_4: "", exchange_rate: "",
       });
       fetchData();
     }
