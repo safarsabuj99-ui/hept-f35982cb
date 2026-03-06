@@ -109,6 +109,7 @@ export default function ClientReports() {
           platform: row.campaign?.platform || "unknown",
           status: row.campaign?.status ?? "active",
           ad_account_name: adAccountId ? adAccountMap[adAccountId] || "" : "",
+          campaign_id: row.campaign?.id, // DB UUID for pause action
           impressions: 0,
           clicks: 0,
           spend: 0,
