@@ -90,6 +90,7 @@ export default function PaymentRequests() {
     setRateOptions([]);
     setSelectedRateKey("");
     setSelectedAccountId("");
+    setOverriddenPlatform(request.platform || "");
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
