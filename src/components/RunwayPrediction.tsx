@@ -31,7 +31,7 @@ export function RunwayPrediction() {
     if (clientIds.length === 0) { setLoading(false); return; }
 
     const [profilesRes, txnsRes, accountsRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_threshold_pct").in("user_id", clientIds),
+      supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_balance_usd").in("user_id", clientIds),
       supabase.from("transactions").select("client_id, type, amount, status"),
       supabase.from("ad_accounts").select("id, client_id").eq("is_active", true),
     ]);
