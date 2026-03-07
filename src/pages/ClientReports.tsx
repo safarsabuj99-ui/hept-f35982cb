@@ -21,6 +21,7 @@ export default function ClientReports() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
