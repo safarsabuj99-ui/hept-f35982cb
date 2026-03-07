@@ -505,9 +505,12 @@ Deno.serve(async (req) => {
             const platformId = `tiktok_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
 
+            const tiktokStatusConfirmed = rawCampaignId in tiktokStatusMap;
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
-            const campaignDbId = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId);
-            if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+            const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed);
+            if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+            const campaignDbId = campaignResult.id;
+            const finalTiktokStatus = campaignResult.status;
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
