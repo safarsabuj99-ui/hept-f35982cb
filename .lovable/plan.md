@@ -1,45 +1,34 @@
 
 
-# Add Date Range Filter to Admin Dashboard
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What Changes
-Add the existing `DateRangeFilter` component to the Admin Dashboard header area, defaulting to "Today". The selected date range will filter all date-sensitive data: KPI cards (spend, collections), ProfitabilityTable, ProfitLossWidget, SpendTrendChart, RevenueVsCostChart, and the client spend in ClientOverviewTable.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. `src/pages/AdminDashboard.tsx`
-- Import `DateRangeFilter` and its `DateRange`/`DatePreset` types
-- Add `dateRange` and `datePreset` state (default: today)
-- Place `<DateRangeFilter>` below the `DashboardHeader`
-- Refactor `fetchData` to accept and use `dateRange` for all date-sensitive queries (`daily_metrics`, `transactions` date filtering)
-- Pass `dateRange` as props to child components that fetch their own data
+## Technical Change
 
-### 2. `src/components/ProfitLossWidget.tsx`
-- Accept optional `dateRange?: { from: Date; to: Date }` prop
-- Filter `daily_metrics` query with `.gte("data_date", ...)` and `.lte("data_date", ...)` when range is provided
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 3. `src/components/dashboard/ProfitabilityTable.tsx`
-- Accept optional `dateRange` prop
-- Apply date filter to `daily_metrics` query
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 4. `src/components/SpendTrendChart.tsx`
-- Accept optional `dateRange` prop
-- Use range to constrain the date window instead of hardcoded 30-day lookback
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 5. `src/components/dashboard/RevenueVsCostChart.tsx`
-- Accept optional `dateRange` prop
-- Filter `daily_ad_spend` query by date range
-
-### 6. `src/components/dashboard/ClientOverviewTable.tsx`
-- Already receives computed data from parent — no change needed (parent filters the data)
-
-### Files Summary
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Add DateRangeFilter, pass range to all children and own queries |
-| `src/components/ProfitLossWidget.tsx` | Accept `dateRange` prop, filter metrics |
-| `src/components/dashboard/ProfitabilityTable.tsx` | Accept `dateRange` prop, filter metrics |
-| `src/components/SpendTrendChart.tsx` | Accept `dateRange` prop, filter by range |
-| `src/components/dashboard/RevenueVsCostChart.tsx` | Accept `dateRange` prop, filter by range |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.

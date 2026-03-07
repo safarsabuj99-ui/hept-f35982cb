@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { format } from "date-fns";
 
 interface DayData {
   date: string;
@@ -10,16 +11,30 @@ interface DayData {
   billed: number;
 }
 
-export function RevenueVsCostChart() {
+interface RevenueVsCostChartProps {
+  dateRange?: { from: Date; to: Date } | null;
+}
+
+export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
   const [data, setData] = useState<DayData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: spendData } = await supabase
+      setLoading(true);
+
+      let query = supabase
         .from("daily_ad_spend")
         .select("date, raw_spend_amount, raw_currency, exchange_rate_used, final_billable_usd")
         .order("date", { ascending: true });
+
+      if (dateRange) {
+        query = query
+          .gte("date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("date", format(dateRange.to, "yyyy-MM-dd"));
+      }
+
+      const { data: spendData } = await query;
 
       const grouped: Record<string, { rawCost: number; billed: number }> = {};
       for (const row of spendData ?? []) {
@@ -35,7 +50,6 @@ export function RevenueVsCostChart() {
       setData(
         Object.entries(grouped)
           .sort(([a], [b]) => a.localeCompare(b))
-          .slice(-30)
           .map(([date, v]) => ({
             date,
             rawCost: Math.round(v.rawCost * 100) / 100,
@@ -45,7 +59,7 @@ export function RevenueVsCostChart() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [dateRange]);
 
   if (loading) return <Skeleton className="h-[320px]" />;
   if (data.length === 0) return null;
@@ -53,7 +67,7 @@ export function RevenueVsCostChart() {
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Revenue vs Cost (30 Days)</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">Revenue vs Cost</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={250}>

@@ -3,19 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { format } from "date-fns";
 
 interface DayData { date: string; spend: number; }
 
-export function SpendTrendChart({ clientId }: { clientId?: string }) {
+interface SpendTrendChartProps {
+  clientId?: string;
+  dateRange?: { from: Date; to: Date } | null;
+}
+
+export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
   const [data, setData] = useState<DayData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetch = async () => {
+      setLoading(true);
       let campaignIds: string[] = [];
 
       if (clientId) {
-        // Get ad accounts for this client via junction table
         const { data: links } = await supabase
           .from("ad_account_clients")
           .select("ad_account_id")
@@ -29,18 +35,25 @@ export function SpendTrendChart({ clientId }: { clientId?: string }) {
           campaignIds = camps?.map((c: any) => c.id) ?? [];
         }
       } else {
-        // All campaigns
         const { data: camps } = await supabase.from("campaigns").select("id");
         campaignIds = camps?.map((c: any) => c.id) ?? [];
       }
 
-      if (campaignIds.length === 0) { setLoading(false); return; }
+      if (campaignIds.length === 0) { setData([]); setLoading(false); return; }
 
-      const { data: metricsData } = await supabase
+      let query = supabase
         .from("daily_metrics")
         .select("data_date, spend")
         .in("campaign_id", campaignIds)
         .order("data_date", { ascending: true });
+
+      if (dateRange) {
+        query = query
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      }
+
+      const { data: metricsData } = await query;
 
       const grouped: Record<string, number> = {};
       for (const row of metricsData ?? []) {
@@ -50,13 +63,12 @@ export function SpendTrendChart({ clientId }: { clientId?: string }) {
       setData(
         Object.entries(grouped)
           .sort(([a], [b]) => a.localeCompare(b))
-          .slice(-30)
           .map(([date, spend]) => ({ date, spend: Math.round(spend * 100) / 100 }))
       );
       setLoading(false);
     };
     fetch();
-  }, [clientId]);
+  }, [clientId, dateRange]);
 
   if (loading) return <Skeleton className="h-[320px]" />;
   if (data.length === 0) return null;
@@ -64,7 +76,7 @@ export function SpendTrendChart({ clientId }: { clientId?: string }) {
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Spend Trend (Last 30 Days)</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">Spend Trend</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={250}>
