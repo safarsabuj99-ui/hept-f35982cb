@@ -219,6 +219,8 @@ Deno.serve(async (req) => {
     }
 
     // Only update fields that were actually fetched
+    // IMPORTANT: Never overwrite threshold_limit or next_billing_date if the API didn't return them
+    // These may have been set manually by the admin
     const updatePayload: Record<string, any> = {};
     const updatedFields: string[] = [];
 

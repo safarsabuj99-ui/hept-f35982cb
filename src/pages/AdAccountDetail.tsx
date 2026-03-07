@@ -528,43 +528,98 @@ export default function AdAccountDetail() {
             </CardContent>
           </Card>
 
-          {/* You'll pay when — for threshold/postpaid accounts */}
-          {isThreshold && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-medium">You'll pay when</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
-                    <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Your balance reaches</p>
-                      <p className="text-lg font-semibold mt-0.5">
-                        {account.threshold_limit ? fmt(account.threshold_limit) : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
-                    <CalendarDays className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">And on this date</p>
-                      <p className="text-lg font-semibold mt-0.5">
-                        {account.next_billing_date
-                          ? format(new Date(account.next_billing_date), "MMM d, yyyy")
-                          : "—"}
-                      </p>
-                      {daysUntilBill !== null && (
-                        <p className={`text-xs mt-0.5 ${daysUntilBill <= 2 ? "text-destructive" : "text-muted-foreground"}`}>
-                          {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill} days away`}
+          {/* You'll pay when — shown for all billing types */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-medium">You'll pay when</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Threshold amount */}
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                  <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">Your balance reaches</p>
+                    {editingThreshold ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          className="h-8 w-28"
+                          value={editThresholdVal}
+                          onChange={(e) => setEditThresholdVal(e.target.value)}
+                          placeholder="250"
+                          min="0"
+                          step="5"
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={savingInline} onClick={() => saveInlineField("threshold_limit", editThresholdVal)}>
+                          <Check className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingThreshold(false)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-lg font-semibold">
+                          {account.threshold_limit ? fmt(account.threshold_limit) : "—"}
                         </p>
-                      )}
-                    </div>
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-60 hover:opacity-100" onClick={() => { setEditThresholdVal(String(account.threshold_limit ?? "")); setEditingThreshold(true); }}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                    {!editingThreshold && account.threshold_limit && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Set manually</p>
+                    )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                {/* Next billing date */}
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                  <CalendarDays className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">And on this date</p>
+                    {editingBillingDate ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="date"
+                          className="h-8 w-40"
+                          value={editBillingDateVal}
+                          onChange={(e) => setEditBillingDateVal(e.target.value)}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={savingInline} onClick={() => saveInlineField("next_billing_date", editBillingDateVal)}>
+                          <Check className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingBillingDate(false)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-lg font-semibold">
+                          {account.next_billing_date
+                            ? format(new Date(account.next_billing_date), "MMM d, yyyy")
+                            : "—"}
+                        </p>
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-60 hover:opacity-100" onClick={() => { setEditBillingDateVal(account.next_billing_date || ""); setEditingBillingDate(true); }}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                    {!editingBillingDate && daysUntilBill !== null && (
+                      <p className={`text-xs mt-0.5 ${daysUntilBill <= 2 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill} days away`}
+                      </p>
+                    )}
+                    {!editingBillingDate && account.next_billing_date && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Set manually</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* You'll pay using — payment method */}
           {account.card_last_4 && (
