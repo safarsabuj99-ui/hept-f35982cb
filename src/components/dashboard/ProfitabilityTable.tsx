@@ -3,7 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp } from "lucide-react";
+import { Loader2, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+interface PlatformDetail {
+  platform: string;
+  spendUsd: number;
+  billingRate: number;
+  gap: number;
+  profitBdt: number;
+  marginPct: number;
+}
 
 interface ProfitRow {
   clientName: string;
@@ -12,11 +22,25 @@ interface ProfitRow {
   cogsBdt: number;
   profitBdt: number;
   marginPct: number;
+  platforms: PlatformDetail[];
 }
+
+const PLATFORM_LABELS: Record<string, string> = {
+  meta: "Meta",
+  tiktok: "TikTok",
+  google: "Google",
+};
+
+const PLATFORM_COLORS: Record<string, string> = {
+  meta: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  tiktok: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+  google: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+};
 
 export function ProfitabilityTable() {
   const [rows, setRows] = useState<ProfitRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     fetchData();
@@ -80,11 +104,28 @@ export function ProfitabilityTable() {
       const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
 
       let revenueBdt = 0, cogsBdt = 0, totalSpend = 0;
+      const platforms: PlatformDetail[] = [];
+
       for (const [platform, spendUsd] of Object.entries(platformSpends)) {
         const rate = Number(rates[platform] || 120);
-        revenueBdt += (spendUsd as number) * rate;
-        cogsBdt += (spendUsd as number) * wac;
-        totalSpend += spendUsd as number;
+        const spend = spendUsd as number;
+        const pRevenue = spend * rate;
+        const pCogs = spend * wac;
+        const pProfit = pRevenue - pCogs;
+        const pMargin = pRevenue > 0 ? (pProfit / pRevenue) * 100 : 0;
+
+        revenueBdt += pRevenue;
+        cogsBdt += pCogs;
+        totalSpend += spend;
+
+        platforms.push({
+          platform,
+          spendUsd: Math.round(spend * 100) / 100,
+          billingRate: Math.round(rate * 100) / 100,
+          gap: Math.round((rate - wac) * 100) / 100,
+          profitBdt: Math.round(pProfit),
+          marginPct: Math.round(pMargin * 10) / 10,
+        });
       }
 
       const profitBdt = revenueBdt - cogsBdt;
@@ -97,11 +138,16 @@ export function ProfitabilityTable() {
         cogsBdt: Math.round(cogsBdt),
         profitBdt: Math.round(profitBdt),
         marginPct: Math.round(marginPct * 10) / 10,
+        platforms: platforms.sort((a, b) => b.profitBdt - a.profitBdt),
       });
     }
 
     setRows(result.sort((a, b) => b.profitBdt - a.profitBdt));
     setLoading(false);
+  };
+
+  const toggleExpand = (idx: number) => {
+    setExpanded((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
   return (
@@ -120,6 +166,7 @@ export function ProfitabilityTable() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8"></TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead className="text-right">Spend (USD)</TableHead>
                 <TableHead className="text-right">Revenue (BDT)</TableHead>
@@ -130,18 +177,52 @@ export function ProfitabilityTable() {
             </TableHeader>
             <TableBody>
               {rows.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell className="font-medium">{r.clientName}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.revenueBdt.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.cogsBdt.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
-                      {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow
+                    key={`client-${i}`}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => toggleExpand(i)}
+                  >
+                    <TableCell className="w-8 px-2">
+                      {expanded[i] ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{r.clientName}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">৳{r.revenueBdt.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">৳{r.cogsBdt.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
+                        {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                  {expanded[i] && r.platforms.map((p) => (
+                    <TableRow key={`${i}-${p.platform}`} className="bg-muted/30">
+                      <TableCell></TableCell>
+                      <TableCell className="pl-6">
+                        <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
+                          {PLATFORM_LABELS[p.platform] || p.platform}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">${p.spendUsd.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">৳{Math.round(p.spendUsd * p.billingRate).toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                        <span className="text-[10px]">Rate: ৳{p.billingRate} | Gap: ৳{p.gap}</span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">৳{p.profitBdt.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px]">
+                          {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
               ))}
             </TableBody>
           </Table>
