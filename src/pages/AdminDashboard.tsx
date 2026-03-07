@@ -70,12 +70,12 @@ export default function AdminDashboard() {
   }, [dateRange]);
 
   const fetchData = useCallback(async () => {
-    // Determine date strings for queries
-    const rangeFrom = dateRange ? toISODate(dateRange.from) : today;
-    const rangeTo = dateRange ? toISODate(dateRange.to) : today;
-
-    let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id")
-      .gte("data_date", rangeFrom).lte("data_date", rangeTo);
+    let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id");
+    if (dateRange) {
+      spendQuery = spendQuery
+        .gte("data_date", toISODate(dateRange.from))
+        .lte("data_date", toISODate(dateRange.to));
+    }
 
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, email, business_name"),
@@ -141,9 +141,11 @@ export default function AdminDashboard() {
     const rangeCollTxns = transactions.filter((t: any) => {
       if (t.type !== "credit" || t.status !== "completed" || !isNotTransfer(t)) return false;
       if (dateRange) {
-        return t.date >= rangeFrom && t.date <= rangeTo;
+        const from = toISODate(dateRange.from);
+        const to = toISODate(dateRange.to);
+        return t.date >= from && t.date <= to;
       }
-      return t.date === today;
+      return true; // All Time: include all
     });
     const rangeCollect = rangeCollTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
 
