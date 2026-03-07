@@ -16,6 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
+import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
