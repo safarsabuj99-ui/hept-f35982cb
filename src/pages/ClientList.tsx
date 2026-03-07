@@ -47,45 +47,72 @@ export default function ClientList() {
       if (!roles?.length) { setLoading(false); return; }
 
       const ids = roles.map((r) => r.user_id);
-      const [profilesRes, spendRes, accRes] = await Promise.all([
+      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
           .in("user_id", ids),
-        supabase.from("daily_ad_spend").select("ad_account_id, raw_spend_amount, raw_currency, exchange_rate_used, final_billable_usd"),
-        supabase.from("ad_accounts").select("id, client_id"),
+        supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
+        supabase.from("campaigns").select("id, ad_account_id, platform"),
+        supabase.from("daily_metrics").select("campaign_id, spend"),
+        supabase.from("ad_account_clients").select("ad_account_id, client_id"),
       ]);
 
       setClients(profilesRes.data || []);
 
-      // Build margin map
-      const accToClient: Record<string, string> = {};
-      for (const a of (accRes.data ?? []) as any[]) if (a.client_id) accToClient[a.id] = a.client_id;
+      // WAC
+      let totalBdt = 0, totalUsd = 0;
+      for (const p of (purchasesRes.data ?? []) as any[]) {
+        totalBdt += Number(p.bdt_amount_paid);
+        totalUsd += Number(p.usd_received);
+      }
+      const wac = totalUsd > 0 ? totalBdt / totalUsd : 128;
 
-      const agg: Record<string, { rawBdt: number; billedUsd: number; rateSum: number; count: number }> = {};
-      for (const s of (spendRes.data ?? []) as any[]) {
-        const clientId = accToClient[s.ad_account_id];
-        if (!clientId) continue;
-        if (!agg[clientId]) agg[clientId] = { rawBdt: 0, billedUsd: 0, rateSum: 0, count: 0 };
-        if (s.raw_currency === "BDT") {
-          agg[clientId].rawBdt += Number(s.raw_spend_amount);
-        } else {
-          agg[clientId].rawBdt += Number(s.raw_spend_amount) * Number(s.exchange_rate_used);
+      // Mappings
+      const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
+      for (const c of (campaignsRes.data ?? []) as any[]) {
+        campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
+      }
+      const accToClients: Record<string, string[]> = {};
+      for (const ac of (accClientsRes.data ?? []) as any[]) {
+        if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
+        accToClients[ac.ad_account_id].push(ac.client_id);
+      }
+      const profileMap: Record<string, any> = {};
+      for (const pr of (profilesRes.data ?? []) as any[]) profileMap[pr.user_id] = pr;
+
+      // Aggregate spend per client per platform
+      const clientPlatformSpend: Record<string, Record<string, number>> = {};
+      for (const m of (metricsRes.data ?? []) as any[]) {
+        const camp = campaignMap[m.campaign_id];
+        if (!camp) continue;
+        const clients = accToClients[camp.ad_account_id] || [];
+        for (const cid of clients) {
+          if (!ids.includes(cid)) continue;
+          if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
+          clientPlatformSpend[cid][camp.platform] = (clientPlatformSpend[cid][camp.platform] || 0) + Number(m.spend);
         }
-        agg[clientId].billedUsd += Number(s.final_billable_usd);
-        agg[clientId].rateSum += Number(s.exchange_rate_used);
-        agg[clientId].count++;
       }
 
+      // Calculate margin using gap method
       const marginMap: Record<string, MarginData> = {};
-      for (const [cid, data] of Object.entries(agg)) {
-        const avgRate = data.count > 0 ? data.rateSum / data.count : 1;
+      for (const [cid, platformSpends] of Object.entries(clientPlatformSpend)) {
+        const profile = profileMap[cid];
+        if (!profile) continue;
+        const pricingConfig = profile.pricing_config as any;
+        const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+
+        let revenueBdt = 0, cogsBdt = 0;
+        for (const [platform, spendUsd] of Object.entries(platformSpends)) {
+          const rate = Number(rates[platform] || 120);
+          revenueBdt += (spendUsd as number) * rate;
+          cogsBdt += (spendUsd as number) * wac;
+        }
+        const profitBdt = revenueBdt - cogsBdt;
         marginMap[cid] = {
-          billedUsd: Math.round(data.billedUsd * 100) / 100,
-          rawBdt: Math.round(data.rawBdt * 100) / 100,
-          margin: data.rawBdt > 0
-            ? Math.round(((data.billedUsd * avgRate - data.rawBdt) / data.rawBdt) * 10000) / 100
-            : 0,
+          billedUsd: Math.round(revenueBdt * 100) / 100,
+          rawBdt: Math.round(cogsBdt * 100) / 100,
+          margin: revenueBdt > 0 ? Math.round((profitBdt / revenueBdt) * 1000) / 10 : 0,
         };
       }
       setMargins(marginMap);
@@ -97,8 +124,8 @@ export default function ClientList() {
   useEffect(() => { setCurrentPage(1); }, [search]);
 
   const getPricingLabel = (config: any) => {
-    if (!config?.platform_rates) return "Not Set";
-    const pr = config.platform_rates;
+    const pr = config?.flat_rates || config?.platform_rates;
+    if (!pr) return "Not Set";
     const parts = [];
     if (pr.meta) parts.push(`M:${pr.meta}`);
     if (pr.tiktok) parts.push(`T:${pr.tiktok}`);
