@@ -1,34 +1,20 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: Profit Tab Not Loading Data on First Render
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Root Cause
+`ClientProfitTab` relies on `ClientDateFilter` to call `onRangeChange` on mount to trigger the initial `fetchData()`. But the mount-time `useEffect` was removed from `ClientDateFilter` (as part of the earlier date fix). The `useEffect` in `ClientProfitTab` (line 42-44) is empty — it does nothing.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+Result: First click on Profit tab → loading spinner forever. Second click re-mounts the component and sometimes works due to React state quirks.
 
-## Technical Change
+## Fix
+Replace the empty `useEffect` in `ClientProfitTab` with one that calls `fetchData(dateRange)` on mount:
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+```typescript
+useEffect(() => {
+  fetchData(dateRange);
+}, [clientId]);
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+This is a one-line fix in `src/components/ClientProfitTab.tsx` (lines 42-44). The `dateRange` is already initialized with today's range, so this will correctly fetch today's data on first render.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
