@@ -10,44 +10,46 @@ const corsHeaders = {
 async function syncMetaBilling(adAccountId: string, token: string) {
   const result: Record<string, any> = {};
 
-  let fundingType: number | null = null;
-
-  // 1. Account-level fields: spend_cap, amount_spent, balance, funding_source_details
+  // 1. Account-level fields
   try {
     const url = `https://graph.facebook.com/v21.0/${adAccountId}?fields=spend_cap,amount_spent,balance,currency,account_status,funding_source_details&access_token=${token}`;
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       console.log("Meta account-level response:", JSON.stringify(data));
-      // spend_cap is in cents (string), 0 means no limit
+
+      // spend_cap: 0 means no limit, value is in cents
       if (data.spend_cap) {
         const capCents = Number(data.spend_cap);
         result.account_spending_limit = capCents > 0 ? capCents / 100 : null;
       }
-      // Map funding_source_details.type to billing_type
+
+      // balance field: for postpaid/threshold accounts, negative = amount owed (outstanding)
+      // Meta returns balance in cents as a string. Negative means outstanding debt.
+      if (data.balance !== undefined) {
+        const balanceCents = Number(data.balance);
+        // Negative balance = outstanding amount owed. Convert to positive for display.
+        result.current_threshold_spend = balanceCents < 0 ? Math.abs(balanceCents) / 100 : 0;
+        console.log("Balance (cents):", balanceCents, "Outstanding:", result.current_threshold_spend);
+      }
+
+      // Extract payment method info from funding_source_details
       if (data.funding_source_details) {
         const fsd = data.funding_source_details;
         console.log("funding_source_details:", JSON.stringify(fsd));
-        fundingType = fsd.type ?? null;
-        const typeMap: Record<number, string> = {
-          1: "credit_card",
-          2: "threshold_postpaid",
-          3: "prepaid",
-        };
-        if (fsd.type && typeMap[fsd.type]) {
-          result.billing_type = typeMap[fsd.type];
-        }
-        if (fsd.type === 2 && fsd.amount) {
-          result.threshold_limit = Number(fsd.amount) / 100;
-        }
-        // Store card display string (e.g. "VISA *9415") in card_last_4
+
+        // Store card/payment display string (e.g. "VISA *9415")
         if (fsd.display_string) {
           result.card_last_4 = fsd.display_string;
         }
-      }
-      // For non-threshold accounts, use account-level amount_spent as outstanding balance
-      if (fundingType !== 2 && data.amount_spent !== undefined) {
-        result.current_threshold_spend = Number(data.amount_spent) / 100;
+
+        // type 3 = prepaid (no threshold), otherwise assume threshold billing
+        if (fsd.type === 3) {
+          result.billing_type = "prepaid";
+        } else {
+          // Both type 1 (credit card) and type 2 (direct debit) use threshold billing
+          result.billing_type = "threshold_postpaid";
+        }
       }
     } else {
       const errText = await res.text();
@@ -57,8 +59,8 @@ async function syncMetaBilling(adAccountId: string, token: string) {
     console.error("Meta account fetch error:", err);
   }
 
-  // 2. Billing cycle (only for threshold/postpaid accounts)
-  if (fundingType === 2) {
+  // 2. Billing cycle — always try for non-prepaid accounts
+  if (result.billing_type !== "prepaid") {
     try {
       const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
       const res = await fetch(url);
@@ -69,9 +71,6 @@ async function syncMetaBilling(adAccountId: string, token: string) {
         if (cycle) {
           if (cycle.threshold_amount) {
             result.threshold_limit = Number(cycle.threshold_amount) / 100;
-          }
-          if (cycle.amount_spent !== undefined) {
-            result.current_threshold_spend = Number(cycle.amount_spent) / 100;
           }
           if (cycle.end_time) {
             const d = typeof cycle.end_time === "number"
@@ -84,10 +83,10 @@ async function syncMetaBilling(adAccountId: string, token: string) {
         }
       } else {
         const errText = await res.text();
-        console.warn(`Meta billing cycle fetch skipped/failed (${res.status}):`, errText);
+        console.warn(`Meta billing cycle fetch (non-critical):`, errText);
       }
     } catch (err) {
-      console.error("Meta billing cycle fetch error:", err);
+      console.warn("Meta billing cycle fetch error:", err);
     }
   }
 
