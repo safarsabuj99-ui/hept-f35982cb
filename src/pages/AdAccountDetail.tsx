@@ -31,6 +31,7 @@ export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [account, setAccount] = useState<any>(null);
 
   // Editable fields
