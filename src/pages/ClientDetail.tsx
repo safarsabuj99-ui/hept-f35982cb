@@ -679,6 +679,11 @@ export default function ClientDetail() {
           </Card>
         </TabsContent>
 
+        {/* PROFIT TAB */}
+        <TabsContent value="profit">
+          <ClientProfitTab clientId={userId!} />
+        </TabsContent>
+
         {/* TRANSACTIONS TAB */}
         <TabsContent value="transactions">
           {/* Platform Sub-Balances + Transfer */}
