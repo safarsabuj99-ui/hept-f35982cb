@@ -36,7 +36,7 @@ export default function AdAccountDetail() {
   // Editable fields
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [dailyLimit, setDailyLimit] = useState("");
+  const [accountLimit, setAccountLimit] = useState("");
   const [billingType, setBillingType] = useState("prepaid");
   const [thresholdLimit, setThresholdLimit] = useState("");
   const [nextBillingDate, setNextBillingDate] = useState("");
