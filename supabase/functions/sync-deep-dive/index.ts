@@ -529,7 +529,7 @@ Deno.serve(async (req) => {
                 client_id: clientId,
                 date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
                 results: conversions, conversion_value: 0, roas,
-                status: tiktokCampaignStatus,
+                status: finalTiktokStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
