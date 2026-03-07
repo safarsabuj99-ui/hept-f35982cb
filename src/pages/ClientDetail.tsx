@@ -16,6 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
+import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
@@ -335,11 +336,12 @@ export default function ClientDetail() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7">
           <TabsTrigger value="profile" className="gap-1"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
           <TabsTrigger value="pricing" className="gap-1"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
           <TabsTrigger value="automation" className="gap-1"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
           <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
+          <TabsTrigger value="profit" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Profit</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
           <TabsTrigger value="transactions" className="gap-1"><Receipt className="h-3.5 w-3.5 hidden sm:inline" /> Transactions</TabsTrigger>
         </TabsList>
@@ -675,6 +677,11 @@ export default function ClientDetail() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* PROFIT TAB */}
+        <TabsContent value="profit">
+          <ClientProfitTab clientId={userId!} />
         </TabsContent>
 
         {/* TRANSACTIONS TAB */}
