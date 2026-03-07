@@ -370,28 +370,30 @@ export default function AdAccounts() {
                           )}
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
-                        <TableCell className="font-mono text-xs">${a.account_spending_limit ?? 250}</TableCell>
                         <TableCell>
-                          <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
-                            {isThreshold ? "Threshold" : "Prepaid"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {isThreshold ? (
-                            <div className="flex items-center gap-2 min-w-[120px]">
-                              <div className="relative h-2 w-16 overflow-hidden rounded-full bg-secondary">
+                          {isThreshold && a.threshold_limit > 0 ? (
+                            <div className="min-w-[140px]">
+                              <div className="flex justify-between text-[11px] font-mono mb-1">
+                                <span className={usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-warning" : "text-success"}>
+                                  ${(a.current_threshold_spend ?? 0).toFixed(2)}
+                                </span>
+                                <span className="text-muted-foreground">/ ${a.threshold_limit}</span>
+                              </div>
+                              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
                                 <div
-                                  className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-yellow-500" : "bg-emerald-500"}`}
+                                  className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-warning" : "bg-success"}`}
                                   style={{ width: `${Math.min(usagePct, 100)}%` }}
                                 />
                               </div>
-                              <span className={`text-xs font-mono ${getUsageColor(usagePct)}`}>
-                                {usagePct}%
-                              </span>
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
+                            {isThreshold ? "Threshold" : "Prepaid"}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {daysUntilBill !== null && daysUntilBill >= 0 ? (
