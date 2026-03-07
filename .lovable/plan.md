@@ -1,38 +1,34 @@
 
 
-# Fix: Date Filter Showing All-Time Data When "Today" Is Selected
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-Multiple pages initialize `dateRange` as `null` while the `DateRangeFilter` visually shows "Today" as active. Since we removed the mount-time `useEffect` from `DateRangeFilter`, these pages now fetch with `null` (all-time) on first render, creating a mismatch.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Affected Pages
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-| Page | Current Init | Fix |
-|------|-------------|-----|
-| `src/pages/FinanceDashboard.tsx` | `null` + `periodLabel: "All Time"` | Today's range + `"Today"` |
-| `src/pages/ExpenseManager.tsx` | `null` + `periodLabel: "All Time"` | Today's range + `"Today"` |
-| `src/pages/WalletInventory.tsx` | `null` + `periodLabel: "All Time"` | Today's range + `"Today"` |
-| `src/pages/CampaignMapping.tsx` | `null` | Today's range |
-| `src/components/ClientProfitTab.tsx` | `null` | Today's range |
+## Technical Change
 
-## Changes Per File
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-Each file gets the same pattern — initialize `dateRange` with today instead of `null`:
-
-```typescript
-// Before:
-const [dateRange, setDateRange] = useState<DateRange | null>(null);
-const [periodLabel, setPeriodLabel] = useState("All Time");
-
-// After:
-const [dateRange, setDateRange] = useState<DateRange | null>({
-  from: startOfDay(new Date()),
-  to: endOfDay(new Date())
-});
-const [periodLabel, setPeriodLabel] = useState("Today");
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-Add `startOfDay` and `endOfDay` imports from `date-fns` where not already imported.
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-For `CampaignMapping.tsx` and `ClientProfitTab.tsx` (no `periodLabel`), just fix the `dateRange` init.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

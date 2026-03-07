@@ -66,12 +66,7 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
   const activePreset = controlledPreset ?? internalPreset;
   const [customRange, setCustomRange] = useState<RDPDateRange | undefined>();
 
-  useEffect(() => {
-    if (!controlledPreset) {
-      const range = getPresetRange("today");
-      onRangeChange(range!, "today");
-    }
-  }, []);
+  // Parent initializes with today's range, no mount-time call needed
 
   const handlePreset = (preset: ClientDatePreset) => {
     setInternalPreset(preset);
