@@ -135,37 +135,6 @@ export default function AdAccounts() {
     }
   };
 
-  const addClientAssignment = async (accountId: string) => {
-    if (!newAssignClient || !newAssignKeyword.trim()) {
-      toast({ title: "Required", description: "Select a client and enter a mapping keyword", variant: "destructive" });
-      return;
-    }
-    setAssignSaving(true);
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert({
-      ad_account_id: accountId,
-      client_id: newAssignClient,
-      mapping_keyword: newAssignKeyword.trim(),
-    });
-    setAssignSaving(false);
-    if (error) {
-      toast({ title: "Error", description: error.message?.includes("duplicate") ? "Client already assigned to this account" : error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Assigned", description: "Client linked with keyword" });
-      setAddClientPopover(null);
-      setNewAssignClient("");
-      setNewAssignKeyword("");
-      fetchData();
-    }
-  };
-
-  const removeClientAssignment = async (assignmentId: string) => {
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).delete().eq("id", assignmentId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      fetchData();
-    }
-  };
 
   const toggleIntegration = (id: string) => {
     setSelectedIntegrations((prev) => {
