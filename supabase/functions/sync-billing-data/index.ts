@@ -243,6 +243,10 @@ Deno.serve(async (req) => {
       updatePayload.billing_type = billingData.billing_type;
       updatedFields.push("Billing Type");
     }
+    if (billingData.card_last_4 !== undefined) {
+      updatePayload.card_last_4 = billingData.card_last_4;
+      updatedFields.push("Payment Method");
+    }
 
     if (Object.keys(updatePayload).length > 0) {
       const { error: updateError } = await adminClient
