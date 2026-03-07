@@ -40,7 +40,7 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {
-    // Initial load handled by ClientDateFilter's onRangeChange callback
+    fetchData(dateRange);
   }, [clientId]);
 
   const handleDateChange = (range: ClientDateRange | null, preset: ClientDatePreset) => {
