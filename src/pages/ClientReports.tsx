@@ -56,6 +56,8 @@ export default function ClientReports() {
         .select("id, name, platform, status, ad_account_id")
         .in("ad_account_id", accIds);
 
+      setCampaigns(campaigns ?? []);
+
       if (campaigns && campaigns.length > 0) {
         const campaignIds = campaigns.map((c) => c.id);
 
