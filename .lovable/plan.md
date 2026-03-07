@@ -1,34 +1,30 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Show Collections in BDT (Original Payment Amount)
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The Collections KPI card currently sums `transactions.amount` which stores USD values. You want to see the original BDT amount that clients actually paid.
 
 ## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+Switch the collections calculation to query `payment_requests` (where `status = 'approved'`) and sum `amount_bdt` instead of using the USD-converted `transactions.amount`. Display with ৳ symbol.
 
-## Technical Change
+## Changes
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### `src/pages/AdminDashboard.tsx`
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+1. **Fetch payment_requests instead of filtering transactions for collections:**
+   - Add a query: `supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved")`
+   - Apply the same date range filter on `created_at`
+   - Sum `amount_bdt` for the total
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+2. **Update KPI display:**
+   - Change `$${todayCollections}` → `৳${todayCollections}` 
+   - Change subtitle from `"USD"` to `"BDT"`
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+3. **Update sparkline data:**
+   - Build `dailyCollMap` from approved `payment_requests.amount_bdt` grouped by date instead of from `transactions`
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/AdminDashboard.tsx` | Query `payment_requests` for BDT amounts, display with ৳ symbol |
 
-No database or edge function changes needed.
