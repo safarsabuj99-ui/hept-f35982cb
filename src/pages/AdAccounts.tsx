@@ -342,8 +342,6 @@ export default function AdAccounts() {
                       ? differenceInDays(new Date(a.next_billing_date), new Date())
                       : null;
                     const accountAssignments = getAccountAssignments(a.id);
-                    const assignedClientIds = new Set(accountAssignments.map((aa) => aa.client_id));
-                    const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
 
                     return (
                       <TableRow key={a.id}>
