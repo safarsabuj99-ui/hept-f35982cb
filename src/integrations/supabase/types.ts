@@ -960,7 +960,7 @@ export type Database = {
       ad_platform: "meta" | "tiktok" | "google"
       agency_account_type: "Cash" | "Bank" | "MFS"
       app_role: "admin" | "client" | "manager"
-      billing_type: "prepaid" | "threshold_postpaid"
+      billing_type: "prepaid" | "threshold_postpaid" | "credit_card"
       campaign_objective:
         | "Message"
         | "Traffic/Website"
@@ -1113,7 +1113,7 @@ export const Constants = {
       ad_platform: ["meta", "tiktok", "google"],
       agency_account_type: ["Cash", "Bank", "MFS"],
       app_role: ["admin", "client", "manager"],
-      billing_type: ["prepaid", "threshold_postpaid"],
+      billing_type: ["prepaid", "threshold_postpaid", "credit_card"],
       campaign_objective: [
         "Message",
         "Traffic/Website",

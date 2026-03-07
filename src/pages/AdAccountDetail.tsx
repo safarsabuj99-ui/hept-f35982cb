@@ -316,6 +316,7 @@ export default function AdAccountDetail() {
                     <SelectContent>
                       <SelectItem value="prepaid">Prepaid</SelectItem>
                       <SelectItem value="threshold_postpaid">Threshold (Postpaid)</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -496,10 +497,15 @@ export default function AdAccountDetail() {
                   ? "No payment due at this time"
                   : "Payment pending"}
               </p>
+              {account.card_last_4 && billingType === "credit_card" && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Payment method: <span className="font-medium text-foreground">{account.card_last_4}</span>
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* You'll pay when / Account Spending Limit */}
+          {/* You'll pay when (threshold) / Spending Limit (others) */}
           {isThreshold ? (
             <Card>
               <CardHeader className="pb-2">
@@ -550,17 +556,30 @@ export default function AdAccountDetail() {
           ) : (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base font-medium">Account Spending Limit</CardTitle>
+                <CardTitle className="text-base font-medium">
+                  {billingType === "credit_card" ? "Billing Details" : "Account Spending Limit"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
-                  <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Spending limit</p>
-                    <p className="text-lg font-semibold mt-0.5">
-                      {account.account_spending_limit ? fmt(account.account_spending_limit) : "No limit set"}
-                    </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                    <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Spending limit</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {account.account_spending_limit ? fmt(account.account_spending_limit) : "No limit set"}
+                      </p>
+                    </div>
                   </div>
+                  {billingType === "credit_card" && account.card_last_4 && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                      <CalendarDays className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Payment method</p>
+                        <p className="text-lg font-semibold mt-0.5">{account.card_last_4}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
