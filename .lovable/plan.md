@@ -1,34 +1,28 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Replace "Acct Limit" Column with Outstanding Balance Progress Bar
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What Changes
+Replace the static "Acct Limit" column (currently showing `$250`) with a dynamic **"Balance"** column that shows the outstanding balance (`current_threshold_spend`) as a progress bar filling toward the threshold limit.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Technical Plan
 
-## Technical Change
+### `src/pages/AdAccounts.tsx`
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+1. **Rename column header** from "Acct Limit" to "Balance" (line 328)
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+2. **Replace the cell content** (line 374) — currently `${a.account_spending_limit ?? 250}` — with:
+   - For **threshold** accounts: Show `current_threshold_spend` as a dollar amount + a progress bar showing percentage toward `threshold_limit`, e.g.:
+     ```
+     $37.03 / $250
+     [████░░░░░░░░] 15%
+     ```
+   - For **prepaid** accounts: Show a dash or `$0` since they don't have outstanding balances
+   - Color-code the progress bar: green (<60%), yellow (60-79%), red (≥80%)
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+3. The data is already available — `current_threshold_spend` and `threshold_limit` are columns on `ad_accounts` and already fetched. The `usagePct` calculation on line 338-340 can be reused here.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+4. **Remove the separate "Threshold" column** (line 330 header, lines 380-396 cell) since the progress bar is now merged into the Balance column — avoiding duplication.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### No database or edge function changes needed.
 
-No database or edge function changes needed.
