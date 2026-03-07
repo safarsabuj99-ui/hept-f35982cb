@@ -292,7 +292,7 @@ Deno.serve(async (req) => {
             threshold_limit: account.threshold_limit,
             next_billing_date: account.next_billing_date,
             current_threshold_spend: account.current_threshold_spend ?? 0,
-            daily_spending_limit: 250,
+            account_spending_limit: 250,
             is_active: true,
             account_currency: account.account_currency,
           });

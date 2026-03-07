@@ -468,7 +468,7 @@ export default function AdAccounts() {
                           </div>
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
-                        <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
+                        <TableCell className="font-mono text-xs">${a.account_spending_limit ?? 250}</TableCell>
                         <TableCell>
                           <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
                             {isThreshold ? "Threshold" : "Prepaid"}
