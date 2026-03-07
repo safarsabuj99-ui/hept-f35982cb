@@ -323,7 +323,7 @@ export default function AdAccounts() {
                     <TableHead>Platform</TableHead>
                     <TableHead>Account Name</TableHead>
                     <TableHead>Account ID</TableHead>
-                    <TableHead className="min-w-[200px]">Clients & Keywords</TableHead>
+                    <TableHead>Clients</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead>Acct Limit</TableHead>
                     <TableHead>Billing</TableHead>
