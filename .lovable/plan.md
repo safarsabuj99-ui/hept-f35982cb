@@ -1,34 +1,32 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Rename "Daily Spending Limit" → "Account Spending Limit"
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What Changes
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+The user wants the spending limit field to represent the **account-level spending limit** (as set on the ads platform), not a daily limit. The admin should be able to set this value without going to the ads platform.
 
-## Technical Change
+### 1. Database Migration
+Rename column `daily_spending_limit` → `account_spending_limit` in `ad_accounts` table.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```sql
+ALTER TABLE ad_accounts RENAME COLUMN daily_spending_limit TO account_spending_limit;
 ```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### 2. Code Updates (3 files)
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+**`src/pages/AdAccounts.tsx`**
+- Rename form field `daily_spending_limit` → `account_spending_limit`
+- Update label from "Daily Spending Limit ($)" → "Account Spending Limit ($)"
+- Update table header and cell references
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+**`src/pages/AdAccountDetail.tsx`**
+- Rename state variable `dailyLimit` references to use `account_spending_limit`
+- Update label text
 
-No database or edge function changes needed.
+**`src/components/dashboard/SystemHealthWidget.tsx`**
+- Update interface and all references from `daily_spending_limit` → `account_spending_limit`
+- Update display text accordingly
+
+All changes are straightforward renames — no logic changes needed.
+
