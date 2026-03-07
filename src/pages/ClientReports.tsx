@@ -86,6 +86,7 @@ export default function ClientReports() {
         setRawMetrics([]);
       }
     } else {
+      setCampaigns([]);
       setRawMetrics([]);
     }
     setLoading(false);
