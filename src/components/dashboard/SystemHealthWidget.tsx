@@ -37,7 +37,7 @@ export function SystemHealthWidget() {
 
     const [intRes, accRes, spendRes] = await Promise.all([
       supabase.from("api_integrations" as any).select("id, instance_name, platform, token_expiry_date, connection_status, is_active") as any,
-      supabase.from("ad_accounts" as any).select("id, ad_account_id, platform_name, daily_spending_limit, is_active").eq("is_active", true) as any,
+      supabase.from("ad_accounts" as any).select("id, ad_account_id, platform_name, account_spending_limit, is_active").eq("is_active", true) as any,
       supabase.from("daily_ad_spend").select("ad_account_id, final_billable_usd").eq("date", today),
     ]);
 
