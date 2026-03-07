@@ -227,23 +227,26 @@ Deno.serve(async (req) => {
           // Fetch real campaign statuses from Meta
           const metaStatusMap: Record<string, string> = {};
           try {
-            const statusUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
-            const statusRes = await fetch(statusUrl);
-            const statusJson = await statusRes.json();
-            if (statusJson.data) {
-              for (const c of statusJson.data) {
-                const rawStatus = (c.effective_status || "").toUpperCase();
-                if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
-                else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED" || rawStatus === "ADSET_PAUSED") metaStatusMap[c.id] = "paused";
-                else if (rawStatus === "NOT_DELIVERING") metaStatusMap[c.id] = "not delivering";
-                else if (rawStatus === "WITH_ISSUES") metaStatusMap[c.id] = "with issues";
-                else if (rawStatus === "IN_PROCESS") metaStatusMap[c.id] = "in process";
-                else if (rawStatus === "PENDING_REVIEW") metaStatusMap[c.id] = "pending review";
-                else if (rawStatus === "DISAPPROVED") metaStatusMap[c.id] = "disapproved";
-                else if (rawStatus === "ARCHIVED") metaStatusMap[c.id] = "archived";
-                else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
-                else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
+            let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
+            while (statusNextUrl) {
+              const statusRes = await fetch(statusNextUrl);
+              const statusJson = await statusRes.json();
+              if (statusJson.data) {
+                for (const c of statusJson.data) {
+                  const rawStatus = (c.effective_status || "").toUpperCase();
+                  if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
+                  else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED" || rawStatus === "ADSET_PAUSED") metaStatusMap[c.id] = "paused";
+                  else if (rawStatus === "NOT_DELIVERING") metaStatusMap[c.id] = "not delivering";
+                  else if (rawStatus === "WITH_ISSUES") metaStatusMap[c.id] = "with issues";
+                  else if (rawStatus === "IN_PROCESS") metaStatusMap[c.id] = "in process";
+                  else if (rawStatus === "PENDING_REVIEW") metaStatusMap[c.id] = "pending review";
+                  else if (rawStatus === "DISAPPROVED") metaStatusMap[c.id] = "disapproved";
+                  else if (rawStatus === "ARCHIVED") metaStatusMap[c.id] = "archived";
+                  else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
+                  else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
+                }
               }
+              statusNextUrl = statusJson.paging?.next || null;
             }
           } catch (e: any) {
             errors.push(`Meta status fetch: ${e.message}`);
