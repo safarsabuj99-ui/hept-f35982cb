@@ -85,7 +85,7 @@ export default function AdAccounts() {
       platform_name: form.platform_name,
       ad_account_id: form.ad_account_id,
       account_currency: form.account_currency,
-      daily_spending_limit: form.daily_spending_limit ? Number(form.daily_spending_limit) : 250,
+      account_spending_limit: form.account_spending_limit ? Number(form.account_spending_limit) : 250,
       billing_type: form.billing_type,
     };
     if (form.billing_type === "threshold_postpaid") {
