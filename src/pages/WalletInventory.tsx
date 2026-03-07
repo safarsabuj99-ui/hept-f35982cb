@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+import { startOfDay, endOfDay } from "date-fns";
 
 interface UsdPurchase {
   id: string;
