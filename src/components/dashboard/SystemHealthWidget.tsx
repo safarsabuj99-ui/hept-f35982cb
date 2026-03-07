@@ -17,7 +17,7 @@ interface AccountLimit {
   id: string;
   ad_account_id: string;
   platform_name: string;
-  daily_spending_limit: number;
+  account_spending_limit: number;
   todaySpend: number;
   usagePercent: number;
   status: "ok" | "warning" | "critical";
