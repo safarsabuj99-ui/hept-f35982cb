@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays } from "lucide-react";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
 
@@ -482,84 +482,121 @@ export default function AdAccountDetail() {
 
         {/* BILLING HEALTH TAB */}
         <TabsContent value="billing" className="space-y-4">
-          {!isThreshold ? (
+          {/* Outstanding Balance Card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-muted-foreground font-medium">Outstanding balance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold tracking-tight">
+                {fmt(account.current_threshold_spend ?? 0)}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {(account.current_threshold_spend ?? 0) === 0
+                  ? "No payment due at this time"
+                  : "Payment pending"}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* You'll pay when / Account Spending Limit */}
+          {isThreshold ? (
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground text-center py-6">This is a prepaid account — billing health monitoring applies to threshold/postpaid accounts.</p>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium">You'll pay when</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                    <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Your balance reaches</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {account.threshold_limit ? fmt(account.threshold_limit) : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                    <CalendarDays className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">And on this date</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {account.next_billing_date
+                          ? format(new Date(account.next_billing_date), "MMM d, yyyy")
+                          : "—"}
+                      </p>
+                      {daysUntilBill !== null && (
+                        <p className={`text-xs mt-0.5 ${daysUntilBill <= 2 ? "text-destructive" : "text-muted-foreground"}`}>
+                          {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill} days away`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Threshold progress bar */}
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>{fmt(account.current_threshold_spend ?? 0)} spent</span>
+                    <span>of {fmt(account.threshold_limit ?? 0)}</span>
+                  </div>
+                  <Progress value={Math.min(usagePct, 100)} className="h-2.5" />
+                  <p className={`text-center text-sm font-semibold ${usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-yellow-500" : "text-emerald-500"}`}>
+                    {usagePct}% used
+                  </p>
+                </div>
               </CardContent>
             </Card>
           ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Threshold Usage</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span>{fmt(account.current_threshold_spend ?? 0)} spent</span>
-                        <span>of {fmt(account.threshold_limit ?? 0)}</span>
-                      </div>
-                      <Progress value={Math.min(usagePct, 100)} className="h-3" />
-                      <p className={`text-center text-lg font-bold ${usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-yellow-500" : "text-emerald-500"}`}>
-                        {usagePct}% used
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Next Billing Date</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {account.next_billing_date ? (
-                      <div className="text-center space-y-2">
-                        <p className="text-sm text-muted-foreground">{account.next_billing_date}</p>
-                        <p className={`text-3xl font-bold ${daysUntilBill !== null && daysUntilBill <= 2 ? "text-destructive" : ""}`}>
-                          {daysUntilBill !== null ? (daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill} days`) : "—"}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">No billing date set.</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Notifications */}
-              <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4" /> Billing Notifications</CardTitle>
-                    {notifications.some((n: any) => !n.is_read) && (
-                      <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={markAllRead}>
-                        <CheckCheck className="h-3.5 w-3.5" /> Mark all read
-                      </Button>
-                    )}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium">Account Spending Limit</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-muted/30">
+                  <DollarSign className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Spending limit</p>
+                    <p className="text-lg font-semibold mt-0.5">
+                      {account.account_spending_limit ? fmt(account.account_spending_limit) : "No limit set"}
+                    </p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {notifications.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No billing notifications.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                      {notifications.map((n: any) => (
-                        <div key={n.id} className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${n.is_read ? "opacity-60" : ""}`}>
-                          <Badge variant={n.priority === "high" ? "destructive" : "outline"} className="text-[10px] mt-0.5 shrink-0">{n.priority}</Badge>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-xs uppercase text-muted-foreground">{n.alert_type}</p>
-                            <p>{n.message}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{format(new Date(n.created_at), "MMM d, yyyy h:mm a")}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
+                </div>
+              </CardContent>
+            </Card>
           )}
+
+          {/* Notifications */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4" /> Billing Notifications</CardTitle>
+                {notifications.some((n: any) => !n.is_read) && (
+                  <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={markAllRead}>
+                    <CheckCheck className="h-3.5 w-3.5" /> Mark all read
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {notifications.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No billing notifications.</p>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {notifications.map((n: any) => (
+                    <div key={n.id} className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${n.is_read ? "opacity-60" : ""}`}>
+                      <Badge variant={n.priority === "high" ? "destructive" : "outline"} className="text-[10px] mt-0.5 shrink-0">{n.priority}</Badge>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-xs uppercase text-muted-foreground">{n.alert_type}</p>
+                        <p>{n.message}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{format(new Date(n.created_at), "MMM d, yyyy h:mm a")}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
