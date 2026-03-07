@@ -1,34 +1,50 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: Collect Threshold & Next Billing Date from Platform API
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+The `sync-billing-data` edge function silently catches all errors (`catch { /* skip */ }`), so when the `adspaymentcycle` API call fails, there's no visibility into why. Additionally, the function only tries one approach for threshold data, while the auto-import function also extracts threshold info from `funding_source_details` as a fallback.
 
-## Technical Change
+## Root Cause
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+1. **Silent error swallowing** — both `try/catch` blocks in `syncMetaBilling` suppress errors with no logging, making it impossible to diagnose failures.
+2. **Missing fallback** — the auto-import fetches `funding_source_details` from the account endpoint (which contains threshold type/amount), but `sync-billing-data` doesn't include this field in its initial account-level fetch.
+3. **No response debugging** — if the API returns an error response (e.g. permission denied, invalid endpoint), the function treats it as "no data available."
 
-Current code:
+## Changes
+
+### `supabase/functions/sync-billing-data/index.ts`
+
+1. **Add `funding_source_details` to the account-level fetch** (line 15) — this field contains threshold type and amount as a fallback, matching what auto-import already does.
+
+2. **Extract threshold from `funding_source_details`** — if `adspaymentcycle` returns no data, fall back to checking `funding_source_details.type === 2` (threshold account) and `funding_source_details.amount` for the threshold limit.
+
+3. **Add `console.log` for API responses** — log the raw responses from both Meta API calls so failures are visible in edge function logs, replacing the silent `catch { /* skip */ }` blocks.
+
+4. **Log non-OK responses** — when `res.ok` is false, log the status and response body before skipping.
+
+### Specific code changes in `syncMetaBilling`:
+
+**Account-level fetch (line 15):** Add `funding_source_details` to the fields:
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+fields=spend_cap,amount_spent,balance,currency,account_status,funding_source_details
 ```
 
-Updated code -- exclude transfer credits:
+Then extract threshold data from `funding_source_details` as fallback:
+```typescript
+if (data.funding_source_details) {
+  const fsd = data.funding_source_details;
+  if (fsd.type === 2) {
+    result.billing_type = "threshold_postpaid";
+    if (fsd.amount) result.threshold_limit = Number(fsd.amount) / 100;
+  }
+}
 ```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+**Both catch blocks:** Replace `/* skip */` with `console.error(...)` to log failures.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+**Non-OK responses:** Log `res.status` and `await res.text()` before skipping.
 
-No database or edge function changes needed.
+This is a single-file change to the edge function. No database or frontend changes needed.
+
