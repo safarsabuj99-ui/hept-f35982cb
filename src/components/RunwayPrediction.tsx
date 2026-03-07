@@ -76,8 +76,7 @@ export function RunwayPrediction() {
       const projectedStop = new Date();
       projectedStop.setDate(projectedStop.getDate() + runwayDays);
 
-      const denominator = credits + overdraft;
-      const utilization = denominator > 0 ? (debits / denominator) * 100 : 100;
+      const pauseThreshold = Number((p as any).auto_pause_balance_usd ?? 5);
 
       const pausedCampaigns = (p as any).system_paused_campaigns;
       const isSystemPaused = Array.isArray(pausedCampaigns) && pausedCampaigns.length > 0;
