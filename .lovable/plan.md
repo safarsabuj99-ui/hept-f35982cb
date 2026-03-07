@@ -1,34 +1,42 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Per-Platform Profit Breakdown — Plan
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What You Want
+- Show profit broken down by **each platform** (Meta, TikTok, Google) per client, not just a single total
+- Add a **"Profit" tab** on the Client Detail page showing per-platform profit for that specific client
+- Keep the existing total profit view on the admin dashboard
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Changes
 
-## Technical Change
+### 1. New Component: `src/components/ClientProfitTab.tsx`
+A dedicated component that receives a `clientId` prop and displays:
+- **3 Platform Profit Cards** (Meta, TikTok, Google) — each showing:
+  - Spend (USD)
+  - Billing Rate (BDT/USD)
+  - WAC (Cost Rate)
+  - Gap (Rate - WAC)
+  - Profit (BDT) = Spend × Gap
+  - Margin %
+- **Total Summary Row** at the bottom with combined figures
+- Color-coded: green for positive profit, red for negative
+- Data source: `daily_metrics` → `campaigns` (for platform) → `ad_account_clients` (for client mapping) + `usd_purchases` (WAC) + `profiles` (billing rates)
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### 2. Update: `src/pages/ClientDetail.tsx`
+- Add a 7th tab: **"Profit"** with a `TrendingUp` icon
+- Change tabs grid from `grid-cols-6` to accommodate 7 tabs
+- Render `<ClientProfitTab clientId={userId} />` inside the new tab content
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### 3. Update: `src/components/dashboard/ProfitabilityTable.tsx`
+- Add **per-platform columns** to the existing admin table: expand each client row to show platform-level breakdown
+- Use an expandable/collapsible row pattern: click a client row to reveal Meta/TikTok/Google sub-rows with individual spend, revenue, cost, profit
+- Keep the existing total row as the summary line
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### File Summary
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/components/ClientProfitTab.tsx` | **New** — Per-platform profit cards for a single client |
+| `src/pages/ClientDetail.tsx` | Add "Profit" tab triggering the new component |
+| `src/components/dashboard/ProfitabilityTable.tsx` | Add expandable per-platform sub-rows under each client |
 
-No database or edge function changes needed.
