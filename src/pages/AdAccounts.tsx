@@ -383,7 +383,17 @@ export default function AdAccounts() {
 
                     return (
                       <TableRow key={a.id}>
-                        <TableCell><Badge variant="secondary" className="capitalize">{a.platform_name}</Badge></TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="capitalize">{a.platform_name}</Badge>
+                          {a.api_integration_id && (() => {
+                            const int = integrations.find(i => i.id === a.api_integration_id);
+                            return int ? (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                                {int.instance_name || `${int.platform} integration`}
+                              </p>
+                            ) : null;
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <button onClick={() => navigate(`/admin/ad-accounts/${a.id}`)} className="font-medium text-sm text-primary hover:underline flex items-center gap-1">
                             {a.account_name || a.ad_account_id}
