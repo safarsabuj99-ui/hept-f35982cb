@@ -148,7 +148,27 @@ export default function AdAccountDetail() {
     } else {
       toast({ title: "Saved", description: "Account updated." });
       loadAll();
+  }
+
+  async function handleSyncBilling() {
+    if (!accountId) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-billing-data", {
+        body: { ad_account_id: accountId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: "Synced",
+        description: data?.message || "Billing data synced from platform.",
+      });
+      await loadAll();
+    } catch (err: any) {
+      toast({ title: "Sync Failed", description: err.message, variant: "destructive" });
     }
+    setSyncing(false);
+  }
   }
 
   async function addAssignment() {
