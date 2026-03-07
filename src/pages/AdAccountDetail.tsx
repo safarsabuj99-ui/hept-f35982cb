@@ -130,7 +130,7 @@ export default function AdAccountDetail() {
     const payload: any = {
       account_name: accountName,
       account_currency: currency,
-      daily_spending_limit: dailyLimit ? Number(dailyLimit) : 250,
+      account_spending_limit: accountLimit ? Number(accountLimit) : 250,
       billing_type: billingType,
       is_active: isActive,
       card_last_4: cardLast4 || null,
