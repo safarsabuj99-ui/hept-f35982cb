@@ -21,6 +21,7 @@ export default function ClientReports() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
   const [rawMetrics, setRawMetrics] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
@@ -55,6 +56,8 @@ export default function ClientReports() {
         .select("id, name, platform, status, ad_account_id")
         .in("ad_account_id", accIds);
 
+      setCampaigns(campaigns ?? []);
+
       if (campaigns && campaigns.length > 0) {
         const campaignIds = campaigns.map((c) => c.id);
 
@@ -83,6 +86,7 @@ export default function ClientReports() {
         setRawMetrics([]);
       }
     } else {
+      setCampaigns([]);
       setRawMetrics([]);
     }
     setLoading(false);
@@ -123,8 +127,25 @@ export default function ClientReports() {
       map[key].results += Number(row.results ?? 0);
       map[key].conversion_value += Number(row.conversion_value ?? 0);
     }
+    // Inject active campaigns that have no metrics for the selected date range
+    for (const c of campaigns) {
+      if (c.status === 'active' && !map[c.id]) {
+        map[c.id] = {
+          campaign_name: c.name || "Unknown",
+          platform: c.platform || "unknown",
+          status: "active",
+          ad_account_name: c.ad_account_id ? adAccountMap[c.ad_account_id] || "" : "",
+          campaign_id: c.id,
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          results: 0,
+          conversion_value: 0,
+        };
+      }
+    }
     return Object.values(map);
-  }, [rawMetrics, adAccountMap]);
+  }, [rawMetrics, adAccountMap, campaigns]);
 
   // Totals
   const totals = useMemo(() => {
