@@ -48,15 +48,11 @@ Deno.serve(async (req) => {
 
     const { data: profiles } = await supabaseAdmin
       .from("profiles")
-      .select("user_id, full_name, auto_pause_threshold_pct, overdraft_limit_usd, system_paused_campaigns")
+      .select("user_id, full_name, auto_pause_balance_usd, overdraft_limit_usd, system_paused_campaigns")
       .in("user_id", clientIds);
 
     const { data: allTxns } = await supabaseAdmin
       .from("transactions").select("client_id, type, amount, status");
-
-    // Get all ad accounts for campaign fetching
-    const { data: allAccounts } = await supabaseAdmin
-      .from("ad_accounts").select("id, client_id, platform_name").eq("is_active", true);
 
     // Get active campaign mappings
     const { data: allCampaigns } = await supabaseAdmin
@@ -76,16 +72,14 @@ Deno.serve(async (req) => {
         .filter((t: any) => t.type === "debit")
         .reduce((s: number, t: any) => s + Number(t.amount), 0);
 
-      const threshold = profile.auto_pause_threshold_pct ?? 95;
-      const overdraft = Number(profile.overdraft_limit_usd ?? 0);
-      const denominator = totalDeposits + overdraft;
-      const utilization = denominator > 0 ? (totalDebits / denominator) * 100 : (totalDebits > 0 ? 100 : 0);
+      const balance = totalDeposits - totalDebits;
+      const pauseThreshold = Number(profile.auto_pause_balance_usd ?? 5);
 
       const alreadyPaused = Array.isArray(profile.system_paused_campaigns)
         ? profile.system_paused_campaigns
         : [];
 
-      if (utilization >= threshold && alreadyPaused.length === 0) {
+      if (balance <= pauseThreshold && alreadyPaused.length === 0) {
         // Find active campaigns for this client
         const clientCampaigns = (allCampaigns ?? []).filter(
           (c: any) => c.client_id === profile.user_id
@@ -110,14 +104,14 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from("audit_logs").insert({
             user_id: caller.id,
             action_type: "ad_guard_pause",
-            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Utilization: ${Math.round(utilization)}% (threshold: ${threshold}%). Balance: $${(totalDeposits - totalDebits).toFixed(2)}`,
+            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Balance: $${balance.toFixed(2)} (threshold: $${pauseThreshold})`,
           });
 
           totalPaused += pausedIds.length;
           results.push({
             client: profile.full_name,
-            utilization: Math.round(utilization * 10) / 10,
-            threshold,
+            balance: Math.round(balance * 100) / 100,
+            threshold: pauseThreshold,
             action: "PAUSED",
             campaigns_paused: pausedIds.length,
           });
@@ -125,9 +119,9 @@ Deno.serve(async (req) => {
       } else {
         results.push({
           client: profile.full_name,
-          utilization: Math.round(utilization * 10) / 10,
-          threshold,
-          action: utilization >= threshold ? "ALREADY_PAUSED" : "OK",
+          balance: Math.round(balance * 100) / 100,
+          threshold: pauseThreshold,
+          action: balance <= pauseThreshold ? "ALREADY_PAUSED" : "OK",
           campaigns_paused: 0,
         });
       }

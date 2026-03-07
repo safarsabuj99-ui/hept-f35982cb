@@ -5,13 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Save, Zap, AlertTriangle } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign } from "lucide-react";
 
 interface Props {
   userId: string;
-  autoPauseThreshold: number;
+  autoPauseBalanceUsd: number;
   overdraftLimit: number;
   systemPausedCampaigns: string[];
   onSaved: () => void;
@@ -19,12 +18,12 @@ interface Props {
 
 export function AutomationConfigTab({
   userId,
-  autoPauseThreshold,
+  autoPauseBalanceUsd,
   overdraftLimit,
   systemPausedCampaigns,
   onSaved,
 }: Props) {
-  const [threshold, setThreshold] = useState(autoPauseThreshold);
+  const [threshold, setThreshold] = useState(String(autoPauseBalanceUsd));
   const [overdraft, setOverdraft] = useState(String(overdraftLimit));
   const [saving, setSaving] = useState(false);
   const [runningGuard, setRunningGuard] = useState(false);
@@ -33,12 +32,18 @@ export function AutomationConfigTab({
 
   async function handleSave() {
     setSaving(true);
+    const thresholdVal = parseFloat(threshold);
+    if (isNaN(thresholdVal) || thresholdVal < 0) {
+      toast({ title: "Invalid threshold", description: "Enter a valid dollar amount (0 or above).", variant: "destructive" });
+      setSaving(false);
+      return;
+    }
     const { error } = await supabase
       .from("profiles")
       .update({
-        auto_pause_threshold_pct: threshold,
+        auto_pause_balance_usd: thresholdVal,
         overdraft_limit_usd: overdraft ? parseFloat(overdraft) : 0,
-      })
+      } as any)
       .eq("user_id", userId);
     setSaving(false);
     if (error) {
@@ -100,7 +105,7 @@ export function AutomationConfigTab({
           <Shield className="h-4 w-4" /> Ad Guard Configuration
         </CardTitle>
         <CardDescription>
-          Configure automatic campaign pausing based on spending thresholds and overdraft protection.
+          Automatically pause all campaigns when the client's balance drops to or below the threshold amount.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -151,22 +156,25 @@ export function AutomationConfigTab({
           </div>
         )}
 
-        {/* Threshold Slider */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label>Auto-Pause Threshold</Label>
-            <span className="text-sm font-mono font-semibold">{threshold}%</span>
+        {/* Dollar Threshold Input */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-1.5">
+            <DollarSign className="h-3.5 w-3.5" /> Pause When Balance Drops To
+          </Label>
+          <div className="relative max-w-xs">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              placeholder="5.00"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              className="pl-7 max-w-xs"
+              min="0"
+              step="1"
+            />
           </div>
-          <Slider
-            value={[threshold]}
-            onValueChange={([v]) => setThreshold(v)}
-            min={80}
-            max={99}
-            step={1}
-            className="w-full"
-          />
           <p className="text-xs text-muted-foreground">
-            Campaigns auto-pause when spending reaches this % of total deposits + overdraft.
+            All campaigns will auto-pause when remaining balance ≤ this amount. Set $0 to only pause at zero/negative balance.
           </p>
         </div>
 
