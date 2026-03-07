@@ -316,6 +316,7 @@ export default function AdAccountDetail() {
                     <SelectContent>
                       <SelectItem value="prepaid">Prepaid</SelectItem>
                       <SelectItem value="threshold_postpaid">Threshold (Postpaid)</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
