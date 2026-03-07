@@ -70,12 +70,12 @@ export default function AdminDashboard() {
   }, [dateRange]);
 
   const fetchData = useCallback(async () => {
-    // Determine date strings for queries
-    const rangeFrom = dateRange ? toISODate(dateRange.from) : today;
-    const rangeTo = dateRange ? toISODate(dateRange.to) : today;
-
-    let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id")
-      .gte("data_date", rangeFrom).lte("data_date", rangeTo);
+    let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id");
+    if (dateRange) {
+      spendQuery = spendQuery
+        .gte("data_date", toISODate(dateRange.from))
+        .lte("data_date", toISODate(dateRange.to));
+    }
 
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, email, business_name"),
