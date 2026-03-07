@@ -1,37 +1,34 @@
 
 
-# Show Linked Integration Name and Proper Account ID
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What Changes
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### `src/pages/AdAccounts.tsx`
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-1. **Build an integration lookup map** from the already-fetched `integrations` array, keyed by `id`, so we can resolve `api_integration_id` on each account.
+## Technical Change
 
-2. **Add integration name below Platform badge** — In the Platform cell, after the platform badge, show the linked integration's `instance_name` in small muted text. If no integration is linked, show nothing.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-3. **Ensure Account ID column shows the raw ad account number** — The `ad_account_id` field already displays in the Account ID column (line 393). This is already correct. If the user wants the column to strip the `act_` prefix or format differently, we keep it as-is since it matches the screenshot.
-
-### Specific Code Changes
-
-**Platform cell (line 386):** Add integration name below the platform badge:
-```tsx
-<TableCell>
-  <Badge variant="secondary" className="capitalize">{a.platform_name}</Badge>
-  {integrationMap[a.api_integration_id] && (
-    <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">
-      {integrationMap[a.api_integration_id]}
-    </p>
-  )}
-</TableCell>
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-**Integration map** — built from existing `integrations` state (no extra fetch needed):
-```tsx
-const integrationMap = Object.fromEntries(
-  integrations.map(i => [i.id, i.instance_name || `${i.platform} integration`])
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
 );
 ```
 
-This is a small UI-only change. No database or backend modifications needed.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.
