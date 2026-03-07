@@ -50,6 +50,7 @@ export type Database = {
         Row: {
           account_currency: Database["public"]["Enums"]["account_currency"]
           account_name: string
+          account_spending_limit: number | null
           ad_account_id: string
           api_integration_id: string | null
           billing_type: Database["public"]["Enums"]["billing_type"]
@@ -57,7 +58,6 @@ export type Database = {
           client_id: string | null
           created_at: string
           current_threshold_spend: number | null
-          daily_spending_limit: number | null
           exchange_rate: number | null
           id: string
           is_active: boolean
@@ -68,6 +68,7 @@ export type Database = {
         Insert: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           account_name?: string
+          account_spending_limit?: number | null
           ad_account_id: string
           api_integration_id?: string | null
           billing_type?: Database["public"]["Enums"]["billing_type"]
@@ -75,7 +76,6 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           current_threshold_spend?: number | null
-          daily_spending_limit?: number | null
           exchange_rate?: number | null
           id?: string
           is_active?: boolean
@@ -86,6 +86,7 @@ export type Database = {
         Update: {
           account_currency?: Database["public"]["Enums"]["account_currency"]
           account_name?: string
+          account_spending_limit?: number | null
           ad_account_id?: string
           api_integration_id?: string | null
           billing_type?: Database["public"]["Enums"]["billing_type"]
@@ -93,7 +94,6 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           current_threshold_spend?: number | null
-          daily_spending_limit?: number | null
           exchange_rate?: number | null
           id?: string
           is_active?: boolean
