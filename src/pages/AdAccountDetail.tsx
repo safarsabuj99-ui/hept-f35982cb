@@ -338,7 +338,11 @@ export default function AdAccountDetail() {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={handleSyncBilling} disabled={syncing || !account?.api_integration_id} className="gap-2">
+                  {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync from Platform
+                </Button>
                 <Button onClick={handleSave} disabled={saving} className="gap-2">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Changes
