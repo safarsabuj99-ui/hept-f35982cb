@@ -77,7 +77,7 @@ export default function AdminDashboard() {
         .lte("data_date", toISODate(dateRange.to));
     }
 
-    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes] = await Promise.all([
+    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, email, business_name"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("transactions").select("*"),
@@ -86,6 +86,7 @@ export default function AdminDashboard() {
       supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
       spendQuery,
       supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
+      supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
     ]);
 
     // Fetch last 7 days spend for sparkline
