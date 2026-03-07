@@ -215,6 +215,27 @@ export default function AdAccountDetail() {
   const getClientName = (id: string) => clients.find((c) => c.user_id === id)?.full_name ?? "—";
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  async function saveInlineField(field: "threshold_limit" | "next_billing_date", value: string) {
+    if (!accountId) return;
+    setSavingInline(true);
+    const payload: any = {};
+    if (field === "threshold_limit") {
+      payload.threshold_limit = value ? Number(value) : null;
+    } else {
+      payload.next_billing_date = value || null;
+    }
+    const { error } = await (supabase.from("ad_accounts" as any) as any).update(payload).eq("id", accountId);
+    setSavingInline(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Saved", description: `${field === "threshold_limit" ? "Threshold" : "Billing date"} updated.` });
+      setEditingThreshold(false);
+      setEditingBillingDate(false);
+      loadAll();
+    }
+  }
+
   const isThreshold = billingType === "threshold_postpaid";
   const usagePct = isThreshold && account?.threshold_limit > 0
     ? Math.round(((account?.current_threshold_spend ?? 0) / account.threshold_limit) * 100)
