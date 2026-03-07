@@ -304,8 +304,8 @@ export default function AdAccounts() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>Daily Spending Limit ($)</Label>
-                  <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
+                   <Label>Account Spending Limit ($)</Label>
+                  <Input type="number" value={form.account_spending_limit} onChange={(e) => setForm({ ...form, account_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
                 </div>
                 <div className="space-y-2">
                   <Label>Billing Type</Label>
