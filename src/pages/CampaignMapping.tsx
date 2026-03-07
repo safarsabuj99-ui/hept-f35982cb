@@ -12,6 +12,7 @@ import { Loader2, MapPin, Filter, FileText, BarChart3 } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { DateRangeFilter, DateRange } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
+import { startOfDay, endOfDay } from "date-fns";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
