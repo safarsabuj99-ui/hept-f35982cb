@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   
   const { toast } = useToast();
