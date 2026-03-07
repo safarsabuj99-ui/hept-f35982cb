@@ -1,34 +1,30 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: "Today" Filter Showing All-Time Data (Race Condition)
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Root Cause
+In `AdminDashboard.tsx`, `dateRange` state is initialized as `null` (line 47). The component's `useEffect` on line 61 fires `fetchData()` immediately with `dateRange = null` (which means "all time"). Then `DateRangeFilter`'s own `useEffect` fires `onRangeChange` to set today's range — but by then the first fetch with null is already in-flight. If it resolves after the second fetch, it overwrites correct data with all-time data.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Fix
 
-## Technical Change
+### `src/pages/AdminDashboard.tsx`
+- Initialize `dateRange` to today's range instead of `null`:
+  ```typescript
+  const [dateRange, setDateRange] = useState<DateRange | null>({ 
+    from: startOfDay(new Date()), 
+    to: endOfDay(new Date()) 
+  });
+  ```
+- This ensures the very first `fetchData()` call uses today's range, eliminating the race condition.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### `src/components/DateRangeFilter.tsx`
+- Remove the `useEffect` that calls `onRangeChange` on mount (lines 64-67), since the parent already initializes with the correct range. This prevents a redundant second fetch.
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### Child components (`SpendTrendChart`, `RevenueVsCostChart`, `ProfitLossWidget`, `ProfitabilityTable`)
+- Already handle `dateRange` correctly — when it's a valid range they filter, when null they show all. No changes needed since the parent now never passes null on initial render.
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/AdminDashboard.tsx` | Initialize `dateRange` to today instead of `null` |
+| `src/components/DateRangeFilter.tsx` | Remove mount-time `useEffect` that triggers duplicate fetch |
 
-No database or edge function changes needed.
