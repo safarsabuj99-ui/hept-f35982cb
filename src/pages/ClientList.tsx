@@ -6,8 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Users, ChevronRight, Plus } from "lucide-react";
+import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
@@ -21,6 +20,12 @@ interface ClientRow {
   pricing_config: any;
 }
 
+interface MarginData {
+  margin: number;
+  billedUsd: number;
+  rawBdt: number;
+}
+
 export default function ClientList() {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +34,7 @@ export default function ClientList() {
   const [depositClientId, setDepositClientId] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [margins, setMargins] = useState<Record<string, MarginData>>({});
   const location = useLocation();
 
   useEffect(() => {
@@ -41,12 +47,48 @@ export default function ClientList() {
       if (!roles?.length) { setLoading(false); return; }
 
       const ids = roles.map((r) => r.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
-        .in("user_id", ids);
+      const [profilesRes, spendRes, accRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
+          .in("user_id", ids),
+        supabase.from("daily_ad_spend").select("ad_account_id, raw_spend_amount, raw_currency, exchange_rate_used, final_billable_usd"),
+        supabase.from("ad_accounts").select("id, client_id"),
+      ]);
 
-      setClients(profiles || []);
+      setClients(profilesRes.data || []);
+
+      // Build margin map
+      const accToClient: Record<string, string> = {};
+      for (const a of (accRes.data ?? []) as any[]) if (a.client_id) accToClient[a.id] = a.client_id;
+
+      const agg: Record<string, { rawBdt: number; billedUsd: number; rateSum: number; count: number }> = {};
+      for (const s of (spendRes.data ?? []) as any[]) {
+        const clientId = accToClient[s.ad_account_id];
+        if (!clientId) continue;
+        if (!agg[clientId]) agg[clientId] = { rawBdt: 0, billedUsd: 0, rateSum: 0, count: 0 };
+        if (s.raw_currency === "BDT") {
+          agg[clientId].rawBdt += Number(s.raw_spend_amount);
+        } else {
+          agg[clientId].rawBdt += Number(s.raw_spend_amount) * Number(s.exchange_rate_used);
+        }
+        agg[clientId].billedUsd += Number(s.final_billable_usd);
+        agg[clientId].rateSum += Number(s.exchange_rate_used);
+        agg[clientId].count++;
+      }
+
+      const marginMap: Record<string, MarginData> = {};
+      for (const [cid, data] of Object.entries(agg)) {
+        const avgRate = data.count > 0 ? data.rateSum / data.count : 1;
+        marginMap[cid] = {
+          billedUsd: Math.round(data.billedUsd * 100) / 100,
+          rawBdt: Math.round(data.rawBdt * 100) / 100,
+          margin: data.rawBdt > 0
+            ? Math.round(((data.billedUsd * avgRate - data.rawBdt) / data.rawBdt) * 10000) / 100
+            : 0,
+        };
+      }
+      setMargins(marginMap);
       setLoading(false);
     }
     load();
@@ -64,6 +106,32 @@ export default function ClientList() {
     let label = parts.join(" ");
     if (config.percentage && config.percentage > 0) label += ` +${config.percentage}%`;
     return label || "Default";
+  };
+
+  const MarginIndicator = ({ clientId }: { clientId: string }) => {
+    const data = margins[clientId];
+    if (!data || data.billedUsd === 0) {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+    const m = data.margin;
+    const isPositive = m > 0;
+    const isNegative = m < 0;
+    const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-all ${
+          isPositive
+            ? "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20"
+            : isNegative
+            ? "bg-destructive/10 text-destructive dark:bg-destructive/20"
+            : "bg-muted text-muted-foreground"
+        }`}>
+          <Icon className="h-3 w-3" />
+          <span className="font-mono">{m >= 0 ? "+" : ""}{m.toFixed(1)}%</span>
+        </div>
+      </div>
+    );
   };
 
   const filtered = clients.filter(
@@ -118,7 +186,7 @@ export default function ClientList() {
                       <TableHead className="hidden sm:table-cell">Business</TableHead>
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead>Pricing</TableHead>
-                      <TableHead>Pricing</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -141,8 +209,8 @@ export default function ClientList() {
                             {getPricingLabel(c.pricing_config)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {getPricingLabel(c.pricing_config)}
+                        <TableCell className="text-right">
+                          <MarginIndicator clientId={c.user_id} />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
