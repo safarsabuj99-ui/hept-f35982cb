@@ -137,26 +137,29 @@ Deno.serve(async (req) => {
         };
 
         // Helper: upsert campaign into campaigns table (ID locking)
+        // statusConfirmed: true = status came directly from platform API; false = fallback "active"
         const upsertCampaign = async (
           platformId: string,
           name: string,
           status: string,
-          clientId: string | null
+          clientId: string | null,
+          statusConfirmed: boolean = true
         ) => {
           // Try to find existing
           const { data: existing } = await supabase
             .from("campaigns")
-            .select("id, original_name_tag")
+            .select("id, original_name_tag, status")
             .eq("platform_id", platformId)
             .maybeSingle();
 
           if (existing) {
-            // Update name and status, keep original_name_tag
+            // If status is NOT confirmed from platform API, preserve the existing DB status
+            const finalStatus = statusConfirmed ? status : existing.status;
             await supabase
               .from("campaigns")
-              .update({ name, status, client_id: clientId, updated_at: new Date().toISOString() })
+              .update({ name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() })
               .eq("id", existing.id);
-            return existing.id;
+            return { id: existing.id, status: finalStatus };
           } else {
             // Insert new with original_name_tag = current name
             const { data: inserted, error: insErr } = await supabase
@@ -177,12 +180,12 @@ Deno.serve(async (req) => {
               // Could be a race condition, try select again
               const { data: retry } = await supabase
                 .from("campaigns")
-                .select("id")
+                .select("id, status")
                 .eq("platform_id", platformId)
                 .single();
-              return retry?.id;
+              return retry ? { id: retry.id, status: retry.status } : null;
             }
-            return inserted?.id;
+            return inserted ? { id: inserted.id, status } : null;
           }
         };
 
