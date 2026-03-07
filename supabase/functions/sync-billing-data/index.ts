@@ -10,6 +10,8 @@ const corsHeaders = {
 async function syncMetaBilling(adAccountId: string, token: string) {
   const result: Record<string, any> = {};
 
+  let fundingType: number | null = null;
+
   // 1. Account-level fields: spend_cap, amount_spent, balance, funding_source_details
   try {
     const url = `https://graph.facebook.com/v21.0/${adAccountId}?fields=spend_cap,amount_spent,balance,currency,account_status,funding_source_details&access_token=${token}`;
@@ -22,16 +24,30 @@ async function syncMetaBilling(adAccountId: string, token: string) {
         const capCents = Number(data.spend_cap);
         result.account_spending_limit = capCents > 0 ? capCents / 100 : null;
       }
-      // Fallback: extract threshold from funding_source_details
+      // Map funding_source_details.type to billing_type
       if (data.funding_source_details) {
         const fsd = data.funding_source_details;
         console.log("funding_source_details:", JSON.stringify(fsd));
-        if (fsd.type === 2) {
-          result.billing_type = "threshold_postpaid";
-          if (fsd.amount) {
-            result.threshold_limit = Number(fsd.amount) / 100;
-          }
+        fundingType = fsd.type ?? null;
+        const typeMap: Record<number, string> = {
+          1: "credit_card",
+          2: "threshold_postpaid",
+          3: "prepaid",
+        };
+        if (fsd.type && typeMap[fsd.type]) {
+          result.billing_type = typeMap[fsd.type];
         }
+        if (fsd.type === 2 && fsd.amount) {
+          result.threshold_limit = Number(fsd.amount) / 100;
+        }
+        // Store card display string (e.g. "VISA *9415") in card_last_4
+        if (fsd.display_string) {
+          result.card_last_4 = fsd.display_string;
+        }
+      }
+      // For non-threshold accounts, use account-level amount_spent as outstanding balance
+      if (fundingType !== 2 && data.amount_spent !== undefined) {
+        result.current_threshold_spend = Number(data.amount_spent) / 100;
       }
     } else {
       const errText = await res.text();
@@ -41,37 +57,38 @@ async function syncMetaBilling(adAccountId: string, token: string) {
     console.error("Meta account fetch error:", err);
   }
 
-  // 2. Billing cycle: threshold_amount, amount_spent, end_time
-  try {
-    const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const json = await res.json();
-      console.log("Meta billing cycle response:", JSON.stringify(json));
-      const cycle = json.data?.[0];
-      if (cycle) {
-        if (cycle.threshold_amount) {
-          result.threshold_limit = Number(cycle.threshold_amount) / 100;
-          result.billing_type = "threshold_postpaid";
-        }
-        if (cycle.amount_spent !== undefined) {
-          result.current_threshold_spend = Number(cycle.amount_spent) / 100;
-        }
-        if (cycle.end_time) {
-          const d = typeof cycle.end_time === "number"
-            ? new Date(cycle.end_time * 1000)
-            : new Date(cycle.end_time);
-          if (!isNaN(d.getTime())) {
-            result.next_billing_date = d.toISOString().split("T")[0];
+  // 2. Billing cycle (only for threshold/postpaid accounts)
+  if (fundingType === 2) {
+    try {
+      const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        console.log("Meta billing cycle response:", JSON.stringify(json));
+        const cycle = json.data?.[0];
+        if (cycle) {
+          if (cycle.threshold_amount) {
+            result.threshold_limit = Number(cycle.threshold_amount) / 100;
+          }
+          if (cycle.amount_spent !== undefined) {
+            result.current_threshold_spend = Number(cycle.amount_spent) / 100;
+          }
+          if (cycle.end_time) {
+            const d = typeof cycle.end_time === "number"
+              ? new Date(cycle.end_time * 1000)
+              : new Date(cycle.end_time);
+            if (!isNaN(d.getTime())) {
+              result.next_billing_date = d.toISOString().split("T")[0];
+            }
           }
         }
+      } else {
+        const errText = await res.text();
+        console.warn(`Meta billing cycle fetch skipped/failed (${res.status}):`, errText);
       }
-    } else {
-      const errText = await res.text();
-      console.error(`Meta billing cycle fetch failed (${res.status}):`, errText);
+    } catch (err) {
+      console.error("Meta billing cycle fetch error:", err);
     }
-  } catch (err) {
-    console.error("Meta billing cycle fetch error:", err);
   }
 
   return result;
