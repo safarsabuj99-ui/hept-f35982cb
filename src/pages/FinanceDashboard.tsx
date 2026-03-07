@@ -26,8 +26,8 @@ export default function FinanceDashboard() {
   const [ownerDraw, setOwnerDraw] = useState(0);
   const [clientProfits, setClientProfits] = useState<ClientProfit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-  const [periodLabel, setPeriodLabel] = useState("All Time");
+  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [periodLabel, setPeriodLabel] = useState("Today");
 
   // Import premium skeletons
 

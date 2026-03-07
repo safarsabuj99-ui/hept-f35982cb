@@ -36,7 +36,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const [rows, setRows] = useState<PlatformProfit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {

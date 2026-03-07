@@ -36,8 +36,8 @@ export default function WalletInventory() {
   const [usdReceived, setUsdReceived] = useState("");
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-  const [periodLabel, setPeriodLabel] = useState("All Time");
+  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [periodLabel, setPeriodLabel] = useState("Today");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);

@@ -23,7 +23,7 @@ export default function CampaignMapping() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [saving, setSaving] = useState<string | null>(null);
   const [overviewPage, setOverviewPage] = useState(1);
   const [overviewSize, setOverviewSize] = useState(20);
