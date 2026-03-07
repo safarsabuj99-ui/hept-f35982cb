@@ -120,7 +120,7 @@ export default function FinanceDashboard() {
       if (!profile) continue;
 
       const pricingConfig = profile.pricing_config as any;
-      const platformRates = pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+      const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
       const percentageMarkup = Number(pricingConfig?.percentage || 0);
 
       let revenueBdt = 0;
