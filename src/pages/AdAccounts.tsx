@@ -47,7 +47,7 @@ export default function AdAccounts() {
   const [importStatus, setImportStatus] = useState("");
   const [form, setForm] = useState({
     platform_name: "", ad_account_id: "", account_currency: "USD",
-    daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
+    account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
     next_billing_date: "", card_last_4: "", exchange_rate: "",
   });
   // Add client popover state
@@ -85,7 +85,7 @@ export default function AdAccounts() {
       platform_name: form.platform_name,
       ad_account_id: form.ad_account_id,
       account_currency: form.account_currency,
-      daily_spending_limit: form.daily_spending_limit ? Number(form.daily_spending_limit) : 250,
+      account_spending_limit: form.account_spending_limit ? Number(form.account_spending_limit) : 250,
       billing_type: form.billing_type,
     };
     if (form.billing_type === "threshold_postpaid") {
@@ -105,7 +105,7 @@ export default function AdAccounts() {
       setOpen(false);
       setForm({
         platform_name: "", ad_account_id: "", account_currency: "USD",
-        daily_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
+        account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
         next_billing_date: "", card_last_4: "", exchange_rate: "",
       });
       fetchData();
@@ -304,8 +304,8 @@ export default function AdAccounts() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>Daily Spending Limit ($)</Label>
-                  <Input type="number" value={form.daily_spending_limit} onChange={(e) => setForm({ ...form, daily_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
+                   <Label>Account Spending Limit ($)</Label>
+                  <Input type="number" value={form.account_spending_limit} onChange={(e) => setForm({ ...form, account_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
                 </div>
                 <div className="space-y-2">
                   <Label>Billing Type</Label>
@@ -361,7 +361,7 @@ export default function AdAccounts() {
                     <TableHead>Account ID</TableHead>
                     <TableHead className="min-w-[200px]">Clients & Keywords</TableHead>
                     <TableHead>Currency</TableHead>
-                    <TableHead>Daily Limit</TableHead>
+                    <TableHead>Acct Limit</TableHead>
                     <TableHead>Billing</TableHead>
                     <TableHead>Threshold</TableHead>
                     <TableHead>Next Bill</TableHead>
@@ -468,7 +468,7 @@ export default function AdAccounts() {
                           </div>
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
-                        <TableCell className="font-mono text-xs">${a.daily_spending_limit ?? 250}</TableCell>
+                        <TableCell className="font-mono text-xs">${a.account_spending_limit ?? 250}</TableCell>
                         <TableCell>
                           <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
                             {isThreshold ? "Threshold" : "Prepaid"}

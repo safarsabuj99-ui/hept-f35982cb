@@ -1,0 +1,1 @@
+ALTER TABLE ad_accounts RENAME COLUMN daily_spending_limit TO account_spending_limit;

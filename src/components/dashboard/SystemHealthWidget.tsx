@@ -17,7 +17,7 @@ interface AccountLimit {
   id: string;
   ad_account_id: string;
   platform_name: string;
-  daily_spending_limit: number;
+  account_spending_limit: number;
   todaySpend: number;
   usagePercent: number;
   status: "ok" | "warning" | "critical";
@@ -37,7 +37,7 @@ export function SystemHealthWidget() {
 
     const [intRes, accRes, spendRes] = await Promise.all([
       supabase.from("api_integrations" as any).select("id, instance_name, platform, token_expiry_date, connection_status, is_active") as any,
-      supabase.from("ad_accounts" as any).select("id, ad_account_id, platform_name, daily_spending_limit, is_active").eq("is_active", true) as any,
+      supabase.from("ad_accounts" as any).select("id, ad_account_id, platform_name, account_spending_limit, is_active").eq("is_active", true) as any,
       supabase.from("daily_ad_spend").select("ad_account_id, final_billable_usd").eq("date", today),
     ]);
 
@@ -65,14 +65,14 @@ export function SystemHealthWidget() {
     }
 
     const limitList: AccountLimit[] = ((accRes.data ?? []) as any[])
-      .filter((a: any) => a.daily_spending_limit && a.daily_spending_limit > 0)
+      .filter((a: any) => a.account_spending_limit && a.account_spending_limit > 0)
       .map((a: any) => {
         const todaySpend = spendByAccount[a.id] || 0;
-        const usagePercent = Math.min(Math.round((todaySpend / a.daily_spending_limit) * 100), 100);
+        const usagePercent = Math.min(Math.round((todaySpend / a.account_spending_limit) * 100), 100);
         let status: AccountLimit["status"] = "ok";
         if (usagePercent >= 90) status = "critical";
         else if (usagePercent >= 75) status = "warning";
-        return { id: a.id, ad_account_id: a.ad_account_id, platform_name: a.platform_name, daily_spending_limit: a.daily_spending_limit, todaySpend, usagePercent, status };
+        return { id: a.id, ad_account_id: a.ad_account_id, platform_name: a.platform_name, account_spending_limit: a.account_spending_limit, todaySpend, usagePercent, status };
       });
 
     setTokens(tokenList);
@@ -162,7 +162,7 @@ export function SystemHealthWidget() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium font-mono">{l.ad_account_id}</span>
                         <span className={l.status === "critical" ? "text-destructive font-semibold" : "text-warning font-semibold"}>
-                          ${l.todaySpend.toFixed(0)} / ${l.daily_spending_limit}
+                          ${l.todaySpend.toFixed(0)} / ${l.account_spending_limit}
                         </span>
                       </div>
                       <Progress

@@ -36,7 +36,7 @@ export default function AdAccountDetail() {
   // Editable fields
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [dailyLimit, setDailyLimit] = useState("");
+  const [accountLimit, setAccountLimit] = useState("");
   const [billingType, setBillingType] = useState("prepaid");
   const [thresholdLimit, setThresholdLimit] = useState("");
   const [nextBillingDate, setNextBillingDate] = useState("");
@@ -78,7 +78,7 @@ export default function AdAccountDetail() {
       setAccount(a);
       setAccountName(a.account_name || "");
       setCurrency(a.account_currency);
-      setDailyLimit(String(a.daily_spending_limit ?? "250"));
+      setAccountLimit(String(a.account_spending_limit ?? "250"));
       setBillingType(a.billing_type);
       setThresholdLimit(String(a.threshold_limit ?? "250"));
       setNextBillingDate(a.next_billing_date || "");
@@ -130,7 +130,7 @@ export default function AdAccountDetail() {
     const payload: any = {
       account_name: accountName,
       account_currency: currency,
-      daily_spending_limit: dailyLimit ? Number(dailyLimit) : 250,
+      account_spending_limit: accountLimit ? Number(accountLimit) : 250,
       billing_type: billingType,
       is_active: isActive,
       card_last_4: cardLast4 || null,
@@ -285,8 +285,8 @@ export default function AdAccountDetail() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Daily Spending Limit ($)</Label>
-                  <Input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} min="0" step="10" />
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Account Spending Limit ($)</Label>
+                  <Input type="number" value={accountLimit} onChange={(e) => setAccountLimit(e.target.value)} min="0" step="10" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Billing Type</Label>
