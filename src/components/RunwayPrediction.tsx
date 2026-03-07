@@ -134,7 +134,7 @@ export function RunwayPrediction() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Avg daily: {fmt(c.avgDailySpend)} · Util: {c.utilization}%
+                  Avg daily: {fmt(c.avgDailySpend)} · Guard at: {fmt(c.pauseThreshold)}
                 </p>
               </div>
               <div className="text-right space-y-0.5">
