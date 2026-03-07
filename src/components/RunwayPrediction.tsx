@@ -89,7 +89,7 @@ export function RunwayPrediction() {
           avgDailySpend: avgDaily,
           runwayDays: Math.round(runwayDays * 10) / 10,
           projectedStopDate: projectedStop,
-          utilization: Math.round(utilization),
+          pauseThreshold,
           isSystemPaused,
         });
       }
