@@ -10,19 +10,36 @@ const corsHeaders = {
 async function syncMetaBilling(adAccountId: string, token: string) {
   const result: Record<string, any> = {};
 
-  // 1. Account-level fields: spend_cap, amount_spent, balance
+  // 1. Account-level fields: spend_cap, amount_spent, balance, funding_source_details
   try {
-    const url = `https://graph.facebook.com/v21.0/${adAccountId}?fields=spend_cap,amount_spent,balance,currency,account_status&access_token=${token}`;
+    const url = `https://graph.facebook.com/v21.0/${adAccountId}?fields=spend_cap,amount_spent,balance,currency,account_status,funding_source_details&access_token=${token}`;
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
+      console.log("Meta account-level response:", JSON.stringify(data));
       // spend_cap is in cents (string), 0 means no limit
       if (data.spend_cap) {
         const capCents = Number(data.spend_cap);
         result.account_spending_limit = capCents > 0 ? capCents / 100 : null;
       }
+      // Fallback: extract threshold from funding_source_details
+      if (data.funding_source_details) {
+        const fsd = data.funding_source_details;
+        console.log("funding_source_details:", JSON.stringify(fsd));
+        if (fsd.type === 2) {
+          result.billing_type = "threshold_postpaid";
+          if (fsd.amount) {
+            result.threshold_limit = Number(fsd.amount) / 100;
+          }
+        }
+      }
+    } else {
+      const errText = await res.text();
+      console.error(`Meta account fetch failed (${res.status}):`, errText);
     }
-  } catch { /* skip */ }
+  } catch (err) {
+    console.error("Meta account fetch error:", err);
+  }
 
   // 2. Billing cycle: threshold_amount, amount_spent, end_time
   try {
@@ -30,6 +47,7 @@ async function syncMetaBilling(adAccountId: string, token: string) {
     const res = await fetch(url);
     if (res.ok) {
       const json = await res.json();
+      console.log("Meta billing cycle response:", JSON.stringify(json));
       const cycle = json.data?.[0];
       if (cycle) {
         if (cycle.threshold_amount) {
@@ -48,8 +66,13 @@ async function syncMetaBilling(adAccountId: string, token: string) {
           }
         }
       }
+    } else {
+      const errText = await res.text();
+      console.error(`Meta billing cycle fetch failed (${res.status}):`, errText);
     }
-  } catch { /* skip */ }
+  } catch (err) {
+    console.error("Meta billing cycle fetch error:", err);
+  }
 
   return result;
 }
