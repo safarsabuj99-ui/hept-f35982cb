@@ -124,8 +124,8 @@ export default function ClientList() {
   useEffect(() => { setCurrentPage(1); }, [search]);
 
   const getPricingLabel = (config: any) => {
-    if (!config?.platform_rates) return "Not Set";
-    const pr = config.platform_rates;
+    const pr = config?.flat_rates || config?.platform_rates;
+    if (!pr) return "Not Set";
     const parts = [];
     if (pr.meta) parts.push(`M:${pr.meta}`);
     if (pr.tiktok) parts.push(`T:${pr.tiktok}`);
