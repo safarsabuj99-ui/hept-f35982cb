@@ -1,54 +1,34 @@
 
 
-# Revamp Ad Guard: Switch from Percentage to Dollar-Amount Trigger
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Current System
-- Uses `auto_pause_threshold_pct` (percentage of deposits+overdraft utilized)
-- Complex calculation: `(total_debits / (total_deposits + overdraft)) * 100`
-- Hard to reason about — clients don't think in percentages
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## New System
-Replace percentage with a simple dollar balance threshold. When a client's remaining balance drops to or below the configured amount (e.g. $5), all campaigns pause. Also triggers at $0 or negative balance.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-**Formula**: `balance = total_deposits - total_debits`. If `balance <= threshold_usd` → pause all campaigns.
+## Technical Change
 
-## Database Changes
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### Migration
-- Add column: `auto_pause_balance_usd numeric NOT NULL DEFAULT 5` to `profiles` (the dollar threshold)
-- The existing `auto_pause_threshold_pct` column stays for now (no data loss) but will no longer be used
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-## Code Changes
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 1. `supabase/functions/ad-guard-check/index.ts`
-- Replace utilization calculation with simple balance check:
-  ```
-  balance = totalDeposits - totalDebits
-  if (balance <= threshold_usd) → pause campaigns
-  ```
-- Auto-resume check: resume when `balance > threshold_usd * 2` (double the threshold as safety buffer)
-
-### 2. `src/components/AutomationConfigTab.tsx`
-- Remove the percentage `Slider` (80-99%)
-- Replace with a USD `Input` field labeled "Pause When Balance Drops To" with default $5
-- Keep the overdraft limit input
-- Keep manual resume and "Run Ad Guard Now" buttons
-- Save writes to `auto_pause_balance_usd` instead of `auto_pause_threshold_pct`
-
-### 3. Database trigger `check_auto_resume()`
-- Update the trigger function to use balance-based logic instead of percentage:
-  ```sql
-  IF v_balance > v_pause_threshold * 2 AND paused campaigns exist → resume
-  ```
-
-### 4. `src/components/RunwayPrediction.tsx`
-- Update to read `auto_pause_balance_usd` instead of `auto_pause_threshold_pct`
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| Migration | Add `auto_pause_balance_usd` column to `profiles` |
-| Migration | Update `check_auto_resume()` trigger function |
-| `supabase/functions/ad-guard-check/index.ts` | Balance-based pause logic |
-| `src/components/AutomationConfigTab.tsx` | Dollar input instead of percentage slider |
-| `src/components/RunwayPrediction.tsx` | Read new column |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.

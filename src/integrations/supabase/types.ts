@@ -736,6 +736,7 @@ export type Database = {
       profiles: {
         Row: {
           ad_account_filter_tag: string | null
+          auto_pause_balance_usd: number
           auto_pause_threshold_pct: number
           business_name: string | null
           created_at: string
@@ -757,6 +758,7 @@ export type Database = {
         }
         Insert: {
           ad_account_filter_tag?: string | null
+          auto_pause_balance_usd?: number
           auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string
@@ -778,6 +780,7 @@ export type Database = {
         }
         Update: {
           ad_account_filter_tag?: string | null
+          auto_pause_balance_usd?: number
           auto_pause_threshold_pct?: number
           business_name?: string | null
           created_at?: string

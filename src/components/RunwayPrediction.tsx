@@ -13,7 +13,7 @@ interface RunwayClient {
   avgDailySpend: number;
   runwayDays: number;
   projectedStopDate: Date;
-  utilization: number;
+  pauseThreshold: number;
   isSystemPaused: boolean;
 }
 
@@ -31,7 +31,7 @@ export function RunwayPrediction() {
     if (clientIds.length === 0) { setLoading(false); return; }
 
     const [profilesRes, txnsRes, accountsRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_threshold_pct").in("user_id", clientIds),
+      supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_balance_usd").in("user_id", clientIds),
       supabase.from("transactions").select("client_id, type, amount, status"),
       supabase.from("ad_accounts").select("id, client_id").eq("is_active", true),
     ]);
@@ -76,8 +76,7 @@ export function RunwayPrediction() {
       const projectedStop = new Date();
       projectedStop.setDate(projectedStop.getDate() + runwayDays);
 
-      const denominator = credits + overdraft;
-      const utilization = denominator > 0 ? (debits / denominator) * 100 : 100;
+      const pauseThreshold = Number((p as any).auto_pause_balance_usd ?? 5);
 
       const pausedCampaigns = (p as any).system_paused_campaigns;
       const isSystemPaused = Array.isArray(pausedCampaigns) && pausedCampaigns.length > 0;
@@ -90,7 +89,7 @@ export function RunwayPrediction() {
           avgDailySpend: avgDaily,
           runwayDays: Math.round(runwayDays * 10) / 10,
           projectedStopDate: projectedStop,
-          utilization: Math.round(utilization),
+          pauseThreshold,
           isSystemPaused,
         });
       }
@@ -135,7 +134,7 @@ export function RunwayPrediction() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Avg daily: {fmt(c.avgDailySpend)} · Util: {c.utilization}%
+                  Avg daily: {fmt(c.avgDailySpend)} · Guard at: {fmt(c.pauseThreshold)}
                 </p>
               </div>
               <div className="text-right space-y-0.5">
