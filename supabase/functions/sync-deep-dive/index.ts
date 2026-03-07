@@ -392,10 +392,13 @@ Deno.serve(async (req) => {
             const platformId = `google_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
+            const googleStatusConfirmed = !!row.campaign?.status;
             const status = statusMap[row.campaign?.status] || "active";
 
-            const campaignDbId = await upsertCampaign(platformId, campaignName, status, clientId);
-            if (!campaignDbId) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+            const campaignResult = await upsertCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
+            if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
+            const campaignDbId = campaignResult.id;
+            const finalStatus = campaignResult.status;
 
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results: Math.round(conversions),
