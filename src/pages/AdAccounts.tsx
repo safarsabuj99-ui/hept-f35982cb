@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download, X, UserPlus, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
