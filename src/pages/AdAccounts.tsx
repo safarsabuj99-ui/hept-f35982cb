@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download, X, UserPlus, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -50,11 +50,6 @@ export default function AdAccounts() {
     account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
     next_billing_date: "", card_last_4: "", exchange_rate: "",
   });
-  // Add client popover state
-  const [addClientPopover, setAddClientPopover] = useState<string | null>(null);
-  const [newAssignClient, setNewAssignClient] = useState("");
-  const [newAssignKeyword, setNewAssignKeyword] = useState("");
-  const [assignSaving, setAssignSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
@@ -140,37 +135,6 @@ export default function AdAccounts() {
     }
   };
 
-  const addClientAssignment = async (accountId: string) => {
-    if (!newAssignClient || !newAssignKeyword.trim()) {
-      toast({ title: "Required", description: "Select a client and enter a mapping keyword", variant: "destructive" });
-      return;
-    }
-    setAssignSaving(true);
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert({
-      ad_account_id: accountId,
-      client_id: newAssignClient,
-      mapping_keyword: newAssignKeyword.trim(),
-    });
-    setAssignSaving(false);
-    if (error) {
-      toast({ title: "Error", description: error.message?.includes("duplicate") ? "Client already assigned to this account" : error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Assigned", description: "Client linked with keyword" });
-      setAddClientPopover(null);
-      setNewAssignClient("");
-      setNewAssignKeyword("");
-      fetchData();
-    }
-  };
-
-  const removeClientAssignment = async (assignmentId: string) => {
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).delete().eq("id", assignmentId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      fetchData();
-    }
-  };
 
   const toggleIntegration = (id: string) => {
     setSelectedIntegrations((prev) => {
@@ -359,7 +323,7 @@ export default function AdAccounts() {
                     <TableHead>Platform</TableHead>
                     <TableHead>Account Name</TableHead>
                     <TableHead>Account ID</TableHead>
-                    <TableHead className="min-w-[200px]">Clients & Keywords</TableHead>
+                    <TableHead>Clients</TableHead>
                     <TableHead>Currency</TableHead>
                     <TableHead>Acct Limit</TableHead>
                     <TableHead>Billing</TableHead>
@@ -378,8 +342,6 @@ export default function AdAccounts() {
                       ? differenceInDays(new Date(a.next_billing_date), new Date())
                       : null;
                     const accountAssignments = getAccountAssignments(a.id);
-                    const assignedClientIds = new Set(accountAssignments.map((aa) => aa.client_id));
-                    const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
 
                     return (
                       <TableRow key={a.id}>
@@ -401,71 +363,12 @@ export default function AdAccounts() {
                           </button>
                         </TableCell>
                         <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {accountAssignments.map((assign) => (
-                              <Badge key={assign.id} variant="outline" className="flex items-center gap-1 pr-1 text-[11px]">
-                                <span className="font-medium">{getClientName(assign.client_id)}</span>
-                                {assign.mapping_keyword && (
-                                  <span className="text-muted-foreground">({assign.mapping_keyword})</span>
-                                )}
-                                <button
-                                  onClick={() => removeClientAssignment(assign.id)}
-                                  className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                            <Popover
-                              open={addClientPopover === a.id}
-                              onOpenChange={(open) => {
-                                setAddClientPopover(open ? a.id : null);
-                                if (!open) { setNewAssignClient(""); setNewAssignKeyword(""); }
-                              }}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled={availableClients.length === 0}>
-                                  <UserPlus className="h-3.5 w-3.5" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-64 space-y-3" align="start">
-                                <p className="text-sm font-medium">Add Client</p>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Client</Label>
-                                  <Select value={newAssignClient} onValueChange={setNewAssignClient}>
-                                    <SelectTrigger className="h-8 text-xs">
-                                      <SelectValue placeholder="Select client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {availableClients.map((c) => (
-                                        <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Mapping Keyword</Label>
-                                  <Input
-                                    className="h-8 text-xs"
-                                    placeholder="e.g. brandname"
-                                    value={newAssignKeyword}
-                                    onChange={(e) => setNewAssignKeyword(e.target.value)}
-                                  />
-                                  <p className="text-[10px] text-muted-foreground">Campaigns containing this keyword will be mapped to this client</p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  className="w-full h-8 text-xs"
-                                  disabled={assignSaving || !newAssignClient || !newAssignKeyword.trim()}
-                                  onClick={() => addClientAssignment(a.id)}
-                                >
-                                  {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                                  Assign
-                                </Button>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
+                        <TableCell className="text-sm">
+                          {accountAssignments.length > 0 ? (
+                            <Badge variant="secondary">{accountAssignments.length} client{accountAssignments.length !== 1 ? "s" : ""}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">${a.account_spending_limit ?? 250}</TableCell>
