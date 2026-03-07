@@ -141,9 +141,11 @@ export default function AdminDashboard() {
     const rangeCollTxns = transactions.filter((t: any) => {
       if (t.type !== "credit" || t.status !== "completed" || !isNotTransfer(t)) return false;
       if (dateRange) {
-        return t.date >= rangeFrom && t.date <= rangeTo;
+        const from = toISODate(dateRange.from);
+        const to = toISODate(dateRange.to);
+        return t.date >= from && t.date <= to;
       }
-      return t.date === today;
+      return true; // All Time: include all
     });
     const rangeCollect = rangeCollTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
 
