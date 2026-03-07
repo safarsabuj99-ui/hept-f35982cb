@@ -50,11 +50,6 @@ export default function AdAccounts() {
     account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
     next_billing_date: "", card_last_4: "", exchange_rate: "",
   });
-  // Add client popover state
-  const [addClientPopover, setAddClientPopover] = useState<string | null>(null);
-  const [newAssignClient, setNewAssignClient] = useState("");
-  const [newAssignKeyword, setNewAssignKeyword] = useState("");
-  const [assignSaving, setAssignSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const { toast } = useToast();
