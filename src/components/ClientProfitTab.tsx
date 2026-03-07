@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
+import { format } from "date-fns";
 
 interface PlatformProfit {
   platform: string;
@@ -34,20 +36,27 @@ const PLATFORM_COLORS: Record<string, string> = {
 export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const [rows, setRows] = useState<PlatformProfit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(null);
+  const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {
-    fetchData();
+    // Initial load handled by ClientDateFilter's onRangeChange callback
   }, [clientId]);
 
-  const fetchData = async () => {
+  const handleDateChange = (range: ClientDateRange | null, preset: ClientDatePreset) => {
+    setDateRange(range);
+    setDatePreset(preset);
+    fetchData(range);
+  };
+
+  const fetchData = async (range: ClientDateRange | null) => {
     setLoading(true);
 
-    const [purchasesRes, profileRes, accClientsRes, campaignsRes, metricsRes] = await Promise.all([
+    const [purchasesRes, profileRes, accClientsRes, campaignsRes] = await Promise.all([
       supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
       supabase.from("profiles").select("pricing_config").eq("user_id", clientId).single(),
       supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", clientId),
       supabase.from("campaigns").select("id, ad_account_id, platform"),
-      supabase.from("daily_metrics").select("campaign_id, spend"),
     ]);
 
     // WAC
@@ -67,11 +76,33 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
 
     // Campaigns belonging to client's ad accounts
     const campaignMap: Record<string, string> = {};
+    const campaignIds: string[] = [];
     for (const c of (campaignsRes.data ?? []) as any[]) {
       if (clientAccIds.has(c.ad_account_id)) {
         campaignMap[c.id] = c.platform;
+        campaignIds.push(c.id);
       }
     }
+
+    if (campaignIds.length === 0) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch metrics with date filter
+    let metricsQuery = supabase
+      .from("daily_metrics")
+      .select("campaign_id, spend")
+      .in("campaign_id", campaignIds);
+
+    if (range) {
+      metricsQuery = metricsQuery
+        .gte("data_date", format(range.from, "yyyy-MM-dd"))
+        .lte("data_date", format(range.to, "yyyy-MM-dd"));
+    }
+
+    const metricsRes = await metricsQuery;
 
     // Aggregate spend per platform
     const platformSpend: Record<string, number> = {};
@@ -112,124 +143,123 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const totalRevenue = rows.reduce((s, r) => s + r.spendUsd * r.billingRate, 0);
   const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-sm text-muted-foreground text-center">No spend data available for this client.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {/* Platform Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {rows.map((r) => (
-          <Card key={r.platform} className="dark:bg-card/80">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <Badge variant="outline" className={`text-xs font-medium ${PLATFORM_COLORS[r.platform] || ""}`}>
-                  {PLATFORM_LABELS[r.platform] || r.platform}
-                </Badge>
-                <Badge variant={r.profitBdt >= 0 ? "default" : "destructive"} className="text-xs">
-                  {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-2xl font-bold font-mono">
-                ৳{r.profitBdt.toLocaleString()}
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wide">Spend</span>
-                  <span className="font-mono text-foreground">${r.spendUsd.toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wide">Rate</span>
-                  <span className="font-mono text-foreground">৳{r.billingRate}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wide">WAC</span>
-                  <span className="font-mono text-foreground">৳{r.wac}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wide">Gap</span>
-                  <span className={`font-mono ${r.gap >= 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
-                    ৳{r.gap}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Date Filter */}
+      <ClientDateFilter onRangeChange={handleDateChange} activePreset={datePreset} />
 
-      {/* Total Summary */}
-      <Card className="dark:bg-card/80 border-primary/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <TrendingUp className="h-4 w-4" /> Total Profit Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Platform</TableHead>
-                <TableHead className="text-right">Spend (USD)</TableHead>
-                <TableHead className="text-right">Rate (BDT)</TableHead>
-                <TableHead className="text-right">Gap (BDT)</TableHead>
-                <TableHead className="text-right">Profit (BDT)</TableHead>
-                <TableHead className="text-right">Margin</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.platform}>
-                  <TableCell>
-                    <Badge variant="outline" className={`text-xs ${PLATFORM_COLORS[r.platform] || ""}`}>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : rows.length === 0 ? (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground text-center">No spend data available for this period.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Platform Cards */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {rows.map((r) => (
+              <Card key={r.platform} className="dark:bg-card/80">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className={`text-xs font-medium ${PLATFORM_COLORS[r.platform] || ""}`}>
                       {PLATFORM_LABELS[r.platform] || r.platform}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.billingRate}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.gap}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
+                    <Badge variant={r.profitBdt >= 0 ? "default" : "destructive"} className="text-xs">
                       {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
                     </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {/* Total row */}
-              <TableRow className="font-semibold border-t-2">
-                <TableCell>Total</TableCell>
-                <TableCell className="text-right font-mono text-xs">${Math.round(totalSpend * 100 / 100).toLocaleString()}</TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">—</TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">—</TableCell>
-                <TableCell className="text-right font-mono text-xs">৳{totalProfit.toLocaleString()}</TableCell>
-                <TableCell className="text-right">
-                  <Badge variant={totalMargin >= 0 ? "default" : "destructive"} className="text-xs">
-                    {totalMargin >= 0 ? "+" : ""}{Math.round(totalMargin * 10) / 10}%
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="text-2xl font-bold font-mono">
+                    ৳{r.profitBdt.toLocaleString()}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide">Spend</span>
+                      <span className="font-mono text-foreground">${r.spendUsd.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide">Rate</span>
+                      <span className="font-mono text-foreground">৳{r.billingRate}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide">WAC</span>
+                      <span className="font-mono text-foreground">৳{r.wac}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase tracking-wide">Gap</span>
+                      <span className={`font-mono ${r.gap >= 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                        ৳{r.gap}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Total Summary */}
+          <Card className="dark:bg-card/80 border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <TrendingUp className="h-4 w-4" /> Total Profit Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Platform</TableHead>
+                    <TableHead className="text-right">Spend (USD)</TableHead>
+                    <TableHead className="text-right">Rate (BDT)</TableHead>
+                    <TableHead className="text-right">Gap (BDT)</TableHead>
+                    <TableHead className="text-right">Profit (BDT)</TableHead>
+                    <TableHead className="text-right">Margin</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => (
+                    <TableRow key={r.platform}>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${PLATFORM_COLORS[r.platform] || ""}`}>
+                          {PLATFORM_LABELS[r.platform] || r.platform}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">৳{r.billingRate}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">৳{r.gap}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
+                          {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {/* Total row */}
+                  <TableRow className="font-semibold border-t-2">
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-right font-mono text-xs">${Math.round(totalSpend * 100 / 100).toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right font-mono text-xs">৳{totalProfit.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={totalMargin >= 0 ? "default" : "destructive"} className="text-xs">
+                        {totalMargin >= 0 ? "+" : ""}{Math.round(totalMargin * 10) / 10}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
