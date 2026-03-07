@@ -239,8 +239,8 @@ export default function AdminDashboard() {
         />
         <KpiCard
           title={collectLabel}
-          value={`$${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle="USD"
+          value={`৳${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          subtitle="BDT"
           icon={Banknote}
           loading={loading}
           accentColor="hsl(var(--success))"
