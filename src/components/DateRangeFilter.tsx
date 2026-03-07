@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, subDays, subWeeks } from "date-fns";
+import type { DateRange as RDPDateRange } from "react-day-picker";
 
 export type DatePreset = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month" | "all_time" | "custom";
 
@@ -58,8 +59,7 @@ function getPresetRange(preset: DatePreset): DateRange | null {
 
 export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   const [activePreset, setActivePreset] = useState<DatePreset>("today");
-  const [customFrom, setCustomFrom] = useState<Date | undefined>();
-  const [customTo, setCustomTo] = useState<Date | undefined>();
+  const [customRange, setCustomRange] = useState<RDPDateRange | undefined>();
 
   useEffect(() => {
     const range = getPresetRange("today");
@@ -69,14 +69,17 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   const handlePreset = (preset: DatePreset) => {
     setActivePreset(preset);
     if (preset !== "custom") {
+      setCustomRange(undefined);
       const range = getPresetRange(preset);
       onRangeChange(range, preset);
     }
   };
 
-  const handleCustomApply = () => {
-    if (customFrom && customTo) {
-      onRangeChange({ from: startOfDay(customFrom), to: endOfDay(customTo) }, "custom");
+  const handleRangeSelect = (range: RDPDateRange | undefined) => {
+    setCustomRange(range);
+    if (range?.from && range?.to) {
+      setActivePreset("custom");
+      onRangeChange({ from: startOfDay(range.from), to: endOfDay(range.to) }, "custom");
     }
   };
 
@@ -101,38 +104,20 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
             onClick={() => setActivePreset("custom")}
           >
             <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-            {activePreset === "custom" && customFrom && customTo
-              ? `${format(customFrom, "MMM d")} – ${format(customTo, "MMM d")}`
+            {activePreset === "custom" && customRange?.from && customRange?.to
+              ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
               : "Custom"}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" align="end">
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">From</p>
-                <Calendar
-                  mode="single"
-                  selected={customFrom}
-                  onSelect={setCustomFrom}
-                  className={cn("p-2 pointer-events-auto")}
-                  initialFocus
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">To</p>
-                <Calendar
-                  mode="single"
-                  selected={customTo}
-                  onSelect={setCustomTo}
-                  className={cn("p-2 pointer-events-auto")}
-                />
-              </div>
-            </div>
-            <Button size="sm" className="w-full" onClick={handleCustomApply} disabled={!customFrom || !customTo}>
-              Apply Range
-            </Button>
-          </div>
+          <Calendar
+            mode="range"
+            selected={customRange}
+            onSelect={handleRangeSelect}
+            numberOfMonths={1}
+            className={cn("p-3 pointer-events-auto")}
+            initialFocus
+          />
         </PopoverContent>
       </Popover>
     </div>
