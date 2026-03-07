@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw } from "lucide-react";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
 
@@ -31,6 +31,7 @@ export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [account, setAccount] = useState<any>(null);
 
   // Editable fields
@@ -148,6 +149,26 @@ export default function AdAccountDetail() {
       toast({ title: "Saved", description: "Account updated." });
       loadAll();
     }
+  }
+
+  async function handleSyncBilling() {
+    if (!accountId) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-billing-data", {
+        body: { ad_account_id: accountId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: "Synced",
+        description: data?.message || "Billing data synced from platform.",
+      });
+      await loadAll();
+    } catch (err: any) {
+      toast({ title: "Sync Failed", description: err.message, variant: "destructive" });
+    }
+    setSyncing(false);
   }
 
   async function addAssignment() {
@@ -337,7 +358,11 @@ export default function AdAccountDetail() {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={handleSyncBilling} disabled={syncing || !account?.api_integration_id} className="gap-2">
+                  {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync from Platform
+                </Button>
                 <Button onClick={handleSave} disabled={saving} className="gap-2">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Changes
