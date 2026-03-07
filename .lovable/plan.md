@@ -1,34 +1,36 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: Active Campaigns Always Visible in Live Campaigns
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+Currently, `campaignRows` is built exclusively from `daily_metrics` results. If an active campaign has no metrics for the selected date range, it won't appear in the Live Campaigns table at all.
 
 ## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+After building `campaignRows` from metrics data, iterate over all fetched `campaigns` and inject any **active** campaigns that are missing from the map with zeroed-out metrics. This ensures every active campaign always appears in the table regardless of whether it has spend data for the selected period.
 
-## Technical Change
+## Changes
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### `src/pages/ClientReports.tsx`
 
-Current code:
+1. **Store campaigns list in state** — add a `campaigns` state variable so it's available in the `useMemo` that builds `campaignRows`.
+
+2. **Update `campaignRows` useMemo** — after aggregating metrics, loop through all campaigns with `status === 'active'` and add any that aren't already in the map with zero metrics:
+
+```typescript
+// After the existing metrics aggregation loop:
+for (const c of campaigns) {
+  if (c.status === 'active' && !map[c.id]) {
+    map[c.id] = {
+      campaign_name: c.name || "Unknown",
+      platform: c.platform || "unknown",
+      status: "active",
+      ad_account_name: adAccountMap[c.ad_account_id] || "",
+      campaign_id: c.id,
+      impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
+    };
+  }
+}
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+This is a small change — add one state variable and ~10 lines in the useMemo. No database or backend changes needed.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
