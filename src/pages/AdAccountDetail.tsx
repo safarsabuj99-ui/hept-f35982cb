@@ -78,7 +78,7 @@ export default function AdAccountDetail() {
       setAccount(a);
       setAccountName(a.account_name || "");
       setCurrency(a.account_currency);
-      setDailyLimit(String(a.daily_spending_limit ?? "250"));
+      setAccountLimit(String(a.account_spending_limit ?? "250"));
       setBillingType(a.billing_type);
       setThresholdLimit(String(a.threshold_limit ?? "250"));
       setNextBillingDate(a.next_billing_date || "");
