@@ -560,7 +560,7 @@ export default function ClientDetail() {
         <TabsContent value="automation">
           <AutomationConfigTab
             userId={userId!}
-            autoPauseThreshold={profile?.auto_pause_threshold_pct ?? 95}
+            autoPauseBalanceUsd={Number((profile as any)?.auto_pause_balance_usd ?? 5)}
             overdraftLimit={Number(profile?.overdraft_limit_usd ?? 0)}
             systemPausedCampaigns={
               Array.isArray(profile?.system_paused_campaigns)
