@@ -328,7 +328,7 @@ Deno.serve(async (req) => {
                 date: dataDate,
                 impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
                 conversion_value: conversionValue, roas,
-                status: metaCampaignStatus,
+                status: finalStatus,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
