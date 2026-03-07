@@ -13,7 +13,7 @@ interface RunwayClient {
   avgDailySpend: number;
   runwayDays: number;
   projectedStopDate: Date;
-  utilization: number;
+  pauseThreshold: number;
   isSystemPaused: boolean;
 }
 
