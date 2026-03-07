@@ -285,8 +285,8 @@ export default function AdAccountDetail() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Daily Spending Limit ($)</Label>
-                  <Input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} min="0" step="10" />
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Account Spending Limit ($)</Label>
+                  <Input type="number" value={accountLimit} onChange={(e) => setAccountLimit(e.target.value)} min="0" step="10" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Billing Type</Label>

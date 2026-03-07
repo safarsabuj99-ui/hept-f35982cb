@@ -162,7 +162,7 @@ export function SystemHealthWidget() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium font-mono">{l.ad_account_id}</span>
                         <span className={l.status === "critical" ? "text-destructive font-semibold" : "text-warning font-semibold"}>
-                          ${l.todaySpend.toFixed(0)} / ${l.daily_spending_limit}
+                          ${l.todaySpend.toFixed(0)} / ${l.account_spending_limit}
                         </span>
                       </div>
                       <Progress

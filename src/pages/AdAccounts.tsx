@@ -361,7 +361,7 @@ export default function AdAccounts() {
                     <TableHead>Account ID</TableHead>
                     <TableHead className="min-w-[200px]">Clients & Keywords</TableHead>
                     <TableHead>Currency</TableHead>
-                    <TableHead>Daily Limit</TableHead>
+                    <TableHead>Acct Limit</TableHead>
                     <TableHead>Billing</TableHead>
                     <TableHead>Threshold</TableHead>
                     <TableHead>Next Bill</TableHead>
