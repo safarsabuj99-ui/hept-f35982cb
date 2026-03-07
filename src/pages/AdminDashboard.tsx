@@ -77,7 +77,7 @@ export default function AdminDashboard() {
         .lte("data_date", toISODate(dateRange.to));
     }
 
-    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes] = await Promise.all([
+    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, email, business_name"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("transactions").select("*"),
@@ -86,6 +86,7 @@ export default function AdminDashboard() {
       supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
       spendQuery,
       supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
+      supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
     ]);
 
     // Fetch last 7 days spend for sparkline
@@ -136,24 +137,25 @@ export default function AdminDashboard() {
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
 
-    // Collections for the selected range
-    const isNotTransfer = (t: any) => !(t.description && t.description.startsWith("Platform transfer:"));
-    const rangeCollTxns = transactions.filter((t: any) => {
-      if (t.type !== "credit" || t.status !== "completed" || !isNotTransfer(t)) return false;
+    // Collections from payment_requests (BDT)
+    const approvedPayments = (paymentReqRes.data ?? []) as any[];
+    const rangeCollPayments = approvedPayments.filter((p: any) => {
       if (dateRange) {
+        const pDate = p.created_at.split("T")[0];
         const from = toISODate(dateRange.from);
         const to = toISODate(dateRange.to);
-        return t.date >= from && t.date <= to;
+        return pDate >= from && pDate <= to;
       }
       return true; // All Time: include all
     });
-    const rangeCollect = rangeCollTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const rangeCollect = rangeCollPayments.reduce((s: number, p: any) => s + Number(p.amount_bdt || 0), 0);
 
-    // Collections sparkline
+    // Collections sparkline (BDT from payment_requests)
     const dailyCollMap: Record<string, number> = {};
-    for (const t of transactions as any[]) {
-      if (t.type === "credit" && t.status === "completed" && t.date >= sevenAgo && !(t.description && t.description.startsWith("Platform transfer:"))) {
-        dailyCollMap[t.date] = (dailyCollMap[t.date] || 0) + Number(t.amount);
+    for (const p of approvedPayments) {
+      const pDate = p.created_at.split("T")[0];
+      if (pDate >= sevenAgo) {
+        dailyCollMap[pDate] = (dailyCollMap[pDate] || 0) + Number(p.amount_bdt || 0);
       }
     }
     setCollectHistory(Array.from({ length: 7 }, (_, i) => {
@@ -237,8 +239,8 @@ export default function AdminDashboard() {
         />
         <KpiCard
           title={collectLabel}
-          value={`$${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle="USD"
+          value={`৳${todayCollections.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          subtitle="BDT"
           icon={Banknote}
           loading={loading}
           accentColor="hsl(var(--success))"
