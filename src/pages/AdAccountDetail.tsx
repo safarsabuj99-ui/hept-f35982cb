@@ -148,6 +148,7 @@ export default function AdAccountDetail() {
     } else {
       toast({ title: "Saved", description: "Account updated." });
       loadAll();
+    }
   }
 
   async function handleSyncBilling() {
@@ -168,7 +169,6 @@ export default function AdAccountDetail() {
       toast({ title: "Sync Failed", description: err.message, variant: "destructive" });
     }
     setSyncing(false);
-  }
   }
 
   async function addAssignment() {
