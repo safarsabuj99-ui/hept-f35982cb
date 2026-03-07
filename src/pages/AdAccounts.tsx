@@ -363,71 +363,12 @@ export default function AdAccounts() {
                           </button>
                         </TableCell>
                         <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {accountAssignments.map((assign) => (
-                              <Badge key={assign.id} variant="outline" className="flex items-center gap-1 pr-1 text-[11px]">
-                                <span className="font-medium">{getClientName(assign.client_id)}</span>
-                                {assign.mapping_keyword && (
-                                  <span className="text-muted-foreground">({assign.mapping_keyword})</span>
-                                )}
-                                <button
-                                  onClick={() => removeClientAssignment(assign.id)}
-                                  className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                            <Popover
-                              open={addClientPopover === a.id}
-                              onOpenChange={(open) => {
-                                setAddClientPopover(open ? a.id : null);
-                                if (!open) { setNewAssignClient(""); setNewAssignKeyword(""); }
-                              }}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled={availableClients.length === 0}>
-                                  <UserPlus className="h-3.5 w-3.5" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-64 space-y-3" align="start">
-                                <p className="text-sm font-medium">Add Client</p>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Client</Label>
-                                  <Select value={newAssignClient} onValueChange={setNewAssignClient}>
-                                    <SelectTrigger className="h-8 text-xs">
-                                      <SelectValue placeholder="Select client" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {availableClients.map((c) => (
-                                        <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Mapping Keyword</Label>
-                                  <Input
-                                    className="h-8 text-xs"
-                                    placeholder="e.g. brandname"
-                                    value={newAssignKeyword}
-                                    onChange={(e) => setNewAssignKeyword(e.target.value)}
-                                  />
-                                  <p className="text-[10px] text-muted-foreground">Campaigns containing this keyword will be mapped to this client</p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  className="w-full h-8 text-xs"
-                                  disabled={assignSaving || !newAssignClient || !newAssignKeyword.trim()}
-                                  onClick={() => addClientAssignment(a.id)}
-                                >
-                                  {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                                  Assign
-                                </Button>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
+                        <TableCell className="text-sm">
+                          {accountAssignments.length > 0 ? (
+                            <Badge variant="secondary">{accountAssignments.length} client{accountAssignments.length !== 1 ? "s" : ""}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">${a.account_spending_limit ?? 250}</TableCell>
