@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { format } from "date-fns";
 
 interface ProfitData {
   totalRevenueBdt: number;
@@ -12,16 +13,29 @@ interface ProfitData {
   wac: number;
 }
 
-export function ProfitLossWidget() {
+interface ProfitLossWidgetProps {
+  dateRange?: { from: Date; to: Date } | null;
+}
+
+export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
   const [data, setData] = useState<ProfitData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+
+      let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
+      if (dateRange) {
+        metricsQuery = metricsQuery
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      }
+
       const [purchasesRes, campaignsRes, metricsRes, accClientsRes, profilesRes, rolesRes] = await Promise.all([
         supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
         supabase.from("campaigns").select("id, ad_account_id, platform"),
-        supabase.from("daily_metrics").select("campaign_id, spend"),
+        metricsQuery,
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
         supabase.from("profiles").select("user_id, pricing_config"),
         supabase.from("user_roles").select("user_id").eq("role", "client"),
@@ -88,7 +102,7 @@ export function ProfitLossWidget() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [dateRange]);
 
   const fmt = (n: number) => `৳${n.toLocaleString("en-US")}`;
   const marginPct = data && data.totalRevenueBdt > 0 ? ((data.totalProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";

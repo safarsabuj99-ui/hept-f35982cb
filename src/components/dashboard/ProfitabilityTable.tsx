@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { format } from "date-fns";
 
 interface PlatformDetail {
   platform: string;
@@ -37,20 +37,33 @@ const PLATFORM_COLORS: Record<string, string> = {
   google: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
 };
 
-export function ProfitabilityTable() {
+interface ProfitabilityTableProps {
+  dateRange?: { from: Date; to: Date } | null;
+}
+
+export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
   const [rows, setRows] = useState<ProfitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [dateRange]);
 
   const fetchData = async () => {
+    setLoading(true);
+
+    let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
+    if (dateRange) {
+      metricsQuery = metricsQuery
+        .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+        .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+    }
+
     const [purchasesRes, campaignsRes, metricsRes, accClientsRes, profilesRes, rolesRes] = await Promise.all([
       supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
       supabase.from("campaigns").select("id, ad_account_id, platform"),
-      supabase.from("daily_metrics").select("campaign_id, spend"),
+      metricsQuery,
       supabase.from("ad_account_clients").select("ad_account_id, client_id"),
       supabase.from("profiles").select("user_id, full_name, pricing_config"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
