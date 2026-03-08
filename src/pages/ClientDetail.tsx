@@ -619,6 +619,86 @@ export default function ClientDetail() {
           />
         </TabsContent>
 
+        {/* AD ACCOUNTS TAB */}
+        <TabsContent value="adaccounts">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Assigned Ad Accounts</CardTitle>
+              <CardDescription>Manage which ad accounts are linked to this client.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Assignment Form */}
+              <div className="flex flex-col sm:flex-row items-end gap-3">
+                <div className="flex-1 space-y-2 w-full">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Account</Label>
+                  <Select value={newAdAccountId} onValueChange={setNewAdAccountId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an ad account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allAdAccounts
+                        .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
+                        .map((ac: any) => (
+                          <SelectItem key={ac.id} value={ac.id}>
+                            {ac.account_name || ac.ad_account_id} ({ac.platform_name})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-full sm:w-48">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
+                  <Input value={newAdKeyword} onChange={(e) => setNewAdKeyword(e.target.value)} placeholder="e.g. alpha" />
+                </div>
+                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !newAdAccountId} className="gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Assign
+                </Button>
+              </div>
+
+              {/* Assignments Table */}
+              {adAccountAssignments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No ad accounts assigned.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account Name</TableHead>
+                        <TableHead>Platform</TableHead>
+                        <TableHead>Account ID</TableHead>
+                        <TableHead>Keyword</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adAccountAssignments.map((a: any) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="text-sm font-medium">{a.account_name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs capitalize">{a.platform_name}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm font-mono text-muted-foreground">{a.ad_account_id_display}</TableCell>
+                          <TableCell className="text-sm">{a.mapping_keyword || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate(`/admin/ad-accounts/${a.ad_account_id}`)}>
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleRemoveAdAccount(a.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* SPEND TAB */}
         <TabsContent value="spend">
           <Card>
