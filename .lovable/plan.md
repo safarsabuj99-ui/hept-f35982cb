@@ -1,21 +1,34 @@
 
 
-# Add Balance Column to Client List
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What
-Add an "Available Balance" column after the Margin column in the Client List table, showing each client's current USD balance.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## How
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### `src/pages/ClientList.tsx`
-1. **Fetch transactions** in the existing `load()` function — add a query for `transactions` table selecting `client_id, type, amount` where `status = 'completed'`
-2. **Compute balances** — aggregate `credits - debits` per client into a `balances` state map (`Record<string, number>`)
-3. **Add column** — insert a `Balance` table header after `Margin`, and a corresponding cell showing the formatted USD amount with a color-coded badge (green for positive, red for negative/zero)
-4. **Interface update** — add `balances` state variable
+## Technical Change
 
-### Column Display
-- Format: `$xxx.xx` in a mono font badge
-- Green badge for positive balance, red/destructive for negative or zero
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-Single file change: `src/pages/ClientList.tsx`
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

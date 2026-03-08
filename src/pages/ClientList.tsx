@@ -35,6 +35,7 @@ export default function ClientList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [margins, setMargins] = useState<Record<string, MarginData>>({});
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const location = useLocation();
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function ClientList() {
       if (!roles?.length) { setLoading(false); return; }
 
       const ids = roles.map((r) => r.user_id);
-      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes] = await Promise.all([
+      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes, txnsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
@@ -56,6 +57,7 @@ export default function ClientList() {
         supabase.from("campaigns").select("id, ad_account_id, platform"),
         supabase.from("daily_metrics").select("campaign_id, spend"),
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
+        supabase.from("transactions").select("client_id, type, amount").eq("status", "completed"),
       ]);
 
       setClients(profilesRes.data || []);
@@ -116,6 +118,15 @@ export default function ClientList() {
         };
       }
       setMargins(marginMap);
+
+      // Compute balances
+      const balMap: Record<string, number> = {};
+      for (const t of (txnsRes.data ?? []) as any[]) {
+        const amt = Number(t.amount) || 0;
+        balMap[t.client_id] = (balMap[t.client_id] || 0) + (t.type === "credit" ? amt : -amt);
+      }
+      setBalances(balMap);
+
       setLoading(false);
     }
     load();
@@ -214,6 +225,7 @@ export default function ClientList() {
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead>Pricing</TableHead>
                       <TableHead className="text-right">Margin</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -238,6 +250,21 @@ export default function ClientList() {
                         </TableCell>
                         <TableCell className="text-right">
                           <MarginIndicator clientId={c.user_id} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {(() => {
+                            const bal = balances[c.user_id] ?? 0;
+                            const isPositive = bal > 0;
+                            return (
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono ${
+                                isPositive
+                                  ? "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20"
+                                  : "bg-destructive/10 text-destructive dark:bg-destructive/20"
+                              }`}>
+                                ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
