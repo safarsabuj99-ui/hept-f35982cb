@@ -163,8 +163,7 @@ export default function AdminDashboard() {
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
 
-    // Collections from payment_requests (BDT)
-    const approvedPayments = (paymentReqRes.data ?? []) as any[];
+    // Collections from payment_requests (BDT) - already declared above
     const rangeCollPayments = approvedPayments.filter((p: any) => {
       if (dateRange) {
         const pDate = p.created_at.split("T")[0];
