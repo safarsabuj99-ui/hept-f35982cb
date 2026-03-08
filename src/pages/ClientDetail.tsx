@@ -69,6 +69,13 @@ export default function ClientDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
+  // Ad Account assignments
+  const [allAdAccounts, setAllAdAccounts] = useState<any[]>([]);
+  const [adAccountAssignments, setAdAccountAssignments] = useState<any[]>([]);
+  const [newAdAccountId, setNewAdAccountId] = useState("");
+  const [newAdKeyword, setNewAdKeyword] = useState("");
+  const [assigningSaving, setAssigningSaving] = useState(false);
+
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
