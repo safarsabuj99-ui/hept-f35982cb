@@ -200,6 +200,7 @@ export default function ClientDetail() {
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendDateRange(range);
     setSpendDatePreset(preset);
+    setSpendPage(1);
     const { data: accounts } = await supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!);
     if (accounts?.length) {
       await loadSpendData(accounts.map((a: any) => a.ad_account_id), range);
