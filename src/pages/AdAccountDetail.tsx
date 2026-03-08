@@ -111,7 +111,7 @@ export default function AdAccountDetail() {
       }
 
       // Load spend with today's range to match default preset
-      await loadSpend({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+      await loadSpend({ from: getUtcTodayClient(), to: getUtcTodayClient() });
     }
 
     setAssignments(assignRes.data ?? []);

@@ -25,7 +25,7 @@ export default function CampaignMapping() {
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getUtcToday(); return { from: t, to: t }; });
   const [saving, setSaving] = useState<string | null>(null);
   const [spendPage, setSpendPage] = useState(1);
   const [spendSize, setSpendSize] = useState(20);

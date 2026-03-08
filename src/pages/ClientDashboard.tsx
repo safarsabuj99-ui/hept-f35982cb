@@ -122,7 +122,7 @@ export default function ClientDashboard() {
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
   const [isSyncing, setIsSyncing] = useState(false);
 

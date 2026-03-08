@@ -149,7 +149,7 @@ export default function ClientDetail() {
     // Spend data - load from new campaigns + daily_metrics tables
     if (assignmentRows.length) {
       const accountIds = assignmentRows.map((a: any) => a.ad_account_id);
-      await loadSpendData(accountIds, { from: startOfDay(new Date()), to: endOfDay(new Date()) });
+      await loadSpendData(accountIds, { from: getUtcTodayClient(), to: getUtcTodayClient() });
     }
 
     setPayments(paymentsRes.data || []);

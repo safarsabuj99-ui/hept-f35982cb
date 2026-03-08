@@ -131,3 +131,8 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
     </div>
   );
 }
+
+/** Helper to get UTC-based today as a local Date for consistent date filtering */
+export function getUtcTodayClient(): Date {
+  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+}
