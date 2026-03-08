@@ -15,6 +15,7 @@ interface Client {
   business_name: string | null;
   balance: number;
   todaySpend: number;
+  dueBdt: number;
 }
 
 interface Props {
@@ -42,7 +43,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
   });
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtBdt = (_n: number) => "—";
+  const fmtBdt = (n: number) => n > 0 ? `৳${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
 
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
     <button onClick={() => handleSort(k)} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
@@ -84,7 +85,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right hidden md:table-cell font-mono text-sm text-muted-foreground">
-                      {fmtBdt(c.balance)}
+                      {fmtBdt(c.dueBdt)}
                     </TableCell>
                     <TableCell className="text-right hidden lg:table-cell font-mono text-sm">
                       {c.todaySpend > 0 ? fmt(c.todaySpend) : "—"}

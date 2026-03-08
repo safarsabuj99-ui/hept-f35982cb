@@ -1,33 +1,34 @@
 
 
-# Show Client Due Balance in BDT in the Client Overview Table
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What You Want
-When a client has a negative USD balance (they owe money), show how much they owe in BDT in the "Balance (BDT)" column. The conversion uses each platform's billing rate from the client's pricing config (e.g., Meta debits × 145, TikTok debits × 150, Google debits × 150). If the client's balance is positive, show "—" in the BDT column.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## How It Works
-The same logic already used for the Payment Due KPI will be applied per-client:
-1. For each client with negative USD balance, group their debit transactions by platform
-2. Multiply each platform's USD debits by the client's `flat_rates` for that platform
-3. Subtract the client's total BDT credits (from approved payment requests `amount_bdt`)
-4. Display the result as `৳XX,XXX` in the BDT column
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Files to Change
+## Technical Change
 
-### 1. `src/pages/AdminDashboard.tsx`
-- In the `result` mapping (line ~133-138), calculate `dueBdt` per client using the same platform-rate logic already used for the KPI (lines 140-162)
-- Add `dueBdt` to the `ClientWithBalance` interface
-- Pass it through to `ClientOverviewTable`
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 2. `src/components/dashboard/ClientOverviewTable.tsx`
-- Add `dueBdt` to the `Client` interface
-- Replace the placeholder `fmtBdt` function with actual formatting: if `dueBdt > 0`, show `৳{dueBdt.toLocaleString()}`, otherwise show "—"
-- Display in the existing "Balance (BDT)" column
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-## Example Display
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-| Name | Balance (USD) | Balance (BDT) |
-|------|--------------|---------------|
-| Client A | -$200.00 | ৳29,000 |
-| Client B | $500.00 | — |
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

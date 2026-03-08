@@ -29,6 +29,7 @@ interface ClientWithBalance {
   business_name: string | null;
   balance: number;
   todaySpend: number;
+  dueBdt: number;
 }
 
 export default function AdminDashboard() {
@@ -134,7 +135,25 @@ export default function AdminDashboard() {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0 };
+      const balance = credits - debits;
+
+      // Calculate per-client BDT due
+      let dueBdt = 0;
+      if (balance < 0) {
+        const flatRates = p.pricing_config?.flat_rates || {};
+        const defaultRate = 120;
+        const clientDebits = clientTxns.filter((t: any) => t.type === "debit");
+        let debitsBdt = 0;
+        for (const t of clientDebits) {
+          const rate = flatRates[t.platform] || defaultRate;
+          debitsBdt += Number(t.amount) * rate;
+        }
+        const clientPayments = approvedPayments.filter((pr: any) => pr.client_id === p.user_id);
+        const creditsBdt = clientPayments.reduce((s: number, pr: any) => s + Number(pr.amount_bdt || 0), 0);
+        dueBdt = Math.max(0, debitsBdt - creditsBdt);
+      }
+
+      return { ...p, balance, todaySpend: clientSpendInRange[p.user_id] || 0, dueBdt: Math.round(dueBdt * 100) / 100 };
     });
 
     // Calculate Payment Due in BDT using per-platform rates from pricing_config
