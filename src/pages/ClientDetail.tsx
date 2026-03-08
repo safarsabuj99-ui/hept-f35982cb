@@ -130,9 +130,19 @@ export default function ClientDetail() {
       setPercentage(String(pc.percentage ?? ""));
     }
 
+    // Store all ad accounts and build assignments with details
+    const allAccs = allAdAccountsRes.data || [];
+    setAllAdAccounts(allAccs);
+    const assignmentRows = adAccountClientsRes.data || [];
+    const enrichedAssignments = assignmentRows.map((a: any) => {
+      const acc = allAccs.find((ac: any) => ac.id === a.ad_account_id);
+      return { ...a, account_name: acc?.account_name || "Unknown", platform_name: acc?.platform_name || "unknown", ad_account_id_display: acc?.ad_account_id || "" };
+    });
+    setAdAccountAssignments(enrichedAssignments);
+
     // Spend data - load from new campaigns + daily_metrics tables
-    if (adAccountsRes.data?.length) {
-      const accountIds = adAccountsRes.data.map((a: any) => a.ad_account_id);
+    if (assignmentRows.length) {
+      const accountIds = assignmentRows.map((a: any) => a.ad_account_id);
       await loadSpendData(accountIds, null);
     }
 
