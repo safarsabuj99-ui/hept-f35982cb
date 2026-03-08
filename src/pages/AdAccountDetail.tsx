@@ -528,7 +528,7 @@ export default function AdAccountDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spendData.map((s: any) => (
+                      {spendData.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((s: any) => (
                         <TableRow key={s.id}>
                           <TableCell className="text-sm">{s.date}</TableCell>
                           <TableCell className="text-sm max-w-[200px] truncate">{s.campaign_name || "—"}</TableCell>
@@ -539,6 +539,13 @@ export default function AdAccountDetail() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePagination
+                    totalItems={spendData.length}
+                    pageSize={spendSize}
+                    currentPage={spendPage}
+                    onPageChange={setSpendPage}
+                    onPageSizeChange={(size) => { setSpendSize(size); setSpendPage(1); }}
+                  />
                 </div>
               )}
             </CardContent>
