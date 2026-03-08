@@ -15,6 +15,7 @@ interface Client {
   business_name: string | null;
   balance: number;
   todaySpend: number;
+  dueBdt: number;
 }
 
 interface Props {
