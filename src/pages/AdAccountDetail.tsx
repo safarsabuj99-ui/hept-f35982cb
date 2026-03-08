@@ -14,6 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
 
@@ -53,9 +56,10 @@ export default function AdAccountDetail() {
   const [notifications, setNotifications] = useState<any[]>([]);
 
   // Client assignment form
-  const [newClient, setNewClient] = useState("");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
@@ -179,22 +183,23 @@ export default function AdAccountDetail() {
   }
 
   async function addAssignment() {
-    if (!newClient || !newKeyword.trim()) {
-      toast({ title: "Required", description: "Select a client and enter a keyword", variant: "destructive" });
+    if (!selectedClientIds.length || !newKeyword.trim()) {
+      toast({ title: "Required", description: "Select client(s) and enter a keyword", variant: "destructive" });
       return;
     }
     setAssignSaving(true);
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert({
+    const rows = selectedClientIds.map((cid) => ({
       ad_account_id: accountId,
-      client_id: newClient,
+      client_id: cid,
       mapping_keyword: newKeyword.trim(),
-    });
+    }));
+    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert(rows);
     setAssignSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Assigned", description: "Client linked." });
-      setNewClient("");
+      toast({ title: "Assigned", description: `${rows.length} client(s) linked.` });
+      setSelectedClientIds([]);
       setNewKeyword("");
       loadAll();
     }
@@ -438,26 +443,53 @@ export default function AdAccountDetail() {
 
               {/* Add Client */}
               <div className="border-t pt-4">
-                <p className="text-sm font-medium mb-3 flex items-center gap-1.5"><UserPlus className="h-4 w-4" /> Add Client</p>
+                <p className="text-sm font-medium mb-3 flex items-center gap-1.5"><UserPlus className="h-4 w-4" /> Add Client(s)</p>
                 <div className="flex items-end gap-3 flex-wrap">
-                  <div className="space-y-1.5 min-w-[180px]">
-                    <Label className="text-xs">Client</Label>
-                    <Select value={newClient} onValueChange={setNewClient}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select client" /></SelectTrigger>
-                      <SelectContent>
-                        {availableClients.map((c) => (
-                          <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1.5 min-w-[220px]">
+                    <Label className="text-xs">Clients</Label>
+                    <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start font-normal h-9">
+                          {selectedClientIds.length > 0
+                            ? `${selectedClientIds.length} client(s) selected`
+                            : "Select clients..."}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[280px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search clients..." />
+                          <CommandList>
+                            <CommandEmpty>No clients found.</CommandEmpty>
+                            <CommandGroup>
+                              {availableClients.map((c) => {
+                                const isSelected = selectedClientIds.includes(c.user_id);
+                                return (
+                                  <CommandItem
+                                    key={c.user_id}
+                                    onSelect={() => {
+                                      setSelectedClientIds((prev) =>
+                                        isSelected ? prev.filter((id) => id !== c.user_id) : [...prev, c.user_id]
+                                      );
+                                    }}
+                                  >
+                                    <Checkbox checked={isSelected} className="mr-2" />
+                                    <span className="truncate">{c.full_name}</span>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1.5 min-w-[160px]">
                     <Label className="text-xs">Mapping Keyword</Label>
                     <Input className="h-9" placeholder="e.g. brandname" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} />
                   </div>
-                  <Button size="sm" className="h-9" disabled={assignSaving || !newClient || !newKeyword.trim()} onClick={addAssignment}>
+                  <Button size="sm" className="h-9" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
                     {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                    Assign
+                    Assign {selectedClientIds.length > 1 ? `(${selectedClientIds.length})` : ""}
                   </Button>
                 </div>
               </div>

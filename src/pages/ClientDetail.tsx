@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -72,9 +74,10 @@ export default function ClientDetail() {
   // Ad Account assignments
   const [allAdAccounts, setAllAdAccounts] = useState<any[]>([]);
   const [adAccountAssignments, setAdAccountAssignments] = useState<any[]>([]);
-  const [newAdAccountId, setNewAdAccountId] = useState("");
+  const [selectedAdAccountIds, setSelectedAdAccountIds] = useState<string[]>([]);
   const [newAdKeyword, setNewAdKeyword] = useState("");
   const [assigningSaving, setAssigningSaving] = useState(false);
+  const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
 
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
@@ -291,20 +294,21 @@ export default function ClientDetail() {
   }
 
   async function handleAssignAdAccount() {
-    if (!newAdAccountId || !userId) return;
+    if (!selectedAdAccountIds.length || !userId) return;
     setAssigningSaving(true);
-    const { error } = await supabase.from("ad_account_clients").insert({
-      ad_account_id: newAdAccountId,
+    const rows = selectedAdAccountIds.map((id) => ({
+      ad_account_id: id,
       client_id: userId,
       mapping_keyword: newAdKeyword || "",
-    });
+    }));
+    const { error } = await supabase.from("ad_account_clients").insert(rows);
     setAssigningSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      setNewAdAccountId("");
+      setSelectedAdAccountIds([]);
       setNewAdKeyword("");
-      toast({ title: "Assigned", description: "Ad account linked to this client." });
+      toast({ title: "Assigned", description: `${rows.length} ad account(s) linked to this client.` });
       loadAll();
     }
   }
@@ -630,28 +634,52 @@ export default function ClientDetail() {
               {/* Assignment Form */}
               <div className="flex flex-col sm:flex-row items-end gap-3">
                 <div className="flex-1 space-y-2 w-full">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Account</Label>
-                  <Select value={newAdAccountId} onValueChange={setNewAdAccountId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an ad account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allAdAccounts
-                        .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
-                        .map((ac: any) => (
-                          <SelectItem key={ac.id} value={ac.id}>
-                            {ac.account_name || ac.ad_account_id} ({ac.platform_name})
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Accounts</Label>
+                  <Popover open={adAccountPopoverOpen} onOpenChange={setAdAccountPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start font-normal h-10">
+                        {selectedAdAccountIds.length > 0
+                          ? `${selectedAdAccountIds.length} account(s) selected`
+                          : "Select ad accounts..."}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search accounts..." />
+                        <CommandList>
+                          <CommandEmpty>No accounts found.</CommandEmpty>
+                          <CommandGroup>
+                            {allAdAccounts
+                              .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
+                              .map((ac: any) => {
+                                const isSelected = selectedAdAccountIds.includes(ac.id);
+                                return (
+                                  <CommandItem
+                                    key={ac.id}
+                                    onSelect={() => {
+                                      setSelectedAdAccountIds((prev) =>
+                                        isSelected ? prev.filter((id) => id !== ac.id) : [...prev, ac.id]
+                                      );
+                                    }}
+                                  >
+                                    <Checkbox checked={isSelected} className="mr-2" />
+                                    <span className="truncate">{ac.account_name || ac.ad_account_id}</span>
+                                    <Badge variant="outline" className="ml-auto text-[10px] capitalize">{ac.platform_name}</Badge>
+                                  </CommandItem>
+                                );
+                              })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2 w-full sm:w-48">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
                   <Input value={newAdKeyword} onChange={(e) => setNewAdKeyword(e.target.value)} placeholder="e.g. alpha" />
                 </div>
-                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !newAdAccountId} className="gap-2">
-                  <Plus className="h-3.5 w-3.5" /> Assign
+                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !selectedAdAccountIds.length} className="gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Assign {selectedAdAccountIds.length > 1 ? `(${selectedAdAccountIds.length})` : ""}
                 </Button>
               </div>
 

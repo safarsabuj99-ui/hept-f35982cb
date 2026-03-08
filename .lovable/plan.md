@@ -1,45 +1,34 @@
 
 
-# Multi-Select Assignment for Ad Accounts and Clients
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-Both the Client Detail "Ad Accounts" tab and the Ad Account Detail "Clients" tab only allow assigning **one item at a time** via a single-select dropdown. This is tedious when linking multiple accounts/clients.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
 ## Solution
-Replace the single `Select` dropdown with a **multi-select checkbox list** using a Popover + Command pattern (already available in the project). Users can check multiple items, then click "Assign All" to bulk-insert.
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Changes
+## Technical Change
 
-### 1. `src/pages/ClientDetail.tsx` — Ad Accounts tab
-- Replace `newAdAccountId` (string) with `selectedAdAccountIds` (string array)
-- Replace `<Select>` with a Popover containing a searchable Command list with checkboxes for each unassigned ad account
-- Show selected count on the trigger button (e.g. "3 accounts selected")
-- Update `handleAssignAdAccount` to loop and insert all selected accounts with the same mapping keyword, then clear selection
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 2. `src/pages/AdAccountDetail.tsx` — Clients tab
-- Replace `newClient` (string) with `selectedClientIds` (string array)
-- Replace `<Select>` with same Popover + Command + Checkbox multi-select pattern
-- Show selected count on trigger
-- Update `addAssignment` to bulk-insert all selected clients with the same mapping keyword
-
-### UI Pattern (both pages)
+Current code:
 ```
-┌─────────────────────────────┐  ┌──────────────┐  ┌────────────┐
-│ ▼ Select accounts (3)       │  │ Keyword      │  │ Assign All │
-└─────────────────────────────┘  └──────────────┘  └────────────┘
-  ┌───────────────────────────┐
-  │ 🔍 Search...              │
-  │ ☑ Account Alpha (Meta)    │
-  │ ☑ Account Beta (Google)   │
-  │ ☐ Account Gamma (TikTok)  │
-  │ ☑ Account Delta (Meta)    │
-  └───────────────────────────┘
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-### Files Changed
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/ClientDetail.tsx` | Multi-select ad accounts in assignment form |
-| `src/pages/AdAccountDetail.tsx` | Multi-select clients in assignment form |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
