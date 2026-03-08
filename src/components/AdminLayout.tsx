@@ -53,6 +53,7 @@ const allSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
+      { to: "/admin/activity", icon: Activity, label: "Activity" },
     ],
   },
   {
