@@ -35,6 +35,7 @@ export default function ClientList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [margins, setMargins] = useState<Record<string, MarginData>>({});
+  const [balances, setBalances] = useState<Record<string, number>>({});
   const location = useLocation();
 
   useEffect(() => {
