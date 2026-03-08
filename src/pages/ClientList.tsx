@@ -309,6 +309,7 @@ export default function ClientList() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         clientId={depositClientId}
+        isAdmin
       />
     </div>
   );

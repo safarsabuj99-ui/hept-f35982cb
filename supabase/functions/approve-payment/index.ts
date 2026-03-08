@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       client_id: pr.client_id,
       type: "credit",
       amount: finalUsd,
-      date: new Date().toISOString().split("T")[0],
+      date: pr.payment_date || new Date().toISOString().split("T")[0],
       description: `Payment: ৳${Number(pr.amount_bdt).toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})`,
       created_by: user.id,
       status: "completed",
