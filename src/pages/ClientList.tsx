@@ -48,7 +48,7 @@ export default function ClientList() {
       if (!roles?.length) { setLoading(false); return; }
 
       const ids = roles.map((r) => r.user_id);
-      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes] = await Promise.all([
+      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes, txnsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
@@ -57,6 +57,7 @@ export default function ClientList() {
         supabase.from("campaigns").select("id, ad_account_id, platform"),
         supabase.from("daily_metrics").select("campaign_id, spend"),
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
+        supabase.from("transactions").select("client_id, type, amount").eq("status", "completed"),
       ]);
 
       setClients(profilesRes.data || []);
