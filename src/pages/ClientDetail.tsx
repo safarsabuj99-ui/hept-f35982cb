@@ -900,10 +900,13 @@ export default function ClientDetail() {
             <CardHeader>
               <CardTitle className="text-base">Transaction History</CardTitle>
             </CardHeader>
-            <CardContent>
-              {transactions.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">No transactions.</p>
-              ) : (
+             <CardContent>
+              {(() => {
+                const visibleTxns = transactions.filter((t: any) => !t.description?.startsWith("auto_spend:"));
+                if (visibleTxns.length === 0) return (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No transactions.</p>
+                );
+                return (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -916,7 +919,7 @@ export default function ClientDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.map((t: any) => (
+                      {visibleTxns.map((t: any) => (
                         <TableRow key={t.id}>
                           <TableCell className="text-sm">{t.date}</TableCell>
                           <TableCell>
@@ -936,7 +939,8 @@ export default function ClientDetail() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

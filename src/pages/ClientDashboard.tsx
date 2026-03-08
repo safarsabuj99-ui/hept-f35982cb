@@ -211,7 +211,9 @@ export default function ClientDashboard() {
     });
   }, [dateRange]);
 
-  const filteredTransactions = useMemo(() => filterByDate(transactions, "date"), [transactions, filterByDate]);
+  // Filter out auto_spend transactions from display (they still count in balance)
+  const visibleTransactions = useMemo(() => transactions.filter(t => !t.description?.startsWith("auto_spend:")), [transactions]);
+  const filteredTransactions = useMemo(() => filterByDate(visibleTransactions, "date"), [visibleTransactions, filterByDate]);
   const filteredAdSpend = useMemo(() => filterByDate(adSpend, "date"), [adSpend, filterByDate]);
   const filteredPaymentRequests = useMemo(() => filterByDate(paymentRequests, "created_at"), [paymentRequests, filterByDate]);
 
