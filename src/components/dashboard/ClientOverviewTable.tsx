@@ -43,7 +43,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
   });
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtBdt = (_n: number) => "—";
+  const fmtBdt = (n: number) => n > 0 ? `৳${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
 
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
     <button onClick={() => handleSort(k)} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
