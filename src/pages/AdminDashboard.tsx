@@ -78,7 +78,7 @@ export default function AdminDashboard() {
     }
 
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, business_name"),
+      supabase.from("profiles").select("user_id, full_name, email, business_name, pricing_config"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("transactions").select("*"),
       (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
