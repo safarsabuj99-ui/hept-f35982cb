@@ -53,9 +53,10 @@ export default function AdAccountDetail() {
   const [notifications, setNotifications] = useState<any[]>([]);
 
   // Client assignment form
-  const [newClient, setNewClient] = useState("");
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
