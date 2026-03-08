@@ -14,9 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Loader2, Trash2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate, getUtcToday } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
-import { startOfDay, endOfDay } from "date-fns";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
