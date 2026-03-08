@@ -7,7 +7,7 @@ import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
   UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone,
-  ChevronRight,
+  ChevronRight, Activity,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,7 @@ const allSections: NavSection[] = [
     defaultOpen: true,
     items: [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
+      { to: "/admin/activity", icon: Activity, label: "Activity" },
     ],
   },
   {

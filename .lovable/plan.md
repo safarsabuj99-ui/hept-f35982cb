@@ -1,20 +1,34 @@
 
 
-# Hide Auto-Spend from Dashboard + Add Activity Page
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Changes
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### 1. `src/components/dashboard/RecentActivityFeed.tsx`
-- Filter out transactions where `description` starts with `auto_spend:` so they don't appear in the dashboard Recent Activity widget
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 2. New page: `src/pages/ActivityLog.tsx`
-- Full activity page showing ALL transactions including auto_spend entries
-- Table/list view with filters, showing type, description, amount, date, status
-- Auto-spend rows displayed with a distinct "Auto" badge for clarity
+## Technical Change
 
-### 3. `src/components/AdminLayout.tsx`
-- Add "Activity" nav item under the "Overview" section with an `Activity` icon, linking to `/admin/activity`
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 4. `src/App.tsx`
-- Add route: `<Route path="/admin/activity" element={<ActivityLog />} />`
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

@@ -25,7 +25,7 @@ export function RecentActivityFeed() {
         supabase.from("api_integrations").select("id, platform, last_synced_at").order("last_synced_at", { ascending: false }).limit(3),
       ]);
 
-      const txnActivities: Activity[] = (txnRes.data ?? []).map((t: any) => ({
+      const txnActivities: Activity[] = (txnRes.data ?? []).filter((t: any) => !t.description?.startsWith("auto_spend:")).map((t: any) => ({
         id: t.id,
         type: t.type,
         description: t.description || `${t.type === "credit" ? "Payment received" : "Spend recorded"}`,
