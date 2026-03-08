@@ -180,22 +180,23 @@ export default function AdAccountDetail() {
   }
 
   async function addAssignment() {
-    if (!newClient || !newKeyword.trim()) {
-      toast({ title: "Required", description: "Select a client and enter a keyword", variant: "destructive" });
+    if (!selectedClientIds.length || !newKeyword.trim()) {
+      toast({ title: "Required", description: "Select client(s) and enter a keyword", variant: "destructive" });
       return;
     }
     setAssignSaving(true);
-    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert({
+    const rows = selectedClientIds.map((cid) => ({
       ad_account_id: accountId,
-      client_id: newClient,
+      client_id: cid,
       mapping_keyword: newKeyword.trim(),
-    });
+    }));
+    const { error } = await (supabase.from("ad_account_clients" as any) as any).insert(rows);
     setAssignSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Assigned", description: "Client linked." });
-      setNewClient("");
+      toast({ title: "Assigned", description: `${rows.length} client(s) linked.` });
+      setSelectedClientIds([]);
       setNewKeyword("");
       loadAll();
     }
