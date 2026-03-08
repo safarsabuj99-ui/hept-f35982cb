@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, ExternalLink, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,6 +52,7 @@ export default function AdAccounts() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -63,7 +64,11 @@ export default function AdAccounts() {
       supabase.from("api_integrations").select("id, platform, instance_name, is_active").eq("is_active", true) as any,
       supabase.from("ad_account_clients" as any).select("*") as any,
     ]);
-    setAccounts(accs ?? []);
+    const sorted = (accs ?? []).sort((a: any, b: any) => {
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    setAccounts(sorted);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
     setAssignments(assigns ?? []);
@@ -167,6 +172,13 @@ export default function AdAccounts() {
     if (pct >= 60) return "text-yellow-500";
     return "text-emerald-500";
   };
+  const filteredAccounts = accounts.filter((a: any) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (a.account_name || "").toLowerCase().includes(q)
+      || (a.ad_account_id || "").toLowerCase().includes(q)
+      || (a.platform_name || "").toLowerCase().includes(q);
+  });
 
   return (
     <div className="space-y-6">
@@ -306,11 +318,21 @@ export default function AdAccounts() {
         </div>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by account name, ID, or platform..."
+          value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+          className="pl-9 max-w-md"
+        />
+      </div>
+
       <Card>
         <CardContent className="pt-6">
           {loading ? (
             <TableSkeleton rows={5} columns={8} />
-          ) : accounts.length === 0 ? (
+          ) : filteredAccounts.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <Monitor className="h-10 w-10" />
               <p>No ad accounts yet</p>
@@ -332,7 +354,7 @@ export default function AdAccounts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
+                  {filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
                     const isThreshold = a.billing_type === "threshold_postpaid";
                     const usagePct = isThreshold && a.threshold_limit > 0
                       ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
@@ -412,7 +434,7 @@ export default function AdAccounts() {
                   })}
                 </TableBody>
               </Table>
-              <TablePagination totalItems={accounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
+              <TablePagination totalItems={filteredAccounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
             </div>
           )}
         </CardContent>
