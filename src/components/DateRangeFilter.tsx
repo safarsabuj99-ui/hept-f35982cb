@@ -39,10 +39,10 @@ function getPresetRange(preset: DatePreset): DateRange | null {
       return { from: startOfDay(y), to: endOfDay(y) };
     }
     case "this_week":
-      return { from: startOfWeek(now, { weekStartsOn: 0 }), to: endOfDay(now) };
+      return { from: startOfWeek(now, { weekStartsOn: 5 }), to: endOfDay(now) };
     case "last_week": {
       const lw = subWeeks(now, 1);
-      return { from: startOfWeek(lw, { weekStartsOn: 0 }), to: endOfWeek(lw, { weekStartsOn: 0 }) };
+      return { from: startOfWeek(lw, { weekStartsOn: 5 }), to: endOfWeek(lw, { weekStartsOn: 5 }) };
     }
     case "this_month":
       return { from: startOfMonth(now), to: endOfDay(now) };
