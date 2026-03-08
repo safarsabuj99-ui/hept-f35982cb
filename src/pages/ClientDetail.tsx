@@ -290,6 +290,35 @@ export default function ClientDetail() {
     setResettingPassword(false);
   }
 
+  async function handleAssignAdAccount() {
+    if (!newAdAccountId || !userId) return;
+    setAssigningSaving(true);
+    const { error } = await supabase.from("ad_account_clients").insert({
+      ad_account_id: newAdAccountId,
+      client_id: userId,
+      mapping_keyword: newAdKeyword || "",
+    });
+    setAssigningSaving(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setNewAdAccountId("");
+      setNewAdKeyword("");
+      toast({ title: "Assigned", description: "Ad account linked to this client." });
+      loadAll();
+    }
+  }
+
+  async function handleRemoveAdAccount(assignmentId: string) {
+    const { error } = await supabase.from("ad_account_clients").delete().eq("id", assignmentId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Removed", description: "Ad account unlinked." });
+      loadAll();
+    }
+  }
+
   const fmt = (n: number) =>
     `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtBdt = (n: number) =>
