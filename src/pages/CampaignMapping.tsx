@@ -10,9 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Filter, FileText, BarChart3, Search, DollarSign, Eye, MousePointerClick, TrendingUp } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
-import { DateRangeFilter, DateRange } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, getUtcToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
-import { startOfDay, endOfDay } from "date-fns";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
@@ -26,7 +25,7 @@ export default function CampaignMapping() {
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getUtcToday(); return { from: t, to: t }; });
   const [saving, setSaving] = useState<string | null>(null);
   const [spendPage, setSpendPage] = useState(1);
   const [spendSize, setSpendSize] = useState(20);

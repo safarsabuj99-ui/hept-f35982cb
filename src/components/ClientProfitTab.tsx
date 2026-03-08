@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { format } from "date-fns";
 
 interface PlatformProfit {
   platform: string;
@@ -36,7 +36,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const [rows, setRows] = useState<PlatformProfit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
 
   useEffect(() => {

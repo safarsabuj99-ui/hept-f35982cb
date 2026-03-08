@@ -29,23 +29,28 @@ const presets: { label: string; value: DatePreset }[] = [
   { label: "Custom", value: "custom" },
 ];
 
+/** Returns a Date parsed from today's UTC date string so local formatting matches DB dates */
+function utcToday(): Date {
+  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+}
+
 function getPresetRange(preset: DatePreset): DateRange | null {
-  const now = new Date();
+  const now = utcToday();
   switch (preset) {
     case "today":
-      return { from: startOfDay(now), to: endOfDay(now) };
+      return { from: now, to: now };
     case "yesterday": {
       const y = subDays(now, 1);
-      return { from: startOfDay(y), to: endOfDay(y) };
+      return { from: y, to: y };
     }
     case "this_week":
-      return { from: startOfWeek(now, { weekStartsOn: 5 }), to: endOfDay(now) };
+      return { from: startOfWeek(now, { weekStartsOn: 5 }), to: now };
     case "last_week": {
       const lw = subWeeks(now, 1);
       return { from: startOfWeek(lw, { weekStartsOn: 5 }), to: endOfWeek(lw, { weekStartsOn: 5 }) };
     }
     case "this_month":
-      return { from: startOfMonth(now), to: endOfDay(now) };
+      return { from: startOfMonth(now), to: now };
     case "last_month": {
       const last = subMonths(now, 1);
       return { from: startOfMonth(last), to: endOfMonth(last) };
@@ -121,6 +126,12 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   );
 }
 
+/** Format date to YYYY-MM-DD using local date components (dates are already UTC-aligned) */
 export function toISODate(d: Date): string {
   return format(d, "yyyy-MM-dd");
+}
+
+/** Helper to get UTC-based today as a local Date for consistent date filtering */
+export function getUtcToday(): Date {
+  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
 }

@@ -14,9 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Loader2, Trash2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate, getUtcToday } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
-import { startOfDay, endOfDay } from "date-fns";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -46,7 +45,7 @@ export default function ExpenseManager() {
   const [category, setCategory] = useState<string>("Salary");
   const [description, setDescription] = useState("");
   const [expDate, setExpDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getUtcToday(); return { from: t, to: t }; });
   const [periodLabel, setPeriodLabel] = useState("Today");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
