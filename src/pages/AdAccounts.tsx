@@ -427,7 +427,7 @@ export default function AdAccounts() {
                   })}
                 </TableBody>
               </Table>
-              <TablePagination totalItems={accounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
+              <TablePagination totalItems={filteredAccounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
             </div>
           )}
         </CardContent>
