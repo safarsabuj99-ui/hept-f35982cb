@@ -1,34 +1,16 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Delete Mistaken Transaction and Payment Request
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What
+Remove the erroneous $574.06 credit transaction and its associated approved payment request for client `c2c71442-78bc-455f-8f8d-82ca8ef2d4b6`.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Records to Delete
+1. **Transaction**: `0c243c7b-8b22-4dcb-9300-6a360a9158e2` — Credit $574.06, "Payment: ৳86,109 via Bank (Rate: 150)"
+2. **Payment Request**: `3446a19d-eb8a-400d-b754-e17a351e88ac` — ৳86,109, status: approved
 
-## Technical Change
+## How
+- Use the database insert tool to `DELETE` both records
+- No code changes needed — this is a data-only fix
+- After deletion, the client's Meta balance will drop by $574.06 (removing the mistaken credit), making it reflect the true balance
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
