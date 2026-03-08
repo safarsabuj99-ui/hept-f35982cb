@@ -225,8 +225,6 @@ export default function AdminDashboard() {
   }, [lastSynced, toast]);
 
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
-  const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
-  const totalDueBdt = useMemo(() => totalDueBdtCalc, [totalDueBdtCalc]);
 
   const spendLabel = datePreset === "today" ? "Today's Spend" : datePreset === "yesterday" ? "Yesterday's Spend" : "Period Spend";
   const collectLabel = datePreset === "today" ? "Today's Collections" : datePreset === "yesterday" ? "Yesterday's Collections" : "Period Collections";
