@@ -950,6 +950,7 @@ export default function ClientDetail() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         clientId={userId}
+        isAdmin
         onSuccess={loadAll}
       />
       <PlatformTransferDialog

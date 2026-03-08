@@ -686,6 +686,7 @@ export type Database = {
           exchange_rate_snapshot: number | null
           final_amount_usd: number | null
           id: string
+          payment_date: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform: string | null
           received_in_account_id: string | null
@@ -701,6 +702,7 @@ export type Database = {
           exchange_rate_snapshot?: number | null
           final_amount_usd?: number | null
           id?: string
+          payment_date?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
           received_in_account_id?: string | null
@@ -716,6 +718,7 @@ export type Database = {
           exchange_rate_snapshot?: number | null
           final_amount_usd?: number | null
           id?: string
+          payment_date?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
           received_in_account_id?: string | null

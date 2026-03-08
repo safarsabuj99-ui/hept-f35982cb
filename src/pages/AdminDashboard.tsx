@@ -306,6 +306,7 @@ export default function AdminDashboard() {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         showClientSelector
+        isAdmin
         onSuccess={fetchData}
       />
     </div>

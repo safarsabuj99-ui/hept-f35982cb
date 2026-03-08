@@ -1,18 +1,23 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { Banknote, Loader2 } from "lucide-react";
+import { Banknote, CalendarIcon, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DepositFundsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   showClientSelector?: boolean;
+  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
@@ -21,6 +26,7 @@ export function DepositFundsDialog({
   onOpenChange,
   clientId,
   showClientSelector = false,
+  isAdmin = false,
   onSuccess,
 }: DepositFundsDialogProps) {
   const { toast } = useToast();
@@ -31,6 +37,7 @@ export function DepositFundsDialog({
   const [platform, setPlatform] = useState("");
   const [selectedClient, setSelectedClient] = useState(clientId || "");
   const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
 
   // Load clients list when selector is shown
   useEffect(() => {
@@ -62,6 +69,7 @@ export function DepositFundsDialog({
       setTrxId("");
       setPlatform("");
       setSubmitting(false);
+      setPaymentDate(new Date());
       if (!clientId) setSelectedClient("");
     }
   }, [open, clientId]);
@@ -72,13 +80,21 @@ export function DepositFundsDialog({
     e.preventDefault();
     if (!amount || Number(amount) <= 0 || !method || !platform || !resolvedClientId) return;
     setSubmitting(true);
-    const { error } = await (supabase.from("payment_requests" as any).insert({
+
+    const insertPayload: any = {
       client_id: resolvedClientId,
       amount_bdt: Number(amount),
       payment_method: method,
       transaction_id: trxId || null,
       platform,
-    }) as any);
+    };
+
+    // Include payment_date only for admin
+    if (isAdmin && paymentDate) {
+      insertPayload.payment_date = format(paymentDate, "yyyy-MM-dd");
+    }
+
+    const { error } = await (supabase.from("payment_requests" as any).insert(insertPayload) as any);
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -142,6 +158,35 @@ export function DepositFundsDialog({
               </SelectContent>
             </Select>
           </div>
+          {isAdmin && (
+            <div className="space-y-2">
+              <Label>Payment Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !paymentDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {paymentDate ? format(paymentDate, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={paymentDate}
+                    onSelect={setPaymentDate}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Transaction ID / Note (optional)</Label>
             <Input
