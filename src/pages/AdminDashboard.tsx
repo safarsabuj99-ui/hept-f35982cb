@@ -128,6 +128,8 @@ export default function AdminDashboard() {
       if (cid) clientSpendInRange[cid] = (clientSpendInRange[cid] || 0) + Number(row.spend);
     }
 
+    const approvedPayments = (paymentReqRes.data ?? []) as any[];
+
     const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
