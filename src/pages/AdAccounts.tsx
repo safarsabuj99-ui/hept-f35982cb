@@ -347,7 +347,7 @@ export default function AdAccounts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
+                  {filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
                     const isThreshold = a.billing_type === "threshold_postpaid";
                     const usagePct = isThreshold && a.threshold_limit > 0
                       ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
