@@ -1,34 +1,55 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: Auto-Deduct Ad Spend from Client Balance
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+Client balance is calculated as `credits - debits` from the `transactions` table across the entire SaaS (5+ files, plus edge functions like ad-guard-check). However, when ad spend is synced into `daily_metrics`, **no corresponding debit transaction is ever created**. So a client can deposit $663, spend $560 on ads, and their balance still shows $663.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Root Cause
+The sync functions (`sync-fast-lane`, `sync-deep-dive`) write spend to `daily_metrics` but never create debit entries in `transactions`. The balance formula `credits - debits` only accounts for manual debits (like platform transfers), not actual ad spend.
 
-## Technical Change
+## Solution: Database Trigger (Auto-Debit)
+Create a PostgreSQL trigger on `daily_metrics` that automatically creates/updates a debit transaction whenever spend is recorded. This fixes ALL balance calculations system-wide — no frontend changes needed.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### Why a trigger vs. changing frontend?
+- Balance is computed in 5+ frontend files AND backend edge functions (ad-guard-check)
+- A trigger is a single fix that makes ALL existing `credits - debits` calculations correct
+- No risk of missing a calculation somewhere
 
-Current code:
+## Changes
+
+### 1. Database Migration: Create trigger function + trigger + backfill
+
+**Trigger function** `auto_debit_on_spend()`:
+- Fires AFTER INSERT OR UPDATE on `daily_metrics`
+- Looks up `campaign → ad_account → client` via `ad_account_clients` junction table
+- Deletes any existing auto-debit for that campaign+date (idempotent)
+- Inserts a new debit transaction with `description = 'auto_spend:{campaign_id}:{data_date}'`
+- Uses SECURITY DEFINER to bypass RLS
+
+**Backfill**: One-time INSERT to create debit transactions for ALL existing `daily_metrics` rows that don't already have corresponding auto-debit transactions.
+
+### 2. Frontend: Filter auto-spend from transaction history display
+
+**`src/pages/ClientDashboard.tsx`**: Filter out transactions where `description` starts with `auto_spend:` from the visible transaction list (they still count in balance). Show a summary row instead like "Ad Spend (auto-tracked)" with the total.
+
+**`src/pages/ClientDetail.tsx`**: Same filtering on the Transactions tab — hide auto_spend rows or show them with a distinct "Auto" badge so they don't clutter the manual transaction view.
+
+### Data Flow After Fix
+```text
+Sync Function writes daily_metrics
+         ↓ (trigger fires)
+auto_debit_on_spend() creates debit in transactions table
+         ↓
+Balance (credits - debits) now reflects actual spend
+         ↓
+All dashboards, alerts, ad-guard automatically correct
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
+### Files Modified
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| Database migration | Trigger function + trigger + backfill |
+| `src/pages/ClientDashboard.tsx` | Filter auto_spend from transaction history display |
+| `src/pages/ClientDetail.tsx` | Filter auto_spend from transactions tab display |
 
-No database or edge function changes needed.
