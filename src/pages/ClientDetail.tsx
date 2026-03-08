@@ -72,9 +72,10 @@ export default function ClientDetail() {
   // Ad Account assignments
   const [allAdAccounts, setAllAdAccounts] = useState<any[]>([]);
   const [adAccountAssignments, setAdAccountAssignments] = useState<any[]>([]);
-  const [newAdAccountId, setNewAdAccountId] = useState("");
+  const [selectedAdAccountIds, setSelectedAdAccountIds] = useState<string[]>([]);
   const [newAdKeyword, setNewAdKeyword] = useState("");
   const [assigningSaving, setAssigningSaving] = useState(false);
+  const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
 
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
