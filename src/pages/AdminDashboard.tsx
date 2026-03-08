@@ -128,12 +128,37 @@ export default function AdminDashboard() {
       if (cid) clientSpendInRange[cid] = (clientSpendInRange[cid] || 0) + Number(row.spend);
     }
 
-    const result: ClientWithBalance[] = clientProfiles.map((p) => {
+    const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0 };
     });
+
+    // Calculate Payment Due in BDT using per-platform rates from pricing_config
+    let dueBdtTotal = 0;
+    for (const client of result) {
+      if (client.balance >= 0) continue; // client doesn't owe anything
+      const profile = clientProfiles.find((p: any) => p.user_id === client.user_id) as any;
+      const flatRates = profile?.pricing_config?.flat_rates || {};
+      const defaultRate = 120;
+      
+      // Get this client's completed debit transactions grouped by platform
+      const clientDebits = transactions.filter((t: any) => t.client_id === client.user_id && t.status === "completed" && t.type === "debit");
+      let debitsBdt = 0;
+      for (const t of clientDebits) {
+        const rate = flatRates[t.platform] || defaultRate;
+        debitsBdt += Number(t.amount) * rate;
+      }
+      
+      // Get this client's BDT credits from approved payment_requests
+      const clientPayments = approvedPayments.filter((p: any) => p.client_id === client.user_id);
+      const creditsBdt = clientPayments.reduce((s: number, p: any) => s + Number(p.amount_bdt || 0), 0);
+      
+      const clientDueBdt = debitsBdt - creditsBdt;
+      if (clientDueBdt > 0) dueBdtTotal += clientDueBdt;
+    }
+    setTotalDueBdt(Math.round(dueBdtTotal * 100) / 100);
 
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
