@@ -632,28 +632,52 @@ export default function ClientDetail() {
               {/* Assignment Form */}
               <div className="flex flex-col sm:flex-row items-end gap-3">
                 <div className="flex-1 space-y-2 w-full">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Account</Label>
-                  <Select value={newAdAccountId} onValueChange={setNewAdAccountId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an ad account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allAdAccounts
-                        .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
-                        .map((ac: any) => (
-                          <SelectItem key={ac.id} value={ac.id}>
-                            {ac.account_name || ac.ad_account_id} ({ac.platform_name})
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Accounts</Label>
+                  <Popover open={adAccountPopoverOpen} onOpenChange={setAdAccountPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start font-normal h-10">
+                        {selectedAdAccountIds.length > 0
+                          ? `${selectedAdAccountIds.length} account(s) selected`
+                          : "Select ad accounts..."}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search accounts..." />
+                        <CommandList>
+                          <CommandEmpty>No accounts found.</CommandEmpty>
+                          <CommandGroup>
+                            {allAdAccounts
+                              .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
+                              .map((ac: any) => {
+                                const isSelected = selectedAdAccountIds.includes(ac.id);
+                                return (
+                                  <CommandItem
+                                    key={ac.id}
+                                    onSelect={() => {
+                                      setSelectedAdAccountIds((prev) =>
+                                        isSelected ? prev.filter((id) => id !== ac.id) : [...prev, ac.id]
+                                      );
+                                    }}
+                                  >
+                                    <Checkbox checked={isSelected} className="mr-2" />
+                                    <span className="truncate">{ac.account_name || ac.ad_account_id}</span>
+                                    <Badge variant="outline" className="ml-auto text-[10px] capitalize">{ac.platform_name}</Badge>
+                                  </CommandItem>
+                                );
+                              })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2 w-full sm:w-48">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
                   <Input value={newAdKeyword} onChange={(e) => setNewAdKeyword(e.target.value)} placeholder="e.g. alpha" />
                 </div>
-                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !newAdAccountId} className="gap-2">
-                  <Plus className="h-3.5 w-3.5" /> Assign
+                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !selectedAdAccountIds.length} className="gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Assign {selectedAdAccountIds.length > 1 ? `(${selectedAdAccountIds.length})` : ""}
                 </Button>
               </div>
 
