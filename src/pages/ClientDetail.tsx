@@ -901,7 +901,9 @@ export default function ClientDetail() {
               <CardTitle className="text-base">Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
-              {transactions.length === 0 ? (
+              {(() => {
+                const visibleTxns = transactions.filter((t: any) => !t.description?.startsWith("auto_spend:"));
+                return visibleTxns.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No transactions.</p>
               ) : (
                 <div className="overflow-x-auto">
