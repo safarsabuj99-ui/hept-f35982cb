@@ -7,7 +7,7 @@ import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
   UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone,
-  ChevronRight,
+  ChevronRight, Activity,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
