@@ -1,27 +1,34 @@
 
 
-# Add Ad Account Assignment Tab to Client Detail Page
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What Changes
-Add an "Ad Accounts" tab to the Client Detail page (`src/pages/ClientDetail.tsx`) that mirrors the client assignment UI on the Ad Account Detail page — but in reverse direction. From here, admins can see which ad accounts are assigned to this client, assign new ones (with mapping keyword), and remove assignments.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Technical Plan
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### `src/pages/ClientDetail.tsx`
+## Technical Change
 
-1. **Load ad accounts data** in `loadAll()`:
-   - Already fetching `ad_account_clients` for this client (line 85). Extend to also fetch `ad_accounts` list for the assignment dropdown and join assignment data with account details.
-   - Add state: `adAccounts` (all available), `adAccountAssignments` (current assignments with account info), `newAdAccount`, `newAdKeyword`, `assigningSaving`.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-2. **Add new tab trigger** in the TabsList (line 339):
-   - Change grid from `grid-cols-7` to `grid-cols-8`
-   - Add `<TabsTrigger value="adaccounts">Ad Accounts</TabsTrigger>`
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-3. **Add TabsContent for "adaccounts"**:
-   - Table showing current assignments: Account Name, Platform, Ad Account ID, Mapping Keyword, Remove button
-   - Assignment form: Select dropdown of unassigned ad accounts + keyword input + Assign button
-   - Each row links to the Ad Account Detail page via Eye icon
-   - Uses the same `ad_account_clients` table — identical insert/delete logic as `AdAccountDetail.tsx` lines 181-206, just with `client_id` fixed and `ad_account_id` selected from dropdown
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### No database or migration changes needed — uses existing `ad_account_clients` junction table.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

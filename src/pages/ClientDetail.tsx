@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -69,6 +69,13 @@ export default function ClientDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
+  // Ad Account assignments
+  const [allAdAccounts, setAllAdAccounts] = useState<any[]>([]);
+  const [adAccountAssignments, setAdAccountAssignments] = useState<any[]>([]);
+  const [newAdAccountId, setNewAdAccountId] = useState("");
+  const [newAdKeyword, setNewAdKeyword] = useState("");
+  const [assigningSaving, setAssigningSaving] = useState(false);
+
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
@@ -80,13 +87,14 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes, roleRes] = await Promise.all([
+    const [profileRes, adAccountClientsRes, paymentsRes, txRes, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
-      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!),
+      supabase.from("ad_account_clients").select("*").eq("client_id", userId!),
       supabase.from("payment_requests").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
       supabase.from("user_roles").select("role").eq("user_id", userId!).maybeSingle(),
+      supabase.from("ad_accounts").select("*").order("account_name"),
     ]);
 
     if (roleRes.data) {
@@ -122,9 +130,19 @@ export default function ClientDetail() {
       setPercentage(String(pc.percentage ?? ""));
     }
 
+    // Store all ad accounts and build assignments with details
+    const allAccs = allAdAccountsRes.data || [];
+    setAllAdAccounts(allAccs);
+    const assignmentRows = adAccountClientsRes.data || [];
+    const enrichedAssignments = assignmentRows.map((a: any) => {
+      const acc = allAccs.find((ac: any) => ac.id === a.ad_account_id);
+      return { ...a, account_name: acc?.account_name || "Unknown", platform_name: acc?.platform_name || "unknown", ad_account_id_display: acc?.ad_account_id || "" };
+    });
+    setAdAccountAssignments(enrichedAssignments);
+
     // Spend data - load from new campaigns + daily_metrics tables
-    if (adAccountsRes.data?.length) {
-      const accountIds = adAccountsRes.data.map((a: any) => a.ad_account_id);
+    if (assignmentRows.length) {
+      const accountIds = assignmentRows.map((a: any) => a.ad_account_id);
       await loadSpendData(accountIds, null);
     }
 
@@ -272,6 +290,35 @@ export default function ClientDetail() {
     setResettingPassword(false);
   }
 
+  async function handleAssignAdAccount() {
+    if (!newAdAccountId || !userId) return;
+    setAssigningSaving(true);
+    const { error } = await supabase.from("ad_account_clients").insert({
+      ad_account_id: newAdAccountId,
+      client_id: userId,
+      mapping_keyword: newAdKeyword || "",
+    });
+    setAssigningSaving(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setNewAdAccountId("");
+      setNewAdKeyword("");
+      toast({ title: "Assigned", description: "Ad account linked to this client." });
+      loadAll();
+    }
+  }
+
+  async function handleRemoveAdAccount(assignmentId: string) {
+    const { error } = await supabase.from("ad_account_clients").delete().eq("id", assignmentId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Removed", description: "Ad account unlinked." });
+      loadAll();
+    }
+  }
+
   const fmt = (n: number) =>
     `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtBdt = (n: number) =>
@@ -336,10 +383,11 @@ export default function ClientDetail() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-8">
           <TabsTrigger value="profile" className="gap-1"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
           <TabsTrigger value="pricing" className="gap-1"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
           <TabsTrigger value="automation" className="gap-1"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
+          <TabsTrigger value="adaccounts" className="gap-1"><MonitorSmartphone className="h-3.5 w-3.5 hidden sm:inline" /> Ad Accounts</TabsTrigger>
           <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
           <TabsTrigger value="profit" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Profit</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
@@ -569,6 +617,86 @@ export default function ClientDetail() {
             }
             onSaved={loadAll}
           />
+        </TabsContent>
+
+        {/* AD ACCOUNTS TAB */}
+        <TabsContent value="adaccounts">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Assigned Ad Accounts</CardTitle>
+              <CardDescription>Manage which ad accounts are linked to this client.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Assignment Form */}
+              <div className="flex flex-col sm:flex-row items-end gap-3">
+                <div className="flex-1 space-y-2 w-full">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Ad Account</Label>
+                  <Select value={newAdAccountId} onValueChange={setNewAdAccountId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an ad account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allAdAccounts
+                        .filter((ac: any) => !adAccountAssignments.some((a: any) => a.ad_account_id === ac.id))
+                        .map((ac: any) => (
+                          <SelectItem key={ac.id} value={ac.id}>
+                            {ac.account_name || ac.ad_account_id} ({ac.platform_name})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-full sm:w-48">
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
+                  <Input value={newAdKeyword} onChange={(e) => setNewAdKeyword(e.target.value)} placeholder="e.g. alpha" />
+                </div>
+                <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !newAdAccountId} className="gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Assign
+                </Button>
+              </div>
+
+              {/* Assignments Table */}
+              {adAccountAssignments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No ad accounts assigned.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account Name</TableHead>
+                        <TableHead>Platform</TableHead>
+                        <TableHead>Account ID</TableHead>
+                        <TableHead>Keyword</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adAccountAssignments.map((a: any) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="text-sm font-medium">{a.account_name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs capitalize">{a.platform_name}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm font-mono text-muted-foreground">{a.ad_account_id_display}</TableCell>
+                          <TableCell className="text-sm">{a.mapping_keyword || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate(`/admin/ad-accounts/${a.ad_account_id}`)}>
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleRemoveAdAccount(a.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* SPEND TAB */}
