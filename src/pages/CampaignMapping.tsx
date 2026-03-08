@@ -10,9 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Filter, FileText, BarChart3, Search, DollarSign, Eye, MousePointerClick, TrendingUp } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
-import { DateRangeFilter, DateRange } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, getUtcToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
-import { startOfDay, endOfDay } from "date-fns";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
