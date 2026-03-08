@@ -136,6 +136,7 @@ export default function AdAccountDetail() {
 
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendPreset(preset);
+    setSpendPage(1);
     await loadSpend(range);
   }
 
