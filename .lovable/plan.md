@@ -1,34 +1,59 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Revamp Campaigns Page: Remove Overview Tab & Enhance Spend Analytics
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Current State
+The Campaigns page has two tabs: "Overview" (campaign-to-client assignment table) and "Spend Analytics" (aggregated metrics). The user wants to remove Overview and build a more powerful single-view analytics + management page.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Plan
 
-## Technical Change
+### Remove Overview Tab & Merge Assignment into Analytics
+Remove the tab system entirely. The page becomes a single unified view with enhanced spend analytics and inline campaign management.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### File: `src/pages/CampaignMapping.tsx`
 
-Current code:
+**1. Remove Overview tab, pagination state, and related code**
+- Delete `overviewPage`, `overviewSize` state
+- Remove `Tabs`/`TabsList`/`TabsTrigger` wrapper — render spend analytics directly
+- Remove the Overview `TabsContent` block entirely
+
+**2. Enhance Spend Analytics Table with Management Columns**
+Move the client assignment dropdown into the spend analytics table so admins can assign campaigns without a separate tab:
+- Add "Status" column with color-coded badges (active=green, paused=yellow, etc.)
+- Add "Assigned Client" column with inline `Select` dropdown (from the old Overview tab)
+- Add "CTR" and "ROAS" calculated columns
+- Add "Ad Account" column showing which account the campaign belongs to
+
+**3. Add KPI Summary Cards Row**
+Expand from 2 KPI cards to 4:
+- Total Spend (USD)
+- Total Impressions
+- Total Clicks
+- Avg. ROAS
+
+**4. Add Search Filter**
+Add a search input above the table to filter campaigns by name, platform ID, or client name — same pattern used on Ad Accounts page.
+
+**5. Add Status Filter**
+Add a status filter dropdown (All, Active, Paused, Not Delivering) alongside existing Platform and Client filters.
+
+**6. Fetch Ad Account Names**
+Query `ad_accounts` to show account names in the table, joined via `campaign.ad_account_id`.
+
+### Data Flow
+```text
+Filters: [Search] [Platform] [Client] [Status] [Date Range]
+         ↓
+KPIs:   [Total Spend] [Impressions] [Clicks] [Avg ROAS]
+         ↓
+Table:  Campaign | Ad Account | Platform | Client (assign) | Status | Impressions | Clicks | CTR | Results | ROAS | Spend | Days
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### Summary of Removals
+- Tab system (`Tabs`, `TabsList`, `TabsTrigger`, both `TabsContent`)
+- `overviewPage` / `overviewSize` state
+- `filteredCampaigns` memo (no longer needed separately)
+- `MapPin` icon import
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### No database changes needed
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
