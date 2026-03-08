@@ -87,13 +87,14 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountsRes, paymentsRes, txRes, managersRes, roleRes] = await Promise.all([
+    const [profileRes, adAccountClientsRes, paymentsRes, txRes, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
-      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!),
+      supabase.from("ad_account_clients").select("*").eq("client_id", userId!),
       supabase.from("payment_requests").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("client_id", userId!).order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
       supabase.from("user_roles").select("role").eq("user_id", userId!).maybeSingle(),
+      supabase.from("ad_accounts").select("*").order("account_name"),
     ]);
 
     if (roleRes.data) {
