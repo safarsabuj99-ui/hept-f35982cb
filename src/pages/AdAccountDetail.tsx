@@ -64,6 +64,8 @@ export default function AdAccountDetail() {
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
+  const [spendPage, setSpendPage] = useState(1);
+  const [spendSize, setSpendSize] = useState(20);
 
   // Inline edit state for billing
   const [editingThreshold, setEditingThreshold] = useState(false);
