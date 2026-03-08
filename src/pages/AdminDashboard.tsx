@@ -86,7 +86,7 @@ export default function AdminDashboard() {
       supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
       spendQuery,
       supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
-      supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
+      supabase.from("payment_requests").select("amount_bdt, created_at, client_id").eq("status", "approved"),
     ]);
 
     // Fetch last 7 days spend for sparkline
