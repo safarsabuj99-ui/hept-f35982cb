@@ -118,6 +118,15 @@ export default function ClientList() {
         };
       }
       setMargins(marginMap);
+
+      // Compute balances
+      const balMap: Record<string, number> = {};
+      for (const t of (txnsRes.data ?? []) as any[]) {
+        const amt = Number(t.amount) || 0;
+        balMap[t.client_id] = (balMap[t.client_id] || 0) + (t.type === "credit" ? amt : -amt);
+      }
+      setBalances(balMap);
+
       setLoading(false);
     }
     load();
