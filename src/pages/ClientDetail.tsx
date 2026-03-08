@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
@@ -82,6 +83,8 @@ export default function ClientDetail() {
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
+  const [spendPage, setSpendPage] = useState(1);
+  const [spendSize, setSpendSize] = useState(20);
 
   useEffect(() => {
     if (!userId) return;
@@ -146,7 +149,7 @@ export default function ClientDetail() {
     // Spend data - load from new campaigns + daily_metrics tables
     if (assignmentRows.length) {
       const accountIds = assignmentRows.map((a: any) => a.ad_account_id);
-      await loadSpendData(accountIds, null);
+      await loadSpendData(accountIds, { from: startOfDay(new Date()), to: endOfDay(new Date()) });
     }
 
     setPayments(paymentsRes.data || []);
@@ -198,6 +201,7 @@ export default function ClientDetail() {
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendDateRange(range);
     setSpendDatePreset(preset);
+    setSpendPage(1);
     const { data: accounts } = await supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!);
     if (accounts?.length) {
       await loadSpendData(accounts.map((a: any) => a.ad_account_id), range);
@@ -762,7 +766,7 @@ export default function ClientDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spendData.slice(0, 50).map((s: any) => (
+                      {spendData.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((s: any) => (
                         <TableRow key={s.id}>
                           <TableCell className="text-sm">{s.date}</TableCell>
                           <TableCell className="text-sm">{s.campaign_name || "—"}</TableCell>
@@ -779,6 +783,13 @@ export default function ClientDetail() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePagination
+                    totalItems={spendData.length}
+                    pageSize={spendSize}
+                    currentPage={spendPage}
+                    onPageChange={setSpendPage}
+                    onPageSizeChange={(size) => { setSpendSize(size); setSpendPage(1); }}
+                  />
                 </div>
               )}
             </CardContent>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,7 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, startOfDay, endOfDay } from "date-fns";
+import { TablePagination } from "@/components/TablePagination";
 
 const CURRENCIES = [
   { value: "USD", label: "USD" },
@@ -63,6 +64,8 @@ export default function AdAccountDetail() {
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
+  const [spendPage, setSpendPage] = useState(1);
+  const [spendSize, setSpendSize] = useState(20);
 
   // Inline edit state for billing
   const [editingThreshold, setEditingThreshold] = useState(false);
@@ -107,8 +110,8 @@ export default function AdAccountDetail() {
         setIntegrationName(intData ? (intData.instance_name || `${intData.platform} integration`) : null);
       }
 
-      // Load spend
-      await loadSpend(null);
+      // Load spend with today's range to match default preset
+      await loadSpend({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
     }
 
     setAssignments(assignRes.data ?? []);
@@ -133,6 +136,7 @@ export default function AdAccountDetail() {
 
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendPreset(preset);
+    setSpendPage(1);
     await loadSpend(range);
   }
 
@@ -524,7 +528,7 @@ export default function AdAccountDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spendData.map((s: any) => (
+                      {spendData.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((s: any) => (
                         <TableRow key={s.id}>
                           <TableCell className="text-sm">{s.date}</TableCell>
                           <TableCell className="text-sm max-w-[200px] truncate">{s.campaign_name || "—"}</TableCell>
@@ -535,6 +539,13 @@ export default function AdAccountDetail() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePagination
+                    totalItems={spendData.length}
+                    pageSize={spendSize}
+                    currentPage={spendPage}
+                    onPageChange={setSpendPage}
+                    onPageSizeChange={(size) => { setSpendSize(size); setSpendPage(1); }}
+                  />
                 </div>
               )}
             </CardContent>

@@ -1,45 +1,34 @@
 
 
-# Fix Date Filter Bugs & Add Pagination Across SaaS
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Bugs Found
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### Bug 1: AdAccountDetail Spend Tab — Shows all data despite "Today" selected
-- `loadAll()` calls `loadSpend(null)` on mount (line 111), passing no date range
-- But `spendPreset` defaults to `"today"` (line 65), so UI shows "Today" highlighted
-- **Fix**: Change `loadSpend(null)` to `loadSpend({ from: startOfDay(new Date()), to: endOfDay(new Date()) })`
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### Bug 2: ClientDetail Spend Tab — Same issue
-- `loadSpendData(accountIds, null)` on mount (line 149) passes no filter
-- But `spendDatePreset` defaults to `"today"` (line 84)
-- **Fix**: Pass today's range instead of `null`
+## Technical Change
 
-### Bug 3: CampaignMapping — Fetches all metrics then filters client-side
-- `fetchData()` loads ALL `daily_metrics` from DB (line 38) with no date filter, risks hitting 1000-row limit
-- Client-side filtering works but data may be incomplete
-- **Fix**: This is less critical since the date state is initialized correctly and client-side filter works. But note the 1000-row risk.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### Bug 4: Missing Pagination on Spend Tables
-- **AdAccountDetail** spend tab: No pagination, just `limit(500)` on query
-- **ClientDetail** spend tab: Hardcoded `slice(0, 50)` with no pagination controls
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-## Changes
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 1. `src/pages/AdAccountDetail.tsx`
-- Change `loadSpend(null)` in `loadAll()` to `loadSpend(getPresetRange("today"))` using today's date range
-- Import `startOfDay`/`endOfDay` (already imported via `format`)
-- Add `spendPage`/`spendSize` state
-- Add `TablePagination` component to spend table
-- Paginate `spendData` with `.slice((spendPage-1)*spendSize, spendPage*spendSize)`
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-### 2. `src/pages/ClientDetail.tsx`
-- Change `loadSpendData(accountIds, null)` to `loadSpendData(accountIds, { from: startOfDay(new Date()), to: endOfDay(new Date()) })`
-- Replace hardcoded `slice(0, 50)` with pagination state + `TablePagination` component
-- Add `spendPage`/`spendSize` state, reset page on date change
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-### Files Modified
-| File | Changes |
-|------|---------|
-| `src/pages/AdAccountDetail.tsx` | Fix initial load date filter + add spend pagination |
-| `src/pages/ClientDetail.tsx` | Fix initial load date filter + add spend pagination |
-
+No database or edge function changes needed.
