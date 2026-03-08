@@ -44,6 +44,7 @@ export default function AdminDashboard() {
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [totalDueBdt, setTotalDueBdt] = useState(0);
   const [dateRange, setDateRange] = useState<DateRange | null>({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
     }
 
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, business_name"),
+      supabase.from("profiles").select("user_id, full_name, email, business_name, pricing_config"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("transactions").select("*"),
       (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
@@ -86,7 +87,7 @@ export default function AdminDashboard() {
       supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
       spendQuery,
       supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
-      supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
+      supabase.from("payment_requests").select("amount_bdt, created_at, client_id").eq("status", "approved"),
     ]);
 
     // Fetch last 7 days spend for sparkline
@@ -127,18 +128,44 @@ export default function AdminDashboard() {
       if (cid) clientSpendInRange[cid] = (clientSpendInRange[cid] || 0) + Number(row.spend);
     }
 
-    const result: ClientWithBalance[] = clientProfiles.map((p) => {
+    const approvedPayments = (paymentReqRes.data ?? []) as any[];
+
+    const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0 };
     });
 
+    // Calculate Payment Due in BDT using per-platform rates from pricing_config
+    let dueBdtTotal = 0;
+    for (const client of result) {
+      if (client.balance >= 0) continue; // client doesn't owe anything
+      const profile = clientProfiles.find((p: any) => p.user_id === client.user_id) as any;
+      const flatRates = profile?.pricing_config?.flat_rates || {};
+      const defaultRate = 120;
+      
+      // Get this client's completed debit transactions grouped by platform
+      const clientDebits = transactions.filter((t: any) => t.client_id === client.user_id && t.status === "completed" && t.type === "debit");
+      let debitsBdt = 0;
+      for (const t of clientDebits) {
+        const rate = flatRates[t.platform] || defaultRate;
+        debitsBdt += Number(t.amount) * rate;
+      }
+      
+      // Get this client's BDT credits from approved payment_requests
+      const clientPayments = approvedPayments.filter((p: any) => p.client_id === client.user_id);
+      const creditsBdt = clientPayments.reduce((s: number, p: any) => s + Number(p.amount_bdt || 0), 0);
+      
+      const clientDueBdt = debitsBdt - creditsBdt;
+      if (clientDueBdt > 0) dueBdtTotal += clientDueBdt;
+    }
+    setTotalDueBdt(Math.round(dueBdtTotal * 100) / 100);
+
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
     const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
 
-    // Collections from payment_requests (BDT)
-    const approvedPayments = (paymentReqRes.data ?? []) as any[];
+    // Collections from payment_requests (BDT) - already declared above
     const rangeCollPayments = approvedPayments.filter((p: any) => {
       if (dateRange) {
         const pDate = p.created_at.split("T")[0];
@@ -199,7 +226,6 @@ export default function AdminDashboard() {
   }, [lastSynced, toast]);
 
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
-  const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
 
   const spendLabel = datePreset === "today" ? "Today's Spend" : datePreset === "yesterday" ? "Yesterday's Spend" : "Period Spend";
   const collectLabel = datePreset === "today" ? "Today's Collections" : datePreset === "yesterday" ? "Yesterday's Collections" : "Period Collections";
@@ -248,8 +274,8 @@ export default function AdminDashboard() {
         />
         <KpiCard
           title="Payment Due"
-          value={`$${totalDue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle="USD"
+          value={`৳${totalDueBdt.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+          subtitle="BDT"
           icon={AlertCircle}
           loading={loading}
           accentColor="hsl(var(--destructive))"
