@@ -110,8 +110,8 @@ export default function AdAccountDetail() {
         setIntegrationName(intData ? (intData.instance_name || `${intData.platform} integration`) : null);
       }
 
-      // Load spend
-      await loadSpend(null);
+      // Load spend with today's range to match default preset
+      await loadSpend({ from: startOfDay(new Date()), to: endOfDay(new Date()) });
     }
 
     setAssignments(assignRes.data ?? []);
