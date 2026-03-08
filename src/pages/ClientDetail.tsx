@@ -292,20 +292,21 @@ export default function ClientDetail() {
   }
 
   async function handleAssignAdAccount() {
-    if (!newAdAccountId || !userId) return;
+    if (!selectedAdAccountIds.length || !userId) return;
     setAssigningSaving(true);
-    const { error } = await supabase.from("ad_account_clients").insert({
-      ad_account_id: newAdAccountId,
+    const rows = selectedAdAccountIds.map((id) => ({
+      ad_account_id: id,
       client_id: userId,
       mapping_keyword: newAdKeyword || "",
-    });
+    }));
+    const { error } = await supabase.from("ad_account_clients").insert(rows);
     setAssigningSaving(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      setNewAdAccountId("");
+      setSelectedAdAccountIds([]);
       setNewAdKeyword("");
-      toast({ title: "Assigned", description: "Ad account linked to this client." });
+      toast({ title: "Assigned", description: `${rows.length} ad account(s) linked to this client.` });
       loadAll();
     }
   }
