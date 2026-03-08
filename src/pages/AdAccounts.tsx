@@ -172,6 +172,13 @@ export default function AdAccounts() {
     if (pct >= 60) return "text-yellow-500";
     return "text-emerald-500";
   };
+  const filteredAccounts = accounts.filter((a: any) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (a.account_name || "").toLowerCase().includes(q)
+      || (a.ad_account_id || "").toLowerCase().includes(q)
+      || (a.platform_name || "").toLowerCase().includes(q);
+  });
 
   return (
     <div className="space-y-6">
