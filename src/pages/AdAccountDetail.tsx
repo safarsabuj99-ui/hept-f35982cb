@@ -18,7 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset } from "@/components/ClientDateFilter";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, startOfDay, endOfDay } from "date-fns";
+import { TablePagination } from "@/components/TablePagination";
 
 const CURRENCIES = [
   { value: "USD", label: "USD" },
