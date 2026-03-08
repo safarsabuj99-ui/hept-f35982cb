@@ -64,7 +64,11 @@ export default function AdAccounts() {
       supabase.from("api_integrations").select("id, platform, instance_name, is_active").eq("is_active", true) as any,
       supabase.from("ad_account_clients" as any).select("*") as any,
     ]);
-    setAccounts(accs ?? []);
+    const sorted = (accs ?? []).sort((a: any, b: any) => {
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    setAccounts(sorted);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
     setAssignments(assigns ?? []);
