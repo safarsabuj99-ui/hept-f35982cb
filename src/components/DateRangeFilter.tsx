@@ -126,6 +126,12 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   );
 }
 
+/** Format date to YYYY-MM-DD using local date components (dates are already UTC-aligned) */
 export function toISODate(d: Date): string {
   return format(d, "yyyy-MM-dd");
+}
+
+/** Helper to get UTC-based today as a local Date for consistent date filtering */
+export function getUtcToday(): Date {
+  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
 }

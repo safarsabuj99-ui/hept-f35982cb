@@ -44,9 +44,10 @@ export default function AdminDashboard() {
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  // Use UTC-based "today" to match how data_date is stored (UTC dates from Meta sync)
-  const utcToday = new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
-  const [dateRange, setDateRange] = useState<DateRange | null>({ from: utcToday, to: utcToday });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => {
+    const t = getUtcToday();
+    return { from: t, to: t };
+  });
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   
   const { toast } = useToast();
