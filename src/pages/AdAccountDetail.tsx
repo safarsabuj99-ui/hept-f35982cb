@@ -606,51 +606,108 @@ export default function AdAccountDetail() {
         <TabsContent value="spend" className="space-y-4">
           <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendPreset} />
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Total Spend</p><p className="text-2xl font-semibold mt-1">{fmt(totalSpend)}</p></CardContent></Card>
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Avg Daily</p><p className="text-2xl font-semibold mt-1">{fmt(avgDaily)}</p></CardContent></Card>
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Campaigns</p><p className="text-2xl font-semibold mt-1">{uniqueCampaigns}</p></CardContent></Card>
+          {/* KPI Summary Cards */}
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{fmt(spendTotals.spend)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+                  <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{spendTotals.results.toLocaleString()}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{spendAvgRoas.toFixed(2)}x</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+                  <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{fmt(spendAvgCpo)}</p>
+              </CardContent>
+            </Card>
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              {spendData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No spend data for this period.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Campaign</TableHead>
-                        <TableHead>Raw Spend</TableHead>
-                        <TableHead>Currency</TableHead>
-                        <TableHead>Billable USD</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {spendData.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((s: any) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="text-sm">{s.date}</TableCell>
-                          <TableCell className="text-sm max-w-[200px] truncate">{s.campaign_name || "—"}</TableCell>
-                          <TableCell className="font-mono text-sm">{Number(s.raw_spend_amount).toFixed(2)}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-[10px]">{s.raw_currency}</Badge></TableCell>
-                          <TableCell className="font-mono text-sm font-medium">{fmt(s.final_billable_usd)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <TablePagination
-                    totalItems={spendData.length}
-                    pageSize={spendSize}
-                    currentPage={spendPage}
-                    onPageChange={setSpendPage}
-                    onPageSizeChange={(size) => { setSpendSize(size); setSpendPage(1); }}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Tabbed Content */}
+          <Tabs defaultValue="live" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="live" className="gap-1.5">
+                <Radio className="h-4 w-4" /> Live Campaigns
+                {spendActiveCampaigns > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{spendActiveCampaigns}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="live">
+              <Tabs defaultValue="all" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="all">
+                    All
+                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendCampaignRows.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="meta">
+                    Meta
+                    {spendMetaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendMetaRows.length}</Badge>}
+                  </TabsTrigger>
+                  <TabsTrigger value="tiktok">
+                    TikTok
+                    {spendTiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendTiktokRows.length}</Badge>}
+                  </TabsTrigger>
+                  <TabsTrigger value="google">
+                    Google
+                    {spendGoogleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendGoogleRows.length}</Badge>}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                  <DeepDiveTable data={spendCampaignRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="meta">
+                  <DeepDiveTable data={spendMetaRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="tiktok">
+                  <DeepDiveTable data={spendTiktokRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="google">
+                  <DeepDiveTable data={spendGoogleRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="overview">
+              <div className="space-y-6">
+                <SalesFunnel impressions={spendTotals.impressions} clicks={spendTotals.clicks} results={spendTotals.results} />
+                <PlatformComparison data={spendPlatformStats} />
+              </div>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* BILLING HEALTH TAB */}
