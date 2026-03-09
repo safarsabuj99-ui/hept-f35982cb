@@ -67,8 +67,11 @@ export default function AdAccountDetail() {
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
-  const [spendPage, setSpendPage] = useState(1);
-  const [spendSize, setSpendSize] = useState(20);
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
+
+  // Spend tab campaign data
+  const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
+  const [spendRawMetrics, setSpendRawMetrics] = useState<any[]>([]);
 
   // Inline edit state for billing
   const [editingThreshold, setEditingThreshold] = useState(false);
