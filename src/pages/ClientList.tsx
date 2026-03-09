@@ -123,27 +123,33 @@ export default function ClientList() {
       // Compute balances (total + per-platform)
       const balMap: Record<string, number> = {};
       const platformBalMap: Record<string, Record<string, number>> = {};
+      const knownPlatforms = ["meta", "tiktok", "google"];
       for (const t of (txnsRes.data ?? []) as any[]) {
         const amt = Number(t.amount) || 0;
         const delta = t.type === "credit" ? amt : -amt;
         balMap[t.client_id] = (balMap[t.client_id] || 0) + delta;
-        const plat = t.platform || "unknown";
-        if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
-        platformBalMap[t.client_id][plat] = (platformBalMap[t.client_id][plat] || 0) + delta;
+        // Only track known platforms (matching Client Dashboard logic)
+        if (t.platform && knownPlatforms.includes(t.platform)) {
+          if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
+          platformBalMap[t.client_id][t.platform] = (platformBalMap[t.client_id][t.platform] || 0) + delta;
+        }
       }
       setBalances(balMap);
 
-      // Compute BDT for negative balances using per-platform rates
+      // Compute BDT for negative balances matching Client Dashboard logic exactly
       const bdtMap: Record<string, number> = {};
       for (const [cid, totalBal] of Object.entries(balMap)) {
         if (totalBal >= 0) continue;
         const profile = profileMap[cid];
-        const rates = profile?.pricing_config?.flat_rates || { meta: 120, tiktok: 120, google: 120 };
+        const pConfig = profile?.pricing_config as any;
+        const rates = pConfig?.flat_rates || pConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
         const platBals = platformBalMap[cid] || {};
         let bdtTotal = 0;
-        for (const [plat, platBal] of Object.entries(platBals)) {
+        // Only iterate known platforms, same as Client Dashboard
+        for (const p of knownPlatforms) {
+          const platBal = platBals[p] || 0;
           if (platBal < 0) {
-            const rate = Number(rates[plat] || 120);
+            const rate = Number(rates[p] || 120);
             bdtTotal += Math.abs(platBal) * rate;
           }
         }
