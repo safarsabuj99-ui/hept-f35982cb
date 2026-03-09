@@ -30,32 +30,49 @@ export function RunwayPrediction() {
     const clientIds = roles?.map((r) => r.user_id) ?? [];
     if (clientIds.length === 0) { setLoading(false); return; }
 
-    const [profilesRes, txnsRes, accountsRes] = await Promise.all([
+    // Get mapped accounts with keywords
+    const { data: mappedAssignments } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id, mapping_keyword")
+      .neq("mapping_keyword", "");
+    
+    const keywordsByAccount: Record<string, string[]> = {};
+    const accToClient: Record<string, string> = {};
+    for (const m of mappedAssignments ?? []) {
+      if (!keywordsByAccount[m.ad_account_id]) keywordsByAccount[m.ad_account_id] = [];
+      keywordsByAccount[m.ad_account_id].push((m.mapping_keyword || "").toLowerCase());
+      accToClient[m.ad_account_id] = m.client_id;
+    }
+    const mappedAccountIds = Object.keys(keywordsByAccount);
+
+    if (mappedAccountIds.length === 0) { setLoading(false); return; }
+
+    const [profilesRes, txnsRes] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_balance_usd").in("user_id", clientIds),
       supabase.from("transactions").select("client_id, type, amount, status"),
-      supabase.from("ad_accounts").select("id, client_id").eq("is_active", true),
     ]);
 
-    const accountIds = (accountsRes.data ?? []).map((a) => a.id);
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     const threeDaysStr = threeDaysAgo.toISOString().split("T")[0];
 
     const { data: recentSpend } = await supabase
       .from("daily_ad_spend")
-      .select("ad_account_id, final_billable_usd")
-      .in("ad_account_id", accountIds)
+      .select("ad_account_id, final_billable_usd, campaign_name")
+      .in("ad_account_id", mappedAccountIds)
       .gte("date", threeDaysStr);
 
-    // Map account to client
-    const accToClient: Record<string, string> = {};
-    for (const a of accountsRes.data ?? []) accToClient[a.id] = a.client_id;
-
-    // Client spend last 3 days
+    // Client spend last 3 days - only count matching campaigns
     const clientSpend3d: Record<string, number> = {};
     for (const s of recentSpend ?? []) {
-      const cid = accToClient[s.ad_account_id];
-      if (cid) clientSpend3d[cid] = (clientSpend3d[cid] || 0) + Number(s.final_billable_usd);
+      const keywords = keywordsByAccount[s.ad_account_id];
+      if (!keywords || keywords.length === 0) continue;
+      const nameLower = (s.campaign_name || "").toLowerCase();
+      const matches = keywords.some((kw: string) => nameLower.includes(kw));
+      if (matches) {
+        const cid = accToClient[s.ad_account_id];
+        if (cid) clientSpend3d[cid] = (clientSpend3d[cid] || 0) + Number(s.final_billable_usd);
+      }
     }
 
     const result: RunwayClient[] = [];
