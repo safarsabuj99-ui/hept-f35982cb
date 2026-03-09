@@ -29,13 +29,14 @@ const presets: { label: string; value: DatePreset }[] = [
   { label: "Custom", value: "custom" },
 ];
 
-/** Returns a Date parsed from today's UTC date string so local formatting matches DB dates */
-function utcToday(): Date {
-  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+/** Returns a Date parsed from today's date in Asia/Dhaka timezone */
+function localToday(): Date {
+  const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+  return new Date(dhakaStr + "T00:00:00");
 }
 
 function getPresetRange(preset: DatePreset): DateRange | null {
-  const now = utcToday();
+  const now = localToday();
   switch (preset) {
     case "today":
       return { from: now, to: now };
@@ -126,12 +127,13 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   );
 }
 
-/** Format date to YYYY-MM-DD using local date components (dates are already UTC-aligned) */
+/** Format date to YYYY-MM-DD using local date components */
 export function toISODate(d: Date): string {
   return format(d, "yyyy-MM-dd");
 }
 
-/** Helper to get UTC-based today as a local Date for consistent date filtering */
-export function getUtcToday(): Date {
-  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+/** Helper to get today in Asia/Dhaka timezone for consistent date filtering */
+export function getLocalToday(): Date {
+  const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+  return new Date(dhakaStr + "T00:00:00");
 }

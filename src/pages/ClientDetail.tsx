@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
-import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
 import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
@@ -81,7 +81,7 @@ export default function ClientDetail() {
   const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
 
   // Spend date filter
-  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
   const [spendPage, setSpendPage] = useState(1);
   const [spendSize, setSpendSize] = useState(20);
@@ -149,7 +149,7 @@ export default function ClientDetail() {
     // Spend data - load from new campaigns + daily_metrics tables
     if (assignmentRows.length) {
       const accountIds = assignmentRows.map((a: any) => a.ad_account_id);
-      await loadSpendData(accountIds, { from: getUtcTodayClient(), to: getUtcTodayClient() });
+      await loadSpendData(accountIds, { from: getLocalTodayClient(), to: getLocalTodayClient() });
     }
 
     setPayments(paymentsRes.data || []);

@@ -17,7 +17,7 @@ import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X,
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
 import { TablePagination } from "@/components/TablePagination";
 
@@ -111,7 +111,7 @@ export default function AdAccountDetail() {
       }
 
       // Load spend with today's range to match default preset
-      await loadSpend({ from: getUtcTodayClient(), to: getUtcTodayClient() });
+      await loadSpend({ from: getLocalTodayClient(), to: getLocalTodayClient() });
     }
 
     setAssignments(assignRes.data ?? []);

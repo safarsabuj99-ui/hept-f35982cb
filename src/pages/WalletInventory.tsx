@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DateRangeFilter, DateRange, DatePreset, toISODate, getUtcToday } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 
 interface UsdPurchase {
@@ -35,7 +35,7 @@ export default function WalletInventory() {
   const [usdReceived, setUsdReceived] = useState("");
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getUtcToday(); return { from: t, to: t }; });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
   const [periodLabel, setPeriodLabel] = useState("Today");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");

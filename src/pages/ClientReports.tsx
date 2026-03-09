@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientDateFilter, ClientDateRange, ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
@@ -24,7 +24,7 @@ export default function ClientReports() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [preset, setPreset] = useState<ClientDatePreset>("today");
 
   const fetchData = useCallback(async () => {

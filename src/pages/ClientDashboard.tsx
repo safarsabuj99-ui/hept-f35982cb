@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
-import { ClientDateFilter, ClientDateRange, ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -122,7 +122,7 @@ export default function ClientDashboard() {
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
+  const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
   const [isSyncing, setIsSyncing] = useState(false);
 
