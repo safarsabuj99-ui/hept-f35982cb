@@ -358,6 +358,9 @@ export default function ClientDashboard() {
               </div>
             </div>
             <p className="text-4xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
+            {balance < 0 && totalNegativeBdt > 0 && (
+              <p className="text-lg font-bold font-mono text-red-300 mt-1">-{fmtBdt(totalNegativeBdt)}</p>
+            )}
             <WalletHealthBar balance={balance} avgDailySpend={avgDailySpend} />
           </div>
 
