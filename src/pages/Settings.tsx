@@ -12,14 +12,35 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" | "billing-radar";
+
+const SYNC_FUNCTIONS: { key: SyncFunction; label: string; icon: React.ReactNode; description: string }[] = [
+  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Quick campaign metrics" },
+  { key: "sync-deep-dive", label: "Deep Dive", icon: <BarChart3 className="h-4 w-4" />, description: "Detailed performance data" },
+  { key: "sync-ad-spend", label: "Ad Spend", icon: <DollarSign className="h-4 w-4" />, description: "Daily spend records" },
+  { key: "billing-radar", label: "Billing", icon: <Bell className="h-4 w-4" />, description: "Threshold alerts" },
+];
+
 export default function Settings() {
   const [serviceMargin, setServiceMargin] = useState("");
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>();
   const [savingSyncDate, setSavingSyncDate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingMargin, setSavingMargin] = useState(false);
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  const fetchLastSynced = async () => {
+    const { data } = await supabase
+      .from("api_integrations")
+      .select("last_synced_at")
+      .order("last_synced_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (data?.last_synced_at) setLastSyncedAt(data.last_synced_at);
+  };
 
   useEffect(() => {
     supabase
@@ -33,6 +54,7 @@ export default function Settings() {
         }
         setLoading(false);
       });
+    fetchLastSynced();
   }, []);
 
   const handleSaveMargin = async (e: React.FormEvent) => {
