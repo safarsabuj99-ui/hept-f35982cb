@@ -301,16 +301,6 @@ export default function ClientDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncNow}
-            disabled={isSyncing}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing..." : "Sync Now"}
-          </Button>
-          <Button
             onClick={() => setDepositOpen(true)}
             className="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
             size="lg"
