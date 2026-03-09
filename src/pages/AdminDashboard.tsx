@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
