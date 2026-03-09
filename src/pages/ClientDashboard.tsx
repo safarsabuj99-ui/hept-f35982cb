@@ -126,7 +126,7 @@ export default function ClientDashboard() {
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
-  const [isSyncing, setIsSyncing] = useState(false);
+  
 
   const today = getDhakaDateString();
 
