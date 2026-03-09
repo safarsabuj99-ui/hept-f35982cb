@@ -139,7 +139,7 @@ export default function ClientDashboard() {
     if (!effectiveClientId) return;
     const [{ data: txData }, { data: accountLinks }] = await Promise.all([
       supabase.from("transactions").select("*").eq("client_id", effectiveClientId).order("date", { ascending: false }),
-      supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", effectiveClientId),
+      supabase.from("ad_account_clients").select("ad_account_id, mapping_keyword").eq("client_id", effectiveClientId).neq("mapping_keyword", ""),
     ]);
     setTransactions((txData as Transaction[]) ?? []);
 

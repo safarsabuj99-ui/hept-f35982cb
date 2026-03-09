@@ -25,18 +25,41 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
     const fetchData = async () => {
       setLoading(true);
 
+      // Step 1: Get mapped accounts WITH keywords
+      const { data: mappedAssignments } = await supabase
+        .from("ad_account_clients")
+        .select("ad_account_id, client_id, mapping_keyword")
+        .neq("mapping_keyword", "");
+
+      const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
+
+      if (mappedAccountIds.length === 0) {
+        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 128 });
+        setLoading(false);
+        return;
+      }
+
+      // Get campaigns from mapped accounts only
+      const { data: mappedCampaigns } = await supabase
+        .from("campaigns")
+        .select("id, ad_account_id, platform")
+        .in("ad_account_id", mappedAccountIds);
+
+      const campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
+
       let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
+      if (campaignIds.length > 0) {
+        metricsQuery = metricsQuery.in("campaign_id", campaignIds);
+      }
       if (dateRange) {
         metricsQuery = metricsQuery
           .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
           .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
       }
 
-      const [purchasesRes, campaignsRes, metricsRes, accClientsRes, profilesRes, rolesRes] = await Promise.all([
+      const [purchasesRes, metricsRes, profilesRes, rolesRes] = await Promise.all([
         supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
-        supabase.from("campaigns").select("id, ad_account_id, platform"),
         metricsQuery,
-        supabase.from("ad_account_clients").select("ad_account_id, client_id"),
         supabase.from("profiles").select("user_id, pricing_config"),
         supabase.from("user_roles").select("user_id").eq("role", "client"),
       ]);
@@ -51,12 +74,12 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
 
       // 2. Build mappings
       const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
-      for (const c of (campaignsRes.data ?? []) as any[]) {
+      for (const c of (mappedCampaigns ?? []) as any[]) {
         campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
       }
 
       const accToClients: Record<string, string[]> = {};
-      for (const ac of (accClientsRes.data ?? []) as any[]) {
+      for (const ac of (mappedAssignments ?? []) as any[]) {
         if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
         accToClients[ac.ad_account_id].push(ac.client_id);
       }
