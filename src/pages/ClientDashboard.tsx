@@ -119,6 +119,7 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
+  const [pricingConfig, setPricingConfig] = useState<any>(null);
 
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
