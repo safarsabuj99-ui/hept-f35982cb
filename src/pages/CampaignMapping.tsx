@@ -1,17 +1,19 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, Filter, FileText, BarChart3, Search, DollarSign, Eye, MousePointerClick, TrendingUp } from "lucide-react";
-import { TablePagination } from "@/components/TablePagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DateRangeFilter, DateRange, getLocalToday } from "@/components/DateRangeFilter";
-import { TableSkeleton } from "@/components/ui/premium-skeletons";
+import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { DollarSign, ShoppingCart, TrendingUp, Target, BarChart3 } from "lucide-react";
+
+const fmt = (n: number) =>
+  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 export default function CampaignMapping() {
   const { role } = useAuth();
@@ -21,18 +23,12 @@ export default function CampaignMapping() {
   const [clients, setClients] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [platformFilter, setPlatformFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
-  const [saving, setSaving] = useState<string | null>(null);
-  const [spendPage, setSpendPage] = useState(1);
-  const [spendSize, setSpendSize] = useState(20);
-  const { toast } = useToast();
 
-  const fetchData = async () => {
-    // Step 1: Get mapped accounts WITH keywords
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+
     const { data: mappedAssignments } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id, client_id, mapping_keyword")
@@ -40,16 +36,15 @@ export default function CampaignMapping() {
 
     const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
 
-    // Step 2: Fetch campaigns only from mapped accounts
-    let campaignsQuery = supabase.from("campaigns").select("*").order("created_at", { ascending: false });
-    if (mappedAccountIds.length > 0) {
-      campaignsQuery = campaignsQuery.in("ad_account_id", mappedAccountIds);
-    } else {
+    if (mappedAccountIds.length === 0) {
       setCampaigns([]);
       setMetrics([]);
       setLoading(false);
       return;
     }
+
+    let campaignsQuery = supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+    campaignsQuery = campaignsQuery.in("ad_account_id", mappedAccountIds);
 
     const [{ data: camps }, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
       campaignsQuery,
@@ -58,16 +53,24 @@ export default function CampaignMapping() {
       supabase.from("ad_accounts").select("id, account_name, ad_account_id"),
     ]);
 
-    // Step 3: Get metrics only for those campaigns
     const campaignIds = camps?.map((c: any) => c.id) ?? [];
     let metricData: any[] = [];
     if (campaignIds.length > 0) {
-      const { data: metrics } = await supabase
+      let metricsQuery = supabase
         .from("daily_metrics")
         .select("*")
         .in("campaign_id", campaignIds)
         .order("data_date", { ascending: false });
-      metricData = metrics ?? [];
+
+      if (dateRange) {
+        const { format } = await import("date-fns");
+        metricsQuery = metricsQuery
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      }
+
+      const { data: mets } = await metricsQuery;
+      metricData = mets ?? [];
     }
 
     setCampaigns(camps ?? []);
@@ -76,295 +79,235 @@ export default function CampaignMapping() {
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
     setLoading(false);
-  };
+  }, [dateRange]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const assignClient = async (campaignId: string, clientId: string) => {
-    setSaving(campaignId);
-    const { error } = await supabase
-      .from("campaigns")
-      .update({ client_id: clientId === "unassigned" ? null : clientId } as any)
-      .eq("id", campaignId);
-    setSaving(null);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Updated", description: "Campaign assignment saved" });
-      fetchData();
+  const adAccountNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of adAccounts) {
+      map[a.id] = a.account_name || a.ad_account_id || "";
     }
-  };
+    return map;
+  }, [adAccounts]);
 
-  const getAdAccountName = (adAccountId: string) =>
-    adAccounts.find((a: any) => a.id === adAccountId)?.account_name || adAccounts.find((a: any) => a.id === adAccountId)?.ad_account_id || "—";
+  // Aggregate metrics by campaign_id into CampaignRow[]
+  const campaignRows: CampaignRow[] = useMemo(() => {
+    const map: Record<string, CampaignRow> = {};
 
-  const getClientName = (clientId: string | null) =>
-    clients.find((c: any) => c.user_id === clientId)?.full_name ?? "—";
-
-  // Spend analytics aggregation
-  const aggregatedRows = useMemo(() => {
-    const filteredMetrics = dateRange
-      ? metrics.filter((m: any) => {
-          const d = new Date(m.data_date);
-          return d >= dateRange.from && d <= dateRange.to;
-        })
-      : metrics;
-
-    const map: Record<string, {
-      campaign: any;
-      totalSpend: number;
-      totalImpressions: number;
-      totalClicks: number;
-      totalResults: number;
-      totalConversionValue: number;
-      days: number;
-    }> = {};
-
-    for (const m of filteredMetrics) {
+    for (const m of metrics) {
       const key = m.campaign_id;
       if (!map[key]) {
         const campaign = campaigns.find((c: any) => c.id === key);
         if (!campaign) continue;
-        map[key] = { campaign, totalSpend: 0, totalImpressions: 0, totalClicks: 0, totalResults: 0, totalConversionValue: 0, days: 0 };
+        map[key] = {
+          campaign_name: campaign.name || "Unknown",
+          platform: campaign.platform || "unknown",
+          status: campaign.status ?? "active",
+          ad_account_name: adAccountNameMap[campaign.ad_account_id] || "",
+          campaign_id: campaign.id,
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          results: 0,
+          conversion_value: 0,
+        };
       }
-      map[key].totalSpend += Number(m.spend);
-      map[key].totalImpressions += Number(m.impressions);
-      map[key].totalClicks += Number(m.clicks);
-      map[key].totalResults += Number(m.results);
-      map[key].totalConversionValue += Number(m.conversion_value);
-      map[key].days += 1;
+      map[key].impressions += Number(m.impressions);
+      map[key].clicks += Number(m.clicks);
+      map[key].spend += Number(m.spend);
+      map[key].results += Number(m.results ?? 0);
+      map[key].conversion_value += Number(m.conversion_value ?? 0);
     }
-    return Object.values(map);
-  }, [metrics, campaigns, dateRange]);
 
-  const filteredSpend = useMemo(() => {
-    return aggregatedRows.filter((row) => {
-      if (platformFilter !== "all" && row.campaign.platform !== platformFilter) return false;
-      if (clientFilter !== "all" && row.campaign.client_id !== clientFilter) return false;
-      if (statusFilter !== "all" && row.campaign.status !== statusFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const clientName = getClientName(row.campaign.client_id).toLowerCase();
-        const accountName = getAdAccountName(row.campaign.ad_account_id).toLowerCase();
-        if (
-          !row.campaign.name?.toLowerCase().includes(q) &&
-          !row.campaign.platform_id?.toLowerCase().includes(q) &&
-          !clientName.includes(q) &&
-          !accountName.includes(q)
-        ) return false;
+    // Inject active campaigns with no metrics
+    for (const c of campaigns) {
+      if (c.status === "active" && !map[c.id]) {
+        map[c.id] = {
+          campaign_name: c.name || "Unknown",
+          platform: c.platform || "unknown",
+          status: "active",
+          ad_account_name: adAccountNameMap[c.ad_account_id] || "",
+          campaign_id: c.id,
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          results: 0,
+          conversion_value: 0,
+        };
       }
-      return true;
+    }
+
+    return Object.values(map);
+  }, [metrics, campaigns, adAccountNameMap]);
+
+  // Apply client filter
+  const filteredRows = useMemo(() => {
+    if (clientFilter === "all") return campaignRows;
+    // Find ad_account_ids assigned to this client
+    const clientAccIds = new Set(
+      (campaigns ?? [])
+        .filter((c: any) => c.client_id === clientFilter)
+        .map((c: any) => c.ad_account_id)
+    );
+    return campaignRows.filter((r) => {
+      const campaign = campaigns.find((c: any) => c.id === r.campaign_id);
+      return campaign && campaign.client_id === clientFilter;
     });
-  }, [aggregatedRows, platformFilter, clientFilter, statusFilter, searchQuery]);
+  }, [campaignRows, clientFilter, campaigns]);
 
-  const fmt = (n: number) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-  const fmtNum = (n: number) => n.toLocaleString("en-US");
+  // Totals
+  const totals = useMemo(() => {
+    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    for (const r of filteredRows) {
+      t.spend += r.spend;
+      t.impressions += r.impressions;
+      t.clicks += r.clicks;
+      t.results += r.results;
+      t.convValue += r.conversion_value;
+    }
+    return t;
+  }, [filteredRows]);
 
-  const totalSpend = filteredSpend.reduce((s, r) => s + r.totalSpend, 0);
-  const totalImpressions = filteredSpend.reduce((s, r) => s + r.totalImpressions, 0);
-  const totalClicks = filteredSpend.reduce((s, r) => s + r.totalClicks, 0);
-  const avgRoas = filteredSpend.length > 0
-    ? filteredSpend.reduce((s, r) => s + (r.totalSpend > 0 ? r.totalConversionValue / r.totalSpend : 0), 0) / filteredSpend.length
-    : 0;
+  const avgRoas = safeDivide(totals.convValue, totals.spend);
+  const avgCpo = safeDivide(totals.spend, totals.results);
 
-  const statusColors: Record<string, string> = {
-    active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-    paused: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-    not_delivering: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-    archived: "bg-muted text-muted-foreground border-muted",
-  };
+  // Platform-filtered rows
+  const metaRows = useMemo(() => filteredRows.filter(r => r.platform === "meta"), [filteredRows]);
+  const tiktokRows = useMemo(() => filteredRows.filter(r => r.platform === "tiktok"), [filteredRows]);
+  const googleRows = useMemo(() => filteredRows.filter(r => r.platform === "google"), [filteredRows]);
 
-  useEffect(() => { setSpendPage(1); }, [platformFilter, clientFilter, statusFilter, searchQuery, dateRange]);
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-10 w-full" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Campaigns</h1>
-        <p className="text-muted-foreground">Unified spend analytics & campaign management</p>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <BarChart3 className="h-6 w-6 text-primary" /> Campaigns
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Unified spend analytics & campaign management
+        </p>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="flex flex-wrap gap-4 pt-6">
-          <div className="space-y-1 flex-1 min-w-[200px]">
-            <Label className="text-xs">Search</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Campaign, account, client..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
+      {/* Admin Controls Bar */}
+      <div className="flex flex-wrap items-end gap-4">
+        {isAdmin && (
           <div className="space-y-1">
-            <Label className="text-xs">Platform</Label>
-            <Select value={platformFilter} onValueChange={setPlatformFilter}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <Label className="text-xs text-muted-foreground">Client</Label>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-44 h-9 text-sm">
+                <SelectValue placeholder="All Clients" />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="meta">Meta</SelectItem>
-                <SelectItem value="tiktok">TikTok</SelectItem>
-                <SelectItem value="google">Google</SelectItem>
+                <SelectItem value="all">All Clients</SelectItem>
+                {clients.map((c: any) => (
+                  <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          {isAdmin && (
-            <div className="space-y-1">
-              <Label className="text-xs">Client</Label>
-              <Select value={clientFilter} onValueChange={setClientFilter}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {clients.map((c: any) => <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div className="space-y-1">
-            <Label className="text-xs">Status</Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="paused">Paused</SelectItem>
-                <SelectItem value="not_delivering">Not Delivering</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Date Range</Label>
-            <DateRangeFilter onRangeChange={(range) => setDateRange(range)} />
-          </div>
-        </CardContent>
-      </Card>
+        )}
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Date Range</Label>
+          <DateRangeFilter onRangeChange={(range) => setDateRange(range)} />
+        </div>
+      </div>
 
-      {/* KPI Summary */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPI Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Spend</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{fmt(totalSpend)}</p></CardContent>
+          <CardContent>
+            <p className="text-2xl font-bold font-mono">{fmt(totals.spend)}</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Impressions</CardTitle>
-            <Eye className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+              <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{fmtNum(totalImpressions)}</p></CardContent>
+          <CardContent>
+            <p className="text-2xl font-bold font-mono">{totals.results.toLocaleString()}</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Clicks</CardTitle>
-            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+              <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{fmtNum(totalClicks)}</p></CardContent>
+          <CardContent>
+            <p className="text-2xl font-bold font-mono">{avgRoas.toFixed(2)}x</p>
+          </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg. ROAS</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center gap-3 pb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+              <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{avgRoas.toFixed(2)}x</p></CardContent>
+          <CardContent>
+            <p className="text-2xl font-bold font-mono">{fmt(avgCpo)}</p>
+          </CardContent>
         </Card>
       </div>
 
-      {/* Unified Table */}
-      <Card>
-        <CardContent className="pt-6">
-          {loading ? (
-            <TableSkeleton rows={6} columns={10} />
-          ) : filteredSpend.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
-              <FileText className="h-10 w-10" />
-              <p>No campaign data found. Adjust filters or run a sync.</p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campaign</TableHead>
-                      <TableHead>Ad Account</TableHead>
-                      <TableHead>Platform</TableHead>
-                      {isAdmin && <TableHead>Client</TableHead>}
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Impressions</TableHead>
-                      <TableHead className="text-right">Clicks</TableHead>
-                      <TableHead className="text-right">CTR</TableHead>
-                      <TableHead className="text-right">Results</TableHead>
-                      <TableHead className="text-right">ROAS</TableHead>
-                      <TableHead className="text-right">Spend</TableHead>
-                      <TableHead className="text-right">Days</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredSpend.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((row, idx) => {
-                      const ctr = row.totalImpressions > 0 ? (row.totalClicks / row.totalImpressions) * 100 : 0;
-                      const roas = row.totalSpend > 0 ? row.totalConversionValue / row.totalSpend : 0;
-                      const statusClass = statusColors[row.campaign.status] || statusColors.active;
-
-                      return (
-                        <TableRow key={row.campaign.id || idx}>
-                          <TableCell className="max-w-[200px] truncate font-medium" title={row.campaign.name}>
-                            {row.campaign.name}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
-                            {getAdAccountName(row.campaign.ad_account_id)}
-                          </TableCell>
-                          <TableCell><Badge variant="secondary" className="capitalize">{row.campaign.platform}</Badge></TableCell>
-                          {isAdmin && (
-                            <TableCell>
-                              <Select
-                                value={row.campaign.client_id || "unassigned"}
-                                onValueChange={(v) => assignClient(row.campaign.id, v)}
-                                disabled={saving === row.campaign.id}
-                              >
-                                <SelectTrigger className="w-36 h-8 text-xs">
-                                  {saving === row.campaign.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <SelectValue placeholder="Assign..." />
-                                  )}
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {clients.map((c: any) => (
-                                    <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <Badge variant="outline" className={`text-xs capitalize ${statusClass}`}>
-                              {row.campaign.status?.replace("_", " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">{fmtNum(row.totalImpressions)}</TableCell>
-                          <TableCell className="text-right font-mono">{fmtNum(row.totalClicks)}</TableCell>
-                          <TableCell className="text-right font-mono">{ctr.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right font-mono">{fmtNum(row.totalResults)}</TableCell>
-                          <TableCell className="text-right font-mono">{roas.toFixed(2)}x</TableCell>
-                          <TableCell className="text-right font-mono font-medium">{fmt(row.totalSpend)}</TableCell>
-                          <TableCell className="text-right font-mono">{row.days}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination totalItems={filteredSpend.length} pageSize={spendSize} currentPage={spendPage} onPageChange={setSpendPage} onPageSizeChange={(s) => { setSpendSize(s); setSpendPage(1); }} />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {/* Platform Tabs with DeepDiveTable */}
+      <Tabs defaultValue="all" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="all">
+            All
+            <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{filteredRows.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="meta">
+            Meta
+            {metaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{metaRows.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="tiktok">
+            TikTok
+            {tiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{tiktokRows.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="google">
+            Google
+            {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="all">
+          <DeepDiveTable data={filteredRows} onCampaignPaused={fetchData} />
+        </TabsContent>
+        <TabsContent value="meta">
+          <DeepDiveTable data={metaRows} onCampaignPaused={fetchData} />
+        </TabsContent>
+        <TabsContent value="tiktok">
+          <DeepDiveTable data={tiktokRows} onCampaignPaused={fetchData} />
+        </TabsContent>
+        <TabsContent value="google">
+          <DeepDiveTable data={googleRows} onCampaignPaused={fetchData} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
