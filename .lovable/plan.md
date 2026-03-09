@@ -1,49 +1,34 @@
 
 
-# Plan: Add Manual API Sync Control Panel to Settings
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-Add a dedicated "API Data Sync" card to the Settings page with buttons to manually trigger each sync edge function. This gives you instant, on-demand control to test data collection without waiting for scheduled syncs or navigating to different pages.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Implementation
+## Technical Change
 
-### File: `src/pages/Settings.tsx`
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-Add a new card with buttons for all 4 sync functions:
-
-| Button | Edge Function | Purpose |
-|--------|--------------|---------|
-| **Fast Lane Sync** | `sync-fast-lane` | Quick campaign metrics (daily_metrics) |
-| **Deep Dive Sync** | `sync-deep-dive` | Detailed campaign performance data |
-| **Full Ad Spend Sync** | `sync-ad-spend` | Complete daily_ad_spend records |
-| **Billing Radar** | `billing-radar` | Billing threshold checks |
-
-Each button will:
-1. Show a loading spinner while running
-2. Display success/failure toast with details (rows synced, errors)
-3. Have independent state so multiple syncs can be tracked
-4. Include a "Sync All" button that runs all functions sequentially
-
-The card will also show the last sync timestamp from `api_integrations.last_synced_at`.
-
-### UI Layout
-
-```text
-┌─────────────────────────────────┐
-│ ⚡ Manual API Sync              │
-│ Trigger data collection instantly│
-│                                 │
-│ [▶ Fast Lane]  [▶ Deep Dive]   │
-│ [▶ Ad Spend]   [▶ Billing]     │
-│                                 │
-│ [━━━━━ Sync All ━━━━━]         │
-│                                 │
-│ Last synced: Mar 9, 2:30 PM    │
-└─────────────────────────────────┘
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-### Changes Summary
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-Only **one file** modified: `src/pages/Settings.tsx` — add the sync control card with 4 individual sync buttons + 1 "Sync All" button, each invoking the corresponding edge function.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

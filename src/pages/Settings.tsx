@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,10 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon } from "lucide-react";
+import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" | "billing-radar";
+
+const SYNC_FUNCTIONS: { key: SyncFunction; label: string; icon: React.ReactNode; description: string }[] = [
+  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Quick campaign metrics" },
+  { key: "sync-deep-dive", label: "Deep Dive", icon: <BarChart3 className="h-4 w-4" />, description: "Detailed performance data" },
+  { key: "sync-ad-spend", label: "Ad Spend", icon: <DollarSign className="h-4 w-4" />, description: "Daily spend records" },
+  { key: "billing-radar", label: "Billing", icon: <Bell className="h-4 w-4" />, description: "Threshold alerts" },
+];
 
 export default function Settings() {
   const [serviceMargin, setServiceMargin] = useState("");
@@ -18,8 +27,20 @@ export default function Settings() {
   const [savingSyncDate, setSavingSyncDate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingMargin, setSavingMargin] = useState(false);
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  const fetchLastSynced = async () => {
+    const { data } = await supabase
+      .from("api_integrations")
+      .select("last_synced_at")
+      .order("last_synced_at", { ascending: false })
+      .limit(1)
+      .single();
+    if (data?.last_synced_at) setLastSyncedAt(data.last_synced_at);
+  };
 
   useEffect(() => {
     supabase
@@ -33,6 +54,7 @@ export default function Settings() {
         }
         setLoading(false);
       });
+    fetchLastSynced();
   }, []);
 
   const handleSaveMargin = async (e: React.FormEvent) => {
@@ -65,12 +87,83 @@ export default function Settings() {
     }
   };
 
+  const handleManualSync = async (fn: SyncFunction) => {
+    setSyncing((prev) => ({ ...prev, [fn]: true }));
+    const { data, error } = await supabase.functions.invoke(fn);
+    setSyncing((prev) => ({ ...prev, [fn]: false }));
+    if (error) {
+      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Sync Complete", description: data?.message || `${fn} finished successfully.` });
+      fetchLastSynced();
+    }
+  };
+
+  const handleSyncAll = async () => {
+    setSyncing((prev) => ({ ...prev, all: true }));
+    for (const fn of SYNC_FUNCTIONS) {
+      setSyncing((prev) => ({ ...prev, [fn.key]: true }));
+      const { error } = await supabase.functions.invoke(fn.key);
+      setSyncing((prev) => ({ ...prev, [fn.key]: false }));
+      if (error) {
+        toast({ title: `${fn.label} Failed`, description: error.message, variant: "destructive" });
+      }
+    }
+    setSyncing((prev) => ({ ...prev, all: false }));
+    toast({ title: "All Syncs Complete", description: "All API data has been refreshed." });
+    fetchLastSynced();
+  };
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Global configuration</p>
       </div>
+
+      {/* Manual API Sync Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <RefreshCw className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Manual API Sync</CardTitle>
+              <CardDescription>Trigger data collection instantly</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            {SYNC_FUNCTIONS.map((fn) => (
+              <Button
+                key={fn.key}
+                variant="outline"
+                className="justify-start gap-2"
+                disabled={syncing[fn.key] || syncing.all}
+                onClick={() => handleManualSync(fn.key)}
+              >
+                {syncing[fn.key] ? <Loader2 className="h-4 w-4 animate-spin" /> : fn.icon}
+                {fn.label}
+              </Button>
+            ))}
+          </div>
+          <Button
+            className="w-full"
+            disabled={syncing.all || Object.values(syncing).some(Boolean)}
+            onClick={handleSyncAll}
+          >
+            {syncing.all ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Sync All
+          </Button>
+          {lastSyncedAt && (
+            <p className="text-xs text-muted-foreground text-center">
+              Last synced: {formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
