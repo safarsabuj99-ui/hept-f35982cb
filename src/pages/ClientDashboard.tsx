@@ -121,16 +121,13 @@ export default function ClientDashboard() {
   const [clientName, setClientName] = useState<string>("");
   const [pricingConfig, setPricingConfig] = useState<any>(null);
 
-  // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
-  
 
   const today = getDhakaDateString();
 
-  // Fetch client name
   useEffect(() => {
     if (!effectiveClientId) return;
     supabase.from("profiles").select("full_name, pricing_config").eq("user_id", effectiveClientId).single()
@@ -150,17 +147,14 @@ export default function ClientDashboard() {
 
     const accIds = accountLinks?.map((a: any) => a.ad_account_id) ?? [];
     
-    // Fetch ad accounts metadata
     if (accIds.length > 0) {
       const { data: accounts } = await supabase.from("ad_accounts").select("*").in("id", accIds);
       setAdAccounts(accounts ?? []);
       
-      // Fetch spend from daily_metrics via campaigns
       const { data: campaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform").in("ad_account_id", accIds);
       const campIds = campaigns?.map((c: any) => c.id) ?? [];
       if (campIds.length > 0) {
         const { data: metrics } = await supabase.from("daily_metrics").select("*").in("campaign_id", campIds).order("data_date", { ascending: false });
-        // Enrich metrics with platform from campaign
         const enriched = (metrics ?? []).map((m: any) => {
           const camp = campaigns?.find((c: any) => c.id === m.campaign_id);
           return { ...m, ad_account_id: camp?.ad_account_id, platform_name: camp?.platform, date: m.data_date, final_billable_usd: m.spend };
@@ -189,12 +183,10 @@ export default function ClientDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchAll]);
 
-  // Balance always uses ALL transactions (unfiltered)
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
   const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
   const balance = credits - debits;
 
-  // Per-platform sub-balances
   const platformBalances = useMemo(() => {
     const platforms = ["meta", "tiktok", "google"] as const;
     return platforms.map((p) => {
@@ -207,7 +199,6 @@ export default function ClientDashboard() {
   const fmtBdt = (n: number) => `৳${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const getPlatformRate = (platform: string) => pricingConfig?.flat_rates?.[platform] || pricingConfig?.platform_rates?.[platform] || 120;
 
-  // Total negative BDT: sum each negative platform balance × its rate
   const totalNegativeBdt = useMemo(() => {
     if (balance >= 0) return 0;
     return platformBalances.reduce((sum, pb) => {
@@ -231,7 +222,6 @@ export default function ClientDashboard() {
     });
   }, [dateRange]);
 
-  // Filter out auto_spend transactions from display (they still count in balance)
   const visibleTransactions = useMemo(() => transactions.filter(t => !t.description?.startsWith("auto_spend:")), [transactions]);
   const filteredTransactions = useMemo(() => filterByDate(visibleTransactions, "date"), [visibleTransactions, filterByDate]);
   const filteredAdSpend = useMemo(() => filterByDate(adSpend, "date"), [adSpend, filterByDate]);
@@ -258,7 +248,6 @@ export default function ClientDashboard() {
   });
   const prevTotalSpend = prev30d.reduce((s: number, r: any) => s + Number(r.final_billable_usd), 0);
 
-  // Platform breakdown (filtered)
   const platformSpend: Record<string, number> = {};
   for (const row of filteredAdSpend) {
     const acc = adAccounts.find((a: any) => a.id === row.ad_account_id);
@@ -271,43 +260,40 @@ export default function ClientDashboard() {
 
   const activeAccounts = adAccounts.filter((a: any) => a.is_active).length;
 
-
   if (loading) return <ShimmerLoader />;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in">
+    <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto animate-fade-in">
       {/* Personalized Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium text-primary">{getGreeting()}</span>
+            <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+            <span className="text-xs md:text-sm font-medium text-primary">{getGreeting()}</span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
             {clientName ? `Welcome back, ${clientName.split(" ")[0]}` : "My Dashboard"}
           </h1>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
             {lastSynced && (
-              <span className="stat-pill">
-                <Clock className="h-3 w-3" /> Last synced: {lastSynced}
+              <span className="stat-pill text-[10px] md:text-xs">
+                <Clock className="h-3 w-3" /> Synced: {lastSynced}
               </span>
             )}
             {activeAccounts > 0 && (
-              <span className="stat-pill">
-                <span className="pulse-dot" /> {activeAccounts} Active Account{activeAccounts !== 1 ? "s" : ""}
+              <span className="stat-pill text-[10px] md:text-xs">
+                <span className="pulse-dot" /> {activeAccounts} Active
               </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setDepositOpen(true)}
-            className="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
-            size="lg"
-          >
-            <Plus className="h-4 w-4" /> Add Funds
-          </Button>
-        </div>
+        <Button
+          onClick={() => setDepositOpen(true)}
+          className="gap-2 w-full sm:w-auto h-12 sm:h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
+          size="lg"
+        >
+          <Plus className="h-4 w-4" /> Add Funds
+        </Button>
       </div>
 
       {/* Date Filter */}
@@ -316,59 +302,61 @@ export default function ClientDashboard() {
       {/* Financial Overview Section */}
       <div>
         <div className="section-label">Financial Overview</div>
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2">
           {/* Balance Card - Hero */}
-          <div className="glass-card glow-border p-6 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-foreground/15 backdrop-blur-sm">
-                <Wallet className="h-6 w-6" />
+          <div className="glass-card glow-border p-4 md:p-6 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+            <div className="flex items-center gap-3 mb-3 md:mb-4">
+              <div className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl bg-primary-foreground/15 backdrop-blur-sm">
+                <Wallet className="h-5 w-5 md:h-6 md:w-6" />
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-primary-foreground/70">Available Balance</p>
+                <p className="text-[10px] md:text-xs font-medium uppercase tracking-wider text-primary-foreground/70">Available Balance</p>
               </div>
             </div>
-            <p className="text-4xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
+            <p className="text-3xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
             {balance < 0 && totalNegativeBdt > 0 && (
-              <p className="text-lg font-bold font-mono text-red-300 mt-1">-{fmtBdt(totalNegativeBdt)}</p>
+              <p className="text-base md:text-lg font-bold font-mono text-red-300 mt-1">-{fmtBdt(totalNegativeBdt)}</p>
             )}
             <WalletHealthBar balance={balance} avgDailySpend={avgDailySpend} />
           </div>
 
-          {/* Platform Sub-Balances */}
-          <div className="sm:col-span-2 grid grid-cols-3 gap-3">
-            {platformBalances.map((pb) => {
-              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
-              return (
-                <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
-                  <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
-                  <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
-                    {fmt(pb.balance)}
-                  </p>
-                  {pb.balance < 0 && (
-                    <p className="text-xs font-bold font-mono text-destructive mt-0.5">-{fmtBdt(bdtAmount)}</p>
-                  )}
-                </div>
-              );
-            })}
+          {/* Platform Sub-Balances — horizontal scroll on mobile */}
+          <div className="sm:col-span-2">
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide snap-x snap-mandatory md:grid md:grid-cols-3 md:overflow-visible pb-1 md:pb-0">
+              {platformBalances.map((pb) => {
+                const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
+                return (
+                  <div key={pb.platform} className="glass-card glow-border p-3 md:p-4 flex flex-col items-center text-center min-w-[130px] snap-start shrink-0 md:min-w-0 md:shrink">
+                    <span className="h-2.5 w-2.5 rounded-full mb-1.5 md:mb-2" style={{ background: pb.color }} />
+                    <p className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
+                    <p className={cn("text-base md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
+                      {fmt(pb.balance)}
+                    </p>
+                    {pb.balance < 0 && (
+                      <p className="text-[10px] md:text-xs font-bold font-mono text-destructive mt-0.5">-{fmtBdt(bdtAmount)}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Spend Card */}
-          <div className="glass-card glow-border p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent">
-                <Zap className="h-6 w-6 text-accent-foreground" />
+          <div className="glass-card glow-border p-4 md:p-6">
+            <div className="flex items-center gap-3 mb-3 md:mb-4">
+              <div className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl bg-accent">
+                <Zap className="h-5 w-5 md:h-6 md:w-6 text-accent-foreground" />
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="text-[10px] md:text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   {dateRange ? "Spend (Filtered)" : "Spend (30d)"}
                 </p>
               </div>
             </div>
-            <p className="text-4xl md:text-5xl font-bold font-mono">{fmt(currentTotalSpend)}</p>
+            <p className="text-3xl md:text-5xl font-bold font-mono">{fmt(currentTotalSpend)}</p>
             <GrowthIndicator current={currentTotalSpend} previous={prevTotalSpend} />
-            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-              <TrendingUp className="h-4 w-4" />
+            <div className="mt-3 md:mt-4 flex items-center gap-2 text-xs md:text-sm text-muted-foreground">
+              <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4" />
               Today: <span className="font-mono font-medium text-foreground">{fmt(todaySpend)}</span>
             </div>
           </div>
@@ -379,26 +367,26 @@ export default function ClientDashboard() {
       {(platformData.length > 0 || user) && (
         <div>
           <div className="section-label">Ad Performance</div>
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
             {/* Platform Donut */}
             {platformData.length > 0 && (
-              <div className="glass-card glow-border p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  <h3 className="font-semibold">Platform Spend Split</h3>
+              <div className="glass-card glow-border p-4 md:p-6">
+                <div className="flex items-center gap-2 mb-3 md:mb-4">
+                  <BarChart3 className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                  <h3 className="font-semibold text-sm md:text-base">Platform Spend Split</h3>
                 </div>
-                <ResponsiveContainer width="100%" height={240}>
+                <ResponsiveContainer width="100%" height={180} className="md:!h-[240px]">
                   <PieChart>
-                    <Pie data={platformData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    <Pie data={platformData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                       {platformData.map((entry) => <Cell key={entry.platform} fill={PLATFORM_COLORS[entry.platform] || "#888"} />)}
                     </Pie>
                     <RTooltip formatter={(value: number) => fmt(value)} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="flex justify-center gap-4 mt-2">
+                <div className="flex justify-center gap-3 md:gap-4 mt-2 flex-wrap">
                   {platformData.map((p) => (
-                    <div key={p.platform} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: PLATFORM_COLORS[p.platform] || "#888" }} />
+                    <div key={p.platform} className="flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground">
+                      <span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full" style={{ background: PLATFORM_COLORS[p.platform] || "#888" }} />
                       {p.name}: <span className="font-mono font-medium text-foreground">{fmt(p.value)}</span>
                     </div>
                   ))}
@@ -422,48 +410,76 @@ export default function ClientDashboard() {
 
         {/* Transaction History */}
         <div className="glass-card glow-border overflow-hidden">
-          <div className="p-6 pb-0 flex items-center justify-between">
-            <h3 className="font-semibold flex items-center gap-2">
+          <div className="p-4 md:p-6 pb-0 flex items-center justify-between">
+            <h3 className="font-semibold text-sm md:text-base flex items-center gap-2">
               Transaction History
               <Badge variant="secondary" className="text-[10px] font-normal">View Only</Badge>
             </h3>
           </div>
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {filteredTransactions.length === 0 ? (
-              <p className="py-8 text-center text-muted-foreground">No transactions for this period</p>
+              <p className="py-8 text-center text-muted-foreground text-sm">No transactions for this period</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border/50">
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="hidden sm:table-cell">Platform</TableHead>
-                      <TableHead className="hidden md:table-cell">Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTransactions.map((t) => (
-                      <TableRow key={t.id} className="border-border/30 hover:bg-accent/50 transition-colors">
-                        <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                        <TableCell>
-                          <Badge variant={t.type === "credit" ? "default" : "destructive"} className="capitalize">
-                            {t.type === "credit" ? "Deposit" : "Spend"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">{t.platform ? PLATFORM_LABELS[t.platform] : "—"}</TableCell>
-                        <TableCell className="hidden md:table-cell">{t.description || "—"}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          <span className={t.type === "credit" ? "text-emerald-500" : "text-destructive"}>
-                            {t.type === "credit" ? "+" : "-"}{fmt(Number(t.amount))}
-                          </span>
-                        </TableCell>
+              <>
+                {/* Mobile card view */}
+                <div className="flex flex-col gap-2 md:hidden">
+                  {filteredTransactions.map((t) => (
+                    <div key={t.id} className="mobile-card flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-lg shrink-0",
+                          t.type === "credit" ? "bg-emerald-500/10" : "bg-destructive/10"
+                        )}>
+                          {t.type === "credit" ? <ArrowDown className="h-4 w-4 text-emerald-500" /> : <ArrowUp className="h-4 w-4 text-destructive" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium capitalize">{t.type === "credit" ? "Deposit" : "Spend"}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {t.platform ? ` · ${PLATFORM_LABELS[t.platform]}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={cn("font-mono text-sm font-medium shrink-0", t.type === "credit" ? "text-emerald-500" : "text-destructive")}>
+                        {t.type === "credit" ? "+" : "-"}{fmt(Number(t.amount))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table view */}
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border/50">
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Platform</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.map((t) => (
+                        <TableRow key={t.id} className="border-border/30 hover:bg-accent/50 transition-colors">
+                          <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                          <TableCell>
+                            <Badge variant={t.type === "credit" ? "default" : "destructive"} className="capitalize">
+                              {t.type === "credit" ? "Deposit" : "Spend"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{t.platform ? PLATFORM_LABELS[t.platform] : "—"}</TableCell>
+                          <TableCell>{t.description || "—"}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            <span className={t.type === "credit" ? "text-emerald-500" : "text-destructive"}>
+                              {t.type === "credit" ? "+" : "-"}{fmt(Number(t.amount))}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -472,13 +488,36 @@ export default function ClientDashboard() {
       {/* Payment Requests */}
       {filteredPaymentRequests.length > 0 && (
         <div className="glass-card glow-border overflow-hidden">
-          <div className="p-6 pb-0">
-            <h3 className="font-semibold flex items-center gap-2">
-              <Banknote className="h-5 w-5 text-primary" /> Payment Requests
+          <div className="p-4 md:p-6 pb-0">
+            <h3 className="font-semibold text-sm md:text-base flex items-center gap-2">
+              <Banknote className="h-4 w-4 md:h-5 md:w-5 text-primary" /> Payment Requests
             </h3>
           </div>
-          <div className="p-6">
-            <div className="overflow-x-auto">
+          <div className="p-4 md:p-6">
+            {/* Mobile card view */}
+            <div className="flex flex-col gap-2 md:hidden">
+              {filteredPaymentRequests.map((pr: any) => (
+                <div key={pr.id} className="mobile-card flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-[10px]">{pr.payment_method}</Badge>
+                      {pr.status === "pending" && <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30">Pending</Badge>}
+                      {pr.status === "approved" && <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">Approved</Badge>}
+                      {pr.status === "rejected" && <Badge variant="destructive" className="text-[10px]">Rejected</Badge>}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-mono text-sm font-medium">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+                    {pr.final_amount_usd && <p className="text-[10px] text-muted-foreground font-mono">${Number(pr.final_amount_usd).toFixed(2)}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table view */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/50">
@@ -486,7 +525,7 @@ export default function ClientDashboard() {
                     <TableHead>Method</TableHead>
                     <TableHead className="text-right">Amount (BDT)</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="hidden md:table-cell text-right">Credited (USD)</TableHead>
+                    <TableHead className="text-right">Credited (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -500,7 +539,7 @@ export default function ClientDashboard() {
                         {pr.status === "approved" && <Badge variant="outline" className="bg-success/10 text-success border-success/30">Approved</Badge>}
                         {pr.status === "rejected" && <Badge variant="destructive">Rejected</Badge>}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-right font-mono">
+                      <TableCell className="text-right font-mono">
                         {pr.final_amount_usd ? `$${Number(pr.final_amount_usd).toFixed(2)}` : "—"}
                       </TableCell>
                     </TableRow>

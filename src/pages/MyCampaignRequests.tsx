@@ -54,13 +54,18 @@ export default function MyCampaignRequests() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Megaphone className="h-6 w-6 text-primary" /> Campaign Requests</h1>
-          <p className="text-sm text-muted-foreground mt-1">Submit and track your ad campaign orders</p>
+    <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Megaphone className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
+            <span className="truncate">Campaign Requests</span>
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-1">Submit and track your ad campaign orders</p>
         </div>
-        <Button asChild><Link to="/dashboard/campaigns/new"><Plus className="h-4 w-4 mr-1" /> New Campaign</Link></Button>
+        <Button asChild size="sm" className="shrink-0 h-9 md:h-10">
+          <Link to="/dashboard/campaigns/new"><Plus className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">New Campaign</span><span className="sm:hidden">New</span></Link>
+        </Button>
       </div>
 
       {loading ? (
@@ -68,35 +73,43 @@ export default function MyCampaignRequests() {
       ) : (
         <div className="space-y-4">
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-3">
             <Card className="border-primary/20">
-              <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10"><Megaphone className="h-4 w-4 text-primary" /></div>
-                <div><p className="text-2xl font-bold">{counts.total}</p><p className="text-xs text-muted-foreground">Total</p></div>
+              <CardContent className="pt-3 pb-2 md:pt-4 md:pb-3 flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-primary/10">
+                  <Megaphone className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
+                </div>
+                <div><p className="text-xl md:text-2xl font-bold">{counts.total}</p><p className="text-[10px] md:text-xs text-muted-foreground">Total</p></div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-yellow-500/10"><Clock className="h-4 w-4 text-yellow-600" /></div>
-                <div><p className="text-2xl font-bold">{counts.pending}</p><p className="text-xs text-muted-foreground">Pending</p></div>
+              <CardContent className="pt-3 pb-2 md:pt-4 md:pb-3 flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-yellow-500/10">
+                  <Clock className="h-3.5 w-3.5 md:h-4 md:w-4 text-yellow-600" />
+                </div>
+                <div><p className="text-xl md:text-2xl font-bold">{counts.pending}</p><p className="text-[10px] md:text-xs text-muted-foreground">Pending</p></div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10"><Loader2 className="h-4 w-4 text-blue-600" /></div>
-                <div><p className="text-2xl font-bold">{counts.processing}</p><p className="text-xs text-muted-foreground">Processing</p></div>
+              <CardContent className="pt-3 pb-2 md:pt-4 md:pb-3 flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-blue-500/10">
+                  <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-blue-600" />
+                </div>
+                <div><p className="text-xl md:text-2xl font-bold">{counts.processing}</p><p className="text-[10px] md:text-xs text-muted-foreground">Processing</p></div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10"><CheckCircle2 className="h-4 w-4 text-emerald-600" /></div>
-                <div><p className="text-2xl font-bold">{counts.completed}</p><p className="text-xs text-muted-foreground">Completed</p></div>
+              <CardContent className="pt-3 pb-2 md:pt-4 md:pb-3 flex items-center gap-2 md:gap-3">
+                <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-600" />
+                </div>
+                <div><p className="text-xl md:text-2xl font-bold">{counts.completed}</p><p className="text-[10px] md:text-xs text-muted-foreground">Completed</p></div>
               </CardContent>
             </Card>
           </div>
 
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 md:pt-6">
               {requests.length === 0 ? (
                 <div className="py-12 text-center space-y-3">
                   <Megaphone className="h-10 w-10 text-muted-foreground/40 mx-auto" />
@@ -111,65 +124,68 @@ export default function MyCampaignRequests() {
                     return (
                       <Collapsible key={r.id}>
                         <CollapsibleTrigger className="w-full">
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                                {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              </span>
-                              <Badge variant="secondary" className="shrink-0">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
-                              <span className="text-sm truncate">{r.objective}</span>
+                          <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2">
+                            {/* Mobile: stacked layout */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
+                                  {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </span>
+                                <Badge variant="secondary" className="shrink-0 text-[10px] md:text-xs">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
+                              </div>
+                              <span className="text-xs md:text-sm truncate">{r.objective}</span>
                             </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="font-mono text-sm font-medium">${Number(r.budget_usd).toFixed(2)}</span>
-                              <Badge variant="outline" className={badge.className}>{badge.label}</Badge>
+                            <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                              <span className="font-mono text-xs md:text-sm font-medium">${Number(r.budget_usd).toFixed(2)}</span>
+                              <Badge variant="outline" className={`text-[10px] md:text-xs ${badge.className}`}>{badge.label}</Badge>
                               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" />
                             </div>
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="mx-3 mb-2 p-4 rounded-lg border border-dashed bg-muted/30 space-y-3">
+                          <div className="mx-3 mb-2 p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                               <div className="flex items-start gap-2">
                                 <Target className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                 <div>
-                                  <p className="text-xs text-muted-foreground">Target Audience</p>
-                                  <p>{r.target_audience_note || "Not specified"}</p>
+                                  <p className="text-[10px] md:text-xs text-muted-foreground">Target Audience</p>
+                                  <p className="text-xs md:text-sm">{r.target_audience_note || "Not specified"}</p>
                                 </div>
                               </div>
                               <div className="flex items-start gap-2">
                                 <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                 <div>
-                                  <p className="text-xs text-muted-foreground">Ad Caption</p>
-                                  <p className="line-clamp-2">{r.ad_caption || "Not specified"}</p>
+                                  <p className="text-[10px] md:text-xs text-muted-foreground">Ad Caption</p>
+                                  <p className="text-xs md:text-sm line-clamp-2">{r.ad_caption || "Not specified"}</p>
                                 </div>
                               </div>
                               <div className="flex items-start gap-2">
                                 <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Creative Link</p>
-                                  <a href={r.creative_link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">{r.creative_link}</a>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] md:text-xs text-muted-foreground">Creative Link</p>
+                                  <a href={r.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs md:text-sm text-primary hover:underline truncate block">{r.creative_link}</a>
                                 </div>
                               </div>
                               {r.landing_page_url && (
                                 <div className="flex items-start gap-2">
                                   <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">Landing Page</p>
-                                    <a href={r.landing_page_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">{r.landing_page_url}</a>
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] md:text-xs text-muted-foreground">Landing Page</p>
+                                    <a href={r.landing_page_url} target="_blank" rel="noopener noreferrer" className="text-xs md:text-sm text-primary hover:underline truncate block">{r.landing_page_url}</a>
                                   </div>
                                 </div>
                               )}
                               <div>
-                                <p className="text-xs text-muted-foreground">Schedule</p>
-                                <p className="text-sm">{r.duration_days} days from {r.start_date}</p>
+                                <p className="text-[10px] md:text-xs text-muted-foreground">Schedule</p>
+                                <p className="text-xs md:text-sm">{r.duration_days} days from {r.start_date}</p>
                               </div>
                             </div>
                             {r.status === "rejected" && r.rejection_reason && (
                               <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                                 <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                                 <div>
-                                  <p className="text-xs font-medium text-destructive">Rejection Reason</p>
-                                  <p className="text-sm">{r.rejection_reason}</p>
+                                  <p className="text-[10px] md:text-xs font-medium text-destructive">Rejection Reason</p>
+                                  <p className="text-xs md:text-sm">{r.rejection_reason}</p>
                                 </div>
                               </div>
                             )}

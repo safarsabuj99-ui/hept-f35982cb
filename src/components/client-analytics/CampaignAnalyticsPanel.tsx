@@ -54,49 +54,49 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
   return (
     <div className="space-y-4">
       {/* KPI Summary Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <DollarSign className="h-5 w-5 text-primary" />
+          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
+            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-primary/10">
+              <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-primary" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
+            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold font-mono">{fmt(totals.spend)}</p>
+          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
+            <p className="text-xl md:text-2xl font-bold font-mono">{fmt(totals.spend)}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
-              <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
+            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-green-500/10">
+              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
+            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold font-mono">{totals.results.toLocaleString()}</p>
+          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
+            <p className="text-xl md:text-2xl font-bold font-mono">{totals.results.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-              <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
+            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-blue-500/10">
+              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
+            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold font-mono">{avgRoas.toFixed(2)}x</p>
+          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
+            <p className="text-xl md:text-2xl font-bold font-mono">{avgRoas.toFixed(2)}x</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center gap-3 pb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
-              <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
+            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-orange-500/10">
+              <Target className="h-4 w-4 md:h-5 md:w-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
+            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold font-mono">{fmt(avgCpo)}</p>
+          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
+            <p className="text-xl md:text-2xl font-bold font-mono">{fmt(avgCpo)}</p>
           </CardContent>
         </Card>
       </div>
@@ -115,24 +115,26 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
 
         <TabsContent value="live">
           <Tabs defaultValue="all" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="all">
-                All
-                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{campaignRows.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="meta">
-                Meta
-                {metaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{metaRows.length}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="tiktok">
-                TikTok
-                {tiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{tiktokRows.length}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="google">
-                Google
-                {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+              <TabsList className="inline-flex w-auto">
+                <TabsTrigger value="all">
+                  All
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{campaignRows.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="meta">
+                  Meta
+                  {metaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{metaRows.length}</Badge>}
+                </TabsTrigger>
+                <TabsTrigger value="tiktok">
+                  TikTok
+                  {tiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{tiktokRows.length}</Badge>}
+                </TabsTrigger>
+                <TabsTrigger value="google">
+                  Google
+                  {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
+                </TabsTrigger>
+              </TabsList>
+            </div>
             <TabsContent value="all">
               <DeepDiveTable data={campaignRows} onCampaignPaused={onRefresh} />
             </TabsContent>
