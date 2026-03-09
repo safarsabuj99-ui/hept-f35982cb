@@ -120,13 +120,36 @@ export default function ClientList() {
       }
       setMargins(marginMap);
 
-      // Compute balances
+      // Compute balances (total + per-platform)
       const balMap: Record<string, number> = {};
+      const platformBalMap: Record<string, Record<string, number>> = {};
       for (const t of (txnsRes.data ?? []) as any[]) {
         const amt = Number(t.amount) || 0;
-        balMap[t.client_id] = (balMap[t.client_id] || 0) + (t.type === "credit" ? amt : -amt);
+        const delta = t.type === "credit" ? amt : -amt;
+        balMap[t.client_id] = (balMap[t.client_id] || 0) + delta;
+        const plat = t.platform || "unknown";
+        if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
+        platformBalMap[t.client_id][plat] = (platformBalMap[t.client_id][plat] || 0) + delta;
       }
       setBalances(balMap);
+
+      // Compute BDT for negative balances using per-platform rates
+      const bdtMap: Record<string, number> = {};
+      for (const [cid, totalBal] of Object.entries(balMap)) {
+        if (totalBal >= 0) continue;
+        const profile = profileMap[cid];
+        const rates = profile?.pricing_config?.flat_rates || { meta: 120, tiktok: 120, google: 120 };
+        const platBals = platformBalMap[cid] || {};
+        let bdtTotal = 0;
+        for (const [plat, platBal] of Object.entries(platBals)) {
+          if (platBal < 0) {
+            const rate = Number(rates[plat] || 120);
+            bdtTotal += Math.abs(platBal) * rate;
+          }
+        }
+        bdtMap[cid] = bdtTotal;
+      }
+      setBdtBalances(bdtMap);
 
       setLoading(false);
     }
