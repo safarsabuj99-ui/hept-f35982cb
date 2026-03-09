@@ -144,7 +144,7 @@ export default function AdminDashboard() {
       for (const c of camps ?? []) campaignToAccount[c.id] = c.ad_account_id;
     }
     
-    const { data: allMappings } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
+    const { data: allMappings } = await supabase.from("ad_account_clients").select("ad_account_id, client_id").neq("mapping_keyword", "");
     const accountToClient: Record<string, string> = {};
     for (const m of allMappings ?? []) accountToClient[m.ad_account_id] = m.client_id;
 
