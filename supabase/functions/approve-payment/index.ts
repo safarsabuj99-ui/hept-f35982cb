@@ -81,6 +81,13 @@ Deno.serve(async (req) => {
         .update({ status: "rejected", admin_note: admin_note || null })
         .eq("id", request_id);
 
+      // Audit log: payment rejected
+      await adminClient.from("audit_logs").insert({
+        user_id: user.id,
+        action_type: "payment_rejected",
+        description: `Rejected payment ৳${Number(pr.amount_bdt).toLocaleString()} from client ${pr.client_id}${admin_note ? ` — ${admin_note}` : ""}`,
+      });
+
       return new Response(JSON.stringify({ success: true, action: "rejected" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
