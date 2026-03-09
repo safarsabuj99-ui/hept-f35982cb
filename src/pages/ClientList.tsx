@@ -36,6 +36,7 @@ export default function ClientList() {
   const [pageSize, setPageSize] = useState(20);
   const [margins, setMargins] = useState<Record<string, MarginData>>({});
   const [balances, setBalances] = useState<Record<string, number>>({});
+  const [bdtBalances, setBdtBalances] = useState<Record<string, number>>({});
   const location = useLocation();
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function ClientList() {
         supabase.from("campaigns").select("id, ad_account_id, platform"),
         supabase.from("daily_metrics").select("campaign_id, spend"),
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
-        supabase.from("transactions").select("client_id, type, amount").eq("status", "completed"),
+        supabase.from("transactions").select("client_id, type, amount, platform").eq("status", "completed"),
       ]);
 
       setClients(profilesRes.data || []);
@@ -119,13 +120,36 @@ export default function ClientList() {
       }
       setMargins(marginMap);
 
-      // Compute balances
+      // Compute balances (total + per-platform)
       const balMap: Record<string, number> = {};
+      const platformBalMap: Record<string, Record<string, number>> = {};
       for (const t of (txnsRes.data ?? []) as any[]) {
         const amt = Number(t.amount) || 0;
-        balMap[t.client_id] = (balMap[t.client_id] || 0) + (t.type === "credit" ? amt : -amt);
+        const delta = t.type === "credit" ? amt : -amt;
+        balMap[t.client_id] = (balMap[t.client_id] || 0) + delta;
+        const plat = t.platform || "unknown";
+        if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
+        platformBalMap[t.client_id][plat] = (platformBalMap[t.client_id][plat] || 0) + delta;
       }
       setBalances(balMap);
+
+      // Compute BDT for negative balances using per-platform rates
+      const bdtMap: Record<string, number> = {};
+      for (const [cid, totalBal] of Object.entries(balMap)) {
+        if (totalBal >= 0) continue;
+        const profile = profileMap[cid];
+        const rates = profile?.pricing_config?.flat_rates || { meta: 120, tiktok: 120, google: 120 };
+        const platBals = platformBalMap[cid] || {};
+        let bdtTotal = 0;
+        for (const [plat, platBal] of Object.entries(platBals)) {
+          if (platBal < 0) {
+            const rate = Number(rates[plat] || 120);
+            bdtTotal += Math.abs(platBal) * rate;
+          }
+        }
+        bdtMap[cid] = bdtTotal;
+      }
+      setBdtBalances(bdtMap);
 
       setLoading(false);
     }
@@ -254,14 +278,18 @@ export default function ClientList() {
                         <TableCell className="text-right">
                           {(() => {
                             const bal = balances[c.user_id] ?? 0;
-                            const isPositive = bal > 0;
+                            const isPositive = bal >= 0;
+                            if (isPositive) {
+                              return (
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20">
+                                  ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              );
+                            }
+                            const bdtAmt = bdtBalances[c.user_id] ?? Math.abs(bal) * 120;
                             return (
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono ${
-                                isPositive
-                                  ? "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20"
-                                  : "bg-destructive/10 text-destructive dark:bg-destructive/20"
-                              }`}>
-                                ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-destructive/10 text-destructive dark:bg-destructive/20">
+                                -৳{bdtAmt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             );
                           })()}
