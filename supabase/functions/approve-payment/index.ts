@@ -177,6 +177,13 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Audit log: payment approved
+    await adminClient.from("audit_logs").insert({
+      user_id: user.id,
+      action_type: "payment_approved",
+      description: `Approved payment ৳${Number(pr.amount_bdt).toLocaleString()} → $${finalUsd} (Rate: ${exchangeRate}) for client ${pr.client_id}`,
+    });
+
     return new Response(
       JSON.stringify({
         success: true,

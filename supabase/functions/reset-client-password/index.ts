@@ -84,6 +84,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Audit log: password reset
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: caller.id,
+      action_type: "client_password_reset",
+      description: `Admin reset password for user ${user_id}`,
+    });
+
     return new Response(
       JSON.stringify({ success: true, message: "Password updated successfully" }),
       {
