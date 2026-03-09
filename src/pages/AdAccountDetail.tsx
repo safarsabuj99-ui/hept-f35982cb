@@ -22,7 +22,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
-import { TablePagination } from "@/components/TablePagination";
+
 
 const CURRENCIES = [
   { value: "USD", label: "USD" },
