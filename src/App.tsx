@@ -34,7 +34,7 @@ import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import AdAccountDetail from "@/pages/AdAccountDetail";
-import ActivityLog from "@/pages/ActivityLog";
+
 
 import NotFound from "@/pages/NotFound";
 
