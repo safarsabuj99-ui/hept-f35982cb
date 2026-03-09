@@ -34,7 +34,7 @@ export function SystemHealthWidget() {
   }, []);
 
   const fetchHealth = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getDhakaDateString();
 
     // First get mapped accounts with keywords
     const { data: mappedAssignments } = await supabase

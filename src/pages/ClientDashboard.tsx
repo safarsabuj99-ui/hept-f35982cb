@@ -127,7 +127,7 @@ export default function ClientDashboard() {
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getDhakaDateString();
 
   // Fetch client name
   useEffect(() => {

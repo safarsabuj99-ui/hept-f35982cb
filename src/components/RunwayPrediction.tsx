@@ -53,9 +53,7 @@ export function RunwayPrediction() {
       supabase.from("transactions").select("client_id, type, amount, status"),
     ]);
 
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    const threeDaysStr = threeDaysAgo.toISOString().split("T")[0];
+    const threeDaysStr = getDhakaDateString(-3);
 
     const { data: recentSpend } = await supabase
       .from("daily_ad_spend")

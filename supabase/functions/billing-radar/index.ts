@@ -25,8 +25,8 @@ Deno.serve(async (req) => {
 
     if (accError) throw accError;
 
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0];
+    const todayStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+    const today = new Date(todayStr + "T00:00:00+06:00");
     const notifications: any[] = [];
 
     for (const acc of accounts ?? []) {

@@ -187,7 +187,7 @@ export default function AdminDashboard() {
       }
     }
     setCollectHistory(Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      const d = getDhakaDateString(-(6 - i));
       return dailyCollMap[d] || 0;
     }));
 

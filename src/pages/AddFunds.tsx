@@ -19,7 +19,7 @@ export default function AddFunds() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [clientId, setClientId] = useState("");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(getDhakaDateString());
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { user, role } = useAuth();
