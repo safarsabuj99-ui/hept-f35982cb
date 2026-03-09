@@ -229,6 +229,43 @@ export default function AdminDashboard() {
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
 
+  // Calculate platform-weighted BDT for Payment Due
+  const totalDueBdt = (() => {
+    let bdtSum = 0;
+    for (const client of clients) {
+      if (client.balance >= 0) continue;
+      const pc = (client as any).pricing_config;
+      const flatRates = pc?.flat_rates || {};
+      // Get client's completed transactions grouped by platform
+      // We need to recalculate per-platform balances from transactions
+      const clientTxns = (allTransactions || []).filter((t: any) => t.client_id === client.user_id && t.status === "completed");
+      const platforms: Array<"meta" | "tiktok" | "google"> = ["meta", "tiktok", "google"];
+      let platformNegBdt = 0;
+      let accountedUsd = 0;
+      
+      for (const platform of platforms) {
+        const pCredits = clientTxns.filter((t: any) => t.type === "credit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const pDebits = clientTxns.filter((t: any) => t.type === "debit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const pBalance = pCredits - pDebits;
+        if (pBalance < 0) {
+          const rate = flatRates[platform] || 120;
+          platformNegBdt += Math.abs(pBalance) * rate;
+          accountedUsd += Math.abs(pBalance);
+        }
+      }
+      
+      // Handle unplatformed negative remainder
+      const unaccounted = Math.abs(client.balance) - accountedUsd;
+      if (unaccounted > 0) {
+        const avgRate = flatRates.meta || flatRates.tiktok || flatRates.google || 120;
+        platformNegBdt += unaccounted * avgRate;
+      }
+      
+      bdtSum += platformNegBdt;
+    }
+    return Math.round(bdtSum * 100) / 100;
+  })();
+
   const spendLabel = datePreset === "today" ? "Today's Spend" : datePreset === "yesterday" ? "Yesterday's Spend" : "Period Spend";
   const collectLabel = datePreset === "today" ? "Today's Collections" : datePreset === "yesterday" ? "Yesterday's Collections" : "Period Collections";
 
