@@ -1,34 +1,38 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Replace Spend Tab with Full ClientReports Experience
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The current Spend tab in ClientDetail is a basic table. The user wants it to match the client's `/dashboard/reports` page (ClientReports.tsx) which has KPI cards, Live Campaigns with platform sub-tabs, DeepDiveTable, SalesFunnel, and PlatformComparison.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Approach
 
-## Technical Change
+Refactor the Spend tab content in `src/pages/ClientDetail.tsx` to reuse the same components and data flow as `ClientReports.tsx`:
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### Changes to `src/pages/ClientDetail.tsx`
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+1. **Add imports**: `DeepDiveTable`, `SalesFunnel`, `PlatformComparison`, `Radio`, `ShoppingCart`, `Target`, and `BarChart3` icons
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+2. **Update data fetching** (`loadSpendData`):
+   - Also fetch `ad_accounts` names to build an `adAccountMap` (account ID → name)
+   - Store `campaigns` list in state (for active campaign injection)
+   - Store raw enriched metrics with campaign object attached (same shape as ClientReports)
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+3. **Add computed values** (same as ClientReports):
+   - `campaignRows`: Aggregate metrics by campaign_id into `CampaignRow[]`, inject active campaigns with zero metrics
+   - `totals`: spend, impressions, clicks, results, convValue
+   - `avgRoas`, `avgCpo`
+   - `platformStats` for PlatformComparison
+   - Platform-filtered rows: `metaRows`, `tiktokRows`, `googleRows`
+   - `activeCampaigns` count
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+4. **Replace Spend tab UI** (lines 742-805) with:
+   - Date filter (already exists)
+   - 4 KPI cards: Total Spend, Total Results, Avg ROAS, Avg CPO
+   - Tabbed layout: "Live Campaigns" (with All/Meta/TikTok/Google sub-tabs using `DeepDiveTable`) and "Overview" (with `SalesFunnel` + `PlatformComparison`)
 
-No database or edge function changes needed.
+5. **Remove** old spend-related state that's no longer needed (`spendPage`, `spendSize`, `spendByPlatform`, `totalSpend` calculations)
+
+## Files Modified
+
+- `src/pages/ClientDetail.tsx` — Replace Spend tab content with full analytics experience matching ClientReports
+
