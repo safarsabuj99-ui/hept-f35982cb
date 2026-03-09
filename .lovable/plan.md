@@ -1,34 +1,38 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Add Multi-Select with Bulk Pause to Campaign Analytics
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Overview
+Add checkbox-based multi-select to `DeepDiveTable` with a floating action bar for bulk pausing selected campaigns.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Changes
 
-## Technical Change
+### `src/components/client-analytics/DeepDiveTable.tsx`
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+1. **Add checkbox column** as the first column using `Checkbox` component
+   - Header checkbox for select-all (toggles all visible rows)
+   - Row checkbox for individual selection
+   - Only campaigns with `campaign_id` and `status === "active"` are selectable
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+2. **Add selection state** — `selectedIds: Set<string>` managed via `useState`
+   - Clear selection when filters/search/page changes
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+3. **Add floating bulk action bar** — appears when `selectedIds.size > 0`
+   - Shows count of selected campaigns (e.g., "3 selected")
+   - "Pause All" button (destructive style)
+   - "Clear" button to deselect all
+   - Fixed at bottom of the table card with a subtle background
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+4. **Bulk pause logic**
+   - Shows confirmation `AlertDialog` listing how many campaigns will be paused
+   - Calls existing `pause-campaign` edge function sequentially for each selected campaign
+   - Shows progress ("Pausing 2 of 5...")
+   - On completion, shows success toast with count, clears selection, calls `onCampaignPaused`
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+5. **Update totals row** — add empty cell for the new checkbox column
 
-No database or edge function changes needed.
+### No changes needed to:
+- `CampaignAnalyticsPanel.tsx` — it just passes data through
+- `pause-campaign` edge function — reuse existing single-pause endpoint
+- Database — no schema changes
+
