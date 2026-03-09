@@ -57,7 +57,7 @@ export default function ClientList() {
         supabase.from("campaigns").select("id, ad_account_id, platform"),
         supabase.from("daily_metrics").select("campaign_id, spend"),
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
-        supabase.from("transactions").select("client_id, type, amount").eq("status", "completed"),
+        supabase.from("transactions").select("client_id, type, amount, platform").eq("status", "completed"),
       ]);
 
       setClients(profilesRes.data || []);
