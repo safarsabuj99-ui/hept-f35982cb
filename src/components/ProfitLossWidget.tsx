@@ -74,12 +74,12 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
 
       // 2. Build mappings
       const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
-      for (const c of (campaignsRes.data ?? []) as any[]) {
+      for (const c of (mappedCampaigns ?? []) as any[]) {
         campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
       }
 
       const accToClients: Record<string, string[]> = {};
-      for (const ac of (accClientsRes.data ?? []) as any[]) {
+      for (const ac of (mappedAssignments ?? []) as any[]) {
         if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
         accToClients[ac.ad_account_id].push(ac.client_id);
       }

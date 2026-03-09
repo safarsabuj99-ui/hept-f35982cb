@@ -21,21 +21,38 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
       setLoading(true);
       let campaignIds: string[] = [];
 
+      // Step 1: Get mapped accounts WITH keywords
+      const { data: mappedAssignments } = await supabase
+        .from("ad_account_clients")
+        .select("ad_account_id, client_id, mapping_keyword")
+        .neq("mapping_keyword", "");
+
+      const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
+
+      if (mappedAccountIds.length === 0) {
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
       if (clientId) {
-        const { data: links } = await supabase
-          .from("ad_account_clients")
-          .select("ad_account_id")
-          .eq("client_id", clientId);
-        const accIds = links?.map((l: any) => l.ad_account_id) ?? [];
-        if (accIds.length > 0) {
+        const clientAccountIds = mappedAssignments
+          ?.filter((a: any) => a.client_id === clientId)
+          .map((a: any) => a.ad_account_id) ?? [];
+        
+        if (clientAccountIds.length > 0) {
           const { data: camps } = await supabase
             .from("campaigns")
             .select("id")
-            .in("ad_account_id", accIds);
+            .in("ad_account_id", clientAccountIds);
           campaignIds = camps?.map((c: any) => c.id) ?? [];
         }
       } else {
-        const { data: camps } = await supabase.from("campaigns").select("id");
+        // Get all campaigns from mapped accounts only
+        const { data: camps } = await supabase
+          .from("campaigns")
+          .select("id")
+          .in("ad_account_id", mappedAccountIds);
         campaignIds = camps?.map((c: any) => c.id) ?? [];
       }
 

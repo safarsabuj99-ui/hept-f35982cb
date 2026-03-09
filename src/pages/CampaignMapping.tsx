@@ -32,15 +32,46 @@ export default function CampaignMapping() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: camps }, { data: metricData }, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
-      supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
-      supabase.from("daily_metrics").select("*").order("data_date", { ascending: false }),
+    // Step 1: Get mapped accounts WITH keywords
+    const { data: mappedAssignments } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id, mapping_keyword")
+      .neq("mapping_keyword", "");
+
+    const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
+
+    // Step 2: Fetch campaigns only from mapped accounts
+    let campaignsQuery = supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+    if (mappedAccountIds.length > 0) {
+      campaignsQuery = campaignsQuery.in("ad_account_id", mappedAccountIds);
+    } else {
+      setCampaigns([]);
+      setMetrics([]);
+      setLoading(false);
+      return;
+    }
+
+    const [{ data: camps }, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
+      campaignsQuery,
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("profiles").select("user_id, full_name"),
       supabase.from("ad_accounts").select("id, account_name, ad_account_id"),
     ]);
+
+    // Step 3: Get metrics only for those campaigns
+    const campaignIds = camps?.map((c: any) => c.id) ?? [];
+    let metricData: any[] = [];
+    if (campaignIds.length > 0) {
+      const { data: metrics } = await supabase
+        .from("daily_metrics")
+        .select("*")
+        .in("campaign_id", campaignIds)
+        .order("data_date", { ascending: false });
+      metricData = metrics ?? [];
+    }
+
     setCampaigns(camps ?? []);
-    setMetrics(metricData ?? []);
+    setMetrics(metricData);
     setAdAccounts(accounts ?? []);
     const clientIds = new Set(roles?.map((r: any) => r.user_id) ?? []);
     setClients((profiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
