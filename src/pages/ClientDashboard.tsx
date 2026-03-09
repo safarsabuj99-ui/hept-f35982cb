@@ -366,15 +366,21 @@ export default function ClientDashboard() {
 
           {/* Platform Sub-Balances */}
           <div className="sm:col-span-2 grid grid-cols-3 gap-3">
-            {platformBalances.map((pb) => (
-              <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
-                <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
-                <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
-                  {fmt(pb.balance)}
-                </p>
-              </div>
-            ))}
+            {platformBalances.map((pb) => {
+              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
+              return (
+                <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
+                  <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
+                  <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
+                    {fmt(pb.balance)}
+                  </p>
+                  {pb.balance < 0 && (
+                    <p className="text-xs font-bold font-mono text-destructive mt-0.5">-{fmtBdt(bdtAmount)}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Spend Card */}
