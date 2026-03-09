@@ -1,6 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
+import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +16,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check, ShoppingCart, Target, Radio } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { format, differenceInDays } from "date-fns";
-import { TablePagination } from "@/components/TablePagination";
+
 
 const CURRENCIES = [
   { value: "USD", label: "USD" },
@@ -53,7 +56,6 @@ export default function AdAccountDetail() {
   const [integrationName, setIntegrationName] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [spendData, setSpendData] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
   // Client assignment form
@@ -64,8 +66,11 @@ export default function AdAccountDetail() {
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
-  const [spendPage, setSpendPage] = useState(1);
-  const [spendSize, setSpendSize] = useState(20);
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
+
+  // Spend tab campaign data
+  const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
+  const [spendRawMetrics, setSpendRawMetrics] = useState<any[]>([]);
 
   // Inline edit state for billing
   const [editingThreshold, setEditingThreshold] = useState(false);
@@ -110,8 +115,7 @@ export default function AdAccountDetail() {
         setIntegrationName(intData ? (intData.instance_name || `${intData.platform} integration`) : null);
       }
 
-      // Load spend with today's range to match default preset
-      await loadSpend({ from: getLocalTodayClient(), to: getLocalTodayClient() });
+      // Spend tab data is loaded via useEffect on loadSpendTab
     }
 
     setAssignments(assignRes.data ?? []);
@@ -121,44 +125,44 @@ export default function AdAccountDetail() {
     setLoading(false);
   }
 
-  async function loadSpend(range: ClientDateRange | null) {
-    // Step 1: Get mapping keywords for this ad account
-    const { data: mappings } = await (supabase.from("ad_account_clients" as any) as any)
-      .select("mapping_keyword")
-      .eq("ad_account_id", accountId)
-      .neq("mapping_keyword", "");
-    
-    const keywords = (mappings ?? []).map((m: any) => (m.mapping_keyword || "").toLowerCase()).filter(Boolean);
-    
-    if (keywords.length === 0) {
-      setSpendData([]);  // No mappings = no data to show
-      return;
-    }
+  const loadSpendTab = useCallback(async () => {
+    if (!accountId) return;
+    // Fetch campaigns for this ad account
+    const { data: camps } = await supabase
+      .from("campaigns")
+      .select("id, name, platform, status, ad_account_id")
+      .eq("ad_account_id", accountId);
+    setSpendCampaigns(camps ?? []);
 
-    // Step 2: Get all spend for this account
-    let query = (supabase.from("daily_ad_spend" as any) as any)
-      .select("*")
-      .eq("ad_account_id", accountId)
-      .order("date", { ascending: false })
-      .limit(1000);
-    if (range) {
-      query = query.gte("date", format(range.from, "yyyy-MM-dd")).lte("date", format(range.to, "yyyy-MM-dd"));
+    if (camps && camps.length > 0) {
+      const campaignIds = camps.map((c) => c.id);
+      let metricsQuery = supabase
+        .from("daily_metrics")
+        .select("*")
+        .in("campaign_id", campaignIds);
+      if (spendDateRange) {
+        metricsQuery = metricsQuery
+          .gte("data_date", format(spendDateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(spendDateRange.to, "yyyy-MM-dd"));
+      }
+      const { data: metrics } = await metricsQuery;
+      const enriched = (metrics ?? []).map((m: any) => {
+        const campaign = camps.find((c) => c.id === m.campaign_id);
+        return { ...m, campaign };
+      });
+      setSpendRawMetrics(enriched);
+    } else {
+      setSpendRawMetrics([]);
     }
-    const { data } = await query;
-    
-    // Step 3: Client-side filter - only keep rows matching keywords
-    const filtered = (data ?? []).filter((row: any) => {
-      const nameLower = (row.campaign_name || "").toLowerCase();
-      return keywords.some((kw: string) => nameLower.includes(kw));
-    });
+  }, [accountId, spendDateRange]);
 
-    setSpendData(filtered);
-  }
+  useEffect(() => {
+    loadSpendTab();
+  }, [loadSpendTab]);
 
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {
     setSpendPreset(preset);
-    setSpendPage(1);
-    await loadSpend(range);
+    setSpendDateRange(range);
   }
 
   async function handleSave() {
@@ -282,10 +286,72 @@ export default function AdAccountDetail() {
     ? differenceInDays(new Date(account.next_billing_date), new Date())
     : null;
 
-  // Spend summary
-  const totalSpend = spendData.reduce((s: number, r: any) => s + (r.final_billable_usd || 0), 0);
-  const uniqueCampaigns = new Set(spendData.map((r: any) => r.campaign_name).filter(Boolean)).size;
-  const avgDaily = spendData.length > 0 ? totalSpend / new Set(spendData.map((r: any) => r.date)).size : 0;
+  // Spend tab campaign rows (same logic as ClientReports)
+  const spendCampaignRows: CampaignRow[] = useMemo(() => {
+    const map: Record<string, CampaignRow> = {};
+    for (const row of spendRawMetrics) {
+      const key = row.campaign_id;
+      if (!map[key]) {
+        map[key] = {
+          campaign_name: row.campaign?.name || "Unknown",
+          platform: row.campaign?.platform || "unknown",
+          status: row.campaign?.status ?? "active",
+          ad_account_name: "",
+          campaign_id: row.campaign?.id,
+          impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
+        };
+      }
+      map[key].impressions += Number(row.impressions);
+      map[key].clicks += Number(row.clicks);
+      map[key].spend += Number(row.spend);
+      map[key].results += Number(row.results ?? 0);
+      map[key].conversion_value += Number(row.conversion_value ?? 0);
+    }
+    for (const c of spendCampaigns) {
+      if (c.status === 'active' && !map[c.id]) {
+        map[c.id] = {
+          campaign_name: c.name || "Unknown",
+          platform: c.platform || "unknown",
+          status: "active",
+          ad_account_name: "",
+          campaign_id: c.id,
+          impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
+        };
+      }
+    }
+    return Object.values(map);
+  }, [spendRawMetrics, spendCampaigns]);
+
+  const spendTotals = useMemo(() => {
+    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    for (const r of spendCampaignRows) {
+      t.spend += r.spend;
+      t.impressions += r.impressions;
+      t.clicks += r.clicks;
+      t.results += r.results;
+      t.convValue += r.conversion_value;
+    }
+    return t;
+  }, [spendCampaignRows]);
+
+  const spendAvgRoas = spendTotals.convValue > 0 && spendTotals.spend > 0 ? spendTotals.convValue / spendTotals.spend : 0;
+  const spendAvgCpo = spendTotals.results > 0 ? spendTotals.spend / spendTotals.results : 0;
+
+  const spendPlatformStats = useMemo(() => {
+    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
+    for (const r of spendCampaignRows) {
+      if (!map[r.platform]) map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
+      map[r.platform].totalSpend += r.spend;
+      map[r.platform].totalResults += r.results;
+      map[r.platform].totalConversionValue += r.conversion_value;
+    }
+    return Object.values(map);
+  }, [spendCampaignRows]);
+
+  const spendActiveCampaigns = spendCampaignRows.filter(r => r.status === "active").length;
+  const spendMetaRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "meta"), [spendCampaignRows]);
+  const spendTiktokRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "tiktok"), [spendCampaignRows]);
+  const spendGoogleRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "google"), [spendCampaignRows]);
 
   const assignedClientIds = new Set(assignments.map((a: any) => a.client_id));
   const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
@@ -534,51 +600,108 @@ export default function AdAccountDetail() {
         <TabsContent value="spend" className="space-y-4">
           <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendPreset} />
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Total Spend</p><p className="text-2xl font-semibold mt-1">{fmt(totalSpend)}</p></CardContent></Card>
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Avg Daily</p><p className="text-2xl font-semibold mt-1">{fmt(avgDaily)}</p></CardContent></Card>
-            <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground uppercase">Campaigns</p><p className="text-2xl font-semibold mt-1">{uniqueCampaigns}</p></CardContent></Card>
+          {/* KPI Summary Cards */}
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{fmt(spendTotals.spend)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+                  <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{spendTotals.results.toLocaleString()}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{spendAvgRoas.toFixed(2)}x</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+                  <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold font-mono">{fmt(spendAvgCpo)}</p>
+              </CardContent>
+            </Card>
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              {spendData.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No spend data for this period.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Campaign</TableHead>
-                        <TableHead>Raw Spend</TableHead>
-                        <TableHead>Currency</TableHead>
-                        <TableHead>Billable USD</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {spendData.slice((spendPage - 1) * spendSize, spendPage * spendSize).map((s: any) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="text-sm">{s.date}</TableCell>
-                          <TableCell className="text-sm max-w-[200px] truncate">{s.campaign_name || "—"}</TableCell>
-                          <TableCell className="font-mono text-sm">{Number(s.raw_spend_amount).toFixed(2)}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-[10px]">{s.raw_currency}</Badge></TableCell>
-                          <TableCell className="font-mono text-sm font-medium">{fmt(s.final_billable_usd)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <TablePagination
-                    totalItems={spendData.length}
-                    pageSize={spendSize}
-                    currentPage={spendPage}
-                    onPageChange={setSpendPage}
-                    onPageSizeChange={(size) => { setSpendSize(size); setSpendPage(1); }}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Tabbed Content */}
+          <Tabs defaultValue="live" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="live" className="gap-1.5">
+                <Radio className="h-4 w-4" /> Live Campaigns
+                {spendActiveCampaigns > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{spendActiveCampaigns}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="live">
+              <Tabs defaultValue="all" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="all">
+                    All
+                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendCampaignRows.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="meta">
+                    Meta
+                    {spendMetaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendMetaRows.length}</Badge>}
+                  </TabsTrigger>
+                  <TabsTrigger value="tiktok">
+                    TikTok
+                    {spendTiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendTiktokRows.length}</Badge>}
+                  </TabsTrigger>
+                  <TabsTrigger value="google">
+                    Google
+                    {spendGoogleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendGoogleRows.length}</Badge>}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="all">
+                  <DeepDiveTable data={spendCampaignRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="meta">
+                  <DeepDiveTable data={spendMetaRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="tiktok">
+                  <DeepDiveTable data={spendTiktokRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+                <TabsContent value="google">
+                  <DeepDiveTable data={spendGoogleRows} onCampaignPaused={loadSpendTab} />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="overview">
+              <div className="space-y-6">
+                <SalesFunnel impressions={spendTotals.impressions} clicks={spendTotals.clicks} results={spendTotals.results} />
+                <PlatformComparison data={spendPlatformStats} />
+              </div>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* BILLING HEALTH TAB */}
