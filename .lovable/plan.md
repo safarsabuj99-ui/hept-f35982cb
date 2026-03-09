@@ -1,34 +1,41 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Extract Shared Campaign Analytics Component
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The same campaign analytics design (KPI cards, platform tabs, DeepDiveTable, SalesFunnel, PlatformComparison) is duplicated in both `ClientReports.tsx` and `AdAccountDetail.tsx`. Changing one doesn't update the other.
 
 ## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+Extract the shared UI into a single reusable component: `CampaignAnalyticsPanel`. Any design change to this component will automatically apply everywhere it's used.
 
-## Technical Change
+## Changes
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### 1. Create `src/components/client-analytics/CampaignAnalyticsPanel.tsx`
 
-Current code:
+A new component that accepts `campaignRows` and an `onRefresh` callback, then renders:
+- 4 KPI cards (Total Spend, Total Results, Avg ROAS, Avg CPO)
+- Live Campaigns tab with platform sub-tabs (All/Meta/TikTok/Google) using `DeepDiveTable`
+- Overview tab with `SalesFunnel` and `PlatformComparison`
+
+```typescript
+interface CampaignAnalyticsPanelProps {
+  campaignRows: CampaignRow[];
+  onRefresh: () => void;
+}
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+All the aggregation logic (totals, platform stats, platform filtering, active count) moves inside this component via `useMemo`.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### 2. Simplify `src/pages/ClientReports.tsx`
+- Remove the KPI cards, tabs, and aggregation JSX
+- Replace with `<CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} />`
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### 3. Simplify `src/pages/AdAccountDetail.tsx` (Spend tab)
+- Remove the duplicated KPI cards, tabs, and aggregation logic (`spendTotals`, `spendPlatformStats`, `spendMetaRows`, etc.)
+- Replace with `<CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} />`
 
-No database or edge function changes needed.
+### Files Modified
+- **New**: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`
+- **Edit**: `src/pages/ClientReports.tsx` — replace inline UI with shared component
+- **Edit**: `src/pages/AdAccountDetail.tsx` — replace spend tab UI with shared component
+
