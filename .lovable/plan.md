@@ -1,52 +1,34 @@
 
 
-# Plan: Fix WAC Fallback Logic for COGS Calculation
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-When "Today" is selected but no USD was purchased today, WAC = 0, making COGS = ৳0 and profit = total revenue. The system should fall back to a broader time range for WAC calculation.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
 ## Solution
-Implement a cascading WAC fallback in both `FinanceDashboard.tsx` and `ProfitLossWidget.tsx`:
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-1. **Try selected date range** — calculate WAC from purchases in the filtered period
-2. **Fallback to current month** — if no purchases found, fetch this month's purchases and calculate WAC
-3. **Fallback to all-time** — if still no purchases this month, fetch all purchases for the last known WAC
+## Technical Change
 
-## Changes
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### `src/pages/FinanceDashboard.tsx` (lines 37-59)
-- Keep the date-filtered purchases query as-is
-- After calculating WAC, if `totalUsd === 0` (no purchases in range):
-  - Run a second query for current month's purchases (`gte` first day of month, `lte` today)
-  - If still no results, run a third query with no date filter (all-time)
-- Use the first non-zero WAC found
-
-### `src/components/ProfitLossWidget.tsx` (lines 60-73)
-- Same cascading fallback logic:
-  - Date range → current month → all-time
-- Replace the hardcoded `128` fallback with dynamically fetched WAC
-
-### Both files: Helper approach
-Extract the WAC fallback into a shared pattern:
-```ts
-// 1. Try range-filtered purchases
-let wac = calcWac(rangePurchases);
-// 2. Fallback: this month
-if (wac === 0) {
-  const monthPurchases = await supabase.from("usd_purchases")
-    .select("bdt_amount_paid, usd_received")
-    .gte("date", firstDayOfMonth).lte("date", today);
-  wac = calcWac(monthPurchases.data);
-}
-// 3. Fallback: all time
-if (wac === 0) {
-  const allPurchases = await supabase.from("usd_purchases")
-    .select("bdt_amount_paid, usd_received");
-  wac = calcWac(allPurchases.data);
-}
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-## Files Modified
-- `src/pages/FinanceDashboard.tsx`
-- `src/components/ProfitLossWidget.tsx`
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

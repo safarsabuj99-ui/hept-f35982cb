@@ -34,7 +34,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
       const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
 
       if (mappedAccountIds.length === 0) {
-        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 128 });
+        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 0 });
         setLoading(false);
         return;
       }
@@ -64,13 +64,40 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         supabase.from("user_roles").select("user_id").eq("role", "client"),
       ]);
 
-      // 1. Calculate WAC
-      let totalBdt = 0, totalUsd = 0;
-      for (const p of (purchasesRes.data ?? []) as any[]) {
-        totalBdt += Number(p.bdt_amount_paid);
-        totalUsd += Number(p.usd_received);
+      // 1. Calculate WAC with cascading fallback
+      const calcWac = (data: any[] | null) => {
+        let bdt = 0, usd = 0;
+        for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
+        return usd > 0 ? bdt / usd : 0;
+      };
+
+      // Try date-range filtered purchases first
+      let rangePurchases = purchasesRes.data as any[] | null;
+      if (dateRange) {
+        const { data: filteredPurchases } = await supabase.from("usd_purchases")
+          .select("bdt_amount_paid, usd_received")
+          .gte("date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("date", format(dateRange.to, "yyyy-MM-dd"));
+        rangePurchases = filteredPurchases;
       }
-      const wac = totalUsd > 0 ? totalBdt / totalUsd : 128;
+
+      let wac = calcWac(rangePurchases);
+
+      // Fallback: current month
+      if (wac === 0) {
+        const today = new Date();
+        const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const { data: monthPurchases } = await supabase.from("usd_purchases")
+          .select("bdt_amount_paid, usd_received")
+          .gte("date", format(firstOfMonth, "yyyy-MM-dd"))
+          .lte("date", format(today, "yyyy-MM-dd"));
+        wac = calcWac(monthPurchases);
+      }
+
+      // Fallback: all-time
+      if (wac === 0) {
+        wac = calcWac(purchasesRes.data);
+      }
 
       // 2. Build mappings
       const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
