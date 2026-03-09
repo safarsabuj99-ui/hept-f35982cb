@@ -1,34 +1,31 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Add Optional Platform Charge % to USD Purchase Dialog
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+When buying USD from certain platforms, they charge a fee (e.g., 1-2%). Currently the dialog records the raw USD received without accounting for this charge. The user wants to optionally enter a charge %, which deducts from USD received and recalculates the effective cost per dollar.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## How It Works
+- Add an optional "Platform Charge %" input field in the Record USD Purchase dialog
+- When a % is entered, the effective USD = `usdReceived - (usdReceived * charge% / 100)`
+- The Calculated Rate preview updates to show the rate **after** charge deduction
+- The `usd_received` saved to the database will be the **net** amount (after charge deduction)
+- This way, WAC and all profit calculations automatically reflect the true cost
 
-## Technical Change
+## Changes
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### `src/pages/WalletInventory.tsx`
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+1. **Add state**: `chargePercent` (string, default `""`)
+2. **Add computed values**:
+   - `effectiveUsd = chargePercent ? usdReceived * (1 - chargePercent/100) : usdReceived`
+   - Update `previewRate` to use `effectiveUsd` instead of raw `usdReceived`
+3. **Add UI** (between USD Received and Calculated Rate):
+   - Optional "Platform Charge %" input (number, step 0.1, placeholder "e.g. 1.5")
+   - When filled, show a helper text: "Net USD: X.XX after Y% charge"
+4. **Update `handleSubmit`**: Save `effectiveUsd` as `usd_received` in the database insert
+5. **Reset** `chargePercent` on dialog close
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+## Result
+The calculated rate and saved USD amount will reflect the true cost after platform fees, flowing correctly into all WAC/profit calculations across the system.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
