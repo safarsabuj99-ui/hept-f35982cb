@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getDhakaDateString } from "@/components/DateRangeFilter";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
