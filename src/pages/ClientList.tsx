@@ -136,17 +136,20 @@ export default function ClientList() {
       }
       setBalances(balMap);
 
-      // Compute BDT for negative balances using per-platform rates
+      // Compute BDT for negative balances matching Client Dashboard logic exactly
       const bdtMap: Record<string, number> = {};
       for (const [cid, totalBal] of Object.entries(balMap)) {
         if (totalBal >= 0) continue;
         const profile = profileMap[cid];
-        const rates = profile?.pricing_config?.flat_rates || { meta: 120, tiktok: 120, google: 120 };
+        const pConfig = profile?.pricing_config as any;
+        const rates = pConfig?.flat_rates || pConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
         const platBals = platformBalMap[cid] || {};
         let bdtTotal = 0;
-        for (const [plat, platBal] of Object.entries(platBals)) {
+        // Only iterate known platforms, same as Client Dashboard
+        for (const p of knownPlatforms) {
+          const platBal = platBals[p] || 0;
           if (platBal < 0) {
-            const rate = Number(rates[plat] || 120);
+            const rate = Number(rates[p] || 120);
             bdtTotal += Math.abs(platBal) * rate;
           }
         }
