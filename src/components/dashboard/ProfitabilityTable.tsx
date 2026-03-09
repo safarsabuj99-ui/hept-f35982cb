@@ -92,13 +92,36 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       supabase.from("user_roles").select("user_id").eq("role", "client"),
     ]);
 
-    // WAC
-    let totalBdt = 0, totalUsd = 0;
-    for (const p of (purchasesRes.data ?? []) as any[]) {
-      totalBdt += Number(p.bdt_amount_paid);
-      totalUsd += Number(p.usd_received);
+    // WAC with cascading fallback
+    const calcWac = (data: any[] | null) => {
+      let bdt = 0, usd = 0;
+      for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
+      return usd > 0 ? bdt / usd : 0;
+    };
+
+    let rangePurchases = purchasesRes.data as any[] | null;
+    if (dateRange) {
+      const { data: filtered } = await supabase.from("usd_purchases")
+        .select("bdt_amount_paid, usd_received")
+        .gte("date", format(dateRange.from, "yyyy-MM-dd"))
+        .lte("date", format(dateRange.to, "yyyy-MM-dd"));
+      rangePurchases = filtered;
     }
-    const wac = totalUsd > 0 ? totalBdt / totalUsd : 128;
+    let wac = calcWac(rangePurchases);
+
+    if (wac === 0) {
+      const today = new Date();
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const { data: monthPurchases } = await supabase.from("usd_purchases")
+        .select("bdt_amount_paid, usd_received")
+        .gte("date", format(firstOfMonth, "yyyy-MM-dd"))
+        .lte("date", format(today, "yyyy-MM-dd"));
+      wac = calcWac(monthPurchases);
+    }
+
+    if (wac === 0) {
+      wac = calcWac(purchasesRes.data);
+    }
 
     // Mappings
     const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
