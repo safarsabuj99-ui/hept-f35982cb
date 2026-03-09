@@ -53,8 +53,8 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const today = new Date().toISOString().split("T")[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = getDhakaDateString();
+  const yesterday = getDhakaDateString(-1);
 
   const handleDateChange = useCallback((range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
