@@ -36,7 +36,7 @@ function localToday(): Date {
 }
 
 function getPresetRange(preset: DatePreset): DateRange | null {
-  const now = utcToday();
+  const now = localToday();
   switch (preset) {
     case "today":
       return { from: now, to: now };
