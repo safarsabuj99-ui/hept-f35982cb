@@ -352,15 +352,79 @@ export default function ClientDetail() {
   const fmtBdt = (n: number) =>
     `৳${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  const spendByPlatform: Record<string, number> = spendData.reduce(
-    (acc: Record<string, number>, s: any) => {
-      const plat = s.platform_name || "unknown";
-      acc[plat] = (acc[plat] || 0) + Number(s.spend || 0);
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-  const totalSpend: number = Object.values(spendByPlatform).reduce((a, b) => a + b, 0);
+  const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
+
+  // Aggregate by campaign_id (same as ClientReports)
+  const spendCampaignRows: CampaignRow[] = useMemo(() => {
+    const map: Record<string, CampaignRow> = {};
+    for (const row of spendData) {
+      const key = row.campaign_id;
+      if (!map[key]) {
+        const adAccountId = row.campaign?.ad_account_id;
+        map[key] = {
+          campaign_name: row.campaign?.name || "Unknown",
+          platform: row.campaign?.platform || "unknown",
+          status: row.campaign?.status ?? "active",
+          ad_account_name: adAccountId ? spendAdAccountMap[adAccountId] || "" : "",
+          campaign_id: row.campaign?.id,
+          impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
+        };
+      }
+      map[key].impressions += Number(row.impressions);
+      map[key].clicks += Number(row.clicks);
+      map[key].spend += Number(row.spend);
+      map[key].results += Number(row.results ?? 0);
+      map[key].conversion_value += Number(row.conversion_value ?? 0);
+    }
+    for (const c of spendCampaigns) {
+      if (c.status === 'active' && !map[c.id]) {
+        map[c.id] = {
+          campaign_name: c.name || "Unknown",
+          platform: c.platform || "unknown",
+          status: "active",
+          ad_account_name: c.ad_account_id ? spendAdAccountMap[c.ad_account_id] || "" : "",
+          campaign_id: c.id,
+          impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
+        };
+      }
+    }
+    return Object.values(map);
+  }, [spendData, spendAdAccountMap, spendCampaigns]);
+
+  const spendTotals = useMemo(() => {
+    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    for (const r of spendCampaignRows) {
+      t.spend += r.spend; t.impressions += r.impressions; t.clicks += r.clicks;
+      t.results += r.results; t.convValue += r.conversion_value;
+    }
+    return t;
+  }, [spendCampaignRows]);
+
+  const spendAvgRoas = safeDivide(spendTotals.convValue, spendTotals.spend);
+  const spendAvgCpo = safeDivide(spendTotals.spend, spendTotals.results);
+
+  const spendPlatformStats = useMemo(() => {
+    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
+    for (const r of spendCampaignRows) {
+      if (!map[r.platform]) map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
+      map[r.platform].totalSpend += r.spend;
+      map[r.platform].totalResults += r.results;
+      map[r.platform].totalConversionValue += r.conversion_value;
+    }
+    return Object.values(map);
+  }, [spendCampaignRows]);
+
+  const spendActiveCampaigns = spendCampaignRows.filter(r => r.status === "active").length;
+  const spendMetaRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "meta"), [spendCampaignRows]);
+  const spendTiktokRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "tiktok"), [spendCampaignRows]);
+  const spendGoogleRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "google"), [spendCampaignRows]);
+
+  const reloadSpendData = async () => {
+    const { data: accounts } = await supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", userId!);
+    if (accounts?.length) {
+      await loadSpendData(accounts.map((a: any) => a.ad_account_id), spendDateRange);
+    }
+  };
 
   if (loading) {
     return (
