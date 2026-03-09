@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check, ShoppingCart, Target, Radio } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -322,37 +321,6 @@ export default function AdAccountDetail() {
     return Object.values(map);
   }, [spendRawMetrics, spendCampaigns]);
 
-  const spendTotals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
-    for (const r of spendCampaignRows) {
-      t.spend += r.spend;
-      t.impressions += r.impressions;
-      t.clicks += r.clicks;
-      t.results += r.results;
-      t.convValue += r.conversion_value;
-    }
-    return t;
-  }, [spendCampaignRows]);
-
-  const spendAvgRoas = spendTotals.convValue > 0 && spendTotals.spend > 0 ? spendTotals.convValue / spendTotals.spend : 0;
-  const spendAvgCpo = spendTotals.results > 0 ? spendTotals.spend / spendTotals.results : 0;
-
-  const spendPlatformStats = useMemo(() => {
-    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
-    for (const r of spendCampaignRows) {
-      if (!map[r.platform]) map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
-      map[r.platform].totalSpend += r.spend;
-      map[r.platform].totalResults += r.results;
-      map[r.platform].totalConversionValue += r.conversion_value;
-    }
-    return Object.values(map);
-  }, [spendCampaignRows]);
-
-  const spendActiveCampaigns = spendCampaignRows.filter(r => r.status === "active").length;
-  const spendMetaRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "meta"), [spendCampaignRows]);
-  const spendTiktokRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "tiktok"), [spendCampaignRows]);
-  const spendGoogleRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "google"), [spendCampaignRows]);
-
   const assignedClientIds = new Set(assignments.map((a: any) => a.client_id));
   const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
 
@@ -599,109 +567,7 @@ export default function AdAccountDetail() {
         {/* SPEND TAB */}
         <TabsContent value="spend" className="space-y-4">
           <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendPreset} />
-
-          {/* KPI Summary Cards */}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-3 pb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold font-mono">{fmt(spendTotals.spend)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-3 pb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
-                  <ShoppingCart className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold font-mono">{spendTotals.results.toLocaleString()}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-3 pb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold font-mono">{spendAvgRoas.toFixed(2)}x</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-3 pb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
-                  <Target className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold font-mono">{fmt(spendAvgCpo)}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Tabbed Content */}
-          <Tabs defaultValue="live" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="live" className="gap-1.5">
-                <Radio className="h-4 w-4" /> Live Campaigns
-                {spendActiveCampaigns > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{spendActiveCampaigns}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="live">
-              <Tabs defaultValue="all" className="space-y-4">
-                <TabsList>
-                  <TabsTrigger value="all">
-                    All
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendCampaignRows.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="meta">
-                    Meta
-                    {spendMetaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendMetaRows.length}</Badge>}
-                  </TabsTrigger>
-                  <TabsTrigger value="tiktok">
-                    TikTok
-                    {spendTiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendTiktokRows.length}</Badge>}
-                  </TabsTrigger>
-                  <TabsTrigger value="google">
-                    Google
-                    {spendGoogleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendGoogleRows.length}</Badge>}
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="all">
-                  <DeepDiveTable data={spendCampaignRows} onCampaignPaused={loadSpendTab} />
-                </TabsContent>
-                <TabsContent value="meta">
-                  <DeepDiveTable data={spendMetaRows} onCampaignPaused={loadSpendTab} />
-                </TabsContent>
-                <TabsContent value="tiktok">
-                  <DeepDiveTable data={spendTiktokRows} onCampaignPaused={loadSpendTab} />
-                </TabsContent>
-                <TabsContent value="google">
-                  <DeepDiveTable data={spendGoogleRows} onCampaignPaused={loadSpendTab} />
-                </TabsContent>
-              </Tabs>
-            </TabsContent>
-
-            <TabsContent value="overview">
-              <div className="space-y-6">
-                <SalesFunnel impressions={spendTotals.impressions} clicks={spendTotals.clicks} results={spendTotals.results} />
-                <PlatformComparison data={spendPlatformStats} />
-              </div>
-            </TabsContent>
-          </Tabs>
+          <CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} />
         </TabsContent>
 
         {/* BILLING HEALTH TAB */}
