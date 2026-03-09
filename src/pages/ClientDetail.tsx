@@ -88,8 +88,6 @@ export default function ClientDetail() {
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
-  const [spendPage, setSpendPage] = useState(1);
-  const [spendSize, setSpendSize] = useState(20);
 
   useEffect(() => {
     if (!userId) return;
