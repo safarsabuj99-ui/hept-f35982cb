@@ -286,11 +286,6 @@ export default function AdAccountDetail() {
     ? differenceInDays(new Date(account.next_billing_date), new Date())
     : null;
 
-  // Spend summary
-  const totalSpend = spendData.reduce((s: number, r: any) => s + (r.final_billable_usd || 0), 0);
-  const uniqueCampaigns = new Set(spendData.map((r: any) => r.campaign_name).filter(Boolean)).size;
-  const avgDaily = spendData.length > 0 ? totalSpend / new Set(spendData.map((r: any) => r.date)).size : 0;
-
   // Spend tab campaign rows (same logic as ClientReports)
   const spendCampaignRows: CampaignRow[] = useMemo(() => {
     const map: Record<string, CampaignRow> = {};
