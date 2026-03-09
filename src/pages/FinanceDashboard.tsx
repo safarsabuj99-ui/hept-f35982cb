@@ -51,11 +51,33 @@ export default function FinanceDashboard() {
       expensesQuery,
     ]);
 
-    // WAC from filtered purchases
-    const purchases = (purchasesRes.data as any[]) ?? [];
-    let totalBdt = 0, totalUsd = 0;
-    for (const p of purchases) { totalBdt += Number(p.bdt_amount_paid); totalUsd += Number(p.usd_received); }
-    const calculatedWac = totalUsd > 0 ? Math.round((totalBdt / totalUsd) * 100) / 100 : 0;
+    // WAC from filtered purchases with cascading fallback
+    const calcWac = (data: any[] | null) => {
+      let bdt = 0, usd = 0;
+      for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
+      return usd > 0 ? Math.round((bdt / usd) * 100) / 100 : 0;
+    };
+
+    let calculatedWac = calcWac(purchasesRes.data);
+
+    // Fallback: current month
+    if (calculatedWac === 0) {
+      const today = getLocalToday();
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const { data: monthPurchases } = await supabase.from("usd_purchases")
+        .select("bdt_amount_paid, usd_received")
+        .gte("date", toISODate(firstOfMonth))
+        .lte("date", toISODate(today));
+      calculatedWac = calcWac(monthPurchases);
+    }
+
+    // Fallback: all-time
+    if (calculatedWac === 0) {
+      const { data: allPurchases } = await supabase.from("usd_purchases")
+        .select("bdt_amount_paid, usd_received");
+      calculatedWac = calcWac(allPurchases);
+    }
+
     setWac(calculatedWac);
 
     const clientIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
