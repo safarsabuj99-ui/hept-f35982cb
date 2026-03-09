@@ -306,15 +306,23 @@ export default function ClientDetail() {
       mapping_keyword: newAdKeyword || "",
     }));
     const { error } = await supabase.from("ad_account_clients").insert(rows);
-    setAssigningSaving(false);
     if (error) {
+      setAssigningSaving(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      setSelectedAdAccountIds([]);
-      setNewAdKeyword("");
-      toast({ title: "Assigned", description: `${rows.length} ad account(s) linked to this client.` });
-      loadAll();
+      return;
     }
+    
+    // Trigger sync to collect data for new mapping (only if keyword provided)
+    if (newAdKeyword.trim()) {
+      toast({ title: "Syncing...", description: "Fetching data for new mapping." });
+      await supabase.functions.invoke("sync-fast-lane", { body: { client_id: userId } });
+    }
+    
+    setAssigningSaving(false);
+    setSelectedAdAccountIds([]);
+    setNewAdKeyword("");
+    toast({ title: "Assigned", description: `${rows.length} ad account(s) linked to this client.` });
+    loadAll();
   }
 
   async function handleRemoveAdAccount(assignmentId: string) {
