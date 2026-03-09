@@ -44,20 +44,6 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
             )}
           </div>
         </div>
-        {onSyncNow && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onSyncNow}
-            disabled={isSyncing}
-            className={`gap-2 shrink-0 press-effect transition-all duration-300 ${
-              isSyncing ? "animate-glow-pulse" : ""
-            }`}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 transition-transform duration-500 ${isSyncing ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync Now"}</span>
-          </Button>
-        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="stat-pill opacity-0 animate-scale-bounce" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>

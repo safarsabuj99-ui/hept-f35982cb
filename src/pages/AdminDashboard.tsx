@@ -266,8 +266,6 @@ export default function AdminDashboard() {
         lastSynced={lastSynced}
         activeAccounts={activeAccounts}
         pendingCount={pendingCount}
-        onSyncNow={handleSyncNow}
-        isSyncing={isSyncing}
       />
 
       {/* Date Filter */}

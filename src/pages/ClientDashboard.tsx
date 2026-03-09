@@ -14,7 +14,7 @@ import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Wallet, Zap, Clock, Shield, ArrowDown, ArrowUp, Minus,
-  Plus, Loader2, Banknote, TrendingUp, BarChart3, Sparkles, RefreshCw
+  Plus, Loader2, Banknote, TrendingUp, BarChart3, Sparkles
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
