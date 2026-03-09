@@ -1,16 +1,13 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Clock, MonitorSmartphone, ClipboardCheck, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Clock, MonitorSmartphone, ClipboardCheck } from "lucide-react";
 
 interface DashboardHeaderProps {
   lastSynced: string | null;
   activeAccounts: number;
   pendingCount: number;
-  onSyncNow?: () => void;
-  isSyncing?: boolean;
 }
 
-export function DashboardHeader({ lastSynced, activeAccounts, pendingCount, onSyncNow, isSyncing }: DashboardHeaderProps) {
+export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: DashboardHeaderProps) {
   const { user } = useAuth();
   
   const hour = new Date().getHours();
