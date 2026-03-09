@@ -72,6 +72,8 @@ export default function ClientDetail() {
 
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
+  const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
+  const [spendAdAccountMap, setSpendAdAccountMap] = useState<Record<string, string>>({});
   const [payments, setPayments] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
