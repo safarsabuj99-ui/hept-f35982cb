@@ -116,8 +116,7 @@ export default function AdAccountDetail() {
         setIntegrationName(intData ? (intData.instance_name || `${intData.platform} integration`) : null);
       }
 
-      // Load spend with today's range to match default preset
-      await loadSpend({ from: getLocalTodayClient(), to: getLocalTodayClient() });
+      // Spend tab data is loaded via useEffect on loadSpendTab
     }
 
     setAssignments(assignRes.data ?? []);
