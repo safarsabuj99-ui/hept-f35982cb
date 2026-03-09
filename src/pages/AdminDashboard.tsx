@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
+  
   const [dateRange, setDateRange] = useState<DateRange | null>(() => {
     const t = getLocalToday();
     return { from: t, to: t };
