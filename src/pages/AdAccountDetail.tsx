@@ -359,9 +359,11 @@ export default function AdAccountDetail() {
   const spendTiktokRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "tiktok"), [spendCampaignRows]);
   const spendGoogleRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "google"), [spendCampaignRows]);
 
-  const totalSpend = spendTotals.spend;
-  const uniqueCampaigns = spendCampaignRows.length;
-  const avgDaily = spendData.length > 0 ? totalSpend / new Set(spendData.map((r: any) => r.date)).size : 0;
+  const assignedClientIds = new Set(assignments.map((a: any) => a.client_id));
+  const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
+
+  if (loading) {
+    return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-40 w-full" />
