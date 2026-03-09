@@ -1,34 +1,24 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Show Negative Balance in BDT on Client Dashboard
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+When a platform balance (Meta, TikTok, Google) or total balance is negative, show the equivalent BDT amount using the client's platform-specific flat rates from `pricing_config.flat_rates`.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## How It Works
 
-## Technical Change
+- Client's `profiles.pricing_config` contains `flat_rates: { meta: 128, tiktok: 125, google: 130 }` (USD→BDT rates per platform)
+- If Meta balance is -$10 and Meta rate is 128, show **-৳1,280.00** below the USD amount
+- For total balance: calculate weighted BDT by converting each negative platform balance using its respective rate, then sum
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+## Changes to `src/pages/ClientDashboard.tsx`
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+1. **Fetch `pricing_config`** alongside `full_name` in the profile query (line 135). Store in state.
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+2. **Platform sub-balance cards** (lines 348-358): When `pb.balance < 0`, show a second line below the USD amount displaying the BDT equivalent:
+   - `bdtAmount = Math.abs(pb.balance) * (pricingConfig?.flat_rates?.[pb.platform] || 120)`
+   - Render: `৳{bdtAmount.toLocaleString(...)}`
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+3. **Main balance card** (line 343): When `balance < 0`, compute total negative BDT by summing each negative platform balance × its rate, then display below the USD figure.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+4. Only show the BDT line when balance is negative — positive balances stay USD-only as they are now.
 
-No database or edge function changes needed.
