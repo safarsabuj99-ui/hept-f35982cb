@@ -162,7 +162,23 @@ export default function ClientList() {
     load();
   }, [location.key]);
 
-  useEffect(() => { setCurrentPage(1); }, [search]);
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("client-list-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+
+    function load() {
+      // Re-trigger the load by navigating to the same page (triggers location.key change)
+      // Instead, just inline fetch
+      const event = new Event("client-list-refresh");
+      window.dispatchEvent(event);
+    }
+  }, []);
 
   const getPricingLabel = (config: any) => {
     const pr = config?.flat_rates || config?.platform_rates;

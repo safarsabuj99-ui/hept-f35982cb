@@ -125,6 +125,15 @@ export default function AuditLogs() {
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
   useEffect(() => { fetchTodayStats(); }, [fetchTodayStats]);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("audit-logs-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, () => { fetchLogs(); fetchTodayStats(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLogs, fetchTodayStats]);
+
   const getSeverity = (actionType: string) => SEVERITY[actionType] || "info";
 
   return (

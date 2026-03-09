@@ -97,6 +97,15 @@ export default function Integrations() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("integrations-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "api_integrations" }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const saveIntegration = async (id: string, updates: any) => {
     const { error } = await (supabase.from("api_integrations" as any) as any).update(updates).eq("id", id);
     if (error) {

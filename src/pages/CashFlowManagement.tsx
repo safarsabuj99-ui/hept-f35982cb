@@ -146,6 +146,18 @@ export default function CashFlowManagement() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("cashflow-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "fund_transfers" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
   const handleAddAccount = async () => {
     if (!accName.trim()) {
       toast({ title: "Error", description: "Account name is required", variant: "destructive" });

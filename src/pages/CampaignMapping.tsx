@@ -83,6 +83,17 @@ export default function CampaignMapping() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("campaign-mapping-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaigns" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_performance" }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
   const adAccountNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const a of adAccounts) {

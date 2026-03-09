@@ -190,6 +190,18 @@ export default function FinanceDashboard() {
 
   useEffect(() => { fetchAll(dateRange); }, []);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("finance-dashboard-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchAll(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => fetchAll(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchAll(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, () => fetchAll(dateRange))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchAll, dateRange]);
+
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
     const labels: Record<DatePreset, string> = {

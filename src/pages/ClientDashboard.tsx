@@ -183,6 +183,8 @@ export default function ClientDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, () => fetchAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_performance' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchAll]);

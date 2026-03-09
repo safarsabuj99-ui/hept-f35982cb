@@ -78,6 +78,16 @@ export default function AdAccounts() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("ad-accounts-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ad_accounts" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "ad_account_clients" }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const handleCreate = async () => {
     if (!form.platform_name || !form.ad_account_id) return;
     setSaving(true);
