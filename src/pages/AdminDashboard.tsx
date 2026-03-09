@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
+  
   const [dateRange, setDateRange] = useState<DateRange | null>(() => {
     const t = getLocalToday();
     return { from: t, to: t };
@@ -210,28 +210,6 @@ export default function AdminDashboard() {
     setLoading(false);
   }, [today, yesterday, dateRange]);
 
-  const handleSyncNow = useCallback(async () => {
-    if (lastSynced) {
-      const lastSyncTime = new Date(lastSynced).getTime();
-      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-      if (lastSyncTime > fiveMinAgo) {
-        const minutesLeft = Math.ceil((lastSyncTime - fiveMinAgo) / 60000);
-        toast({ title: "Data is up to date", description: `Please wait ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} before syncing again.` });
-        return;
-      }
-    }
-    setIsSyncing(true);
-    toast({ title: "Syncing...", description: "Fetching latest financial data." });
-    try {
-      const res = await supabase.functions.invoke("sync-fast-lane", { body: {} });
-      if (res.error) throw res.error;
-      toast({ title: "Sync complete", description: `${res.data?.synced ?? 0} accounts synced.` });
-    } catch (err: any) {
-      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [lastSynced, toast]);
 
   const totalBalance = clients.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
@@ -288,8 +266,6 @@ export default function AdminDashboard() {
         lastSynced={lastSynced}
         activeAccounts={activeAccounts}
         pendingCount={pendingCount}
-        onSyncNow={handleSyncNow}
-        isSyncing={isSyncing}
       />
 
       {/* Date Filter */}
