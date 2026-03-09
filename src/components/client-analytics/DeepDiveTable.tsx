@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,9 +10,10 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { TablePagination } from "@/components/TablePagination";
@@ -74,8 +75,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [bulkPausing, setBulkPausing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+
+  // Reset page & selection when filters change
+  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [searchQuery, statusFilter]);
 
   const uniqueStatuses = useMemo(() => {
     const set = new Set(data.map((r) => r.status));
@@ -99,6 +106,43 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     return filtered;
   }, [data, searchQuery, statusFilter]);
 
+  // Selectable rows = active campaigns with campaign_id on current page
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
+  const selectableRows = useMemo(
+    () => paginatedData.filter(r => r.campaign_id && r.status === "active"),
+    [paginatedData]
+  );
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    const allIds = selectableRows.map(r => r.campaign_id!);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        allIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        allIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [selectableRows, selectedIds]);
+
   const handlePause = async (row: CampaignRow) => {
     if (!row.campaign_id) return;
     setPausingId(row.campaign_id);
@@ -118,7 +162,70 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     }
   };
 
+  const handleBulkPause = async () => {
+    const ids = Array.from(selectedIds);
+    setBulkPausing(true);
+    setBulkProgress({ current: 0, total: ids.length });
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < ids.length; i++) {
+      setBulkProgress({ current: i + 1, total: ids.length });
+      try {
+        const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
+          body: { campaign_id: ids[i] },
+        });
+        if (error) throw error;
+        if (result?.error) throw new Error(result.error);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setBulkPausing(false);
+    setShowBulkConfirm(false);
+    setSelectedIds(new Set());
+
+    if (failCount === 0) {
+      toast({ title: "Bulk Pause Complete", description: `${successCount} campaign${successCount > 1 ? "s" : ""} paused successfully.` });
+    } else {
+      toast({ title: "Bulk Pause Partial", description: `${successCount} paused, ${failCount} failed.`, variant: "destructive" });
+    }
+    onCampaignPaused?.();
+  };
+
   const columns = useMemo(() => [
+    columnHelper.display({
+      id: "select",
+      header: () => {
+        const allIds = selectableRows.map(r => r.campaign_id!);
+        const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+        const someSelected = allIds.some(id => selectedIds.has(id)) && !allSelected;
+        return (
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "indeterminate" : false}
+            onCheckedChange={toggleSelectAll}
+            aria-label="Select all"
+            className="translate-y-[2px]"
+          />
+        );
+      },
+      cell: (info) => {
+        const row = info.row.original;
+        const isSelectable = row.campaign_id && row.status === "active";
+        if (!isSelectable) return <div className="w-4" />;
+        return (
+          <Checkbox
+            checked={selectedIds.has(row.campaign_id!)}
+            onCheckedChange={() => toggleSelect(row.campaign_id!)}
+            aria-label={`Select ${row.campaign_name}`}
+            className="translate-y-[2px]"
+            onClick={(e) => e.stopPropagation()}
+          />
+        );
+      },
+    }),
     columnHelper.accessor("campaign_name", {
       header: "Campaign",
       cell: (info) => (
@@ -223,12 +330,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
       },
     }),
-  ], [pausingId]);
-
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
+  ], [pausingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll]);
 
   const table = useReactTable({
     data: paginatedData,
@@ -281,81 +383,121 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           </SelectContent>
         </Select>
       </div>
-      <div className="overflow-x-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id}>
-                {hg.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className="cursor-pointer select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider"
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    <div className="flex items-center gap-1">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === "asc" ? (
-                        <ArrowUp className="h-3 w-3" />
-                      ) : header.column.getIsSorted() === "desc" ? (
-                        <ArrowDown className="h-3 w-3" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
-                      )}
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">
-                  No campaign data available
-                </TableCell>
-              </TableRow>
-            ) : (
-              <>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/30 transition-colors">
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+
+      <div className="relative">
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((hg) => (
+                <TableRow key={hg.id}>
+                  {hg.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      className={`${header.id === "select" ? "w-10" : "cursor-pointer"} select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider`}
+                      onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
+                    >
+                      <div className="flex items-center gap-1">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.id !== "select" && (
+                          header.column.getIsSorted() === "asc" ? (
+                            <ArrowUp className="h-3 w-3" />
+                          ) : header.column.getIsSorted() === "desc" ? (
+                            <ArrowDown className="h-3 w-3" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+                          )
+                        )}
+                      </div>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">
+                    No campaign data available
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {table.getRowModel().rows.map((row) => {
+                    const isSelected = row.original.campaign_id ? selectedIds.has(row.original.campaign_id) : false;
+                    return (
+                      <TableRow
+                        key={row.id}
+                        className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
+                  {filteredData.length > 1 && (
+                    <TableRow className="bg-muted/40 font-semibold border-t-2">
+                      <TableCell /> {/* checkbox column */}
+                      <TableCell className="text-sm">Totals</TableCell>
+                      <TableCell />
+                      <TableCell />
+                      <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
+                      <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
+                      <TableCell className="font-mono text-sm">{totals.results.toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-sm">{fmt(totalCpo)}</TableCell>
+                      <TableCell className="font-mono text-sm">{fmt(totals.spend)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">
+                          {totalRoas.toFixed(2)}x
+                        </Badge>
                       </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-                {filteredData.length > 1 && (
-                  <TableRow className="bg-muted/40 font-semibold border-t-2">
-                    <TableCell className="text-sm">Totals</TableCell>
-                    <TableCell />
-                    <TableCell />
-                    <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
-                    <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
-                    <TableCell className="font-mono text-sm">{totals.results.toLocaleString()}</TableCell>
-                    <TableCell className="font-mono text-sm">{fmt(totalCpo)}</TableCell>
-                    <TableCell className="font-mono text-sm">{fmt(totals.spend)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">
-                        {totalRoas.toFixed(2)}x
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </>
-            )}
-          </TableBody>
-        </Table>
+                    </TableRow>
+                  )}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Floating bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="sticky bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+            <span className="text-sm font-medium text-foreground">
+              {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+                className="h-8 text-xs"
+              >
+                <X className="h-3.5 w-3.5 mr-1" /> Clear
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowBulkConfirm(true)}
+                className="h-8 text-xs"
+              >
+                <Power className="h-3.5 w-3.5 mr-1" /> Pause All
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <TablePagination
         totalItems={filteredData.length}
         pageSize={pageSize}
         currentPage={currentPage}
-        onPageChange={setCurrentPage}
+        onPageChange={(p) => { setCurrentPage(p); setSelectedIds(new Set()); }}
         onPageSizeChange={setPageSize}
       />
 
+      {/* Single pause confirm */}
       <AlertDialog open={!!confirmPause} onOpenChange={() => setConfirmPause(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -373,6 +515,36 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             >
               {pausingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Pause Campaign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk pause confirm */}
+      <AlertDialog open={showBulkConfirm} onOpenChange={(open) => { if (!bulkPausing) setShowBulkConfirm(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pause {selectedIds.size} Campaign{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will pause <strong>{selectedIds.size} active campaign{selectedIds.size > 1 ? "s" : ""}</strong> directly on their ad platforms.
+              Once paused, campaigns cannot be resumed from here — contact your account manager.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkPausing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); handleBulkPause(); }}
+              disabled={bulkPausing}
+            >
+              {bulkPausing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Pausing {bulkProgress.current} of {bulkProgress.total}…
+                </>
+              ) : (
+                `Pause ${selectedIds.size} Campaign${selectedIds.size > 1 ? "s" : ""}`
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
