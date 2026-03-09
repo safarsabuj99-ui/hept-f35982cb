@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Clock, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getDhakaDateString } from "@/components/DateRangeFilter";
 
 interface RunwayClient {
   user_id: string;
