@@ -29,6 +29,7 @@ interface ClientWithBalance {
   business_name: string | null;
   balance: number;
   todaySpend: number;
+  pricing_config: any;
 }
 
 export default function AdminDashboard() {
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [activeAccounts, setActiveAccounts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [depositOpen, setDepositOpen] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
@@ -102,7 +104,7 @@ export default function AdminDashboard() {
     }
 
     const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, business_name"),
+      supabase.from("profiles").select("user_id, full_name, email, business_name, pricing_config"),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("transactions").select("*"),
       (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
@@ -133,6 +135,7 @@ export default function AdminDashboard() {
     const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
     const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
     const transactions = txnsRes.data ?? [];
+    setAllTransactions(transactions);
 
     // Map spend to clients via campaigns -> ad_account_clients
     const spendRows = (spendRangeRes.data ?? []) as any[];
@@ -159,7 +162,7 @@ export default function AdminDashboard() {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0 };
+      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0, pricing_config: (p as any).pricing_config };
     });
 
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
@@ -229,6 +232,43 @@ export default function AdminDashboard() {
   const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
 
+  // Calculate platform-weighted BDT for Payment Due
+  const totalDueBdt = (() => {
+    let bdtSum = 0;
+    for (const client of clients) {
+      if (client.balance >= 0) continue;
+      const pc = (client as any).pricing_config;
+      const flatRates = pc?.flat_rates || {};
+      // Get client's completed transactions grouped by platform
+      // We need to recalculate per-platform balances from transactions
+      const clientTxns = (allTransactions || []).filter((t: any) => t.client_id === client.user_id && t.status === "completed");
+      const platforms: Array<"meta" | "tiktok" | "google"> = ["meta", "tiktok", "google"];
+      let platformNegBdt = 0;
+      let accountedUsd = 0;
+      
+      for (const platform of platforms) {
+        const pCredits = clientTxns.filter((t: any) => t.type === "credit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const pDebits = clientTxns.filter((t: any) => t.type === "debit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const pBalance = pCredits - pDebits;
+        if (pBalance < 0) {
+          const rate = flatRates[platform] || 120;
+          platformNegBdt += Math.abs(pBalance) * rate;
+          accountedUsd += Math.abs(pBalance);
+        }
+      }
+      
+      // Handle unplatformed negative remainder
+      const unaccounted = Math.abs(client.balance) - accountedUsd;
+      if (unaccounted > 0) {
+        const avgRate = flatRates.meta || flatRates.tiktok || flatRates.google || 120;
+        platformNegBdt += unaccounted * avgRate;
+      }
+      
+      bdtSum += platformNegBdt;
+    }
+    return Math.round(bdtSum * 100) / 100;
+  })();
+
   const spendLabel = datePreset === "today" ? "Today's Spend" : datePreset === "yesterday" ? "Yesterday's Spend" : "Period Spend";
   const collectLabel = datePreset === "today" ? "Today's Collections" : datePreset === "yesterday" ? "Yesterday's Collections" : "Period Collections";
 
@@ -277,7 +317,7 @@ export default function AdminDashboard() {
         <KpiCard
           title="Payment Due"
           value={`$${totalDue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle="USD"
+          subtitle={`৳${totalDueBdt.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
           icon={AlertCircle}
           loading={loading}
           accentColor="hsl(var(--destructive))"

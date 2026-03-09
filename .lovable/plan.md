@@ -1,34 +1,34 @@
 
 
-# Plan: Payment Due Widget — Platform-Weighted BDT from Negative Balances
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Current Behavior
-Line 230: `totalDue` = sum of `Math.abs(balance)` for all clients with `balance < 0`. Shows only USD.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## New Behavior
-Calculate negative balances **per-platform per-client**, convert each to BDT using that client's `pricing_config.flat_rates` (Meta/TikTok/Google rates), then sum. Show both USD total and BDT total in the Payment Due KPI card.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Changes to `src/pages/AdminDashboard.tsx`
+## Technical Change
 
-### 1. Fetch `pricing_config` in profiles query
-Update line 105 to include `pricing_config`:
-```ts
-supabase.from("profiles").select("user_id, full_name, email, business_name, pricing_config")
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-### 2. Calculate per-platform negative balances per client
-After building client balances (around line 158), for each client with negative balance:
-- Group their completed debit transactions by platform
-- Group their completed credit transactions
-- Calculate per-platform balance (credits minus debits per platform)
-- For each negative platform balance, multiply by that client's `pricing_config.flat_rates.[platform]` (fallback 120)
-- Sum all BDT amounts across all clients
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 3. Update Payment Due KPI (lines 277-284)
-- Keep USD value: `$totalDue`
-- Change subtitle to show BDT: `৳totalDueBdt`
-- Both values only count negative balances
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-### Files Modified
-- `src/pages/AdminDashboard.tsx`
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
