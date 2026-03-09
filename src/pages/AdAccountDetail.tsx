@@ -56,7 +56,6 @@ export default function AdAccountDetail() {
   const [integrationName, setIntegrationName] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [spendData, setSpendData] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
   // Client assignment form
