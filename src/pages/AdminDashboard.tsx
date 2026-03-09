@@ -114,7 +114,7 @@ export default function AdminDashboard() {
     ]);
 
     // Fetch last 7 days spend for sparkline (from mapped campaigns only)
-    const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    const sevenAgo = getDhakaDateString(-7);
     let weekSpendQuery = supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
     if (campaignIds.length > 0) {
       weekSpendQuery = weekSpendQuery.in("campaign_id", campaignIds);
