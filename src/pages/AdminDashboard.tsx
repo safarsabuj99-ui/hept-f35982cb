@@ -135,6 +135,7 @@ export default function AdminDashboard() {
     const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
     const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
     const transactions = txnsRes.data ?? [];
+    setAllTransactions(transactions);
 
     // Map spend to clients via campaigns -> ad_account_clients
     const spendRows = (spendRangeRes.data ?? []) as any[];
