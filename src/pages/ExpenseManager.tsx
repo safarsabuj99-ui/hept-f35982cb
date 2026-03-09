@@ -45,7 +45,7 @@ export default function ExpenseManager() {
   const [category, setCategory] = useState<string>("Salary");
   const [description, setDescription] = useState("");
   const [expDate, setExpDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getUtcToday(); return { from: t, to: t }; });
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
   const [periodLabel, setPeriodLabel] = useState("Today");
   const [agencyAccounts, setAgencyAccounts] = useState<any[]>([]);
   const [paidFromAccountId, setPaidFromAccountId] = useState("");

@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => {
-    const t = getUtcToday();
+    const t = getLocalToday();
     return { from: t, to: t };
   });
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
