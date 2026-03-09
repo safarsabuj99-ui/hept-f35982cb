@@ -2,20 +2,12 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
-import { BarChart3, DollarSign, TrendingUp, ShoppingCart, Target, Radio } from "lucide-react";
-import { format, startOfDay, endOfDay } from "date-fns";
-
-const fmt = (n: number) =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
+import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
+import { BarChart3 } from "lucide-react";
+import { format } from "date-fns";
 
 export default function ClientReports() {
   const { user } = useAuth();
