@@ -125,7 +125,7 @@ export default function AdminDashboard() {
       dailySpendMap[r.data_date] = (dailySpendMap[r.data_date] || 0) + Number(r.spend);
     }
     const spark = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      const d = getDhakaDateString(-(6 - i));
       return dailySpendMap[d] || 0;
     });
     setSpendHistory(spark);
