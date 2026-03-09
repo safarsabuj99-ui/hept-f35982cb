@@ -162,7 +162,7 @@ export default function AdminDashboard() {
       const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
       const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0 };
+      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0, pricing_config: (p as any).pricing_config };
     });
 
     const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
