@@ -33,6 +33,7 @@ export default function WalletInventory() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bdtPaid, setBdtPaid] = useState("");
   const [usdReceived, setUsdReceived] = useState("");
+  const [chargePercent, setChargePercent] = useState("");
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(getDhakaDateString());
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
@@ -86,16 +87,22 @@ export default function WalletInventory() {
   const totalBdtSpent = purchases.reduce((s, p) => s + Number(p.bdt_amount_paid), 0);
   const wac = calculateWAC();
 
+  const chargeNum = chargePercent ? Number(chargePercent) : 0;
+  const effectiveUsd = usdReceived && Number(usdReceived) > 0
+    ? Number(usdReceived) * (1 - chargeNum / 100)
+    : 0;
+
   const handleSubmit = async () => {
     if (!bdtPaid || !usdReceived || Number(usdReceived) <= 0) {
       toast({ title: "Error", description: "Please fill in valid amounts", variant: "destructive" });
       return;
     }
     setSubmitting(true);
+    const netUsd = chargeNum > 0 ? effectiveUsd : Number(usdReceived);
     const { error } = await supabase.from("usd_purchases").insert({
       date: purchaseDate,
       bdt_amount_paid: Number(bdtPaid),
-      usd_received: Number(usdReceived),
+      usd_received: netUsd,
       notes: notes || null,
       created_by: user?.id,
       paid_from_account_id: paidFromAccountId || null,
@@ -115,14 +122,14 @@ export default function WalletInventory() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "USD purchase recorded" });
-      setBdtPaid(""); setUsdReceived(""); setNotes(""); setPaidFromAccountId("");
+      setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
     }
   };
 
-  const previewRate = bdtPaid && usdReceived && Number(usdReceived) > 0
-    ? (Number(bdtPaid) / Number(usdReceived)).toFixed(2)
+  const previewRate = bdtPaid && effectiveUsd > 0
+    ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
     : "—";
 
   return (
@@ -149,6 +156,15 @@ export default function WalletInventory() {
                     <Label>USD Received</Label>
                     <Input type="number" placeholder="e.g. 77" value={usdReceived} onChange={e => setUsdReceived(e.target.value)} />
                   </div>
+                </div>
+                <div>
+                  <Label>Platform Charge % <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input type="number" step="0.1" min="0" max="100" placeholder="e.g. 1.5" value={chargePercent} onChange={e => setChargePercent(e.target.value)} />
+                  {chargeNum > 0 && effectiveUsd > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Net USD: <span className="font-mono font-medium text-foreground">${effectiveUsd.toFixed(2)}</span> after {chargeNum}% charge
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-lg bg-muted p-3 text-center">
                   <p className="text-xs text-muted-foreground">Calculated Rate</p>
