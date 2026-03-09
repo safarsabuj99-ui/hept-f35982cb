@@ -113,9 +113,13 @@ export default function AdminDashboard() {
       supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
     ]);
 
-    // Fetch last 7 days spend for sparkline
+    // Fetch last 7 days spend for sparkline (from mapped campaigns only)
     const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
-    const { data: weekSpend } = await supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
+    let weekSpendQuery = supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
+    if (campaignIds.length > 0) {
+      weekSpendQuery = weekSpendQuery.in("campaign_id", campaignIds);
+    }
+    const { data: weekSpend } = await weekSpendQuery;
     const dailySpendMap: Record<string, number> = {};
     for (const r of (weekSpend ?? []) as any[]) {
       dailySpendMap[r.data_date] = (dailySpendMap[r.data_date] || 0) + Number(r.spend);
