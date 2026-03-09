@@ -122,16 +122,37 @@ export default function AdAccountDetail() {
   }
 
   async function loadSpend(range: ClientDateRange | null) {
+    // Step 1: Get mapping keywords for this ad account
+    const { data: mappings } = await (supabase.from("ad_account_clients" as any) as any)
+      .select("mapping_keyword")
+      .eq("ad_account_id", accountId)
+      .neq("mapping_keyword", "");
+    
+    const keywords = (mappings ?? []).map((m: any) => (m.mapping_keyword || "").toLowerCase()).filter(Boolean);
+    
+    if (keywords.length === 0) {
+      setSpendData([]);  // No mappings = no data to show
+      return;
+    }
+
+    // Step 2: Get all spend for this account
     let query = (supabase.from("daily_ad_spend" as any) as any)
       .select("*")
       .eq("ad_account_id", accountId)
       .order("date", { ascending: false })
-      .limit(500);
+      .limit(1000);
     if (range) {
       query = query.gte("date", format(range.from, "yyyy-MM-dd")).lte("date", format(range.to, "yyyy-MM-dd"));
     }
     const { data } = await query;
-    setSpendData(data ?? []);
+    
+    // Step 3: Client-side filter - only keep rows matching keywords
+    const filtered = (data ?? []).filter((row: any) => {
+      const nameLower = (row.campaign_name || "").toLowerCase();
+      return keywords.some((kw: string) => nameLower.includes(kw));
+    });
+
+    setSpendData(filtered);
   }
 
   async function handleSpendDateChange(range: ClientDateRange | null, preset: ClientDatePreset) {

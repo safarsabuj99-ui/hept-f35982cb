@@ -1,88 +1,34 @@
 
-# Plan: Complete Mapping-First Filtering for All Data Display
 
-## Problem Identified
+# Fix: Platform Transfers Inflating Today's Collections
 
-1. **AdAccountDetail.tsx (Spend tab)**: Queries `daily_ad_spend` directly by `ad_account_id` **without checking if the campaign matches a mapping keyword**. This shows ALL spend data for the account, including unmapped campaigns.
-
-2. **Legacy data issue**: The database may still contain old records in `daily_ad_spend` from before the mapping-first sync was implemented.
-
-3. **Other pages querying `daily_ad_spend` without full filtering**:
-   - `RunwayPrediction.tsx` - fetches recent spend without keyword check
-   - `SystemHealthWidget.tsx` - fetches today's spend without keyword check  
-   - `UnassignedSpendAlert.tsx` - intentionally shows unmapped data (correct behavior)
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
 ## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. AdAccountDetail.tsx - Filter Spend by Mapping Keywords
+## Technical Change
 
-The Spend tab must only show data for campaigns that match the client's mapping keywords assigned to that account.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-**Change `loadSpend()` function**:
-```typescript
-async function loadSpend(range: ClientDateRange | null) {
-  // Step 1: Get mapping keywords for this ad account
-  const { data: mappings } = await supabase
-    .from("ad_account_clients")
-    .select("mapping_keyword")
-    .eq("ad_account_id", accountId)
-    .neq("mapping_keyword", "");
-  
-  const keywords = mappings?.map(m => m.mapping_keyword.toLowerCase()) ?? [];
-  
-  if (keywords.length === 0) {
-    setSpendData([]);  // No mappings = no data to show
-    return;
-  }
-
-  // Step 2: Get all spend, then filter client-side by keyword match
-  let query = supabase.from("daily_ad_spend")
-    .select("*")
-    .eq("ad_account_id", accountId)
-    .order("date", { ascending: false })
-    .limit(1000);
-
-  if (range) {
-    query = query.gte("date", format(range.from, "yyyy-MM-dd"))
-                 .lte("date", format(range.to, "yyyy-MM-dd"));
-  }
-
-  const { data } = await query;
-  
-  // Step 3: Client-side filter - only keep rows matching keywords
-  const filtered = (data ?? []).filter(row => {
-    const nameLower = (row.campaign_name || "").toLowerCase();
-    return keywords.some(kw => nameLower.includes(kw));
-  });
-
-  setSpendData(filtered);
-}
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-### 2. RunwayPrediction.tsx - Filter by Mapped Accounts
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-Update to only calculate runway from mapped accounts with keywords.
-
-### 3. SystemHealthWidget.tsx - Filter Today's Spend by Mapped Accounts
-
-Update to filter `daily_ad_spend` by mapped account IDs only.
-
-### 4. Optional: Database Cleanup
-
-After frontend is fixed, you may want to clean up legacy unmapped data from `daily_ad_spend` table. This requires a manual database query to delete records that don't match any keyword.
-
-## Files to Modify
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/pages/AdAccountDetail.tsx` | Filter `loadSpend()` by mapping keywords |
-| `src/components/RunwayPrediction.tsx` | Filter spend query by mapped account IDs |
-| `src/components/dashboard/SystemHealthWidget.tsx` | Filter today's spend by mapped accounts |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-## Result
-
-After implementation:
-- **AdAccountDetail Spend tab**: Only shows campaigns matching mapping keywords
-- **RunwayPrediction**: Only predicts runway for mapped client accounts
-- **SystemHealthWidget**: Only counts mapped spend in daily totals
-- **Unmapped/legacy data**: Hidden from all views (not deleted, just filtered out)
+No database or edge function changes needed.
