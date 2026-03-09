@@ -317,7 +317,7 @@ export default function AdminDashboard() {
         <KpiCard
           title="Payment Due"
           value={`$${totalDue.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle="USD"
+          subtitle={`৳${totalDueBdt.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
           icon={AlertCircle}
           loading={loading}
           accentColor="hsl(var(--destructive))"
