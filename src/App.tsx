@@ -34,7 +34,7 @@ import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import AdAccountDetail from "@/pages/AdAccountDetail";
-import ActivityLog from "@/pages/ActivityLog";
+
 
 import NotFound from "@/pages/NotFound";
 
@@ -68,7 +68,7 @@ const App = () => (
                 }
               >
                 <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/activity" element={<ActivityLog />} />
+                
                 <Route path="/admin/clients" element={<ClientList />} />
                 <Route path="/admin/clients/new" element={<NewClient />} />
                 <Route path="/admin/clients/:userId" element={<ClientDetail />} />
