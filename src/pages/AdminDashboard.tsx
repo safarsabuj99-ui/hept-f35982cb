@@ -229,7 +229,7 @@ export default function AdminDashboard() {
     }
   }, [lastSynced, toast]);
 
-  const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
+  const totalBalance = clients.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
 
   // Calculate platform-weighted BDT for Payment Due
