@@ -81,7 +81,7 @@ export default function ClientDetail() {
   const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
 
   // Spend date filter
-  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getUtcTodayClient(); return { from: t, to: t }; });
+  const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
   const [spendPage, setSpendPage] = useState(1);
   const [spendSize, setSpendSize] = useState(20);
