@@ -219,15 +219,23 @@ export default function AdAccountDetail() {
       mapping_keyword: newKeyword.trim(),
     }));
     const { error } = await (supabase.from("ad_account_clients" as any) as any).insert(rows);
-    setAssignSaving(false);
     if (error) {
+      setAssignSaving(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Assigned", description: `${rows.length} client(s) linked.` });
-      setSelectedClientIds([]);
-      setNewKeyword("");
-      loadAll();
+      return;
     }
+    
+    // Trigger sync for each assigned client to collect data for new mapping
+    toast({ title: "Syncing...", description: "Fetching data for new mapping(s)." });
+    for (const clientId of selectedClientIds) {
+      await supabase.functions.invoke("sync-fast-lane", { body: { client_id: clientId } });
+    }
+    
+    setAssignSaving(false);
+    toast({ title: "Assigned & Synced", description: `${rows.length} client(s) linked and data synced.` });
+    setSelectedClientIds([]);
+    setNewKeyword("");
+    loadAll();
   }
 
   async function removeAssignment(id: string) {
