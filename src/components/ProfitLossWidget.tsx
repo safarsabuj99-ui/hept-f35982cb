@@ -34,7 +34,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
       const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
 
       if (mappedAccountIds.length === 0) {
-        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 128 });
+        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 0 });
         setLoading(false);
         return;
       }
