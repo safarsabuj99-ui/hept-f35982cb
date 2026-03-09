@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
+import { getDhakaDateString } from "@/components/DateRangeFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -126,7 +127,7 @@ export default function ClientDashboard() {
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getDhakaDateString();
 
   // Fetch client name
   useEffect(() => {

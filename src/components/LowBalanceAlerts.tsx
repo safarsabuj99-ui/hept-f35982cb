@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getDhakaDateString } from "@/components/DateRangeFilter";
 
 interface AlertClient {
   user_id: string;
@@ -26,9 +27,7 @@ export function LowBalanceAlerts() {
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", clientIds);
       const { data: txns } = await supabase.from("transactions").select("client_id, type, amount, status, date");
 
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const sevenDaysStr = sevenDaysAgo.toISOString().split("T")[0];
+      const sevenDaysStr = getDhakaDateString(-7);
 
       const result: AlertClient[] = [];
       for (const p of profiles ?? []) {

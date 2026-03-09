@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Shield, AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { getDhakaDateString } from "@/components/DateRangeFilter";
 
 interface TokenHealth {
   id: string;
@@ -33,7 +34,7 @@ export function SystemHealthWidget() {
   }, []);
 
   const fetchHealth = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getDhakaDateString();
 
     // First get mapped accounts with keywords
     const { data: mappedAssignments } = await supabase

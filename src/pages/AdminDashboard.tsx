@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
@@ -53,8 +53,8 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const today = new Date().toISOString().split("T")[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = getDhakaDateString();
+  const yesterday = getDhakaDateString(-1);
 
   const handleDateChange = useCallback((range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -114,7 +114,7 @@ export default function AdminDashboard() {
     ]);
 
     // Fetch last 7 days spend for sparkline (from mapped campaigns only)
-    const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    const sevenAgo = getDhakaDateString(-7);
     let weekSpendQuery = supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
     if (campaignIds.length > 0) {
       weekSpendQuery = weekSpendQuery.in("campaign_id", campaignIds);
@@ -125,7 +125,7 @@ export default function AdminDashboard() {
       dailySpendMap[r.data_date] = (dailySpendMap[r.data_date] || 0) + Number(r.spend);
     }
     const spark = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      const d = getDhakaDateString(-(6 - i));
       return dailySpendMap[d] || 0;
     });
     setSpendHistory(spark);
@@ -187,7 +187,7 @@ export default function AdminDashboard() {
       }
     }
     setCollectHistory(Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().split("T")[0];
+      const d = getDhakaDateString(-(6 - i));
       return dailyCollMap[d] || 0;
     }));
 

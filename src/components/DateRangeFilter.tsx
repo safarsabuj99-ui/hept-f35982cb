@@ -137,3 +137,12 @@ export function getLocalToday(): Date {
   const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
   return new Date(dhakaStr + "T00:00:00");
 }
+
+/** Returns YYYY-MM-DD string in Asia/Dhaka timezone with optional day offset */
+export function getDhakaDateString(offsetDays: number = 0): string {
+  const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+  if (offsetDays === 0) return dhakaStr;
+  const d = new Date(dhakaStr + "T00:00:00");
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().split("T")[0];
+}
