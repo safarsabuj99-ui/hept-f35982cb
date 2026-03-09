@@ -157,6 +157,15 @@ export default function WalletInventory() {
                     <Input type="number" placeholder="e.g. 77" value={usdReceived} onChange={e => setUsdReceived(e.target.value)} />
                   </div>
                 </div>
+                <div>
+                  <Label>Platform Charge % <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input type="number" step="0.1" min="0" max="100" placeholder="e.g. 1.5" value={chargePercent} onChange={e => setChargePercent(e.target.value)} />
+                  {chargeNum > 0 && effectiveUsd > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Net USD: <span className="font-mono font-medium text-foreground">${effectiveUsd.toFixed(2)}</span> after {chargeNum}% charge
+                    </p>
+                  )}
+                </div>
                 <div className="rounded-lg bg-muted p-3 text-center">
                   <p className="text-xs text-muted-foreground">Calculated Rate</p>
                   <p className="text-2xl font-bold font-mono">{previewRate} <span className="text-sm font-normal text-muted-foreground">BDT/USD</span></p>
