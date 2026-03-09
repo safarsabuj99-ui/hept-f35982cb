@@ -1,34 +1,27 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Total Balance Widget — Only Positive Balances
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+Line 232 sums all client balances (positive and negative). The widget should only sum clients with positive balances.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Change
 
-## Technical Change
+**File: `src/pages/AdminDashboard.tsx`**
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
+**Line 232** — Change from:
+```ts
+const totalBalance = clients.reduce((s, c) => s + c.balance, 0);
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+To:
+```ts
+const totalBalance = clients.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0);
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+**Line 328** — Update the subtitle to show count of positive-balance clients instead of all clients:
+```ts
+subtitle={`${clients.filter(c => c.balance > 0).length} clients`}
+```
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+This ensures the Total Balance widget only sums and counts clients whose balance is positive, excluding any client with zero or negative balance.
 
-No database or edge function changes needed.
