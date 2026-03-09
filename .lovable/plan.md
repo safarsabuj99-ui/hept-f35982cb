@@ -1,68 +1,34 @@
 
 
-# Plan: Add WAC Cascading Fallback to All Profit Calculation Pages
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-Two additional files still use a simple WAC calculation (`totalUsd > 0 ? totalBdt / totalUsd : 128`) with no date-range fallback. When no USD purchases exist in the selected period, they fall back to a hardcoded `128` instead of trying current month → all-time like the already-fixed files.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Files That Need the Fix
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-1. **`src/components/dashboard/ProfitabilityTable.tsx`** (line 95-101) — Admin Dashboard profitability table
-2. **`src/components/ClientProfitTab.tsx`** (line 62-68) — Client Detail profit tab
+## Technical Change
 
-Both already have `dateRange` props available. The `ProfitLossWidget.tsx` and `FinanceDashboard.tsx` are already fixed.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-## Changes
-
-### Both files — Replace simple WAC with cascading fallback
-
-Replace the current pattern:
-```ts
-let totalBdt = 0, totalUsd = 0;
-for (const p of (purchasesRes.data ?? []) as any[]) {
-  totalBdt += Number(p.bdt_amount_paid);
-  totalUsd += Number(p.usd_received);
-}
-const wac = totalUsd > 0 ? totalBdt / totalUsd : 128;
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-With the cascading pattern (same as ProfitLossWidget):
-```ts
-const calcWac = (data: any[] | null) => {
-  let bdt = 0, usd = 0;
-  for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
-  return usd > 0 ? bdt / usd : 0;
-};
-
-// 1. Try date-range filtered
-let rangePurchases = purchasesRes.data;
-if (dateRange) {
-  const { data: filtered } = await supabase.from("usd_purchases")
-    .select("bdt_amount_paid, usd_received")
-    .gte("date", format(dateRange.from, "yyyy-MM-dd"))
-    .lte("date", format(dateRange.to, "yyyy-MM-dd"));
-  rangePurchases = filtered;
-}
-let wac = calcWac(rangePurchases);
-
-// 2. Fallback: current month
-if (wac === 0) {
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const { data: monthPurchases } = await supabase.from("usd_purchases")
-    .select("bdt_amount_paid, usd_received")
-    .gte("date", format(firstOfMonth, "yyyy-MM-dd"))
-    .lte("date", format(today, "yyyy-MM-dd"));
-  wac = calcWac(monthPurchases);
-}
-
-// 3. Fallback: all-time
-if (wac === 0) {
-  wac = calcWac(purchasesRes.data);
-}
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
 ```
 
-### Files Modified
-- `src/components/dashboard/ProfitabilityTable.tsx`
-- `src/components/ClientProfitTab.tsx`
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.
