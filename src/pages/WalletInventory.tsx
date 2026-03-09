@@ -87,16 +87,22 @@ export default function WalletInventory() {
   const totalBdtSpent = purchases.reduce((s, p) => s + Number(p.bdt_amount_paid), 0);
   const wac = calculateWAC();
 
+  const chargeNum = chargePercent ? Number(chargePercent) : 0;
+  const effectiveUsd = usdReceived && Number(usdReceived) > 0
+    ? Number(usdReceived) * (1 - chargeNum / 100)
+    : 0;
+
   const handleSubmit = async () => {
     if (!bdtPaid || !usdReceived || Number(usdReceived) <= 0) {
       toast({ title: "Error", description: "Please fill in valid amounts", variant: "destructive" });
       return;
     }
     setSubmitting(true);
+    const netUsd = chargeNum > 0 ? effectiveUsd : Number(usdReceived);
     const { error } = await supabase.from("usd_purchases").insert({
       date: purchaseDate,
       bdt_amount_paid: Number(bdtPaid),
-      usd_received: Number(usdReceived),
+      usd_received: netUsd,
       notes: notes || null,
       created_by: user?.id,
       paid_from_account_id: paidFromAccountId || null,
@@ -116,14 +122,14 @@ export default function WalletInventory() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "USD purchase recorded" });
-      setBdtPaid(""); setUsdReceived(""); setNotes(""); setPaidFromAccountId("");
+      setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
     }
   };
 
-  const previewRate = bdtPaid && usdReceived && Number(usdReceived) > 0
-    ? (Number(bdtPaid) / Number(usdReceived)).toFixed(2)
+  const previewRate = bdtPaid && effectiveUsd > 0
+    ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
     : "—";
 
   return (
