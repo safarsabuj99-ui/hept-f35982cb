@@ -173,6 +173,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Audit log: platform transfer
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: callerId,
+      action_type: "platform_transfer",
+      description: `Transfer $${usd} from ${from_platform} → ${to_platform} (→ $${destUsd}) for client ${client_id}`,
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
