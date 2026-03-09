@@ -73,7 +73,28 @@ export default function AdminDashboard() {
   }, [dateRange]);
 
   const fetchData = useCallback(async () => {
+    // Step 1: Get mapped accounts WITH keywords
+    const { data: mappedAssignments } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id, mapping_keyword")
+      .neq("mapping_keyword", "");
+
+    const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
+
+    // Get campaigns only from mapped accounts
+    let campaignIds: string[] = [];
+    if (mappedAccountIds.length > 0) {
+      const { data: mappedCampaigns } = await supabase
+        .from("campaigns")
+        .select("id")
+        .in("ad_account_id", mappedAccountIds);
+      campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
+    }
+
     let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id");
+    if (campaignIds.length > 0) {
+      spendQuery = spendQuery.in("campaign_id", campaignIds);
+    }
     if (dateRange) {
       spendQuery = spendQuery
         .gte("data_date", toISODate(dateRange.from))
