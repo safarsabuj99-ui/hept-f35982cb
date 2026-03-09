@@ -29,6 +29,7 @@ interface ClientWithBalance {
   business_name: string | null;
   balance: number;
   todaySpend: number;
+  pricing_config: any;
 }
 
 export default function AdminDashboard() {
