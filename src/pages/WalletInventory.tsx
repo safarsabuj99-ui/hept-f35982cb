@@ -33,6 +33,7 @@ export default function WalletInventory() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bdtPaid, setBdtPaid] = useState("");
   const [usdReceived, setUsdReceived] = useState("");
+  const [chargePercent, setChargePercent] = useState("");
   const [notes, setNotes] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(getDhakaDateString());
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
