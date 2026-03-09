@@ -163,11 +163,24 @@ export default function ClientDetail() {
   }
 
   async function loadSpendData(accountIds: string[], range: ClientDateRange | null) {
+    // Fetch ad account names
+    const { data: adAccountsData } = await supabase
+      .from("ad_accounts")
+      .select("id, account_name")
+      .in("id", accountIds);
+    const nameMap: Record<string, string> = {};
+    for (const acc of adAccountsData ?? []) {
+      nameMap[acc.id] = acc.account_name;
+    }
+    setSpendAdAccountMap(nameMap);
+
     // Get campaigns for these ad accounts
     const { data: campaignsData } = await supabase
       .from("campaigns")
-      .select("id, name, platform, ad_account_id")
+      .select("id, name, platform, status, ad_account_id")
       .in("ad_account_id", accountIds);
+
+    setSpendCampaigns(campaignsData ?? []);
 
     if (!campaignsData || campaignsData.length === 0) {
       setSpendData([]);
@@ -179,8 +192,7 @@ export default function ClientDetail() {
       .from("daily_metrics")
       .select("*")
       .in("campaign_id", campaignIds)
-      .order("data_date", { ascending: false })
-      .limit(500);
+      .order("data_date", { ascending: false });
 
     if (range) {
       metricsQuery = metricsQuery
@@ -193,12 +205,7 @@ export default function ClientDetail() {
     // Enrich with campaign info
     const enriched = (metricsData ?? []).map((m: any) => {
       const campaign = campaignsData.find((c: any) => c.id === m.campaign_id);
-      return {
-        ...m,
-        campaign_name: campaign?.name || "Unknown",
-        platform_name: campaign?.platform || "unknown",
-        date: m.data_date,
-      };
+      return { ...m, campaign };
     });
     setSpendData(enriched);
   }
