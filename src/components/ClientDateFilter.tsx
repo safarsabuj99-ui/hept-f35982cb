@@ -133,7 +133,8 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
   );
 }
 
-/** Helper to get UTC-based today as a local Date for consistent date filtering */
-export function getUtcTodayClient(): Date {
-  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+/** Helper to get today in Asia/Dhaka timezone for consistent date filtering */
+export function getLocalTodayClient(): Date {
+  const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+  return new Date(dhakaStr + "T00:00:00");
 }

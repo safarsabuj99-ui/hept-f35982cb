@@ -6,6 +6,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Get today's date string in Asia/Dhaka timezone */
+function getDhakaToday(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -25,21 +30,57 @@ Deno.serve(async (req) => {
       } catch { /* no body is fine for cron */ }
     }
 
-    // Get active ad accounts with integration tokens
+    // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
+    const { data: mappedAssignments } = await supabase
+      .from("ad_account_clients")
+      .select("ad_account_id, client_id, mapping_keyword")
+      .neq("mapping_keyword", "");
+
+    if (!mappedAssignments || mappedAssignments.length === 0) {
+      return new Response(
+        JSON.stringify({ message: "No mapped accounts with keywords to sync", synced: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const mappedAccountIds = [...new Set(mappedAssignments.map(r => r.ad_account_id))];
+
+    // Build a map: ad_account_id -> [{ client_id, keyword }]
+    const accountKeywordMap: Record<string, { client_id: string; keyword: string }[]> = {};
+    for (const ac of mappedAssignments) {
+      if (!accountKeywordMap[ac.ad_account_id]) accountKeywordMap[ac.ad_account_id] = [];
+      accountKeywordMap[ac.ad_account_id].push({
+        client_id: ac.client_id,
+        keyword: ac.mapping_keyword.trim().toLowerCase(),
+      });
+    }
+
+    // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountQuery = supabase
       .from("ad_accounts")
       .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .in("id", mappedAccountIds);
 
     if (targetClientId) {
-      accountQuery = accountQuery.eq("client_id", targetClientId);
+      // Filter to accounts mapped to this specific client
+      const clientMappedAccountIds = mappedAssignments
+        .filter(r => r.client_id === targetClientId)
+        .map(r => r.ad_account_id);
+      if (clientMappedAccountIds.length === 0) {
+        return new Response(
+          JSON.stringify({ message: "No mapped accounts for this client", synced: 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      accountQuery = accountQuery.in("id", clientMappedAccountIds);
     }
 
     const { data: accounts, error: accErr } = await accountQuery;
     if (accErr) throw accErr;
     if (!accounts || accounts.length === 0) {
       return new Response(
-        JSON.stringify({ message: "No active accounts to sync", synced: 0 }),
+        JSON.stringify({ message: "No active mapped accounts", synced: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -48,20 +89,11 @@ Deno.serve(async (req) => {
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
     const globalStartDate = dateSetting?.value || "2025-01-01";
-    const endDateStr = new Date().toISOString().split("T")[0];
+    // Use Asia/Dhaka timezone for "today"
+    const endDateStr = getDhakaToday();
 
-    // Load ad_account_clients junction + client profiles for per-client start dates
-    const { data: aacRows } = await supabase
-      .from("ad_account_clients")
-      .select("ad_account_id, client_id");
-
-    const accountClientMap: Record<string, string[]> = {};
-    for (const row of aacRows ?? []) {
-      if (!accountClientMap[row.ad_account_id]) accountClientMap[row.ad_account_id] = [];
-      accountClientMap[row.ad_account_id].push(row.client_id);
-    }
-
-    const allClientIds = [...new Set((aacRows ?? []).map(r => r.client_id))];
+    // Load client profiles for per-client start dates
+    const allClientIds = [...new Set(mappedAssignments.map(r => r.client_id))];
     const clientStartDates: Record<string, string | null> = {};
 
     if (allClientIds.length > 0) {
@@ -76,7 +108,7 @@ Deno.serve(async (req) => {
 
     // Helper: get per-account start date (earliest linked client date >= global)
     const getAccountStartDate = (accountId: string): string => {
-      const linkedClients = accountClientMap[accountId] || [];
+      const linkedClients = (accountKeywordMap[accountId] || []).map(k => k.client_id);
       const dates = linkedClients
         .map(cid => clientStartDates[cid])
         .filter((d): d is string => !!d && d >= globalStartDate);
@@ -93,12 +125,14 @@ Deno.serve(async (req) => {
     const exchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
     let syncedCount = 0;
+    let skipped = 0;
     const errors: string[] = [];
 
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
       const currency = account.account_currency || "USD";
       const platform = account.platform_name;
+      const accountAssignments = accountKeywordMap[account.id] ?? [];
 
       const startDateStr = getAccountStartDate(account.id);
 
@@ -128,6 +162,23 @@ Deno.serve(async (req) => {
             const spend = parseFloat(row.spend || "0");
             if (spend <= 0) continue;
 
+            const campaignName = row.campaign_name || "Meta Spend";
+            
+            // ===== KEYWORD MATCHING: Skip if no match =====
+            const nameLower = campaignName.toLowerCase();
+            let matchedClientId: string | null = null;
+            for (const { client_id, keyword } of accountAssignments) {
+              if (nameLower.includes(keyword)) { 
+                matchedClientId = client_id; 
+                break; 
+              }
+            }
+
+            if (!matchedClientId) {
+              skipped++;
+              continue;
+            }
+
             const isBDT = currency === "BDT";
             const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
             const finalUsd = isBDT ? Math.round((spend / accountRate) * 100) / 100 : spend;
@@ -135,7 +186,7 @@ Deno.serve(async (req) => {
             spendRecords.push({
               ad_account_id: account.id,
               date: row.date_start, // API's actual date
-              campaign_name: row.campaign_name || "Meta Spend",
+              campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
               exchange_rate_used: isBDT ? accountRate : 1,
@@ -191,10 +242,27 @@ Deno.serve(async (req) => {
             const spend = costMicros / 1_000_000;
             if (spend <= 0) continue;
 
+            const campaignName = row.campaign?.name || "Google Campaign";
+
+            // ===== KEYWORD MATCHING: Skip if no match =====
+            const nameLower = campaignName.toLowerCase();
+            let matchedClientId: string | null = null;
+            for (const { client_id, keyword } of accountAssignments) {
+              if (nameLower.includes(keyword)) { 
+                matchedClientId = client_id; 
+                break; 
+              }
+            }
+
+            if (!matchedClientId) {
+              skipped++;
+              continue;
+            }
+
             spendRecords.push({
               ad_account_id: account.id,
               date: row.segments?.date,
-              campaign_name: row.campaign?.name || "Google Campaign",
+              campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
               exchange_rate_used: 1,
@@ -223,9 +291,9 @@ Deno.serve(async (req) => {
           const params = new URLSearchParams({
             advertiser_id: account.ad_account_id,
             report_type: "BASIC",
-            data_level: "AUCTION_ADVERTISER",
-            dimensions: '["stat_time_day"]',
-            metrics: '["spend"]',
+            data_level: "AUCTION_CAMPAIGN",
+            dimensions: '["campaign_id","stat_time_day"]',
+            metrics: '["campaign_name","spend"]',
             start_date: startDateStr,
             end_date: endDateStr,
             page_size: "500",
@@ -255,11 +323,27 @@ Deno.serve(async (req) => {
             if (spend <= 0) continue;
 
             const date = (row.dimensions?.stat_time_day || "").split(" ")[0];
+            const campaignName = row.metrics?.campaign_name || "TikTok Spend";
+
+            // ===== KEYWORD MATCHING: Skip if no match =====
+            const nameLower = campaignName.toLowerCase();
+            let matchedClientId: string | null = null;
+            for (const { client_id, keyword } of accountAssignments) {
+              if (nameLower.includes(keyword)) { 
+                matchedClientId = client_id; 
+                break; 
+              }
+            }
+
+            if (!matchedClientId) {
+              skipped++;
+              continue;
+            }
 
             spendRecords.push({
               ad_account_id: account.id,
               date,
-              campaign_name: "TikTok Spend",
+              campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
               exchange_rate_used: 1,
@@ -300,6 +384,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         message: `Fast lane sync complete`,
         synced: syncedCount,
+        skipped_no_keyword_match: skipped,
         errors: errors.length > 0 ? errors : undefined,
         date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
