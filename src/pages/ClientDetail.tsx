@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
-import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getUtcTodayClient } from "@/components/ClientDateFilter";
+import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
 import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
