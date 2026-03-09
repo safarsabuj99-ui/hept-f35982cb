@@ -278,14 +278,18 @@ export default function ClientList() {
                         <TableCell className="text-right">
                           {(() => {
                             const bal = balances[c.user_id] ?? 0;
-                            const isPositive = bal > 0;
+                            const isPositive = bal >= 0;
+                            if (isPositive) {
+                              return (
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20">
+                                  ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              );
+                            }
+                            const bdtAmt = bdtBalances[c.user_id] ?? Math.abs(bal) * 120;
                             return (
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono ${
-                                isPositive
-                                  ? "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20"
-                                  : "bg-destructive/10 text-destructive dark:bg-destructive/20"
-                              }`}>
-                                ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-destructive/10 text-destructive dark:bg-destructive/20">
+                                -৳{bdtAmt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             );
                           })()}
