@@ -7,7 +7,6 @@ import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
   UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone,
-  ChevronRight, Activity,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -17,22 +16,15 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuBadge,
   SidebarProvider,
   SidebarTrigger,
   SidebarFooter,
   SidebarHeader,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 interface NavItem {
   to: string;
@@ -44,21 +36,17 @@ interface NavItem {
 interface NavSection {
   title: string;
   items: NavItem[];
-  defaultOpen?: boolean;
 }
 
 const allSections: NavSection[] = [
   {
-    title: "Overview",
-    defaultOpen: true,
+    title: "",
     items: [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
-      { to: "/admin/activity", icon: Activity, label: "Activity" },
     ],
   },
   {
     title: "Clients",
-    defaultOpen: true,
     items: [
       { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
       { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
@@ -117,98 +105,101 @@ function AdminSidebarContent() {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      {/* Header / Logo */}
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl breathing-glow"
-            style={{ background: "linear-gradient(135deg, hsl(var(--sidebar-primary)), hsl(260 60% 50%))" }}>
-            <BarChart3 className="h-5 w-5 text-white" />
+    <Sidebar collapsible="icon" className="border-r-0 sidebar-premium">
+      {/* Premium Header */}
+      <SidebarHeader className="sidebar-header-premium">
+        <div className="flex h-16 items-center gap-3 px-4">
+          <div className="sidebar-logo-orb">
+            <BarChart3 className="h-5 w-5 text-white relative z-10" />
           </div>
           {!collapsed && (
-            <span className="text-lg font-bold tracking-tight text-sidebar-primary-foreground animate-slide-up-fade">
-              AdSpend
-            </span>
+            <div className="flex items-center gap-2 animate-slide-up-fade">
+              <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+                AdSpend
+              </span>
+              <span className="sidebar-version-tag">v2.0</span>
+            </div>
           )}
         </div>
       </SidebarHeader>
 
       {/* Navigation */}
-      <SidebarContent className="px-2 py-3">
-        {filteredSections.map((section) => {
-          const sectionHasActive = section.items.some((item) => isActive(item.to));
-          return (
-            <Collapsible key={section.title} defaultOpen={section.defaultOpen || sectionHasActive} className="group/collapsible">
-              <SidebarGroup>
-                <CollapsibleTrigger asChild>
-                  <SidebarGroupLabel className="cursor-pointer text-[10px] uppercase tracking-[0.15em] text-sidebar-foreground/40 hover:text-sidebar-foreground/60 transition-colors flex items-center justify-between pr-2">
-                    {!collapsed && section.title}
-                    {!collapsed && (
-                      <ChevronRight className="h-3 w-3 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                    )}
-                  </SidebarGroupLabel>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      {section.items.map((item) => {
-                        const active = isActive(item.to);
-                        const badge = badgeCounts[item.to] || 0;
-                        return (
-                          <SidebarMenuItem key={item.to}>
-                            <SidebarMenuButton
-                              asChild
-                              isActive={active}
-                              tooltip={item.label}
-                            >
-                              <NavLink
-                                to={item.to}
-                                end
-                                className={cn(
-                                  "group/nav relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                                  active
-                                    ? "nav-active-indicator bg-sidebar-accent text-sidebar-primary"
-                                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground hover:translate-x-0.5 hover:scale-[1.02]"
-                                )}
-                                activeClassName=""
-                              >
-                                <item.icon className={cn(
-                                  "h-4 w-4 shrink-0 transition-all duration-200",
-                                  active && "text-sidebar-primary"
-                                )} />
-                                {!collapsed && <span>{item.label}</span>}
-                              </NavLink>
-                            </SidebarMenuButton>
-                            {badge > 0 && (
-                              <SidebarMenuBadge className="animate-scale-bounce bg-destructive text-destructive-foreground text-[10px] font-bold">
-                                {badge}
-                              </SidebarMenuBadge>
-                            )}
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </CollapsibleContent>
-              </SidebarGroup>
-            </Collapsible>
-          );
-        })}
+      <SidebarContent className="px-3 py-4 space-y-1">
+        {filteredSections.map((section, sIdx) => (
+          <SidebarGroup key={section.title || "top"} className="p-0">
+            {/* Section divider label */}
+            {section.title && !collapsed && (
+              <div className="sidebar-section-divider">
+                <span className="sidebar-section-label">{section.title}</span>
+                <div className="sidebar-section-line" />
+              </div>
+            )}
+            {section.title && collapsed && (
+              <div className="my-2 mx-2 h-px bg-gradient-to-r from-transparent via-sidebar-border to-transparent" />
+            )}
+
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">
+                {section.items.map((item, iIdx) => {
+                  const active = isActive(item.to);
+                  const badge = badgeCounts[item.to] || 0;
+                  return (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                        <NavLink
+                          to={item.to}
+                          end
+                          className={cn(
+                            "group/nav relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300",
+                            active
+                              ? "sidebar-nav-active"
+                              : "text-sidebar-foreground/60 hover:text-sidebar-foreground sidebar-nav-hover"
+                          )}
+                          activeClassName=""
+                        >
+                          {/* Icon with bubble effect for active */}
+                          <div className={cn(
+                            "relative flex items-center justify-center shrink-0 transition-all duration-300",
+                            active ? "sidebar-icon-bubble" : ""
+                          )}>
+                            <item.icon className={cn(
+                              "h-4 w-4 relative z-10 transition-all duration-300",
+                              active ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/50 group-hover/nav:text-sidebar-foreground/80"
+                            )} />
+                          </div>
+                          {!collapsed && (
+                            <span className="truncate">{item.label}</span>
+                          )}
+                          {/* Glassmorphic badge */}
+                          {badge > 0 && !collapsed && (
+                            <span className="sidebar-badge-glass ml-auto">
+                              {badge}
+                            </span>
+                          )}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
-      {/* Footer */}
-      <SidebarFooter className="border-t border-sidebar-border p-3">
-        <div className="flex items-center justify-between gap-2">
+      {/* Premium Footer */}
+      <SidebarFooter className="sidebar-footer-premium">
+        <div className="flex items-center justify-between gap-2 px-3 py-3">
+          <ThemeToggle />
           <Button
             variant="ghost"
-            size="sm"
-            className="flex-1 justify-start gap-2 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground press-effect text-xs"
+            size="icon"
+            className="h-8 w-8 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-all duration-200"
             onClick={signOut}
+            title="Sign Out"
           >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Sign Out</span>}
+            <LogOut className="h-4 w-4" />
           </Button>
-          {!collapsed && <ThemeToggle />}
         </div>
       </SidebarFooter>
     </Sidebar>
@@ -222,7 +213,6 @@ export function AdminLayout() {
         <AdminSidebarContent />
 
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Mobile + desktop trigger header */}
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/80 backdrop-blur-xl px-4 lg:px-6">
             <SidebarTrigger className="press-effect" />
             <div className="flex items-center gap-2 lg:hidden">
