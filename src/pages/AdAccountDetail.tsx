@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
