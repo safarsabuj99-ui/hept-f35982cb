@@ -119,6 +119,7 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
+  const [pricingConfig, setPricingConfig] = useState<any>(null);
 
   // Deposit modal state
   const [depositOpen, setDepositOpen] = useState(false);
@@ -132,8 +133,11 @@ export default function ClientDashboard() {
   // Fetch client name
   useEffect(() => {
     if (!effectiveClientId) return;
-    supabase.from("profiles").select("full_name").eq("user_id", effectiveClientId).single()
-      .then(({ data }) => { if (data?.full_name) setClientName(data.full_name); });
+    supabase.from("profiles").select("full_name, pricing_config").eq("user_id", effectiveClientId).single()
+      .then(({ data }) => {
+        if (data?.full_name) setClientName(data.full_name);
+        if (data?.pricing_config) setPricingConfig(data.pricing_config as any);
+      });
   }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
@@ -198,6 +202,19 @@ export default function ClientDashboard() {
     });
   }, [transactions]);
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtBdt = (n: number) => `৳${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const getPlatformRate = (platform: string) => pricingConfig?.flat_rates?.[platform] || pricingConfig?.platform_rates?.[platform] || 120;
+
+  // Total negative BDT: sum each negative platform balance × its rate
+  const totalNegativeBdt = useMemo(() => {
+    if (balance >= 0) return 0;
+    return platformBalances.reduce((sum, pb) => {
+      if (pb.balance < 0) {
+        return sum + Math.abs(pb.balance) * getPlatformRate(pb.platform);
+      }
+      return sum;
+    }, 0);
+  }, [platformBalances, balance, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
@@ -341,20 +358,29 @@ export default function ClientDashboard() {
               </div>
             </div>
             <p className="text-4xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
+            {balance < 0 && totalNegativeBdt > 0 && (
+              <p className="text-lg font-bold font-mono text-red-300 mt-1">-{fmtBdt(totalNegativeBdt)}</p>
+            )}
             <WalletHealthBar balance={balance} avgDailySpend={avgDailySpend} />
           </div>
 
           {/* Platform Sub-Balances */}
           <div className="sm:col-span-2 grid grid-cols-3 gap-3">
-            {platformBalances.map((pb) => (
-              <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
-                <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
-                <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
-                  {fmt(pb.balance)}
-                </p>
-              </div>
-            ))}
+            {platformBalances.map((pb) => {
+              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
+              return (
+                <div key={pb.platform} className="glass-card glow-border p-4 flex flex-col items-center text-center">
+                  <span className="h-2.5 w-2.5 rounded-full mb-2" style={{ background: pb.color }} />
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{pb.label}</p>
+                  <p className={cn("text-lg md:text-xl font-bold font-mono mt-1", pb.balance < 0 ? "text-destructive" : "")}>
+                    {fmt(pb.balance)}
+                  </p>
+                  {pb.balance < 0 && (
+                    <p className="text-xs font-bold font-mono text-destructive mt-0.5">-{fmtBdt(bdtAmount)}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Spend Card */}
