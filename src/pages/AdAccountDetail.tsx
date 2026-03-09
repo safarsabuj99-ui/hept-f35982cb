@@ -321,37 +321,6 @@ export default function AdAccountDetail() {
     return Object.values(map);
   }, [spendRawMetrics, spendCampaigns]);
 
-  const spendTotals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
-    for (const r of spendCampaignRows) {
-      t.spend += r.spend;
-      t.impressions += r.impressions;
-      t.clicks += r.clicks;
-      t.results += r.results;
-      t.convValue += r.conversion_value;
-    }
-    return t;
-  }, [spendCampaignRows]);
-
-  const spendAvgRoas = spendTotals.convValue > 0 && spendTotals.spend > 0 ? spendTotals.convValue / spendTotals.spend : 0;
-  const spendAvgCpo = spendTotals.results > 0 ? spendTotals.spend / spendTotals.results : 0;
-
-  const spendPlatformStats = useMemo(() => {
-    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
-    for (const r of spendCampaignRows) {
-      if (!map[r.platform]) map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
-      map[r.platform].totalSpend += r.spend;
-      map[r.platform].totalResults += r.results;
-      map[r.platform].totalConversionValue += r.conversion_value;
-    }
-    return Object.values(map);
-  }, [spendCampaignRows]);
-
-  const spendActiveCampaigns = spendCampaignRows.filter(r => r.status === "active").length;
-  const spendMetaRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "meta"), [spendCampaignRows]);
-  const spendTiktokRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "tiktok"), [spendCampaignRows]);
-  const spendGoogleRows = useMemo(() => spendCampaignRows.filter(r => r.platform === "google"), [spendCampaignRows]);
-
   const assignedClientIds = new Set(assignments.map((a: any) => a.client_id));
   const availableClients = clients.filter((c) => !assignedClientIds.has(c.user_id));
 
