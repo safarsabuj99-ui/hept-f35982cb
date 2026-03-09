@@ -1,34 +1,32 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: Show Balance in BDT When Negative on Client List
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What Changes
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+The Balance column in the Client List currently always shows USD. The new behavior:
+- **Positive balance** → show USD as-is (e.g., `$500.00`)
+- **Negative balance** → show BDT equivalent (e.g., `-৳72,000.00`), calculated using per-platform rates from the client's `pricing_config.flat_rates`
 
-## Technical Change
+## How It Works
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+To convert a negative total balance to BDT accurately, we need per-platform negative balances (same approach as client dashboard). Each platform's negative portion gets multiplied by its respective flat rate.
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+## Changes to `src/pages/ClientList.tsx`
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+### 1. Update transactions query (line 60)
+Add `platform` to the transaction select:
+```ts
+supabase.from("transactions").select("client_id, type, amount, platform").eq("status", "completed")
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### 2. Compute per-platform balances alongside total balance (lines 122-128)
+In addition to the total `balMap`, build a `platformBalMap: Record<string, Record<string, number>>` that tracks per-platform balance for each client.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### 3. Add BDT negative balance calculation
+New state or computed value: `bdtBalances: Record<string, number>`. For each client with a negative total balance, sum each negative platform sub-balance multiplied by the client's `pricing_config.flat_rates[platform]` (fallback 120).
 
-No database or edge function changes needed.
+### 4. Update Balance cell rendering (lines 254-267)
+- If `bal >= 0`: show `$bal` in green (current behavior)
+- If `bal < 0`: show `-৳bdtAmount` in red, using the computed weighted BDT amount
+
