@@ -202,6 +202,19 @@ export default function ClientDashboard() {
     });
   }, [transactions]);
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtBdt = (n: number) => `৳${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const getPlatformRate = (platform: string) => pricingConfig?.flat_rates?.[platform] || pricingConfig?.platform_rates?.[platform] || 120;
+
+  // Total negative BDT: sum each negative platform balance × its rate
+  const totalNegativeBdt = useMemo(() => {
+    if (balance >= 0) return 0;
+    return platformBalances.reduce((sum, pb) => {
+      if (pb.balance < 0) {
+        return sum + Math.abs(pb.balance) * getPlatformRate(pb.platform);
+      }
+      return sum;
+    }, 0);
+  }, [platformBalances, balance, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
