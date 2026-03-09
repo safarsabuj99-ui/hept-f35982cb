@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const [activeAccounts, setActiveAccounts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [depositOpen, setDepositOpen] = useState(false);
   const [spendHistory, setSpendHistory] = useState<number[]>([]);
   const [collectHistory, setCollectHistory] = useState<number[]>([]);
