@@ -29,9 +29,10 @@ const presets: { label: string; value: DatePreset }[] = [
   { label: "Custom", value: "custom" },
 ];
 
-/** Returns a Date parsed from today's UTC date string so local formatting matches DB dates */
-function utcToday(): Date {
-  return new Date(new Date().toISOString().split("T")[0] + "T00:00:00");
+/** Returns a Date parsed from today's date in Asia/Dhaka timezone */
+function localToday(): Date {
+  const dhakaStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
+  return new Date(dhakaStr + "T00:00:00");
 }
 
 function getPresetRange(preset: DatePreset): DateRange | null {
