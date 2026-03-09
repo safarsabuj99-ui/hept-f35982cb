@@ -39,8 +39,7 @@ export default function ClientList() {
   const [bdtBalances, setBdtBalances] = useState<Record<string, number>>({});
   const location = useLocation();
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -158,9 +157,9 @@ export default function ClientList() {
       setBdtBalances(bdtMap);
 
       setLoading(false);
-    }
-    load();
-  }, [location.key]);
+  }, []);
+
+  useEffect(() => { load(); }, [location.key, load]);
 
   // Realtime subscription
   useEffect(() => {
@@ -171,14 +170,7 @@ export default function ClientList() {
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-
-    function load() {
-      // Re-trigger the load by navigating to the same page (triggers location.key change)
-      // Instead, just inline fetch
-      const event = new Event("client-list-refresh");
-      window.dispatchEvent(event);
-    }
-  }, []);
+  }, [load]);
 
   const getPricingLabel = (config: any) => {
     const pr = config?.flat_rates || config?.platform_rates;
