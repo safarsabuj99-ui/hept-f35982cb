@@ -1,34 +1,77 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Plan: API Data Collection Flow + Junction Data Refresh
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Current State Summary
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+After reviewing the codebase, I found:
 
-## Technical Change
+1. **Edge Functions (API Collection)** - Already correctly implementing mapping-first logic:
+   - `sync-ad-spend`, `sync-fast-lane`, `sync-deep-dive` all query `ad_account_clients` WHERE `mapping_keyword != ''`
+   - Campaign-level filtering matches campaign names against keywords before storing
+   - Skipped campaigns are counted and logged
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+2. **Frontend Display Pages** - Most are already filtering correctly:
+   - `CampaignMapping.tsx` ✅ - Filters by mapped accounts
+   - `AdminDashboard.tsx` ✅ - Filters by mapped accounts  
+   - `AdAccountDetail.tsx` ✅ - Filters spend by keywords (recently fixed)
+   - `ClientDashboard.tsx` ✅ - Filters by client's assigned accounts
 
-Current code:
+3. **Junction Table Updates** - When `ad_account_clients` is modified (new client assignment or keyword change), there's **no automatic refresh trigger** to:
+   - Re-sync data with new keywords
+   - Clear/update existing data for changed mappings
+
+---
+
+## Identified Gap: Junction Data Change → Resync
+
+When a user adds/updates a client assignment with a new `mapping_keyword` in `ad_account_clients`:
+
+| Current Behavior | Expected Behavior |
+|-----------------|-------------------|
+| Junction row saved | Junction row saved |
+| No sync triggered | **Trigger sync for affected account(s)** |
+| New data not collected until next scheduled sync | New data collected immediately |
+
+---
+
+## Implementation Plan
+
+### 1. Add "Refresh Data" Action After Junction Updates
+
+**Files to Modify:**
+- `src/pages/AdAccountDetail.tsx` - Add sync after client assignment save
+- `src/pages/ClientDetail.tsx` - Add sync after ad account assignment save
+
+**Logic:**
+```typescript
+// After successful ad_account_clients insert/update:
+await supabase.functions.invoke("sync-fast-lane", {
+  body: { client_id: clientId }
+});
+toast({ title: "Syncing...", description: "Fetching new mapped data" });
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### 2. Add Global "Resync All Mappings" Button (Optional Enhancement)
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+In Admin Dashboard or Settings, add a button to force full resync when mappings change.
+
+### 3. Ensure UI Reloads After Sync
+
+After sync completes, call `fetchData()` to refresh displayed data.
+
+---
+
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/AdAccountDetail.tsx` | Trigger `sync-fast-lane` after adding/updating client assignment |
+| `src/pages/ClientDetail.tsx` | Trigger `sync-fast-lane` after assigning ad account to client |
 
-No database or edge function changes needed.
+---
+
+## Summary
+
+The edge functions are correctly filtering by mapping keywords. The missing piece is **triggering a resync when junction data changes** so new mappings immediately start collecting data.
+
