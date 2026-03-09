@@ -271,28 +271,6 @@ export default function ClientDashboard() {
 
   const activeAccounts = adAccounts.filter((a: any) => a.is_active).length;
 
-  const handleSyncNow = useCallback(async () => {
-    if (lastSynced) {
-      const lastSyncTime = new Date(lastSynced).getTime();
-      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-      if (lastSyncTime > fiveMinAgo) {
-        const minutesLeft = Math.ceil((lastSyncTime - fiveMinAgo) / 60000);
-        toast({ title: "Data is up to date", description: `Please wait ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""} before syncing again.` });
-        return;
-      }
-    }
-    setIsSyncing(true);
-    toast({ title: "Syncing...", description: "Fetching latest data." });
-    try {
-      const res = await supabase.functions.invoke("sync-fast-lane", { body: { client_id: effectiveClientId } });
-      if (res.error) throw res.error;
-      toast({ title: "Sync complete", description: "Your data has been refreshed." });
-    } catch (err: any) {
-      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [lastSynced, toast, user]);
 
   if (loading) return <ShimmerLoader />;
 
