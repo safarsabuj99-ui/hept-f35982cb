@@ -70,6 +70,10 @@ export default function AdminDashboard() {
       .channel("admin-dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [dateRange]);

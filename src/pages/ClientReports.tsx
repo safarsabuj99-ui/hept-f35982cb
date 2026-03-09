@@ -96,6 +96,16 @@ export default function ClientReports() {
     fetchData();
   }, [fetchData]);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("client-reports-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_performance" }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
   const handleRangeChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
     setPreset(p);

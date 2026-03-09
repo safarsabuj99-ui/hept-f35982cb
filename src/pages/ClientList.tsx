@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,8 +39,7 @@ export default function ClientList() {
   const [bdtBalances, setBdtBalances] = useState<Record<string, number>>({});
   const location = useLocation();
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -158,11 +157,20 @@ export default function ClientList() {
       setBdtBalances(bdtMap);
 
       setLoading(false);
-    }
-    load();
-  }, [location.key]);
+  }, []);
 
-  useEffect(() => { setCurrentPage(1); }, [search]);
+  useEffect(() => { load(); }, [location.key, load]);
+
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("client-list-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
 
   const getPricingLabel = (config: any) => {
     const pr = config?.flat_rates || config?.platform_rates;

@@ -1,0 +1,11 @@
+ALTER PUBLICATION supabase_realtime ADD TABLE public.usd_purchases;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.agency_expenses;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.agency_accounts;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.fund_transfers;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.ad_accounts;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_logs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.api_integrations;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_metrics;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.campaigns;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.ad_account_clients;

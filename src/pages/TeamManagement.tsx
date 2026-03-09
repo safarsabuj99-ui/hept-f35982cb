@@ -71,6 +71,15 @@ export default function TeamManagement() {
 
   useEffect(() => { fetchManagers(); }, []);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("team-management-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchManagers())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const openEdit = (m: ManagerRow) => {
     setEditManager(m);
     setEditPerms(m.permissions);

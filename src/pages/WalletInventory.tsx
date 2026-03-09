@@ -61,6 +61,15 @@ export default function WalletInventory() {
     supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
   }, []);
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("wallet-inventory-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchPurchases, dateRange]);
+
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
     const labels: Record<DatePreset, string> = {
