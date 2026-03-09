@@ -72,8 +72,6 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
   const activePreset = controlledPreset ?? internalPreset;
   const [customRange, setCustomRange] = useState<RDPDateRange | undefined>();
 
-  // Parent initializes with today's range, no mount-time call needed
-
   const handlePreset = (preset: ClientDatePreset) => {
     setInternalPreset(preset);
     if (preset !== "custom") {
@@ -91,13 +89,13 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory flex-nowrap pb-1 -mx-1 px-1">
       {presets.filter(p => p.value !== "custom").map(p => (
         <Button
           key={p.value}
           variant={activePreset === p.value ? "default" : "outline"}
           size="sm"
-          className="h-8 text-xs"
+          className="h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start"
           onClick={() => handlePreset(p.value)}
         >
           {p.label}
@@ -109,7 +107,7 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
           <Button
             variant={activePreset === "custom" ? "default" : "outline"}
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start"
             onClick={() => setInternalPreset("custom")}
           >
             <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />

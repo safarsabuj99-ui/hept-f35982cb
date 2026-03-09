@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { TablePagination } from "@/components/TablePagination";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +39,7 @@ export interface CampaignRow {
   results: number;
   conversion_value: number;
   ad_account_name?: string;
-  campaign_id?: string; // DB UUID for actions
+  campaign_id?: string;
 }
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
@@ -75,13 +76,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [bulkPausing, setBulkPausing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
-  // Reset page & selection when filters change
   useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [searchQuery, statusFilter]);
 
   const uniqueStatuses = useMemo(() => {
@@ -106,7 +105,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     return filtered;
   }, [data, searchQuery, statusFilter]);
 
-  // Selectable rows = active campaigns with campaign_id on current page
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
@@ -255,7 +253,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         const yellowStatuses = ["in process", "pending review"];
         const dimStatuses = ["archived", "deleted"];
 
-        let dotClass = "bg-muted-foreground/40"; // default gray for paused
+        let dotClass = "bg-muted-foreground/40";
         if (status === "active") dotClass = "bg-green-500";
         else if (redStatuses.includes(status)) dotClass = "bg-red-500";
         else if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
@@ -356,20 +354,115 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const totalCpm = safeDivide(totals.spend, totals.impressions) * 1000;
   const totalCpo = safeDivide(totals.spend, totals.results);
 
+  // Mobile campaign card component
+  const MobileCampaignCard = ({ row }: { row: CampaignRow }) => {
+    const roas = safeDivide(row.conversion_value, row.spend);
+    const cpo = safeDivide(row.spend, row.results);
+    const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
+    const isSelectable = row.campaign_id && row.status === "active";
+    const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
+    const isPausing = pausingId === row.campaign_id;
+
+    const redStatuses = ["not delivering", "disapproved", "with issues"];
+    const yellowStatuses = ["in process", "pending review"];
+    let dotClass = "bg-muted-foreground/40";
+    if (row.status === "active") dotClass = "bg-green-500";
+    else if (redStatuses.includes(row.status)) dotClass = "bg-red-500";
+    else if (yellowStatuses.includes(row.status)) dotClass = "bg-yellow-500";
+
+    let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+    if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+    else if (roas < 1.5) roasClass = "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+
+    return (
+      <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
+        {/* Top row: checkbox + name + platform */}
+        <div className="flex items-start gap-2.5">
+          {isSelectable ? (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => toggleSelect(row.campaign_id!)}
+              className="mt-0.5 shrink-0"
+            />
+          ) : (
+            <div className="w-4 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium truncate">{row.campaign_name}</span>
+              <Badge variant="outline" className={`text-[10px] font-semibold shrink-0 ${pb.className}`}>{pb.label}</Badge>
+            </div>
+            {row.ad_account_name && (
+              <p className="text-[10px] text-muted-foreground truncate mt-0.5">{row.ad_account_name}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Status row */}
+        <div className="flex items-center justify-between mt-2.5 mb-2">
+          <div className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+            <span className="text-xs text-muted-foreground capitalize">{row.status}</span>
+          </div>
+          {row.status === "active" && row.campaign_id && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
+              disabled={isPausing}
+              onClick={() => setConfirmPause(row)}
+            >
+              {isPausing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Power className="h-3 w-3" />}
+              Pause
+            </Button>
+          )}
+        </div>
+
+        {/* Metrics grid */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 border-t border-border/50">
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Spend</span>
+            <span className="font-mono text-xs font-medium">{fmt(row.spend)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Results</span>
+            <span className="font-mono text-xs font-medium">{row.results.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">CPR</span>
+            <span className="font-mono text-xs">{fmt(cpo)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">ROAS</span>
+            <Badge variant="outline" className={`text-[10px] font-mono h-5 ${roasClass}`}>{roas.toFixed(2)}x</Badge>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
+            <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
+            <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative max-w-sm flex-1">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search campaigns, platforms..."
+            placeholder="Search campaigns..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-sm"
+            className="pl-9 h-10 sm:h-9 text-sm"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px] h-9 text-sm">
+          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
             <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -385,7 +478,17 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       </div>
 
       <div className="relative">
-        <div className="overflow-x-auto rounded-lg border">
+        {/* Mobile card view */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {paginatedData.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">No campaign data available</div>
+          ) : (
+            paginatedData.map((row, i) => <MobileCampaignCard key={`${row.campaign_name}-${i}`} row={row} />)
+          )}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden md:block overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
@@ -439,7 +542,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                   })}
                   {filteredData.length > 1 && (
                     <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell /> {/* checkbox column */}
+                      <TableCell />
                       <TableCell className="text-sm">Totals</TableCell>
                       <TableCell />
                       <TableCell />
@@ -463,7 +566,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
 
         {/* Floating bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="sticky bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
             </span>

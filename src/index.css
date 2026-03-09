@@ -459,6 +459,49 @@
   .stagger-6 { animation-delay: var(--stagger-6); }
   .stagger-7 { animation-delay: var(--stagger-7); }
   .stagger-8 { animation-delay: var(--stagger-8); }
+
+  /* === Mobile Utility Classes === */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bottom-tab-bar {
+    background: hsl(var(--card) / 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .mobile-card {
+    @apply rounded-xl border border-border/50 p-4;
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .bottom-tab-item {
+    @apply flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl transition-all duration-200;
+  }
+
+  .bottom-tab-item:active {
+    transform: scale(0.92);
+  }
+
+  .bottom-tab-active {
+    color: hsl(var(--primary));
+  }
+
+  .bottom-tab-active::after {
+    content: '';
+    @apply block h-1 w-1 rounded-full mt-0.5;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 6px 1px hsl(var(--primary) / 0.5);
+  }
 }
 
 /* === Keyframes === */
