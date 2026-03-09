@@ -325,7 +325,7 @@ export default function AdminDashboard() {
         <KpiCard
           title="Total Balance"
           value={`$${totalBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
-          subtitle={`${clients.length} clients`}
+          subtitle={`${clients.filter(c => c.balance > 0).length} clients`}
           icon={Wallet}
           loading={loading}
           accentColor="hsl(var(--chart-meta))"
