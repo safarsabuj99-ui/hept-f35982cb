@@ -123,13 +123,16 @@ export default function ClientList() {
       // Compute balances (total + per-platform)
       const balMap: Record<string, number> = {};
       const platformBalMap: Record<string, Record<string, number>> = {};
+      const knownPlatforms = ["meta", "tiktok", "google"];
       for (const t of (txnsRes.data ?? []) as any[]) {
         const amt = Number(t.amount) || 0;
         const delta = t.type === "credit" ? amt : -amt;
         balMap[t.client_id] = (balMap[t.client_id] || 0) + delta;
-        const plat = t.platform || "unknown";
-        if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
-        platformBalMap[t.client_id][plat] = (platformBalMap[t.client_id][plat] || 0) + delta;
+        // Only track known platforms (matching Client Dashboard logic)
+        if (t.platform && knownPlatforms.includes(t.platform)) {
+          if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
+          platformBalMap[t.client_id][t.platform] = (platformBalMap[t.client_id][t.platform] || 0) + delta;
+        }
       }
       setBalances(balMap);
 
