@@ -149,43 +149,6 @@ export default function ClientReports() {
     return Object.values(map);
   }, [rawMetrics, adAccountMap, campaigns]);
 
-  // Totals
-  const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
-    for (const r of campaignRows) {
-      t.spend += r.spend;
-      t.impressions += r.impressions;
-      t.clicks += r.clicks;
-      t.results += r.results;
-      t.convValue += r.conversion_value;
-    }
-    return t;
-  }, [campaignRows]);
-
-  const avgRoas = safeDivide(totals.convValue, totals.spend);
-  const avgCpo = safeDivide(totals.spend, totals.results);
-
-  // Platform stats for comparison
-  const platformStats = useMemo(() => {
-    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
-    for (const r of campaignRows) {
-      if (!map[r.platform]) {
-        map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
-      }
-      map[r.platform].totalSpend += r.spend;
-      map[r.platform].totalResults += r.results;
-      map[r.platform].totalConversionValue += r.conversion_value;
-    }
-    return Object.values(map);
-  }, [campaignRows]);
-
-  // Active campaigns count
-  const activeCampaigns = campaignRows.filter(r => r.status === "active").length;
-
-  // Platform-filtered rows
-  const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
-  const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
-  const googleRows = useMemo(() => campaignRows.filter(r => r.platform === "google"), [campaignRows]);
 
   if (loading) {
     return (
