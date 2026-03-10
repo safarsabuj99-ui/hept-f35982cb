@@ -300,6 +300,15 @@ export default function Integrations() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label className="text-xs">App Secret</Label>
+                      <Input
+                        type="password"
+                        value={tiktokAppSecret}
+                        onChange={(e) => setTiktokAppSecret(e.target.value)}
+                        placeholder="From Developer Portal → Basic Information"
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label className="text-xs">Auth Code</Label>
                       <Input
                         value={tiktokAuthCode}
