@@ -493,7 +493,7 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
             const statusRes = await fetch(
-              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
+              `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
               { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
             );
             const statusJson = await statusRes.json();
