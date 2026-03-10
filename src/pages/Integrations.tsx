@@ -89,6 +89,10 @@ export default function Integrations() {
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string; details?: string }>>({});
   const [newForm, setNewForm] = useState({ platform: "meta", instance_name: "", api_token: "", app_id: "", token_expiry_date: "" });
   const [saving, setSaving] = useState(false);
+  const [tiktokAuthCode, setTiktokAuthCode] = useState("");
+  const [tiktokAppId, setTiktokAppId] = useState("");
+  const [exchangingToken, setExchangingToken] = useState(false);
+  const [exchangeResult, setExchangeResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const fetchData = async () => {
     const { data } = await (supabase.from("api_integrations" as any).select("*").order("created_at", { ascending: false }) as any);
