@@ -106,6 +106,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
 
   // Step 1: Discover all advertiser IDs under the Business Center using /bc/asset/get/
   const advertiserIds: string[] = [];
+  const advertiserNames: string[] = [];
   let page = 1;
   const pageSize = 50;
 
@@ -132,6 +133,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
         || item.advertiser_info?.advertiser_id;
       if (advId) {
         advertiserIds.push(String(advId));
+        advertiserNames.push(item.asset_name || item.advertiser_name || "");
       }
     }
 
