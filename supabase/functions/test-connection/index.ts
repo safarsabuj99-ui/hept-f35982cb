@@ -50,18 +50,28 @@ serve(async (req) => {
         };
       }
     } else if (platform === "tiktok") {
-      // Test TikTok token
-      const res = await fetch("https://business-api.tiktok.com/open_api/v1.3/user/info/", {
-        headers: { "Access-Token": token },
-      });
+      // Test TikTok token using Business Center info endpoint
+      const bcId = appId; // App ID stores the BC ID
+      const res = await fetch(
+        `https://business-api.tiktok.com/open_api/v1.3/bc/get/?bc_id=${bcId}`,
+        { headers: { "Access-Token": token, "Content-Type": "application/json" } }
+      );
       const data = await res.json();
       if (data.code !== 0) {
-        result = { ok: false, message: "Token invalid", details: data.message };
+        result = { ok: false, message: "Token invalid or BC ID incorrect", details: data.message };
       } else {
+        const bcName = data.data?.bc_info?.name || data.data?.name || "N/A";
+        // Also count advertisers
+        const advRes = await fetch(
+          `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page_size=1`,
+          { headers: { "Access-Token": token, "Content-Type": "application/json" } }
+        );
+        const advData = await advRes.json();
+        const advCount = advData.data?.page_info?.total_number ?? 0;
         result = {
           ok: true,
-          message: `Connected to TikTok Business`,
-          details: `Display name: ${data.data?.display_name || "N/A"}`,
+          message: `Connected to BC: "${bcName}"`,
+          details: `${advCount} advertiser account(s) accessible`,
         };
       }
     } else if (platform === "google") {
