@@ -528,8 +528,8 @@ export default function AdAccountDetail() {
               {/* Add Client */}
               <div className="border-t pt-4">
                 <p className="text-sm font-medium mb-3 flex items-center gap-1.5"><UserPlus className="h-4 w-4" /> Add Client(s)</p>
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div className="space-y-1.5 min-w-[220px]">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="space-y-1.5 w-full sm:min-w-[220px] sm:w-auto">
                     <Label className="text-xs">Clients</Label>
                     <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
                       <PopoverTrigger asChild>
@@ -567,11 +567,11 @@ export default function AdAccountDetail() {
                       </PopoverContent>
                     </Popover>
                   </div>
-                  <div className="space-y-1.5 min-w-[160px]">
+                  <div className="space-y-1.5 w-full sm:min-w-[160px] sm:w-auto">
                     <Label className="text-xs">Mapping Keyword</Label>
                     <Input className="h-9" placeholder="e.g. brandname" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} />
                   </div>
-                  <Button size="sm" className="h-9" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
+                  <Button size="sm" className="h-9 w-full sm:w-auto" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
                     {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                     Assign {selectedClientIds.length > 1 ? `(${selectedClientIds.length})` : ""}
                   </Button>
