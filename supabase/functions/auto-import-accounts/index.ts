@@ -182,7 +182,7 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
   const balanceMap: Record<string, { cash: number; grant: number }> = {};
   try {
     const idsParam = encodeURIComponent(JSON.stringify(advertiserIds));
-    const balanceUrl = `https://business-api.tiktok.com/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
+    const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
     console.log(`TikTok balance URL: ${balanceUrl}`);
     const balRes = await fetch(balanceUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
