@@ -595,7 +595,7 @@ export default function AdAccountDetail() {
               <CardTitle className="text-base text-muted-foreground font-medium">Outstanding balance</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold tracking-tight">
+              <p className="text-3xl sm:text-4xl font-bold tracking-tight">
                 {fmt(account.current_threshold_spend ?? 0)}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
