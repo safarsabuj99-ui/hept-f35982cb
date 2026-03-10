@@ -48,11 +48,12 @@ export default function Settings() {
     supabase
       .from("settings" as any)
       .select("key, value")
-      .in("key", ["service_margin_percentage", "sync_start_date"])
+      .in("key", ["service_margin_percentage", "sync_start_date", "tiktok_proxy_url"])
       .then(({ data }: any) => {
         for (const row of data ?? []) {
           if (row.key === "service_margin_percentage") setServiceMargin(row.value);
           if (row.key === "sync_start_date") setSyncStartDate(new Date(row.value + "T00:00:00"));
+          if (row.key === "tiktok_proxy_url") setTiktokProxyUrl(row.value || "");
         }
         setLoading(false);
       });
