@@ -106,6 +106,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
 
   // Step 1: Discover all advertiser IDs under the Business Center using /bc/asset/get/
   const advertiserIds: string[] = [];
+  const advertiserNames: string[] = [];
   let page = 1;
   const pageSize = 50;
 
@@ -132,6 +133,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
         || item.advertiser_info?.advertiser_id;
       if (advId) {
         advertiserIds.push(String(advId));
+        advertiserNames.push(item.asset_name || item.advertiser_name || "");
       }
     }
 
@@ -143,38 +145,16 @@ async function fetchTikTokAccounts(appId: string, token: string) {
 
   if (advertiserIds.length === 0) return [];
 
-  // Step 2: Fetch advertiser details in batches of 100
-  const accounts: any[] = [];
-  for (let i = 0; i < advertiserIds.length; i += 100) {
-    const batch = advertiserIds.slice(i, i + 100);
-    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify(batch))}`;
-    const res = await fetch(url, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`TikTok API error: ${err}`);
-    }
-    const json = await res.json();
-    console.log("TikTok advertiser/info response:", JSON.stringify({ code: json.code, message: json.message, count: json.data?.list?.length ?? 0 }));
-    if (json.code !== 0) {
-      throw new Error(`TikTok advertiser/info error: ${json.message} (code ${json.code})`);
-    }
-
-    for (const adv of json.data?.list ?? []) {
-      const currency = adv.currency === "BDT" ? "BDT" : "USD";
-      accounts.push({
-        ad_account_id: String(adv.advertiser_id),
-        account_name: adv.advertiser_name ?? "",
-        account_currency: currency,
-        billing_type: "prepaid",
-        threshold_limit: null,
-        next_billing_date: null,
-      });
-    }
-  }
-
-  return accounts;
+  // Build accounts directly from Step 1 data (skips geo-blocked /advertiser/info/ endpoint)
+  console.log(`Building ${advertiserIds.length} TikTok accounts from BC asset discovery data`);
+  return advertiserIds.map((id, idx) => ({
+    ad_account_id: id,
+    account_name: advertiserNames[idx] || `TikTok Advertiser ${id}`,
+    account_currency: "USD",
+    billing_type: "prepaid",
+    threshold_limit: null,
+    next_billing_date: null,
+  }));
 }
 
 // ── Google: fetch accessible customer accounts ──
