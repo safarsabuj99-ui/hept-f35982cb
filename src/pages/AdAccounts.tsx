@@ -357,6 +357,7 @@ export default function AdAccounts() {
       ) : (
         <>
           {/* Mobile Card View */}
+          <PullToRefresh onRefresh={loadAccounts}>
           <div className="flex flex-col gap-3 md:hidden">
             {paginatedAccounts.map((a: any) => {
               const isThreshold = a.billing_type === "threshold_postpaid";
