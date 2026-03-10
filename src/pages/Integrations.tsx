@@ -91,6 +91,7 @@ export default function Integrations() {
   const [saving, setSaving] = useState(false);
   const [tiktokAuthCode, setTiktokAuthCode] = useState("");
   const [tiktokAppId, setTiktokAppId] = useState("");
+  const [tiktokAppSecret, setTiktokAppSecret] = useState("");
   const [exchangingToken, setExchangingToken] = useState(false);
   const [exchangeResult, setExchangeResult] = useState<{ ok: boolean; message: string } | null>(null);
 
