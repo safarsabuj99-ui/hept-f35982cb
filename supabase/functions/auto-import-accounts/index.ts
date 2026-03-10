@@ -104,19 +104,19 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   const bcId = appId.trim();
   if (!bcId) return [];
 
-  // Step 1: Discover all advertiser IDs under the Business Center
+  // Step 1: Discover all advertiser IDs under the Business Center using /bc/asset/get/
   const advertiserIds: string[] = [];
   let page = 1;
   const pageSize = 100;
 
   while (true) {
-    const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=${page}&page_size=${pageSize}`;
+    const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
     const bcRes = await fetch(bcUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
     if (!bcRes.ok) {
-      const err = await bcRes.text();
-      throw new Error(`TikTok BC API error: ${err}`);
+      const errText = await bcRes.text();
+      throw new Error(`TikTok BC Asset API error: ${errText}`);
     }
     const bcJson = await bcRes.json();
     if (bcJson.code !== 0) {
@@ -125,8 +125,9 @@ async function fetchTikTokAccounts(appId: string, token: string) {
 
     const list = bcJson.data?.list ?? [];
     for (const item of list) {
-      if (item.advertiser_id) {
-        advertiserIds.push(String(item.advertiser_id));
+      const advId = item.advertiser_id || item.asset_id;
+      if (advId) {
+        advertiserIds.push(String(advId));
       }
     }
 

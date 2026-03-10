@@ -71,16 +71,16 @@ serve(async (req) => {
       }
     } else if (platform === "tiktok") {
       const bcId = appId;
-      // Use advertiser listing endpoint (known working) to validate token + BC ID
+      // Use /bc/asset/get/ to list advertisers under the BC
       const advRes = await fetch(
-        `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page_size=1`,
+        `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page_size=1`,
         { headers: { "Access-Token": token, "Content-Type": "application/json" } }
       );
       const advData = await safeJson(advRes);
       if (advData.code !== 0) {
         result = { ok: false, message: "Token invalid or BC ID incorrect", details: advData.message };
       } else {
-        const advCount = advData.data?.page_info?.total_number ?? 0;
+        const advCount = advData.data?.page_info?.total_number ?? advData.data?.list?.length ?? 0;
         result = {
           ok: true,
           message: `Connected to BC "${bcId}"`,
