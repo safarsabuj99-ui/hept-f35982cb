@@ -484,28 +484,45 @@ export default function AdAccountDetail() {
               {assignments.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">No clients assigned yet.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Mapping Keyword</TableHead>
-                      <TableHead className="w-[60px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  {/* Mobile card list */}
+                  <div className="flex flex-col gap-2 md:hidden">
                     {assignments.map((a: any) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
-                        <TableCell><Badge variant="outline" className="font-mono text-xs">{a.mapping_keyword || "—"}</Badge></TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeAssignment(a.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{getClientName(a.client_id)}</p>
+                          <Badge variant="outline" className="font-mono text-xs mt-1">{a.mapping_keyword || "—"}</Badge>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive shrink-0" onClick={() => removeAssignment(a.id)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                  {/* Desktop table */}
+                  <Table className="hidden md:table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Mapping Keyword</TableHead>
+                        <TableHead className="w-[60px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {assignments.map((a: any) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
+                          <TableCell><Badge variant="outline" className="font-mono text-xs">{a.mapping_keyword || "—"}</Badge></TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeAssignment(a.id)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
               )}
 
               {/* Add Client */}
