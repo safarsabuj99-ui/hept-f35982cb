@@ -659,9 +659,9 @@ export default function AdAccountDetail() {
                     <p className="text-sm text-muted-foreground">And on this date</p>
                     {editingBillingDate ? (
                       <div className="flex items-center gap-2 mt-1">
-                        <Input
+                         <Input
                           type="date"
-                          className="h-8 w-40"
+                          className="h-8 w-full sm:w-40"
                           value={editBillingDateVal}
                           onChange={(e) => setEditBillingDateVal(e.target.value)}
                           autoFocus
