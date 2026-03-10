@@ -61,7 +61,6 @@ export default function WalletInventory() {
     supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
   }, []);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("wallet-inventory-realtime")
@@ -81,7 +80,6 @@ export default function WalletInventory() {
     setCurrentPage(1);
   };
 
-  // WAC from filtered purchases
   const calculateWAC = () => {
     if (purchases.length === 0) return 0;
     let totalCostBDT = 0, totalUSD = 0;
@@ -117,7 +115,6 @@ export default function WalletInventory() {
       paid_from_account_id: paidFromAccountId || null,
     } as any);
     
-    // Debit agency account if selected
     if (!error && paidFromAccountId) {
       const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
       if (acc) {
@@ -147,7 +144,7 @@ export default function WalletInventory() {
         <div className="flex items-center gap-2">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Buy USD</Button>
+              <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Buy USD</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Record USD Purchase</DialogTitle></DialogHeader>
@@ -212,11 +209,11 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2"><TrendingUp className="h-5 w-5 text-primary" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg. Cost ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><TrendingUp className="h-5 w-5 text-primary" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Avg. Cost ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">{wac.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">BDT</span></p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">{wac.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">BDT</span></p>
                 )}
               </div>
             </div>
@@ -225,11 +222,11 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-success/10 p-2"><DollarSign className="h-5 w-5 text-success" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">USD Purchased ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-success/10 p-2"><DollarSign className="h-5 w-5 text-success" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">USD Purchased ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">${totalUsdPurchased.toLocaleString()}</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">${totalUsdPurchased.toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -238,11 +235,11 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-warning/10 p-2"><Wallet className="h-5 w-5 text-warning" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">BDT Invested ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Wallet className="h-5 w-5 text-warning" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">BDT Invested ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">৳{totalBdtSpent.toLocaleString()}</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalBdtSpent.toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -251,11 +248,11 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-accent p-2"><Package className="h-5 w-5 text-accent-foreground" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Purchases ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-accent p-2"><Package className="h-5 w-5 text-accent-foreground" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Purchases ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-16" /> : (
-                  <p className="text-2xl font-bold font-mono">{purchases.length}</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">{purchases.length}</p>
                 )}
               </div>
             </div>
@@ -273,39 +270,63 @@ export default function WalletInventory() {
             <p className="text-center text-muted-foreground py-8">No purchases in this period. Click "Buy USD" to get started.</p>
           ) : (
             <>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">BDT Paid</TableHead>
-                    <TableHead className="text-right">USD Received</TableHead>
-                    <TableHead className="text-right">Rate</TableHead>
-                    <TableHead>Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-mono text-sm">{p.date}</TableCell>
-                      <TableCell className="text-right font-mono">৳{Number(p.bdt_amount_paid).toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono">${Number(p.usd_received).toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{p.notes || "—"}</TableCell>
+              {/* Mobile card view */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
+                  <div key={p.id} className="rounded-xl border p-4 space-y-2 bg-card">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm text-muted-foreground">{p.date}</span>
+                      <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">BDT Paid</p>
+                        <p className="font-mono font-medium">৳{Number(p.bdt_amount_paid).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">USD Received</p>
+                        <p className="font-mono font-medium">${Number(p.usd_received).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {p.notes && <p className="text-xs text-muted-foreground truncate">{p.notes}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">BDT Paid</TableHead>
+                      <TableHead className="text-right">USD Received</TableHead>
+                      <TableHead className="text-right">Rate</TableHead>
+                      <TableHead>Notes</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <TablePagination
-              totalItems={purchases.length}
-              pageSize={pageSize}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={setPageSize}
-            />
+                  </TableHeader>
+                  <TableBody>
+                    {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-mono text-sm">{p.date}</TableCell>
+                        <TableCell className="text-right font-mono">৳{Number(p.bdt_amount_paid).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono">${Number(p.usd_received).toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{p.notes || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <TablePagination
+                totalItems={purchases.length}
+                pageSize={pageSize}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
             </>
           )}
         </CardContent>

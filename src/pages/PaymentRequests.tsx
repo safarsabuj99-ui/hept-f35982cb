@@ -175,7 +175,6 @@ export default function PaymentRequests() {
       if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
 
       setRateOptions(options);
-      // Auto-select matching platform rate
       const platform = request.platform || "";
       const matchingKey = platform && options.find(o => o.key === platform) ? platform : options[0]?.key;
       setSelectedRateKey(matchingKey ?? "default");
@@ -226,22 +225,21 @@ export default function PaymentRequests() {
   const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const paginatedRequests = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  const pendingDeposits = deposits.filter(d => true); // all are pending_approval already
+  const pendingDeposits = deposits.filter(d => true);
   const paginatedDeposits = pendingDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Banknote className="h-6 w-6 text-primary" /> Payments & Deposits
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
         </h1>
-        <p className="text-muted-foreground">Manage client payment requests and fund deposit approvals</p>
+        <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
       </div>
 
       <Tabs defaultValue="payments" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="payments" className="gap-2">
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+          <TabsTrigger value="payments" className="gap-2 flex-shrink-0">
             Payment Requests
             {requests.filter(r => r.status === "pending").length > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -249,7 +247,7 @@ export default function PaymentRequests() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="deposits" className="gap-2">
+          <TabsTrigger value="deposits" className="gap-2 flex-shrink-0">
             Fund Deposits
             {deposits.length > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -268,7 +266,52 @@ export default function PaymentRequests() {
                 <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {paginatedRequests.map((r) => (
+                      <div key={r.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{r.client_name}</span>
+                          {statusBadge(r.status)}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Amount</p>
+                            <p className="font-mono font-semibold">৳{fmt(r.amount_bdt)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Method</p>
+                            <Badge variant="secondary">{r.payment_method}</Badge>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Date</p>
+                            <p className="text-xs font-mono">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Platform</p>
+                            {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : <span className="text-xs text-muted-foreground">—</span>}
+                          </div>
+                        </div>
+                        {r.final_amount_usd && (
+                          <p className="text-xs text-muted-foreground">USD Credited: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></p>
+                        )}
+                        {r.status === "pending" && canManageFinance && (
+                          <div className="flex flex-col gap-2">
+                            <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1 w-full">
+                              {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                              Approve
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1 w-full">
+                              <XCircle className="h-3 w-3" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -344,7 +387,45 @@ export default function PaymentRequests() {
                 <p className="py-8 text-center text-muted-foreground">No pending fund deposits</p>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {paginatedDeposits.map((t) => (
+                      <div key={t.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{t.client_name}</span>
+                          <span className="font-mono font-semibold">${Number(t.amount).toFixed(2)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {t.creator_name && ` · by ${t.creator_name}`}
+                        </div>
+                        {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleDepositAction(t.id, "completed")}
+                            disabled={processing === t.id}
+                            className="gap-1 w-full"
+                          >
+                            {processing === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDepositAction(t.id, "rejected")}
+                            disabled={processing === t.id}
+                            className="gap-1 w-full"
+                          >
+                            <XCircle className="h-3 w-3" /> Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>

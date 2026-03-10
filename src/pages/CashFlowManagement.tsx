@@ -58,7 +58,6 @@ export default function CashFlowManagement() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Add Account form
   const [addOpen, setAddOpen] = useState(false);
   const [accName, setAccName] = useState("");
   const [accType, setAccType] = useState<string>("Cash");
@@ -66,7 +65,6 @@ export default function CashFlowManagement() {
   const [accBalance, setAccBalance] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Transfer form
   const [transferOpen, setTransferOpen] = useState(false);
   const [fromAccId, setFromAccId] = useState("");
   const [toAccId, setToAccId] = useState("");
@@ -96,7 +94,6 @@ export default function CashFlowManagement() {
     const accMap: Record<string, string> = {};
     for (const a of accs) accMap[a.id] = a.name;
 
-    // Build recent activity feed
     const activity: RecentActivity[] = [];
 
     for (const p of (paymentRes.data as any[]) ?? []) {
@@ -146,7 +143,6 @@ export default function CashFlowManagement() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("cashflow-realtime")
@@ -195,7 +191,6 @@ export default function CashFlowManagement() {
 
     setTransferring(true);
 
-    // Atomic: debit from, credit to, log transfer
     const { error: debitErr } = await supabase.from("agency_accounts" as any)
       .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) - amt } as any)
       .eq("id", fromAccId);
@@ -212,7 +207,6 @@ export default function CashFlowManagement() {
       .eq("id", toAccId);
 
     if (creditErr) {
-      // Rollback debit
       await supabase.from("agency_accounts" as any)
         .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) } as any)
         .eq("id", fromAccId);
@@ -268,95 +262,93 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <div className="flex items-center gap-2">
-          <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Fund Transfer</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>From Account</Label>
-                  <Select value={fromAccId} onValueChange={setFromAccId}>
-                    <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
-                    <SelectContent>
-                      {activeAccounts.map(a => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>To Account</Label>
-                  <Select value={toAccId} onValueChange={setToAccId}>
-                    <SelectTrigger><SelectValue placeholder="Select destination" /></SelectTrigger>
-                    <SelectContent>
-                      {activeAccounts.filter(a => a.id !== fromAccId).map(a => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Amount (BDT)</Label>
-                  <Input type="number" placeholder="e.g. 10000" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Reference / Note (optional)</Label>
-                  <Textarea value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Moving to bank for vendor payment" />
-                </div>
-                <Button className="w-full" onClick={handleTransfer} disabled={transferring}>
-                  {transferring && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Execute Transfer
-                </Button>
+      <div className="flex flex-col sm:flex-row justify-end gap-2">
+        <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Fund Transfer</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>From Account</Label>
+                <Select value={fromAccId} onValueChange={setFromAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </DialogContent>
-          </Dialog>
+              <div>
+                <Label>To Account</Label>
+                <Select value={toAccId} onValueChange={setToAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select destination" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.filter(a => a.id !== fromAccId).map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Amount (BDT)</Label>
+                <Input type="number" placeholder="e.g. 10000" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Reference / Note (optional)</Label>
+                <Textarea value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Moving to bank for vendor payment" />
+              </div>
+              <Button className="w-full" onClick={handleTransfer} disabled={transferring}>
+                {transferring && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Execute Transfer
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add Agency Account</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Account Name</Label>
-                  <Input placeholder="e.g. Office Cash" value={accName} onChange={e => setAccName(e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Type</Label>
-                    <Select value={accType} onValueChange={setAccType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Bank">Bank</SelectItem>
-                        <SelectItem value="MFS">MFS (bKash/Nagad)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Account # (optional)</Label>
-                    <Input placeholder="e.g. 1234567890" value={accNumber} onChange={e => setAccNumber(e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <Label>Opening Balance (BDT)</Label>
-                  <Input type="number" placeholder="0" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
-                </div>
-                <Button className="w-full" onClick={handleAddAccount} disabled={submitting}>
-                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Account
-                </Button>
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild>
+            <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add Agency Account</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Account Name</Label>
+                <Input placeholder="e.g. Office Cash" value={accName} onChange={e => setAccName(e.target.value)} />
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Type</Label>
+                  <Select value={accType} onValueChange={setAccType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Bank">Bank</SelectItem>
+                      <SelectItem value="MFS">MFS (bKash/Nagad)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Account # (optional)</Label>
+                  <Input placeholder="e.g. 1234567890" value={accNumber} onChange={e => setAccNumber(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <Label>Opening Balance (BDT)</Label>
+                <Input type="number" placeholder="0" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+              </div>
+              <Button className="w-full" onClick={handleAddAccount} disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Account
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Total Liquid Funds */}
@@ -366,10 +358,10 @@ export default function CashFlowManagement() {
             <div>
               <p className="text-sm text-muted-foreground">Total Liquid Funds</p>
               {loading ? <Skeleton className="h-10 w-48" /> : (
-                <p className="text-3xl font-bold font-mono">৳{totalBalance.toLocaleString()}</p>
+                <p className="text-2xl sm:text-3xl font-bold font-mono">৳{totalBalance.toLocaleString()}</p>
               )}
             </div>
-            <Wallet className="h-10 w-10 text-primary/40" />
+            <Wallet className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
           </div>
         </CardContent>
       </Card>
@@ -398,10 +390,10 @@ export default function CashFlowManagement() {
       </div>
 
       <Tabs defaultValue="accounts">
-        <TabsList>
-          <TabsTrigger value="accounts">Accounts ({accounts.length})</TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-          <TabsTrigger value="transfers">Transfer History</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+          <TabsTrigger value="accounts" className="flex-shrink-0">Accounts ({accounts.length})</TabsTrigger>
+          <TabsTrigger value="activity" className="flex-shrink-0">Recent Activity</TabsTrigger>
+          <TabsTrigger value="transfers" className="flex-shrink-0">Transfer History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="accounts">
@@ -412,38 +404,65 @@ export default function CashFlowManagement() {
               ) : accounts.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No accounts. Click "Add Account" to get started.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Account</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="hidden sm:table-cell">Account #</TableHead>
-                        <TableHead className="text-right">Balance (BDT)</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accounts.map(a => (
-                        <TableRow key={a.id}>
-                          <TableCell className="font-medium">{a.name}</TableCell>
-                          <TableCell><Badge variant="secondary">{a.type}</Badge></TableCell>
-                          <TableCell className="hidden sm:table-cell font-mono text-sm text-muted-foreground">{a.account_number || "—"}</TableCell>
-                          <TableCell className="text-right font-mono font-semibold">৳{Number(a.current_balance_bdt).toLocaleString()}</TableCell>
-                          <TableCell className="text-center">
-                            <Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a)} />
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteAccount(a.id)}>
-                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                            </Button>
-                          </TableCell>
+                <>
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {accounts.map(a => (
+                      <div key={a.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{a.name}</span>
+                            <Badge variant="secondary" className="text-xs">{a.type}</Badge>
+                          </div>
+                          <Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a)} />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="font-mono font-semibold text-lg">৳{Number(a.current_balance_bdt).toLocaleString()}</p>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteAccount(a.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                        {a.account_number && (
+                          <p className="text-xs text-muted-foreground font-mono"># {a.account_number}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Account</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="hidden sm:table-cell">Account #</TableHead>
+                          <TableHead className="text-right">Balance (BDT)</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {accounts.map(a => (
+                          <TableRow key={a.id}>
+                            <TableCell className="font-medium">{a.name}</TableCell>
+                            <TableCell><Badge variant="secondary">{a.type}</Badge></TableCell>
+                            <TableCell className="hidden sm:table-cell font-mono text-sm text-muted-foreground">{a.account_number || "—"}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold">৳{Number(a.current_balance_bdt).toLocaleString()}</TableCell>
+                            <TableCell className="text-center">
+                              <Switch checked={a.is_active} onCheckedChange={() => handleToggleActive(a)} />
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteAccount(a.id)}>
+                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -460,17 +479,17 @@ export default function CashFlowManagement() {
                 <div className="space-y-3">
                   {recentActivity.map(a => (
                     <div key={a.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {activityIcon(a.type)}
-                        <div>
-                          <p className="text-sm font-medium">{a.description}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{a.description}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                             {a.account_name && ` · ${a.account_name}`}
                           </p>
                         </div>
                       </div>
-                      <span className={`font-mono text-sm font-semibold ${a.type === "in" ? "text-success" : a.type === "out" ? "text-destructive" : "text-primary"}`}>
+                      <span className={`font-mono text-sm font-semibold flex-shrink-0 ml-2 ${a.type === "in" ? "text-success" : a.type === "out" ? "text-destructive" : "text-primary"}`}>
                         {a.type === "in" ? "+" : a.type === "out" ? "-" : ""}৳{a.amount_bdt.toLocaleString()}
                       </span>
                     </div>
@@ -490,39 +509,60 @@ export default function CashFlowManagement() {
                 <p className="text-center text-muted-foreground py-8">No transfers yet</p>
               ) : (
                 <>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>From → To</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>Note</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
-                        const from = accounts.find(a => a.id === t.from_account_id);
-                        const to = accounts.find(a => a.id === t.to_account_id);
-                        return (
-                          <TableRow key={t.id}>
-                            <TableCell className="font-mono text-sm">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                            <TableCell className="text-sm">{from?.name || "?"} → {to?.name || "?"}</TableCell>
-                            <TableCell className="text-right font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{t.note || "—"}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-                <TablePagination
-                  totalItems={transfers.length}
-                  pageSize={pageSize}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={setPageSize}
-                />
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
+                      const from = accounts.find(a => a.id === t.from_account_id);
+                      const to = accounts.find(a => a.id === t.to_account_id);
+                      return (
+                        <div key={t.id} className="rounded-xl border p-4 space-y-2 bg-card">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{from?.name || "?"} → {to?.name || "?"}</span>
+                            <span className="font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-mono">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                            {t.note && <span className="truncate ml-2 max-w-[150px]">{t.note}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>From → To</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Note</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
+                          const from = accounts.find(a => a.id === t.from_account_id);
+                          const to = accounts.find(a => a.id === t.to_account_id);
+                          return (
+                            <TableRow key={t.id}>
+                              <TableCell className="font-mono text-sm">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                              <TableCell className="text-sm">{from?.name || "?"} → {to?.name || "?"}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{t.note || "—"}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={transfers.length}
+                    pageSize={pageSize}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                  />
                 </>
               )}
             </CardContent>

@@ -33,7 +33,6 @@ export default function FinanceDashboard() {
   const fetchAll = useCallback(async (range: DateRange | null) => {
     setLoading(true);
 
-    // Build date-filtered queries
     let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
     let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date");
 
@@ -51,7 +50,6 @@ export default function FinanceDashboard() {
       expensesQuery,
     ]);
 
-    // WAC from filtered purchases with cascading fallback
     const calcWac = (data: any[] | null) => {
       let bdt = 0, usd = 0;
       for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
@@ -60,7 +58,6 @@ export default function FinanceDashboard() {
 
     let calculatedWac = calcWac(purchasesRes.data);
 
-    // Fallback: current month
     if (calculatedWac === 0) {
       const today = getLocalToday();
       const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -71,7 +68,6 @@ export default function FinanceDashboard() {
       calculatedWac = calcWac(monthPurchases);
     }
 
-    // Fallback: all-time
     if (calculatedWac === 0) {
       const { data: allPurchases } = await supabase.from("usd_purchases")
         .select("bdt_amount_paid, usd_received");
@@ -86,7 +82,6 @@ export default function FinanceDashboard() {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    // Get client-to-ad-account mapping via junction table
     const { data: adAccountClients } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
     const accToClients: Record<string, string[]> = {};
     for (const aac of (adAccountClients ?? []) as any[]) {
@@ -94,12 +89,10 @@ export default function FinanceDashboard() {
       accToClients[aac.ad_account_id].push(aac.client_id);
     }
 
-    // Get ad accounts to know platform
     const { data: adAccounts } = await supabase.from("ad_accounts").select("id, platform_name");
     const accToPlatform: Record<string, string> = {};
     for (const a of adAccounts ?? []) accToPlatform[a.id] = a.platform_name;
 
-    // Get campaigns
     const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform");
 
     if (!allCampaigns?.length) {
@@ -114,14 +107,12 @@ export default function FinanceDashboard() {
       campaignToPlatform[c.id] = c.platform;
     }
 
-    // Get daily_metrics with date filter
     let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
     if (range) {
       metricsQuery = metricsQuery.gte("data_date", toISODate(range.from)).lte("data_date", toISODate(range.to));
     }
     const { data: metricsData } = await metricsQuery;
 
-    // Aggregate spend per client per platform
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsData ?? []) as any[]) {
       const accountId = campaignToAccount[m.campaign_id];
@@ -153,7 +144,6 @@ export default function FinanceDashboard() {
         totalSpendUsd += spendUsd as number;
       }
 
-      // Add percentage markup revenue if applicable
       if (percentageMarkup > 0) {
         revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
       }
@@ -190,7 +180,6 @@ export default function FinanceDashboard() {
 
   useEffect(() => { fetchAll(dateRange); }, []);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("finance-dashboard-realtime")
@@ -223,11 +212,11 @@ export default function FinanceDashboard() {
         <Card className="border-success/30">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Net Profit ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-28" /> : (
-                  <p className={`text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                  <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
                     ৳{netProfit.toLocaleString()}
                   </p>
                 )}
@@ -238,11 +227,11 @@ export default function FinanceDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Avg. Buying Cost ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Avg. Cost ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">{wac} <span className="text-sm text-muted-foreground">BDT</span></p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">{wac} <span className="text-sm text-muted-foreground">BDT</span></p>
                 )}
               </div>
             </div>
@@ -251,11 +240,11 @@ export default function FinanceDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Owner's Draw ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">৳{ownerDraw.toLocaleString()}</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{ownerDraw.toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -264,11 +253,11 @@ export default function FinanceDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-accent p-2"><Banknote className="h-5 w-5 text-accent-foreground" /></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total OpEx ({periodLabel})</p>
+              <div className="hidden sm:block rounded-lg bg-accent p-2"><Banknote className="h-5 w-5 text-accent-foreground" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Total OpEx ({periodLabel})</p>
                 {loading ? <Skeleton className="h-8 w-24" /> : (
-                  <p className="text-2xl font-bold font-mono">৳{totalOpex.toLocaleString()}</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalOpex.toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -280,20 +269,20 @@ export default function FinanceDashboard() {
       <Card>
         <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+            <div className="py-2 border-b sm:border-b-0">
               <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
               {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
                 <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
               )}
             </div>
-            <div>
+            <div className="py-2 border-b sm:border-b-0">
               <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
               {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
                 <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
               )}
             </div>
-            <div>
+            <div className="py-2">
               <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
               {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
                 <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
@@ -305,7 +294,7 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Client Profitability Table */}
+      {/* Client Profitability */}
       <Card>
         <CardHeader><CardTitle className="text-base">Client Profitability</CardTitle></CardHeader>
         <CardContent>
@@ -314,44 +303,85 @@ export default function FinanceDashboard() {
           ) : clientProfits.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No spend data. Run a sync simulation first.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Client</TableHead>
-                    <TableHead className="text-right">Spend (USD)</TableHead>
-                    <TableHead className="text-right">Revenue (BDT)</TableHead>
-                    <TableHead className="text-right">COGS (BDT)</TableHead>
-                    <TableHead className="text-right">Profit (BDT)</TableHead>
-                    <TableHead className="text-right">Margin</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clientProfits.map(c => (
-                    <TableRow key={c.name}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-right font-mono">${c.totalSpendUsd.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono">৳{c.revenueBdt.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-destructive">৳{c.cogsBdt.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
+            <>
+              {/* Mobile card view */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {clientProfits.map(c => (
+                  <div key={c.name} className="rounded-xl border p-4 space-y-3 bg-card">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{c.name}</span>
+                      {c.margin < 5 ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" /> {c.margin}%
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">{c.margin}%</Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Spend (USD)</p>
+                        <p className="font-mono font-medium">${c.totalSpendUsd.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Revenue (BDT)</p>
+                        <p className="font-mono font-medium">৳{c.revenueBdt.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">COGS (BDT)</p>
+                        <p className="font-mono font-medium text-destructive">৳{c.cogsBdt.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Profit (BDT)</p>
+                        <p className={`font-mono font-medium ${c.netProfit >= 0 ? "text-success" : "text-destructive"}`}>
                           ৳{c.netProfit.toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {c.margin < 5 ? (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertTriangle className="h-3 w-3" /> {c.margin}%
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">{c.margin}%</Badge>
-                        )}
-                      </TableCell>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead className="text-right">Spend (USD)</TableHead>
+                      <TableHead className="text-right">Revenue (BDT)</TableHead>
+                      <TableHead className="text-right">COGS (BDT)</TableHead>
+                      <TableHead className="text-right">Profit (BDT)</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {clientProfits.map(c => (
+                      <TableRow key={c.name}>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-right font-mono">${c.totalSpendUsd.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono">৳{c.revenueBdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-destructive">৳{c.cogsBdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
+                            ৳{c.netProfit.toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {c.margin < 5 ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertTriangle className="h-3 w-3" /> {c.margin}%
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">{c.margin}%</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

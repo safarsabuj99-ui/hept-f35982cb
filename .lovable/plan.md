@@ -1,51 +1,34 @@
 
 
-# Plan: Mobile-Responsive Finance Pages
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-All four finance sub-pages (P&L Overview, Wallet & USD, Expenses, Cash Flow) use desktop-oriented tables and cramped grids that overflow or become unreadable on mobile.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. `src/pages/FinanceHub.tsx` — Scrollable tabs
-- Make `TabsList` horizontally scrollable: `overflow-x-auto scrollbar-hide flex w-full` with `flex-shrink-0` triggers
-- Reduce title to `text-xl sm:text-2xl`
+## Technical Change
 
-### 2. `src/pages/FinanceDashboard.tsx` — P&L Overview
-- **KPI cards**: Already `grid-cols-2 lg:grid-cols-4` — reduce inner text to `text-xl sm:text-2xl`, hide icon on xs screens
-- **P&L Summary**: Change `grid-cols-3` to `grid-cols-1 sm:grid-cols-3` with dividers between stacked items on mobile
-- **Client Profitability table**: Add mobile card view (`md:hidden`) — each card shows client name, spend, revenue, profit, margin badge. Keep table for `hidden md:block`
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 3. `src/pages/WalletInventory.tsx` — Wallet & USD
-- **Action button**: `w-full sm:w-auto` for "Buy USD"
-- **KPI cards**: Reduce font to `text-xl sm:text-2xl` on mobile, hide period label text that overflows
-- **Purchase History table**: Add mobile card view (`md:hidden`) — each card shows date, BDT paid, USD received, rate badge. Keep table `hidden md:block`
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 4. `src/pages/ExpenseManager.tsx` — Expenses
-- **Summary cards**: Change `grid-cols-3` to `grid-cols-1 sm:grid-cols-3` — stack vertically on mobile
-- **Pie chart + table grid**: Already `md:grid-cols-2` — good. Reduce pie chart height on mobile to 200px
-- **Expenses table**: Add mobile card view (`md:hidden`) — date, category badge, amount, delete button per card. Keep table `hidden md:block`
-- **Add Expense button**: `w-full sm:w-auto`
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 5. `src/pages/CashFlowManagement.tsx` — Cash Flow
-- **Action buttons row**: Stack vertically on mobile: `flex-col sm:flex-row w-full sm:w-auto` for Transfer and Add Account buttons
-- **Total Liquid Funds card**: Reduce text to `text-2xl sm:text-3xl`
-- **Accounts table (tab)**: Add mobile card view — each card shows name, type badge, balance, active toggle, delete. Keep table `hidden md:block`
-- **Transfer History table**: Add mobile card view — from→to, amount, date, note. Keep table `hidden md:block`
-- **Activity feed**: Already card-based — no changes needed
-- **Tabs**: Make scrollable with `overflow-x-auto scrollbar-hide`
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-### 6. `src/pages/PaymentRequests.tsx` — Payments & Deposits
-- **Header**: Reduce title to `text-xl sm:text-2xl`
-- **Tabs**: Make scrollable `overflow-x-auto scrollbar-hide`
-- **Payment Requests table**: Add mobile card view (`md:hidden`) — each card shows date, client, method badge, amount, status badge, and approve/reject buttons stacked. Keep table `hidden md:block`
-- **Fund Deposits table**: Same mobile card treatment — client, amount, approve/reject buttons
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-### Files Modified
-- `src/pages/FinanceHub.tsx`
-- `src/pages/FinanceDashboard.tsx`
-- `src/pages/WalletInventory.tsx`
-- `src/pages/ExpenseManager.tsx`
-- `src/pages/CashFlowManagement.tsx`
-- `src/pages/PaymentRequests.tsx`
-
+No database or edge function changes needed.
