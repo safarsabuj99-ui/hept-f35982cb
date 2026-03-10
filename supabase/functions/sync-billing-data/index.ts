@@ -94,10 +94,10 @@ async function syncMetaBilling(adAccountId: string, token: string) {
 }
 
 // ── TikTok: fetch advertiser balance info ──
-async function syncTikTokBilling(adAccountId: string, token: string) {
+async function syncTikTokBilling(adAccountId: string, token: string, tiktokBase: string) {
   const result: Record<string, any> = {};
   try {
-    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify([adAccountId])}`;
+    const url = `${tiktokBase}/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify([adAccountId])}`;
     const res = await fetch(url, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
