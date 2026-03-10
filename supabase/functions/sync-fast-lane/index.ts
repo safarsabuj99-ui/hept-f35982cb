@@ -135,6 +135,13 @@ Deno.serve(async (req) => {
       .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
     const exchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabase
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = getTikTokBaseUrl(tiktokProxyUrl);
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
+
     let syncedCount = 0;
     let skipped = 0;
     const errors: string[] = [];
