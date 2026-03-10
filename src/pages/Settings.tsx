@@ -29,6 +29,8 @@ export default function Settings() {
   const [savingMargin, setSavingMargin] = useState(false);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
+  const [savingProxy, setSavingProxy] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
