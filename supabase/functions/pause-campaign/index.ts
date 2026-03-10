@@ -154,6 +154,12 @@ Deno.serve(async (req) => {
     let apiMessage = "";
     let alreadyOff = false;
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabase
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+
     if (platform === "meta") {
       const res = await fetch(
         `https://graph.facebook.com/v21.0/${rawId}?access_token=${integration.api_token}`,
