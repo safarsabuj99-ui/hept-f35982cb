@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,10 +36,12 @@ interface ClientProfile {
 
 export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [account, setAccount] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Editable fields
   const [accountName, setAccountName] = useState("");
@@ -277,6 +280,29 @@ export default function AdAccountDetail() {
     }
   }
 
+  async function handleDeleteAccount() {
+    if (!accountId) return;
+    setDeleting(true);
+    try {
+      // Delete related data in order
+      await (supabase.from("ad_account_clients" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("billing_notifications" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("campaign_performance" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("daily_ad_spend" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("campaign_mappings" as any) as any).delete().eq("ad_account_id", accountId);
+      // Delete campaigns (daily_metrics has FK cascade)
+      await (supabase.from("campaigns" as any) as any).delete().eq("ad_account_id", accountId);
+      // Finally delete the ad account itself
+      const { error } = await (supabase.from("ad_accounts" as any) as any).delete().eq("id", accountId);
+      if (error) throw error;
+      toast({ title: "Deleted", description: "Ad account and all related data removed." });
+      navigate("/admin/ad-accounts");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setDeleting(false);
+    }
+  }
+
   const isThreshold = billingType === "threshold_postpaid";
   const usagePct = isThreshold && account?.threshold_limit > 0
     ? Math.round(((account?.current_threshold_spend ?? 0) / account.threshold_limit) * 100)
@@ -469,6 +495,45 @@ export default function AdAccountDetail() {
                   Save Changes
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Danger Zone */}
+          <Card className="border-destructive/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-destructive flex items-center gap-2">
+                <Trash2 className="h-4 w-4" /> Danger Zone
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Permanently delete this ad account and all associated data (campaigns, spend, notifications, client assignments). You can re-import it later using Sync from API.
+              </p>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="gap-2" disabled={deleting}>
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Delete Ad Account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Ad Account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete <strong>{account.account_name || account.ad_account_id}</strong> and all associated data including campaigns, spend records, notifications, and client assignments. You can re-import it later using Sync from API.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={handleDeleteAccount}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         </TabsContent>
