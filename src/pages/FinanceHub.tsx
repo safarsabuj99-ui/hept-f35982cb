@@ -19,16 +19,16 @@ export default function FinanceHub() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Finance</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Finance</h1>
         <p className="text-sm text-muted-foreground">P&L, USD inventory, expenses & cash flow</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="overview">P&L Overview</TabsTrigger>
-          <TabsTrigger value="wallet">Wallet & USD</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="cash-flow">Cash Flow</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+          <TabsTrigger value="overview" className="flex-shrink-0">P&L Overview</TabsTrigger>
+          <TabsTrigger value="wallet" className="flex-shrink-0">Wallet & USD</TabsTrigger>
+          <TabsTrigger value="expenses" className="flex-shrink-0">Expenses</TabsTrigger>
+          <TabsTrigger value="cash-flow" className="flex-shrink-0">Cash Flow</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><FinanceDashboard /></TabsContent>

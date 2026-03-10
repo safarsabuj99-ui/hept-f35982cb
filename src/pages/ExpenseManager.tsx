@@ -96,7 +96,6 @@ export default function ExpenseManager() {
       paid_from_account_id: paidFromAccountId || null,
     } as any);
 
-    // Debit agency account if selected
     if (!error && paidFromAccountId) {
       const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
       if (acc) {
@@ -125,7 +124,6 @@ export default function ExpenseManager() {
     }
   };
 
-  // Pie chart data
   const categoryTotals: Record<string, number> = {};
   for (const e of expenses) {
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.amount_bdt);
@@ -141,7 +139,7 @@ export default function ExpenseManager() {
       <div className="flex justify-end">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Expense</Button>
+            <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Expense</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Record Expense</DialogTitle></DialogHeader>
@@ -193,12 +191,12 @@ export default function ExpenseManager() {
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
-              <p className="text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
           </CardContent>
         </Card>
@@ -206,7 +204,7 @@ export default function ExpenseManager() {
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
-              <p className="text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
             )}
           </CardContent>
         </Card>
@@ -214,13 +212,13 @@ export default function ExpenseManager() {
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
-              <p className="text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Pie Chart + Table */}
+      {/* Pie Chart + Expenses */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Distribution</CardTitle></CardHeader>
@@ -228,9 +226,9 @@ export default function ExpenseManager() {
             {pieData.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No data yet</p>
             ) : (
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={window.innerWidth < 640 ? 200 : 280}>
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={window.innerWidth < 640 ? 70 : 100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                     {pieData.map((entry) => (
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] || "hsl(var(--muted))"} />
                     ))}
@@ -251,43 +249,64 @@ export default function ExpenseManager() {
               <p className="text-center text-muted-foreground py-8">No expenses in this period</p>
             ) : (
               <>
-              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
-                      <TableRow key={e.id}>
-                        <TableCell className="font-mono text-sm">{e.date}</TableCell>
-                        <TableCell>
-                          <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"}>
+                {/* Mobile card view */}
+                <div className="flex flex-col gap-3 md:hidden max-h-[400px] overflow-y-auto">
+                  {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                    <div key={e.id} className="rounded-xl border p-3 space-y-1 bg-card flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"} className="text-xs">
                             {e.category.replace("_", " ")}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">৳{Number(e.amount_bdt).toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
-                        </TableCell>
+                          <span className="text-xs text-muted-foreground font-mono">{e.date}</span>
+                        </div>
+                        <p className="font-mono font-semibold">৳{Number(e.amount_bdt).toLocaleString()}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="flex-shrink-0">
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination
-                totalItems={expenses.length}
-                pageSize={pageSize}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onPageSizeChange={setPageSize}
-              />
+                    </TableHeader>
+                    <TableBody>
+                      {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                        <TableRow key={e.id}>
+                          <TableCell className="font-mono text-sm">{e.date}</TableCell>
+                          <TableCell>
+                            <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"}>
+                              {e.category.replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">৳{Number(e.amount_bdt).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}>
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <TablePagination
+                  totalItems={expenses.length}
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
               </>
             )}
           </CardContent>
