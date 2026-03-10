@@ -1,39 +1,34 @@
 
 
-## Problem: TikTok Step 2 (Advertiser Details) Silently Fails
+# Fix: Platform Transfers Inflating Today's Collections
 
-**Step 1 works perfectly** — the debug log confirms 3 advertiser accounts are discovered with `asset_id` values like `"7614979329147109377"`.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-**Step 2 fails silently** — the `/advertiser/info/` call returns no data, but the code doesn't check for errors, so it just returns 0 accounts.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### Root Cause
+## Technical Change
 
-Two issues in `auto-import-accounts/index.ts`, lines 148-171:
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-1. **Missing URL encoding** on line 150:
-   ```
-   advertiser_ids=${JSON.stringify(batch)}
-   ```
-   This produces `advertiser_ids=["7614979329147109377"]` with raw brackets/quotes in the URL. TikTok's API can't parse this correctly — the parameter needs to be URL-encoded.
-
-2. **No error checking on Step 2 response** — if TikTok returns `code !== 0`, the code silently iterates an empty `json.data?.list`, producing 0 results with no error message.
-
-### Fix
-
-In `supabase/functions/auto-import-accounts/index.ts`:
-
-**Line 150** — URL-encode the advertiser_ids parameter:
-```typescript
-const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify(batch))}`;
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-**After line 158** — Add error checking for Step 2:
-```typescript
-const json = await res.json();
-if (json.code !== 0) {
-  throw new Error(`TikTok advertiser/info error: ${json.message} (code ${json.code})`);
-}
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
 ```
 
-This is a two-line fix. The URL encoding ensures TikTok correctly receives the advertiser IDs, and the error check prevents silent failures.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

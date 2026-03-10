@@ -147,7 +147,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   const accounts: any[] = [];
   for (let i = 0; i < advertiserIds.length; i += 100) {
     const batch = advertiserIds.slice(i, i + 100);
-    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify(batch)}`;
+    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify(batch))}`;
     const res = await fetch(url, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
@@ -156,6 +156,10 @@ async function fetchTikTokAccounts(appId: string, token: string) {
       throw new Error(`TikTok API error: ${err}`);
     }
     const json = await res.json();
+    console.log("TikTok advertiser/info response:", JSON.stringify({ code: json.code, message: json.message, count: json.data?.list?.length ?? 0 }));
+    if (json.code !== 0) {
+      throw new Error(`TikTok advertiser/info error: ${json.message} (code ${json.code})`);
+    }
 
     for (const adv of json.data?.list ?? []) {
       const currency = adv.currency === "BDT" ? "BDT" : "USD";
