@@ -525,18 +525,27 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Fetch real campaign statuses from TikTok
+          // Fetch real campaign statuses from TikTok (try direct first, then proxy)
           const tiktokStatusMap: Record<string, string> = {};
           try {
             const statusParams = new URLSearchParams({
               advertiser_id: account.ad_account_id,
               page_size: "500",
             });
-            const statusRes = await fetch(
-              `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
+            // Try direct TikTok first (campaign/get may not be geo-blocked)
+            let statusRes = await fetch(
+              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
               { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
             );
-            const statusJson = await statusRes.json();
+            let statusJson = await statusRes.json();
+            // If geo-blocked, try proxy
+            if (statusJson.code === 41000 && tiktokBase !== "https://business-api.tiktok.com") {
+              statusRes = await fetch(
+                `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
+                { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+              );
+              statusJson = await statusRes.json();
+            }
             if (statusJson.code === 0 && statusJson.data?.list) {
               for (const c of statusJson.data.list) {
                 const opStatus = c.operation_status || c.secondary_status || "";
