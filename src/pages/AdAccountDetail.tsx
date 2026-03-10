@@ -364,11 +364,11 @@ export default function AdAccountDetail() {
       </div>
 
       <Tabs defaultValue="details" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="details" className="gap-1"><Settings2 className="h-3.5 w-3.5 hidden sm:inline" /> Details</TabsTrigger>
-          <TabsTrigger value="clients" className="gap-1"><Users className="h-3.5 w-3.5 hidden sm:inline" /> Clients ({assignments.length})</TabsTrigger>
-          <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
-          <TabsTrigger value="billing" className="gap-1"><ShieldAlert className="h-3.5 w-3.5 hidden sm:inline" /> Billing</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide sm:grid sm:grid-cols-4">
+          <TabsTrigger value="details" className="gap-1 flex-1 min-w-0"><Settings2 className="h-3.5 w-3.5 hidden sm:inline" /> Details</TabsTrigger>
+          <TabsTrigger value="clients" className="gap-1 flex-1 min-w-0"><Users className="h-3.5 w-3.5 hidden sm:inline" /> Clients ({assignments.length})</TabsTrigger>
+          <TabsTrigger value="spend" className="gap-1 flex-1 min-w-0"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1 flex-1 min-w-0"><ShieldAlert className="h-3.5 w-3.5 hidden sm:inline" /> Billing</TabsTrigger>
         </TabsList>
 
         {/* DETAILS TAB */}
