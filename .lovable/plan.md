@@ -1,32 +1,34 @@
 
 
-# Diagnosis: TikTok Proxy Partially Working + Date Range Issue
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What the Logs Reveal
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-Looking at the actual edge function logs, there are **two separate problems**:
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-| Function | Error | Meaning |
-|----------|-------|---------|
-| `sync-ad-spend` | **40002** - "max time span is 30 days" | Proxy IS working (got past geo-block), but date range too long |
-| `sync-fast-lane` | **41000** - "banned Country list" | Proxy may not have been redeployed yet |
-| `sync-deep-dive` | **41000** - "banned Country list" | Same - old code may still be running |
+## Technical Change
 
-The `sync-ad-spend` function successfully bypassed the geo-restriction (error 40002 is a date range error, not a geo error), proving the Cloudflare Worker proxy works. But `sync-fast-lane` and `sync-deep-dive` still get 41000, likely because they hadn't finished redeploying when you triggered the sync.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-## Plan
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 1. Force redeploy all TikTok edge functions
-Add a small comment change to `sync-fast-lane` and `sync-deep-dive` to trigger a fresh deployment, ensuring they use the proxy code.
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 2. Fix 30-day date range limit for TikTok
-The TikTok API rejects `stat_time_day` requests spanning more than 30 days. `sync-ad-spend` tries to sync from `2025-11-01` to `2026-03-11` (130+ days). Fix: chunk requests into 30-day windows and merge results.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-### 3. Add diagnostic logging
-Add a log line that prints the exact URL being fetched for TikTok BC-scoped calls so we can confirm the proxy URL is in use.
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-## Files to Change
-- `supabase/functions/sync-ad-spend/index.ts` - Add 30-day chunking for TikTok date ranges
-- `supabase/functions/sync-fast-lane/index.ts` - Add deploy-trigger comment + diagnostic log
-- `supabase/functions/sync-deep-dive/index.ts` - Add deploy-trigger comment + diagnostic log
-
+No database or edge function changes needed.
