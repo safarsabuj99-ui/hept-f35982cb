@@ -320,13 +320,13 @@ export default function Integrations() {
                       variant="outline"
                       size="sm"
                       className="w-full gap-2"
-                      disabled={exchangingToken || !tiktokAuthCode.trim() || !tiktokAppId.trim()}
+                      disabled={exchangingToken || !tiktokAuthCode.trim() || !tiktokAppId.trim() || !tiktokAppSecret.trim()}
                       onClick={async () => {
                         setExchangingToken(true);
                         setExchangeResult(null);
                         try {
                           const { data, error } = await supabase.functions.invoke("tiktok-exchange-token", {
-                            body: { auth_code: tiktokAuthCode.trim(), app_id: tiktokAppId.trim() },
+                            body: { auth_code: tiktokAuthCode.trim(), app_id: tiktokAppId.trim(), app_secret: tiktokAppSecret.trim() },
                           });
                           if (error) throw error;
                           if (data.ok) {

@@ -23,7 +23,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         app_id: app_id,
-        secret: appSecret,
+        secret: app_secret,
         auth_code: auth_code,
       }),
     });
