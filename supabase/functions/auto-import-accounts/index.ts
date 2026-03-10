@@ -99,7 +99,7 @@ async function fetchMetaAccounts(appId: string, token: string) {
 }
 
 // ── TikTok: discover advertisers from Business Center, then fetch details ──
-async function fetchTikTokAccounts(appId: string, token: string) {
+async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: string) {
   // appId = Business Center ID (BC ID)
   const bcId = appId.trim();
   if (!bcId) return [];
@@ -111,7 +111,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   const pageSize = 50;
 
   while (true) {
-    const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
+    const bcUrl = `${tiktokBase}/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
     const bcRes = await fetch(bcUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
@@ -150,7 +150,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   // Step 2a: Fetch advertiser details via BC endpoint (currency, name, status)
   const detailMap: Record<string, { currency: string; name: string }> = {};
   try {
-    const detailUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
+    const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
     console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
     const detailRes = await fetch(detailUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
@@ -182,7 +182,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   const balanceMap: Record<string, { cash: number; grant: number }> = {};
   try {
     const idsParam = encodeURIComponent(JSON.stringify(advertiserIds));
-    const balanceUrl = `https://business-api.tiktok.com/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
+    const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
     console.log(`TikTok balance URL: ${balanceUrl}`);
     const balRes = await fetch(balanceUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
@@ -353,6 +353,13 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     const newAccounts: any[] = [];
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await adminClient
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
+
     for (const integration of integrations) {
       try {
         let discovered: any[] = [];
@@ -362,7 +369,7 @@ Deno.serve(async (req) => {
             discovered = await fetchMetaAccounts(integration.app_id, integration.api_token);
             break;
           case "tiktok":
-            discovered = await fetchTikTokAccounts(integration.app_id, integration.api_token);
+            discovered = await fetchTikTokAccounts(integration.app_id, integration.api_token, tiktokBase);
             break;
           case "google":
             discovered = await fetchGoogleAccounts(integration.app_id, integration.api_token);

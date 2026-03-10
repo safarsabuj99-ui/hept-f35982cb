@@ -1,34 +1,34 @@
 
 
-# Fix: Route ALL TikTok API Calls Through Proxy
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-Your Cloudflare Worker proxy (`https://hept.raohas10.workers.dev/`) is set up correctly, but the edge functions still use the hardcoded `https://business-api.tiktok.com` URL for the **BC-scoped** TikTok calls. The proxy (`tiktokBase`) is only used in the fallback path. Since both BC-scoped and fallback calls originate from the same blocked Singapore IP, both fail with error 41000.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Root Cause
-In 3 sync edge functions, the BC-scoped TikTok report call hardcodes the direct URL instead of using `tiktokBase`:
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+
+## Technical Change
+
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+
+Current code:
 ```
-// Current (broken) - line 328 in sync-fast-lane
-fetch(`https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?...`)
-
-// Should be
-fetch(`${tiktokBase}/open_api/v1.3/report/integrated/get/?...`)
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-## Files to Update
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/sync-fast-lane/index.ts` | Line 328: replace hardcoded URL with `${tiktokBase}` |
-| `supabase/functions/sync-ad-spend/index.ts` | Line ~384: same fix |
-| `supabase/functions/sync-deep-dive/index.ts` | Lines ~479, ~537: same fix for BC report + campaign/get calls |
-| `supabase/functions/auto-import-accounts/index.ts` | Lines ~114, ~153, ~185: route BC asset/advertiser/balance calls through proxy |
-| `supabase/functions/sync-billing-data/index.ts` | Line ~100: route advertiser/info call through proxy |
-| `supabase/functions/test-connection/index.ts` | Line ~76: route test connection call through proxy |
-| `supabase/functions/pause-campaign/index.ts` | Lines ~44, ~210: route campaign get/update calls through proxy |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-For functions that don't already read the `tiktok_proxy_url` setting (auto-import, sync-billing, test-connection, pause-campaign), add the settings lookup and `getTikTokBaseUrl` helper.
-
-## Summary
-Every `fetch("https://business-api.tiktok.com/...")` in edge functions must be replaced with `fetch("${tiktokBase}/...")` so all TikTok traffic routes through your Cloudflare Worker proxy. No database changes needed -- only edge function code updates.
-
+No database or edge function changes needed.

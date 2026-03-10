@@ -38,10 +38,10 @@ async function checkGoogleStatus(customerId: string, rawId: string, token: strin
   } catch { return null; }
 }
 
-async function checkTikTokStatus(advertiserId: string, rawId: string, token: string): Promise<string | null> {
+async function checkTikTokStatus(advertiserId: string, rawId: string, token: string, tiktokBase: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawId}"]}&fields=["operation_status"]`,
+      `${tiktokBase}/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawId}"]}&fields=["operation_status"]`,
       { headers: { "Access-Token": token } }
     );
     const json = await res.json();
@@ -154,6 +154,12 @@ Deno.serve(async (req) => {
     let apiMessage = "";
     let alreadyOff = false;
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabase
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+
     if (platform === "meta") {
       const res = await fetch(
         `https://graph.facebook.com/v21.0/${rawId}?access_token=${integration.api_token}`,
@@ -207,7 +213,7 @@ Deno.serve(async (req) => {
       }
     } else if (platform === "tiktok") {
       const res = await fetch(
-        "https://business-api.tiktok.com/open_api/v1.3/campaign/status/update/",
+        `${tiktokBase}/open_api/v1.3/campaign/status/update/`,
         {
           method: "POST",
           headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" },
@@ -222,7 +228,7 @@ Deno.serve(async (req) => {
       if (json.code === 0) {
         apiSuccess = true;
       } else {
-        const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token);
+        const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
         if (isOffStatus("tiktok", currentStatus)) {
           alreadyOff = true;
         } else {

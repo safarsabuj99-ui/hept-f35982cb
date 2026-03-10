@@ -476,7 +476,7 @@ Deno.serve(async (req) => {
             });
 
             const bcRes = await fetch(
-              `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${bcParams}`,
+              `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
               {
                 headers: {
                   "Access-Token": integration.api_token,
@@ -533,19 +533,11 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
             // Try direct TikTok first (campaign/get may not be geo-blocked)
-            let statusRes = await fetch(
-              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
+            const statusRes = await fetch(
+              `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
               { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
             );
-            let statusJson = await statusRes.json();
-            // If geo-blocked, try proxy
-            if (statusJson.code === 41000 && tiktokBase !== "https://business-api.tiktok.com") {
-              statusRes = await fetch(
-                `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
-                { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
-              );
-              statusJson = await statusRes.json();
-            }
+            const statusJson = await statusRes.json();
             if (statusJson.code === 0 && statusJson.data?.list) {
               for (const c of statusJson.data.list) {
                 const opStatus = c.operation_status || c.secondary_status || "";

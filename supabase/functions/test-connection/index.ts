@@ -52,6 +52,12 @@ serve(async (req) => {
     const token = integration.api_token;
     const appId = integration.app_id;
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabaseAdmin
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+
     let result: { ok: boolean; message: string; details?: string } = { ok: false, message: "Unknown platform" };
 
     if (platform === "meta") {
@@ -73,7 +79,7 @@ serve(async (req) => {
       const bcId = appId;
       // Use /bc/asset/get/ to list advertisers under the BC
       const advRes = await fetch(
-        `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page_size=1`,
+        `${tiktokBase}/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page_size=1`,
         { headers: { "Access-Token": token, "Content-Type": "application/json" } }
       );
       const advData = await safeJson(advRes);

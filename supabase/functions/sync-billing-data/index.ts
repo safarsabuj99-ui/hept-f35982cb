@@ -94,10 +94,10 @@ async function syncMetaBilling(adAccountId: string, token: string) {
 }
 
 // ── TikTok: fetch advertiser balance info ──
-async function syncTikTokBilling(adAccountId: string, token: string) {
+async function syncTikTokBilling(adAccountId: string, token: string, tiktokBase: string) {
   const result: Record<string, any> = {};
   try {
-    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify([adAccountId])}`;
+    const url = `${tiktokBase}/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify([adAccountId])}`;
     const res = await fetch(url, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
@@ -203,6 +203,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await adminClient
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+
     // Fetch live billing data based on platform
     let billingData: Record<string, any> = {};
 
@@ -211,7 +217,7 @@ Deno.serve(async (req) => {
         billingData = await syncMetaBilling(account.ad_account_id, integration.api_token);
         break;
       case "tiktok":
-        billingData = await syncTikTokBilling(account.ad_account_id, integration.api_token);
+        billingData = await syncTikTokBilling(account.ad_account_id, integration.api_token, tiktokBase);
         break;
       case "google":
         billingData = await syncGoogleBilling(account.ad_account_id, integration.api_token);
