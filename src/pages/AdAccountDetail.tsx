@@ -36,10 +36,12 @@ interface ClientProfile {
 
 export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [account, setAccount] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Editable fields
   const [accountName, setAccountName] = useState("");
