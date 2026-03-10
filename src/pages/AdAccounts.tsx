@@ -456,6 +456,7 @@ export default function AdAccounts() {
               );
             })}
           </div>
+          </PullToRefresh>
 
           {/* Desktop Table View */}
           <Card className="hidden md:block">
