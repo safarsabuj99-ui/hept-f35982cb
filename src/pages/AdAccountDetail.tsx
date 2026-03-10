@@ -620,9 +620,9 @@ export default function AdAccountDetail() {
                     <p className="text-sm text-muted-foreground">Your balance reaches</p>
                     {editingThreshold ? (
                       <div className="flex items-center gap-2 mt-1">
-                        <Input
+                         <Input
                           type="number"
-                          className="h-8 w-28"
+                          className="h-8 w-full sm:w-28"
                           value={editThresholdVal}
                           onChange={(e) => setEditThresholdVal(e.target.value)}
                           placeholder="250"
