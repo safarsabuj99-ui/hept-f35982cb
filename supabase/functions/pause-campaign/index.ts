@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
       }
     } else if (platform === "tiktok") {
       const res = await fetch(
-        "https://business-api.tiktok.com/open_api/v1.3/campaign/status/update/",
+        `${tiktokBase}/open_api/v1.3/campaign/status/update/`,
         {
           method: "POST",
           headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" },
@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
       if (json.code === 0) {
         apiSuccess = true;
       } else {
-        const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token);
+        const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
         if (isOffStatus("tiktok", currentStatus)) {
           alreadyOff = true;
         } else {

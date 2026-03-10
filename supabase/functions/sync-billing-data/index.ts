@@ -203,6 +203,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await adminClient
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+
     // Fetch live billing data based on platform
     let billingData: Record<string, any> = {};
 
@@ -211,7 +217,7 @@ Deno.serve(async (req) => {
         billingData = await syncMetaBilling(account.ad_account_id, integration.api_token);
         break;
       case "tiktok":
-        billingData = await syncTikTokBilling(account.ad_account_id, integration.api_token);
+        billingData = await syncTikTokBilling(account.ad_account_id, integration.api_token, tiktokBase);
         break;
       case "google":
         billingData = await syncGoogleBilling(account.ad_account_id, integration.api_token);
