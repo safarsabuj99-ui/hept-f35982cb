@@ -1,22 +1,34 @@
 
 
-## Plan: Move TikTok App Secret to UI Input
+# Fix: Platform Transfers Inflating Today's Collections
 
-### Problem
-Currently the `tiktok-exchange-token` edge function reads `TIKTOK_APP_SECRET` from backend secrets. You want to enter it directly in the Add Instance dialog when creating a TikTok integration.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-**1. Update `tiktok-exchange-token` edge function**
-- Accept `app_secret` from the request body instead of reading from `Deno.env`
-- Validate that `app_secret` is provided alongside `auth_code` and `app_id`
+## Technical Change
 
-**2. Update TikTok OAuth section in `src/pages/Integrations.tsx`**
-- Add a new "App Secret" input field in the TikTok OAuth exchange panel
-- Add state variable `tiktokAppSecret` for the field
-- Pass `app_secret` to the edge function call
-- The secret is only used transiently for the token exchange — not stored in the database
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### Security Note
-The App Secret is sent to the edge function over HTTPS, used once for the token exchange, and never stored. Only the resulting access token is saved in the database.
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

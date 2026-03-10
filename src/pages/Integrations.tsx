@@ -91,6 +91,7 @@ export default function Integrations() {
   const [saving, setSaving] = useState(false);
   const [tiktokAuthCode, setTiktokAuthCode] = useState("");
   const [tiktokAppId, setTiktokAppId] = useState("");
+  const [tiktokAppSecret, setTiktokAppSecret] = useState("");
   const [exchangingToken, setExchangingToken] = useState(false);
   const [exchangeResult, setExchangeResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -299,6 +300,15 @@ export default function Integrations() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label className="text-xs">App Secret</Label>
+                      <Input
+                        type="password"
+                        value={tiktokAppSecret}
+                        onChange={(e) => setTiktokAppSecret(e.target.value)}
+                        placeholder="From Developer Portal → Basic Information"
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label className="text-xs">Auth Code</Label>
                       <Input
                         value={tiktokAuthCode}
@@ -310,13 +320,13 @@ export default function Integrations() {
                       variant="outline"
                       size="sm"
                       className="w-full gap-2"
-                      disabled={exchangingToken || !tiktokAuthCode.trim() || !tiktokAppId.trim()}
+                      disabled={exchangingToken || !tiktokAuthCode.trim() || !tiktokAppId.trim() || !tiktokAppSecret.trim()}
                       onClick={async () => {
                         setExchangingToken(true);
                         setExchangeResult(null);
                         try {
                           const { data, error } = await supabase.functions.invoke("tiktok-exchange-token", {
-                            body: { auth_code: tiktokAuthCode.trim(), app_id: tiktokAppId.trim() },
+                            body: { auth_code: tiktokAuthCode.trim(), app_id: tiktokAppId.trim(), app_secret: tiktokAppSecret.trim() },
                           });
                           if (error) throw error;
                           if (data.ok) {

@@ -12,14 +12,9 @@ serve(async (req) => {
   }
 
   try {
-    const { auth_code, app_id } = await req.json();
-    if (!auth_code || !app_id) {
-      throw new Error("auth_code and app_id are required");
-    }
-
-    const appSecret = Deno.env.get("TIKTOK_APP_SECRET");
-    if (!appSecret) {
-      throw new Error("TIKTOK_APP_SECRET not configured. Please add it in backend secrets.");
+    const { auth_code, app_id, app_secret } = await req.json();
+    if (!auth_code || !app_id || !app_secret) {
+      throw new Error("auth_code, app_id, and app_secret are required");
     }
 
     // Exchange auth_code for access token
@@ -28,7 +23,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         app_id: app_id,
-        secret: appSecret,
+        secret: app_secret,
         auth_code: auth_code,
       }),
     });
