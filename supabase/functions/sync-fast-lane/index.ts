@@ -17,10 +17,31 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
+/** Split a date range into 30-day chunks for TikTok API compatibility */
+function generateDateChunks(startDate: string, endDate: string, maxDays = 30): Array<{start: string, end: string}> {
+  const chunks: Array<{start: string, end: string}> = [];
+  let current = new Date(startDate + "T00:00:00Z");
+  const end = new Date(endDate + "T00:00:00Z");
+  while (current <= end) {
+    const chunkEnd = new Date(current);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + maxDays - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push({
+      start: current.toISOString().split("T")[0],
+      end: chunkEnd.toISOString().split("T")[0],
+    });
+    current = new Date(chunkEnd);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return chunks;
+}
+
 /** Get today's date string in Asia/Dhaka timezone */
 function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
 }
+
+// Force redeploy v2 - proxy + 30-day chunking fix
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
