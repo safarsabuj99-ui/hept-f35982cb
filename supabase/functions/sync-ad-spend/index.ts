@@ -117,6 +117,13 @@ Deno.serve(async (req) => {
 
     console.log(`Syncing spend from ${sinceStr} to ${untilStr} for ${adAccounts.length} mapped accounts`);
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabaseAdmin
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = getTikTokBaseUrl(tiktokProxyUrl);
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
+
     let totalRecords = 0;
     let autoMapped = 0;
     let skipped = 0;
