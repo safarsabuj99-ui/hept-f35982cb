@@ -280,6 +280,29 @@ export default function AdAccountDetail() {
     }
   }
 
+  async function handleDeleteAccount() {
+    if (!accountId) return;
+    setDeleting(true);
+    try {
+      // Delete related data in order
+      await (supabase.from("ad_account_clients" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("billing_notifications" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("campaign_performance" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("daily_ad_spend" as any) as any).delete().eq("ad_account_id", accountId);
+      await (supabase.from("campaign_mappings" as any) as any).delete().eq("ad_account_id", accountId);
+      // Delete campaigns (daily_metrics has FK cascade)
+      await (supabase.from("campaigns" as any) as any).delete().eq("ad_account_id", accountId);
+      // Finally delete the ad account itself
+      const { error } = await (supabase.from("ad_accounts" as any) as any).delete().eq("id", accountId);
+      if (error) throw error;
+      toast({ title: "Deleted", description: "Ad account and all related data removed." });
+      navigate("/admin/ad-accounts");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setDeleting(false);
+    }
+  }
+
   const isThreshold = billingType === "threshold_postpaid";
   const usagePct = isThreshold && account?.threshold_limit > 0
     ? Math.round(((account?.current_threshold_spend ?? 0) / account.threshold_limit) * 100)
