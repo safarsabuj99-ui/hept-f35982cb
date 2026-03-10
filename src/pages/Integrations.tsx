@@ -41,20 +41,21 @@ const SETUP_GUIDES: Record<string, { steps: string[]; link: string; linkLabel: s
   },
   tiktok: {
     steps: [
-      "Go to TikTok Business Center → Settings → Developer",
-      "Create or select your app from the TikTok Marketing API portal",
-      "Navigate to App Management → click on your app",
-      "Go to Tools → Generate Long-Lived Token",
-      "Select advertiser accounts to authorize",
-      "Copy the Access Token (valid for 1 year)",
-      "For App ID: Copy from the app's basic info page",
+      "Go to TikTok Developer Portal → My Apps → select your app",
+      "Copy your App ID (this is also your TikTok Developer App ID)",
+      "Open the Advertiser Authorization URL from your app's settings",
+      "Click 'Confirm' to authorize — you'll be redirected with an auth_code in the URL",
+      "Copy the auth_code from the redirect URL (e.g. ?auth_code=abc123...)",
+      "Paste it below and click 'Exchange for Token' to get a long-lived access token",
+      "For App ID: Enter your Business Center ID (BC ID) — this discovers all advertiser accounts",
     ],
     link: "https://business-api.tiktok.com/portal/docs",
     linkLabel: "Open TikTok Developer Portal",
     tips: [
-      "Long-lived tokens last 1 year — set a reminder to refresh before expiry",
-      "Make sure your app has 'Ad Account Management' and 'Reporting' permissions",
-      "Each advertiser account needs to be individually authorized",
+      "The auth_code expires in ~10 minutes — exchange it quickly after authorization",
+      "Long-lived tokens last 365 days — set a reminder to refresh before expiry",
+      "Your BC ID discovers ALL advertiser accounts automatically — no need to enter IDs manually",
+      "Make sure your app has 'Ad Account Management', 'Reporting', and 'Business Center Management' scopes",
     ],
   },
   google: {
@@ -88,6 +89,10 @@ export default function Integrations() {
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string; details?: string }>>({});
   const [newForm, setNewForm] = useState({ platform: "meta", instance_name: "", api_token: "", app_id: "", token_expiry_date: "" });
   const [saving, setSaving] = useState(false);
+  const [tiktokAuthCode, setTiktokAuthCode] = useState("");
+  const [tiktokAppId, setTiktokAppId] = useState("");
+  const [exchangingToken, setExchangingToken] = useState(false);
+  const [exchangeResult, setExchangeResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const fetchData = async () => {
     const { data } = await (supabase.from("api_integrations" as any).select("*").order("created_at", { ascending: false }) as any);
@@ -274,6 +279,82 @@ export default function Integrations() {
                   <Label>App ID</Label>
                   <Input value={newForm.app_id} onChange={(e) => setNewForm({ ...newForm, app_id: e.target.value })} placeholder="Enter App ID" />
                 </div>
+                {/* TikTok OAuth Token Exchange */}
+                {newForm.platform === "tiktok" && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Zap className="h-4 w-4 text-primary" />
+                      TikTok OAuth — Exchange Auth Code for Token
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      After authorizing your app, paste the auth_code from the redirect URL here. 
+                      Your TikTok Developer App ID is needed for the exchange (not the BC ID above).
+                    </p>
+                    <div className="space-y-2">
+                      <Label className="text-xs">TikTok Developer App ID</Label>
+                      <Input
+                        value={tiktokAppId}
+                        onChange={(e) => setTiktokAppId(e.target.value)}
+                        placeholder="e.g. 7615506076583673857"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Auth Code</Label>
+                      <Input
+                        value={tiktokAuthCode}
+                        onChange={(e) => setTiktokAuthCode(e.target.value)}
+                        placeholder="Paste auth_code from redirect URL"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      disabled={exchangingToken || !tiktokAuthCode.trim() || !tiktokAppId.trim()}
+                      onClick={async () => {
+                        setExchangingToken(true);
+                        setExchangeResult(null);
+                        try {
+                          const { data, error } = await supabase.functions.invoke("tiktok-exchange-token", {
+                            body: { auth_code: tiktokAuthCode.trim(), app_id: tiktokAppId.trim() },
+                          });
+                          if (error) throw error;
+                          if (data.ok) {
+                            setNewForm((prev) => ({
+                              ...prev,
+                              api_token: data.access_token,
+                              token_expiry_date: data.expiry_date || "",
+                            }));
+                            setExchangeResult({ ok: true, message: data.message });
+                            toast({ title: "Token Obtained!", description: data.message });
+                          } else {
+                            setExchangeResult({ ok: false, message: data.message });
+                            toast({ title: "Exchange Failed", description: data.message, variant: "destructive" });
+                          }
+                        } catch (err: any) {
+                          setExchangeResult({ ok: false, message: err.message });
+                          toast({ title: "Exchange Failed", description: err.message, variant: "destructive" });
+                        }
+                        setExchangingToken(false);
+                      }}
+                    >
+                      {exchangingToken ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                      {exchangingToken ? "Exchanging…" : "Exchange for Token"}
+                    </Button>
+                    {exchangeResult && (
+                      <div className={`rounded-md p-2.5 text-xs ${exchangeResult.ok ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "bg-destructive/10 border border-destructive/30 text-destructive"}`}>
+                        <div className="flex items-center gap-1.5">
+                          {exchangeResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                          {exchangeResult.message}
+                        </div>
+                        {exchangeResult.ok && (
+                          <p className="mt-1 text-muted-foreground">✅ Token & expiry auto-filled below</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label>Token Expiry Date</Label>
                   <Input type="date" value={newForm.token_expiry_date} onChange={(e) => setNewForm({ ...newForm, token_expiry_date: e.target.value })} />

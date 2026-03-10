@@ -98,33 +98,71 @@ async function fetchMetaAccounts(appId: string, token: string) {
   return accounts;
 }
 
-// ── TikTok: fetch advertiser accounts ──
+// ── TikTok: discover advertisers from Business Center, then fetch details ──
 async function fetchTikTokAccounts(appId: string, token: string) {
-  // appId stores comma-separated advertiser IDs or a single app/bc ID
-  const advertiserIds = appId.split(",").map((s) => s.trim()).filter(Boolean);
+  // appId = Business Center ID (BC ID)
+  const bcId = appId.trim();
+  if (!bcId) return [];
+
+  // Step 1: Discover all advertiser IDs under the Business Center
+  const advertiserIds: string[] = [];
+  let page = 1;
+  const pageSize = 100;
+
+  while (true) {
+    const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=${page}&page_size=${pageSize}`;
+    const bcRes = await fetch(bcUrl, {
+      headers: { "Access-Token": token, "Content-Type": "application/json" },
+    });
+    if (!bcRes.ok) {
+      const err = await bcRes.text();
+      throw new Error(`TikTok BC API error: ${err}`);
+    }
+    const bcJson = await bcRes.json();
+    if (bcJson.code !== 0) {
+      throw new Error(`TikTok BC error: ${bcJson.message} (code ${bcJson.code})`);
+    }
+
+    const list = bcJson.data?.list ?? [];
+    for (const item of list) {
+      if (item.advertiser_id) {
+        advertiserIds.push(String(item.advertiser_id));
+      }
+    }
+
+    // Check if there are more pages
+    const totalCount = bcJson.data?.page_info?.total_number ?? list.length;
+    if (page * pageSize >= totalCount || list.length === 0) break;
+    page++;
+  }
+
   if (advertiserIds.length === 0) return [];
 
-  const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify(advertiserIds)}`;
-  const res = await fetch(url, {
-    headers: { "Access-Token": token, "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`TikTok API error: ${err}`);
-  }
-  const json = await res.json();
+  // Step 2: Fetch advertiser details in batches of 100
   const accounts: any[] = [];
-
-  for (const adv of json.data?.list ?? []) {
-    const currency = adv.currency === "BDT" ? "BDT" : "USD";
-    accounts.push({
-      ad_account_id: String(adv.advertiser_id),
-      account_name: adv.advertiser_name ?? "",
-      account_currency: currency,
-      billing_type: "prepaid", // TikTok is generally prepaid
-      threshold_limit: null,
-      next_billing_date: null,
+  for (let i = 0; i < advertiserIds.length; i += 100) {
+    const batch = advertiserIds.slice(i, i + 100);
+    const url = `https://business-api.tiktok.com/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify(batch)}`;
+    const res = await fetch(url, {
+      headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`TikTok API error: ${err}`);
+    }
+    const json = await res.json();
+
+    for (const adv of json.data?.list ?? []) {
+      const currency = adv.currency === "BDT" ? "BDT" : "USD";
+      accounts.push({
+        ad_account_id: String(adv.advertiser_id),
+        account_name: adv.advertiser_name ?? "",
+        account_currency: currency,
+        billing_type: "prepaid",
+        threshold_limit: null,
+        next_billing_date: null,
+      });
+    }
   }
 
   return accounts;

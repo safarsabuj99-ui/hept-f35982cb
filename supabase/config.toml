@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.sync-deep-dive]
 verify_jwt = false
+
+[functions.tiktok-exchange-token]
+verify_jwt = false
