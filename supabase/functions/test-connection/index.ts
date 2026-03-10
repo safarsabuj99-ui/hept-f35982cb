@@ -9,6 +9,28 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Helper to safely parse JSON from external API responses
+  async function safeJson(response: Response): Promise<any> {
+    const text = await response.text();
+    try {
+      return JSON.parse(text.trim());
+    } catch {
+      // Try to extract JSON from response
+      const jsonStart = text.search(/[\{\[]/);
+      const lastBrace = text.lastIndexOf('}');
+      const lastBracket = text.lastIndexOf(']');
+      const jsonEnd = Math.max(lastBrace, lastBracket);
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        try {
+          return JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+        } catch {
+          throw new Error(`Invalid JSON response: ${text.substring(0, 200)}`);
+        }
+      }
+      throw new Error(`Non-JSON response: ${text.substring(0, 200)}`);
+    }
+  }
+
   try {
     const { integration_id } = await req.json();
     if (!integration_id) throw new Error("integration_id required");
@@ -33,15 +55,13 @@ serve(async (req) => {
     let result: { ok: boolean; message: string; details?: string } = { ok: false, message: "Unknown platform" };
 
     if (platform === "meta") {
-      // Test Meta token by fetching user info
       const res = await fetch(`https://graph.facebook.com/v21.0/me?fields=id,name&access_token=${token}`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.error) {
         result = { ok: false, message: "Token invalid or expired", details: data.error.message };
       } else {
-        // Also try to list business portfolios
         const bizRes = await fetch(`https://graph.facebook.com/v21.0/me/businesses?fields=id,name&access_token=${token}`);
-        const bizData = await bizRes.json();
+        const bizData = await safeJson(bizRes);
         const bizCount = bizData.data?.length ?? 0;
         result = {
           ok: true,
@@ -50,23 +70,21 @@ serve(async (req) => {
         };
       }
     } else if (platform === "tiktok") {
-      // Test TikTok token using Business Center info endpoint
-      const bcId = appId; // App ID stores the BC ID
+      const bcId = appId;
       const res = await fetch(
         `https://business-api.tiktok.com/open_api/v1.3/bc/get/?bc_id=${bcId}`,
         { headers: { "Access-Token": token, "Content-Type": "application/json" } }
       );
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.code !== 0) {
         result = { ok: false, message: "Token invalid or BC ID incorrect", details: data.message };
       } else {
         const bcName = data.data?.bc_info?.name || data.data?.name || "N/A";
-        // Also count advertisers
         const advRes = await fetch(
           `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page_size=1`,
           { headers: { "Access-Token": token, "Content-Type": "application/json" } }
         );
-        const advData = await advRes.json();
+        const advData = await safeJson(advRes);
         const advCount = advData.data?.page_info?.total_number ?? 0;
         result = {
           ok: true,
@@ -75,18 +93,15 @@ serve(async (req) => {
         };
       }
     } else if (platform === "google") {
-      // Test Google Ads - use the token as a refresh token to get accessible customers
-      // For now, test with a simple OAuth token info check
       const res = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${token}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         result = {
           ok: true,
           message: `Token valid`,
           details: `Scopes: ${data.scope || "N/A"}`,
         };
       } else {
-        // Try as developer token with customer ID in app_id
         result = {
           ok: false,
           message: "Token may be expired or invalid",
