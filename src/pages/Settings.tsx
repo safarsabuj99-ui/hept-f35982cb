@@ -109,10 +109,14 @@ export default function Settings() {
     setSyncing((prev) => ({ ...prev, all: true }));
     for (const fn of SYNC_FUNCTIONS) {
       setSyncing((prev) => ({ ...prev, [fn.key]: true }));
-      const { error } = await supabase.functions.invoke(fn.key);
+      const { data, error } = await supabase.functions.invoke(fn.key);
       setSyncing((prev) => ({ ...prev, [fn.key]: false }));
       if (error) {
         toast({ title: `${fn.label} Failed`, description: error.message, variant: "destructive" });
+      } else if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+        for (const err of data.errors) {
+          toast({ title: `${fn.label} Warning`, description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
+        }
       }
     }
     setSyncing((prev) => ({ ...prev, all: false }));

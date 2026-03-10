@@ -311,7 +311,8 @@ Deno.serve(async (req) => {
 
           const json = await res.json();
           if (json.code !== 0) {
-            errors.push(`TikTok ${account.ad_account_id}: ${json.message}`);
+            console.error(`TikTok API error for ${account.ad_account_id} (${account.account_name}):`, JSON.stringify(json));
+            errors.push(`TikTok ${account.ad_account_id}: [code ${json.code}] ${json.message}`);
             continue;
           }
 
