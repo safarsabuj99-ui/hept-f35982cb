@@ -1,72 +1,34 @@
 
 
-## Cloudflare Worker: TikTok API Proxy Relay
+# Fix: Route ALL TikTok API Calls Through Proxy
 
-Since both direct and BC-scoped TikTok API calls are blocked by error 41000 (geo-restriction on server IP), we need an external proxy in an allowed region. A **Cloudflare Worker** is ideal — free tier supports 100K requests/day, deployed globally, and takes ~5 minutes to set up.
+## Problem
+Your Cloudflare Worker proxy (`https://hept.raohas10.workers.dev/`) is set up correctly, but the edge functions still use the hardcoded `https://business-api.tiktok.com` URL for the **BC-scoped** TikTok calls. The proxy (`tiktokBase`) is only used in the fallback path. Since both BC-scoped and fallback calls originate from the same blocked Singapore IP, both fail with error 41000.
 
-### The Cloudflare Worker Code
+## Root Cause
+In 3 sync edge functions, the BC-scoped TikTok report call hardcodes the direct URL instead of using `tiktokBase`:
+```
+// Current (broken) - line 328 in sync-fast-lane
+fetch(`https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?...`)
 
-You'll deploy this as a Cloudflare Worker. It transparently forwards any request to `business-api.tiktok.com`, preserving headers, path, query params, and body:
-
-```javascript
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    
-    // Forward everything after the worker domain to TikTok
-    const tiktokUrl = `https://business-api.tiktok.com${url.pathname}${url.search}`;
-    
-    // Clone headers, remove Host
-    const headers = new Headers(request.headers);
-    headers.delete("Host");
-    
-    const response = await fetch(tiktokUrl, {
-      method: request.method,
-      headers,
-      body: request.method !== "GET" ? request.body : undefined,
-    });
-    
-    // Return response with CORS
-    const newHeaders = new Headers(response.headers);
-    newHeaders.set("Access-Control-Allow-Origin", "*");
-    
-    return new Response(response.body, {
-      status: response.status,
-      headers: newHeaders,
-    });
-  }
-};
+// Should be
+fetch(`${tiktokBase}/open_api/v1.3/report/integrated/get/?...`)
 ```
 
-### Deployment Steps
+## Files to Update
 
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create Worker**
-2. Name it something like `tiktok-proxy`
-3. Paste the code above and click **Deploy**
-4. Your proxy URL will be: `https://tiktok-proxy.<your-subdomain>.workers.dev`
-5. In your app's **Settings** page, paste that URL into the **TikTok API Proxy URL** field and save
-6. Trigger a manual sync — the edge functions will route TikTok calls through your worker
+| File | Change |
+|------|--------|
+| `supabase/functions/sync-fast-lane/index.ts` | Line 328: replace hardcoded URL with `${tiktokBase}` |
+| `supabase/functions/sync-ad-spend/index.ts` | Line ~384: same fix |
+| `supabase/functions/sync-deep-dive/index.ts` | Lines ~479, ~537: same fix for BC report + campaign/get calls |
+| `supabase/functions/auto-import-accounts/index.ts` | Lines ~114, ~153, ~185: route BC asset/advertiser/balance calls through proxy |
+| `supabase/functions/sync-billing-data/index.ts` | Line ~100: route advertiser/info call through proxy |
+| `supabase/functions/test-connection/index.ts` | Line ~76: route test connection call through proxy |
+| `supabase/functions/pause-campaign/index.ts` | Lines ~44, ~210: route campaign get/update calls through proxy |
 
-### How It Works With Your Code
+For functions that don't already read the `tiktok_proxy_url` setting (auto-import, sync-billing, test-connection, pause-campaign), add the settings lookup and `getTikTokBaseUrl` helper.
 
-Your sync functions already have `getTikTokBaseUrl(proxyUrl)` which replaces `https://business-api.tiktok.com` with the proxy URL. So a call like:
-
-```
-https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?...
-```
-
-Becomes:
-
-```
-https://tiktok-proxy.your-subdomain.workers.dev/open_api/v1.3/report/integrated/get/?...
-```
-
-The Worker forwards it to TikTok from Cloudflare's network (US/EU IPs), bypassing the geo-block.
-
-### Important Notes
-
-- **Free tier**: 100,000 requests/day — more than enough for ad sync
-- **Region**: Cloudflare Workers run on edge nodes globally; TikTok typically allows US/EU IPs
-- **Security**: The Access-Token header passes through to TikTok, so only your edge functions (with valid tokens) can use it meaningfully
-- **No code changes needed** in Lovable — just paste the Worker URL in Settings
+## Summary
+Every `fetch("https://business-api.tiktok.com/...")` in edge functions must be replaced with `fetch("${tiktokBase}/...")` so all TikTok traffic routes through your Cloudflare Worker proxy. No database changes needed -- only edge function code updates.
 
