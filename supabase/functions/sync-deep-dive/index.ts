@@ -6,6 +6,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
+
+/** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
+function getTikTokBaseUrl(proxyUrl: string | null): string {
+  if (proxyUrl) {
+    return proxyUrl.replace(/\/+$/, "");
+  }
+  return TIKTOK_BASE_URL;
+}
+
 /** Get today's date string in Asia/Dhaka timezone */
 function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
@@ -105,6 +115,13 @@ Deno.serve(async (req) => {
     let totalSynced = 0;
     let skippedCampaigns = 0;
     const errors: string[] = [];
+
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabase
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = getTikTokBaseUrl(tiktokProxyUrl);
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
 
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
@@ -452,7 +469,7 @@ Deno.serve(async (req) => {
           });
 
           const res = await fetch(
-            `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${params}`,
+            `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
             {
               headers: {
                 "Access-Token": integration.api_token,
@@ -476,7 +493,7 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
             const statusRes = await fetch(
-              `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?${statusParams}`,
+              `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
               { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
             );
             const statusJson = await statusRes.json();

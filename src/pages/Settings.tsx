@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell } from "lucide-react";
+import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,8 @@ export default function Settings() {
   const [savingMargin, setSavingMargin] = useState(false);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
+  const [savingProxy, setSavingProxy] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -46,11 +48,12 @@ export default function Settings() {
     supabase
       .from("settings" as any)
       .select("key, value")
-      .in("key", ["service_margin_percentage", "sync_start_date"])
+      .in("key", ["service_margin_percentage", "sync_start_date", "tiktok_proxy_url"])
       .then(({ data }: any) => {
         for (const row of data ?? []) {
           if (row.key === "service_margin_percentage") setServiceMargin(row.value);
           if (row.key === "sync_start_date") setSyncStartDate(new Date(row.value + "T00:00:00"));
+          if (row.key === "tiktok_proxy_url") setTiktokProxyUrl(row.value || "");
         }
         setLoading(false);
       });
@@ -84,6 +87,19 @@ export default function Settings() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Saved", description: `Sync start date set to ${dateStr}. Next sync will import from this date.` });
+    }
+  };
+
+  const handleSaveProxy = async () => {
+    setSavingProxy(true);
+    const { error } = await (supabase.from("settings" as any) as any)
+      .update({ value: tiktokProxyUrl.trim(), updated_by: user?.id })
+      .eq("key", "tiktok_proxy_url");
+    setSavingProxy(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Saved", description: tiktokProxyUrl.trim() ? "TikTok proxy URL configured. Next sync will use it." : "TikTok proxy removed. Direct API calls will be used." });
     }
   };
 
@@ -254,6 +270,43 @@ export default function Settings() {
               <Button onClick={handleSaveSyncDate} className="w-full" disabled={savingSyncDate || !syncStartDate}>
                 {savingSyncDate ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save Sync Date
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Globe className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>TikTok API Proxy</CardTitle>
+              <CardDescription>Route TikTok calls through a proxy to bypass geo-restrictions</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Proxy Base URL</Label>
+                <Input
+                  type="url"
+                  value={tiktokProxyUrl}
+                  onChange={(e) => setTiktokProxyUrl(e.target.value)}
+                  placeholder="https://your-proxy.workers.dev"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty for direct API calls. Set to a relay server URL to bypass TikTok error 41000 (geo-restriction).
+                </p>
+              </div>
+              <Button onClick={handleSaveProxy} className="w-full" disabled={savingProxy}>
+                {savingProxy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Proxy URL
               </Button>
             </div>
           )}
