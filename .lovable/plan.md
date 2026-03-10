@@ -1,34 +1,42 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Problem: TikTok Import Returns 0 Accounts
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The import succeeds (no errors) but finds 0 accounts. The `/bc/asset/get/` API call returns `code: 0` (success), but the code fails to extract advertiser IDs from the response because the **response structure** doesn't match what we're looking for.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### Root Cause
 
-## Technical Change
+The code looks for `item.advertiser_id` or `item.asset_id` on each list item (line 128), but the TikTok `/bc/asset/get/` endpoint for `ADVERTISER` assets likely nests the data differently — e.g., under `item.advertiser_info.advertiser_id` or uses a different field name entirely.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+Since TikTok's docs are dynamically rendered and hard to verify, we can't confirm the exact structure without seeing the actual response.
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### Fix Plan
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+**Step 1: Add debug logging** to `auto-import-accounts/index.ts` to log the raw TikTok API response so we can see the actual data structure:
+
+```typescript
+// After line 121: const bcJson = await bcRes.json();
+console.log("TikTok BC Asset response:", JSON.stringify(bcJson.data?.list?.[0] ?? "empty list"));
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+**Step 2: Broaden the advertiser ID extraction** (line 126-132) to check multiple possible field paths:
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+```typescript
+const list = bcJson.data?.list ?? [];
+for (const item of list) {
+  const advId = item.advertiser_id 
+    || item.asset_id 
+    || item.id
+    || item.advertiser_info?.advertiser_id;
+  if (advId) {
+    advertiserIds.push(String(advId));
+  }
+}
+```
 
-No database or edge function changes needed.
+This covers the most common TikTok API response patterns. The debug log will tell us the exact structure on the next run, allowing a targeted fix if needed.
+
+### What to expect
+
+After this change, try "Sync from API" again. The console logs (visible in edge function logs) will show the actual TikTok response structure, and the broadened extraction should catch the advertiser IDs regardless of which field they're in.
+
