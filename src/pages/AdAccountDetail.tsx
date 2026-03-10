@@ -352,10 +352,10 @@ export default function AdAccountDetail() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{account.account_name || account.ad_account_id}</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">{account.account_name || account.ad_account_id}</h1>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <Badge variant="secondary" className="capitalize">{account.platform_name}</Badge>
             <Badge variant={account.is_active ? "default" : "outline"}>{account.is_active ? "Active" : "Inactive"}</Badge>
           </div>
