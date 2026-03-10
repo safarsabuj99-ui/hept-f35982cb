@@ -38,10 +38,10 @@ async function checkGoogleStatus(customerId: string, rawId: string, token: strin
   } catch { return null; }
 }
 
-async function checkTikTokStatus(advertiserId: string, rawId: string, token: string): Promise<string | null> {
+async function checkTikTokStatus(advertiserId: string, rawId: string, token: string, tiktokBase: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawId}"]}&fields=["operation_status"]`,
+      `${tiktokBase}/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawId}"]}&fields=["operation_status"]`,
       { headers: { "Access-Token": token } }
     );
     const json = await res.json();
