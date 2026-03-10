@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { differenceInDays } from "date-fns";
 import { TablePagination } from "@/components/TablePagination";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
+import { PullToRefresh } from "@/components/PullToRefresh";
 
 const PLATFORMS = [
   { value: "meta", label: "Meta" },
@@ -356,6 +357,7 @@ export default function AdAccounts() {
       ) : (
         <>
           {/* Mobile Card View */}
+          <PullToRefresh onRefresh={fetchData}>
           <div className="flex flex-col gap-3 md:hidden">
             {paginatedAccounts.map((a: any) => {
               const isThreshold = a.billing_type === "threshold_postpaid";
@@ -454,6 +456,7 @@ export default function AdAccounts() {
               );
             })}
           </div>
+          </PullToRefresh>
 
           {/* Desktop Table View */}
           <Card className="hidden md:block">

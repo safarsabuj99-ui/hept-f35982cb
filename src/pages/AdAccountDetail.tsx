@@ -352,10 +352,10 @@ export default function AdAccountDetail() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{account.account_name || account.ad_account_id}</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">{account.account_name || account.ad_account_id}</h1>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <Badge variant="secondary" className="capitalize">{account.platform_name}</Badge>
             <Badge variant={account.is_active ? "default" : "outline"}>{account.is_active ? "Active" : "Inactive"}</Badge>
           </div>
@@ -364,11 +364,11 @@ export default function AdAccountDetail() {
       </div>
 
       <Tabs defaultValue="details" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="details" className="gap-1"><Settings2 className="h-3.5 w-3.5 hidden sm:inline" /> Details</TabsTrigger>
-          <TabsTrigger value="clients" className="gap-1"><Users className="h-3.5 w-3.5 hidden sm:inline" /> Clients ({assignments.length})</TabsTrigger>
-          <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
-          <TabsTrigger value="billing" className="gap-1"><ShieldAlert className="h-3.5 w-3.5 hidden sm:inline" /> Billing</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide sm:grid sm:grid-cols-4">
+          <TabsTrigger value="details" className="gap-1 flex-1 min-w-0"><Settings2 className="h-3.5 w-3.5 hidden sm:inline" /> Details</TabsTrigger>
+          <TabsTrigger value="clients" className="gap-1 flex-1 min-w-0"><Users className="h-3.5 w-3.5 hidden sm:inline" /> Clients ({assignments.length})</TabsTrigger>
+          <TabsTrigger value="spend" className="gap-1 flex-1 min-w-0"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1 flex-1 min-w-0"><ShieldAlert className="h-3.5 w-3.5 hidden sm:inline" /> Billing</TabsTrigger>
         </TabsList>
 
         {/* DETAILS TAB */}
@@ -459,12 +459,12 @@ export default function AdAccountDetail() {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={handleSyncBilling} disabled={syncing || !account?.api_integration_id} className="gap-2">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={handleSyncBilling} disabled={syncing || !account?.api_integration_id} className="gap-2 w-full sm:w-auto">
                   {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Sync from Platform
                 </Button>
-                <Button onClick={handleSave} disabled={saving} className="gap-2">
+                <Button onClick={handleSave} disabled={saving} className="gap-2 w-full sm:w-auto">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Changes
                 </Button>
@@ -484,35 +484,52 @@ export default function AdAccountDetail() {
               {assignments.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">No clients assigned yet.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Mapping Keyword</TableHead>
-                      <TableHead className="w-[60px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  {/* Mobile card list */}
+                  <div className="flex flex-col gap-2 md:hidden">
                     {assignments.map((a: any) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
-                        <TableCell><Badge variant="outline" className="font-mono text-xs">{a.mapping_keyword || "—"}</Badge></TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeAssignment(a.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{getClientName(a.client_id)}</p>
+                          <Badge variant="outline" className="font-mono text-xs mt-1">{a.mapping_keyword || "—"}</Badge>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive shrink-0" onClick={() => removeAssignment(a.id)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                  {/* Desktop table */}
+                  <Table className="hidden md:table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Mapping Keyword</TableHead>
+                        <TableHead className="w-[60px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {assignments.map((a: any) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="font-medium">{getClientName(a.client_id)}</TableCell>
+                          <TableCell><Badge variant="outline" className="font-mono text-xs">{a.mapping_keyword || "—"}</Badge></TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => removeAssignment(a.id)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
               )}
 
               {/* Add Client */}
               <div className="border-t pt-4">
                 <p className="text-sm font-medium mb-3 flex items-center gap-1.5"><UserPlus className="h-4 w-4" /> Add Client(s)</p>
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div className="space-y-1.5 min-w-[220px]">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="space-y-1.5 w-full sm:min-w-[220px] sm:w-auto">
                     <Label className="text-xs">Clients</Label>
                     <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
                       <PopoverTrigger asChild>
@@ -550,11 +567,11 @@ export default function AdAccountDetail() {
                       </PopoverContent>
                     </Popover>
                   </div>
-                  <div className="space-y-1.5 min-w-[160px]">
+                  <div className="space-y-1.5 w-full sm:min-w-[160px] sm:w-auto">
                     <Label className="text-xs">Mapping Keyword</Label>
                     <Input className="h-9" placeholder="e.g. brandname" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} />
                   </div>
-                  <Button size="sm" className="h-9" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
+                  <Button size="sm" className="h-9 w-full sm:w-auto" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
                     {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                     Assign {selectedClientIds.length > 1 ? `(${selectedClientIds.length})` : ""}
                   </Button>
@@ -578,7 +595,7 @@ export default function AdAccountDetail() {
               <CardTitle className="text-base text-muted-foreground font-medium">Outstanding balance</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold tracking-tight">
+              <p className="text-3xl sm:text-4xl font-bold tracking-tight">
                 {fmt(account.current_threshold_spend ?? 0)}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
@@ -603,9 +620,9 @@ export default function AdAccountDetail() {
                     <p className="text-sm text-muted-foreground">Your balance reaches</p>
                     {editingThreshold ? (
                       <div className="flex items-center gap-2 mt-1">
-                        <Input
+                         <Input
                           type="number"
-                          className="h-8 w-28"
+                          className="h-8 w-full sm:w-28"
                           value={editThresholdVal}
                           onChange={(e) => setEditThresholdVal(e.target.value)}
                           placeholder="250"
@@ -642,9 +659,9 @@ export default function AdAccountDetail() {
                     <p className="text-sm text-muted-foreground">And on this date</p>
                     {editingBillingDate ? (
                       <div className="flex items-center gap-2 mt-1">
-                        <Input
+                         <Input
                           type="date"
-                          className="h-8 w-40"
+                          className="h-8 w-full sm:w-40"
                           value={editBillingDateVal}
                           onChange={(e) => setEditBillingDateVal(e.target.value)}
                           autoFocus
