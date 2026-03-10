@@ -90,6 +90,19 @@ export default function Settings() {
     }
   };
 
+  const handleSaveProxy = async () => {
+    setSavingProxy(true);
+    const { error } = await (supabase.from("settings" as any) as any)
+      .update({ value: tiktokProxyUrl.trim(), updated_by: user?.id })
+      .eq("key", "tiktok_proxy_url");
+    setSavingProxy(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Saved", description: tiktokProxyUrl.trim() ? "TikTok proxy URL configured. Next sync will use it." : "TikTok proxy removed. Direct API calls will be used." });
+    }
+  };
+
   const handleManualSync = async (fn: SyncFunction) => {
     setSyncing((prev) => ({ ...prev, [fn]: true }));
     const { data, error } = await supabase.functions.invoke(fn);
