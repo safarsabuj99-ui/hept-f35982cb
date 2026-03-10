@@ -99,7 +99,7 @@ async function fetchMetaAccounts(appId: string, token: string) {
 }
 
 // ── TikTok: discover advertisers from Business Center, then fetch details ──
-async function fetchTikTokAccounts(appId: string, token: string) {
+async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: string) {
   // appId = Business Center ID (BC ID)
   const bcId = appId.trim();
   if (!bcId) return [];
@@ -111,7 +111,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   const pageSize = 50;
 
   while (true) {
-    const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
+    const bcUrl = `${tiktokBase}/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
     const bcRes = await fetch(bcUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
     });
