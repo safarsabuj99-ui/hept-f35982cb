@@ -107,7 +107,7 @@ async function fetchTikTokAccounts(appId: string, token: string) {
   // Step 1: Discover all advertiser IDs under the Business Center using /bc/asset/get/
   const advertiserIds: string[] = [];
   let page = 1;
-  const pageSize = 100;
+  const pageSize = 50;
 
   while (true) {
     const bcUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page=${page}&page_size=${pageSize}`;
