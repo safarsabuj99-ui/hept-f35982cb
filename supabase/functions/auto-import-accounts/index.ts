@@ -353,6 +353,13 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     const newAccounts: any[] = [];
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await adminClient
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
+
     for (const integration of integrations) {
       try {
         let discovered: any[] = [];
@@ -362,7 +369,7 @@ Deno.serve(async (req) => {
             discovered = await fetchMetaAccounts(integration.app_id, integration.api_token);
             break;
           case "tiktok":
-            discovered = await fetchTikTokAccounts(integration.app_id, integration.api_token);
+            discovered = await fetchTikTokAccounts(integration.app_id, integration.api_token, tiktokBase);
             break;
           case "google":
             discovered = await fetchGoogleAccounts(integration.app_id, integration.api_token);
