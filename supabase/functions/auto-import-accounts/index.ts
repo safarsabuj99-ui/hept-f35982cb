@@ -145,16 +145,85 @@ async function fetchTikTokAccounts(appId: string, token: string) {
 
   if (advertiserIds.length === 0) return [];
 
-  // Build accounts directly from Step 1 data (skips geo-blocked /advertiser/info/ endpoint)
-  console.log(`Building ${advertiserIds.length} TikTok accounts from BC asset discovery data`);
-  return advertiserIds.map((id, idx) => ({
-    ad_account_id: id,
-    account_name: advertiserNames[idx] || `TikTok Advertiser ${id}`,
-    account_currency: "USD",
-    billing_type: "prepaid",
-    threshold_limit: null,
-    next_billing_date: null,
-  }));
+  console.log(`Building ${advertiserIds.length} TikTok accounts with enrichment from BC endpoints`);
+
+  // Step 2a: Fetch advertiser details via BC endpoint (currency, name, status)
+  const detailMap: Record<string, { currency: string; name: string }> = {};
+  try {
+    const detailUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
+    console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
+    const detailRes = await fetch(detailUrl, {
+      headers: { "Access-Token": token, "Content-Type": "application/json" },
+    });
+    const detailJson = await detailRes.json();
+    console.log(`TikTok BC advertiser detail response code: ${detailJson.code}`);
+    if (detailJson.code === 0 && detailJson.data?.list) {
+      for (const adv of detailJson.data.list) {
+        const advId = String(adv.advertiser_id || adv.id || "");
+        if (advId) {
+          detailMap[advId] = {
+            currency: adv.currency || "USD",
+            name: adv.advertiser_name || adv.name || "",
+          };
+        }
+      }
+      console.log(`TikTok BC advertiser details fetched for ${Object.keys(detailMap).length} accounts`);
+      if (detailJson.data.list.length > 0) {
+        console.log(`TikTok BC advertiser detail sample: ${JSON.stringify(detailJson.data.list[0])}`);
+      }
+    } else {
+      console.warn(`TikTok BC advertiser detail failed: ${detailJson.message || "unknown"}`);
+    }
+  } catch (e) {
+    console.warn(`TikTok BC advertiser detail call failed (falling back to defaults): ${e.message}`);
+  }
+
+  // Step 2b: Fetch balances via BC endpoint
+  const balanceMap: Record<string, { cash: number; grant: number }> = {};
+  try {
+    const idsParam = encodeURIComponent(JSON.stringify(advertiserIds));
+    const balanceUrl = `https://business-api.tiktok.com/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
+    console.log(`TikTok balance URL: ${balanceUrl}`);
+    const balRes = await fetch(balanceUrl, {
+      headers: { "Access-Token": token, "Content-Type": "application/json" },
+    });
+    const balJson = await balRes.json();
+    console.log(`TikTok balance response code: ${balJson.code}`);
+    if (balJson.code === 0 && balJson.data?.list) {
+      for (const b of balJson.data.list) {
+        const bId = String(b.advertiser_id || "");
+        if (bId) {
+          balanceMap[bId] = {
+            cash: Number(b.cash_balance ?? b.balance ?? 0),
+            grant: Number(b.grant_balance ?? 0),
+          };
+        }
+      }
+      console.log(`TikTok balances fetched for ${Object.keys(balanceMap).length} accounts`);
+    } else {
+      console.warn(`TikTok balance fetch failed: ${balJson.message || "unknown"}`);
+    }
+  } catch (e) {
+    console.warn(`TikTok balance call failed (falling back to defaults): ${e.message}`);
+  }
+
+  // Step 3: Build enriched accounts with fallback
+  return advertiserIds.map((id, idx) => {
+    const detail = detailMap[id];
+    const bal = balanceMap[id];
+    const rawCurrency = detail?.currency?.toUpperCase() || "USD";
+    const accountCurrency = rawCurrency === "BDT" ? "BDT" : "USD";
+
+    return {
+      ad_account_id: id,
+      account_name: detail?.name || advertiserNames[idx] || `TikTok Advertiser ${id}`,
+      account_currency: accountCurrency,
+      billing_type: "prepaid",
+      threshold_limit: null,
+      next_billing_date: null,
+      current_threshold_spend: bal ? bal.cash + bal.grant : null,
+    };
+  });
 }
 
 // ── Google: fetch accessible customer accounts ──

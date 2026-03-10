@@ -1,44 +1,34 @@
 
 
-## Enrich TikTok Ad Account Import with Real Metadata
+# Fix: Platform Transfers Inflating Today's Collections
 
-### Problem
-Currently, TikTok ad accounts are imported with hardcoded values (USD currency, prepaid billing, no balance). The user needs automatic detection of currency, billing type, and balance from TikTok's API.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### Solution
-Use two BC-level TikTok API endpoints (which already work without geo-block since they use `bc_id`):
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-1. **`/bc/advertiser/get/`** — returns advertiser details including `currency`, `name`, `status`, `timezone` for all advertisers under the BC. This replaces the blocked `/advertiser/info/` endpoint.
+## Technical Change
 
-2. **`/advertiser/balance/get/`** — returns balance and budget info per advertiser under the BC. Fields: `cash_balance`, `grant_balance`, `transfer_balance`.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### Implementation
-
-**File: `supabase/functions/auto-import-accounts/index.ts`**
-
-Replace the current TikTok account building logic (lines 148-157) with:
-
-**Step 2a — Fetch advertiser details via BC endpoint:**
-```typescript
-const detailUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
+Current code:
 ```
-Extract: `currency`, `name`, `status` per advertiser. Map currency to "BDT" or "USD".
-
-**Step 2b — Fetch balances via BC endpoint:**
-```typescript
-const balanceUrl = `https://business-api.tiktok.com/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${encodeURIComponent(JSON.stringify(advertiserIds))}`;
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
-Extract: `cash_balance`, `grant_balance` per advertiser. Sum as outstanding balance.
 
-**Step 3 — Build enriched accounts:**
-- `account_currency`: from advertiser details (BDT or USD)
-- `billing_type`: "prepaid" (TikTok default; can be overridden if balance data suggests otherwise)
-- `threshold_limit`: null (TikTok doesn't use threshold billing)
-- `current_threshold_spend`: mapped from balance data
-- `account_name`: real name from API
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-Both endpoints use `bc_id` so they should bypass the same geo-restriction that blocks `/advertiser/info/`. If either fails, the function falls back to the current behavior (IDs from Step 1 with defaults).
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-### Fallback Strategy
-Wrap each enrichment call in try/catch. If geo-blocked, fall back to current hardcoded defaults so import never breaks.
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
