@@ -328,74 +328,71 @@ Deno.serve(async (req) => {
           }
 
           const bcId = integration.app_id || "";
-          let json: any = null;
+          const dateChunks = generateDateChunks(startDateStr, endDateStr);
+          console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${endDateStr}], base=${tiktokBase}`);
+          let allTiktokRows: any[] = [];
+          let tiktokFailed = false;
 
-          // Try BC-scoped reporting first (bypasses geo-restriction error 41000)
-          if (bcId) {
-            const bcParams = new URLSearchParams({
-              bc_id: bcId,
-              advertiser_ids: JSON.stringify([account.ad_account_id]),
-              service_type: "AUCTION",
-              report_type: "BASIC",
-              data_level: "AUCTION_CAMPAIGN",
-              dimensions: '["campaign_id","stat_time_day"]',
-              metrics: '["campaign_name","spend"]',
-              start_date: startDateStr,
-              end_date: endDateStr,
-              page_size: "500",
-            });
+          for (const chunk of dateChunks) {
+            let cJson: any = null;
 
-            const bcRes = await fetch(
-              `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
-              {
-                headers: {
-                  "Access-Token": integration.api_token,
-                  "Content-Type": "application/json",
-                },
+            if (bcId) {
+              const bcParams = new URLSearchParams({
+                bc_id: bcId,
+                advertiser_ids: JSON.stringify([account.ad_account_id]),
+                service_type: "AUCTION",
+                report_type: "BASIC",
+                data_level: "AUCTION_CAMPAIGN",
+                dimensions: '["campaign_id","stat_time_day"]',
+                metrics: '["campaign_name","spend"]',
+                start_date: chunk.start,
+                end_date: chunk.end,
+                page_size: "500",
+              });
+
+              const bcRes = await fetch(
+                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
+                { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+              );
+
+              cJson = await bcRes.json();
+              if (cJson.code !== 0) {
+                console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                cJson = null;
               }
-            );
-
-            json = await bcRes.json();
-            if (json.code !== 0) {
-              console.warn(`TikTok BC-scoped report failed for ${account.ad_account_id}: [code ${json.code}] ${json.message}. Falling back to standard API.`);
-              json = null; // fall through to standard
-            } else {
-              console.log(`TikTok BC-scoped report succeeded for ${account.ad_account_id}`);
             }
+
+            if (!cJson) {
+              const params = new URLSearchParams({
+                advertiser_id: account.ad_account_id,
+                report_type: "BASIC",
+                data_level: "AUCTION_CAMPAIGN",
+                dimensions: '["campaign_id","stat_time_day"]',
+                metrics: '["campaign_name","spend"]',
+                start_date: chunk.start,
+                end_date: chunk.end,
+                page_size: "500",
+              });
+
+              const res = await fetch(
+                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
+                { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+              );
+
+              cJson = await res.json();
+              if (cJson.code !== 0) {
+                console.error(`TikTok chunk ${chunk.start}-${chunk.end} error:`, JSON.stringify(cJson));
+                errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
+                tiktokFailed = true;
+                break;
+              }
+            }
+
+            allTiktokRows = allTiktokRows.concat(cJson.data?.list || []);
           }
 
-          // Fallback: standard advertiser-scoped reporting (may fail with 41000)
-          if (!json) {
-            const params = new URLSearchParams({
-              advertiser_id: account.ad_account_id,
-              report_type: "BASIC",
-              data_level: "AUCTION_CAMPAIGN",
-              dimensions: '["campaign_id","stat_time_day"]',
-              metrics: '["campaign_name","spend"]',
-              start_date: startDateStr,
-              end_date: endDateStr,
-              page_size: "500",
-            });
-
-            const res = await fetch(
-              `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-              {
-                headers: {
-                  "Access-Token": integration.api_token,
-                  "Content-Type": "application/json",
-                },
-              }
-            );
-
-            json = await res.json();
-            if (json.code !== 0) {
-              console.error(`TikTok API error for ${account.ad_account_id}:`, JSON.stringify(json));
-              errors.push(`TikTok ${account.ad_account_id}: [code ${json.code}] ${json.message}`);
-              continue;
-            }
-          }
-
-          const rows = json.data?.list || [];
+          if (tiktokFailed) continue;
+          const rows = allTiktokRows;
           const spendRecords: any[] = [];
 
           for (const row of rows) {
