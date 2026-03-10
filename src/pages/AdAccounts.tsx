@@ -78,7 +78,6 @@ export default function AdAccounts() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("ad-accounts-realtime")
@@ -150,7 +149,6 @@ export default function AdAccounts() {
     }
   };
 
-
   const toggleIntegration = (id: string) => {
     setSelectedIntegrations((prev) => {
       const next = new Set(prev);
@@ -182,6 +180,7 @@ export default function AdAccounts() {
     if (pct >= 60) return "text-yellow-500";
     return "text-emerald-500";
   };
+
   const filteredAccounts = accounts.filter((a: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -190,18 +189,21 @@ export default function AdAccounts() {
       || (a.platform_name || "").toLowerCase().includes(q);
   });
 
+  const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header — stacks on mobile */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ad Accounts</h1>
-          <p className="text-muted-foreground">Manage platform ad accounts linked to clients</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Ad Accounts</h1>
+          <p className="text-sm text-muted-foreground">Manage platform ad accounts linked to clients</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           {/* Auto-Import Dialog */}
           <Dialog open={importOpen} onOpenChange={setImportOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" disabled={integrations.length === 0}>
+              <Button variant="outline" disabled={integrations.length === 0} className="flex-1 sm:flex-none h-11 sm:h-10">
                 <Download className="mr-2 h-4 w-4" /> Auto-Import
               </Button>
             </DialogTrigger>
@@ -259,7 +261,7 @@ export default function AdAccounts() {
           {/* Add Account Dialog */}
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
+              <Button className="flex-1 sm:flex-none h-11 sm:h-10"><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>New Ad Account</DialogTitle></DialogHeader>
@@ -290,7 +292,7 @@ export default function AdAccounts() {
                   </div>
                 )}
                 <div className="space-y-2">
-                   <Label>Account Spending Limit ($)</Label>
+                  <Label>Account Spending Limit ($)</Label>
                   <Input type="number" value={form.account_spending_limit} onChange={(e) => setForm({ ...form, account_spending_limit: e.target.value })} placeholder="250" min="0" step="10" />
                 </div>
                 <div className="space-y-2">
@@ -328,127 +330,238 @@ export default function AdAccounts() {
         </div>
       </div>
 
+      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search by account name, ID, or platform..."
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-          className="pl-9 max-w-md"
+          className="pl-9 w-full sm:max-w-md"
         />
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          {loading ? (
-            <TableSkeleton rows={5} columns={8} />
-          ) : filteredAccounts.length === 0 ? (
+      {/* Content */}
+      {loading ? (
+        <Card><CardContent className="pt-6"><TableSkeleton rows={5} columns={8} /></CardContent></Card>
+      ) : filteredAccounts.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <Monitor className="h-10 w-10" />
               <p>No ad accounts yet</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Platform</TableHead>
-                    <TableHead>Account Name</TableHead>
-                    <TableHead>Account ID</TableHead>
-                    <TableHead>Clients</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead>Balance</TableHead>
-                    <TableHead>Billing</TableHead>
-                    <TableHead>Next Bill</TableHead>
-                    <TableHead>Active</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((a: any) => {
-                    const isThreshold = a.billing_type === "threshold_postpaid";
-                    const usagePct = isThreshold && a.threshold_limit > 0
-                      ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
-                      : 0;
-                    const daysUntilBill = a.next_billing_date
-                      ? differenceInDays(new Date(a.next_billing_date), new Date())
-                      : null;
-                    const accountAssignments = getAccountAssignments(a.id);
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Mobile Card View */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {paginatedAccounts.map((a: any) => {
+              const isThreshold = a.billing_type === "threshold_postpaid";
+              const usagePct = isThreshold && a.threshold_limit > 0
+                ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
+                : 0;
+              const daysUntilBill = a.next_billing_date
+                ? differenceInDays(new Date(a.next_billing_date), new Date())
+                : null;
+              const accountAssignments = getAccountAssignments(a.id);
+              const integration = a.api_integration_id ? integrations.find(i => i.id === a.api_integration_id) : null;
 
-                    return (
-                      <TableRow key={a.id}>
-                        <TableCell>
-                          <Badge variant="secondary" className="capitalize">{a.platform_name}</Badge>
-                          {a.api_integration_id && (() => {
-                            const int = integrations.find(i => i.id === a.api_integration_id);
-                            return int ? (
-                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">
-                                {int.instance_name || `${int.platform} integration`}
-                              </p>
-                            ) : null;
-                          })()}
-                        </TableCell>
-                        <TableCell>
-                          <button onClick={() => navigate(`/admin/ad-accounts/${a.id}`)} className="font-medium text-sm text-primary hover:underline flex items-center gap-1">
-                            {a.account_name || a.ad_account_id}
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
-                        <TableCell className="text-sm">
-                          {accountAssignments.length > 0 ? (
-                            <Badge variant="secondary">{accountAssignments.length} client{accountAssignments.length !== 1 ? "s" : ""}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
-                        <TableCell>
-                          {isThreshold && a.threshold_limit > 0 ? (
-                            <div className="min-w-[140px]">
-                              <div className="flex justify-between text-[11px] font-mono mb-1">
-                                <span className={usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-warning" : "text-success"}>
-                                  ${(a.current_threshold_spend ?? 0).toFixed(2)}
-                                </span>
-                                <span className="text-muted-foreground">/ ${a.threshold_limit}</span>
-                              </div>
-                              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-                                <div
-                                  className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-warning" : "bg-success"}`}
-                                  style={{ width: `${Math.min(usagePct, 100)}%` }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
-                            {isThreshold ? "Threshold" : "Prepaid"}
+              return (
+                <div key={a.id} className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+                  {/* Top row: Platform + Active toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="capitalize text-xs">{a.platform_name}</Badge>
+                      {integration && (
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                          {integration.instance_name || `${integration.platform}`}
+                        </span>
+                      )}
+                    </div>
+                    <Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} />
+                  </div>
+
+                  {/* Account name + ID */}
+                  <div>
+                    <button
+                      onClick={() => navigate(`/admin/ad-accounts/${a.id}`)}
+                      className="font-semibold text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      {a.account_name || a.ad_account_id}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </button>
+                    <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{a.ad_account_id}</p>
+                  </div>
+
+                  {/* 2-column info grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Clients</span>
+                      <p className="font-medium mt-0.5">
+                        {accountAssignments.length > 0
+                          ? `${accountAssignments.length} client${accountAssignments.length !== 1 ? "s" : ""}`
+                          : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Currency</span>
+                      <p className="mt-0.5">
+                        <Badge variant={a.account_currency === "BDT" ? "outline" : "default"} className="text-[10px]">{a.account_currency}</Badge>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Billing</span>
+                      <p className="mt-0.5">
+                        <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
+                          {isThreshold ? "Threshold" : "Prepaid"}
+                        </Badge>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Next Bill</span>
+                      <p className="font-medium mt-0.5">
+                        {daysUntilBill !== null && daysUntilBill >= 0 ? (
+                          <Badge variant={daysUntilBill <= 2 ? "destructive" : "outline"} className="text-[10px]">
+                            {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill}d`}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {daysUntilBill !== null && daysUntilBill >= 0 ? (
-                            <Badge variant={daysUntilBill <= 2 ? "destructive" : "outline"} className="text-[10px]">
-                              {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill}d`}
+                        ) : a.next_billing_date ? (
+                          <span className="text-muted-foreground">{a.next_billing_date}</span>
+                        ) : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Balance / threshold progress */}
+                  {isThreshold && a.threshold_limit > 0 && (
+                    <div className="pt-1">
+                      <div className="flex justify-between text-[11px] font-mono mb-1">
+                        <span className={usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-warning" : "text-success"}>
+                          ${(a.current_threshold_spend ?? 0).toFixed(2)}
+                        </span>
+                        <span className="text-muted-foreground">/ ${a.threshold_limit}</span>
+                      </div>
+                      <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-warning" : "bg-success"}`}
+                          style={{ width: `${Math.min(usagePct, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <Card className="hidden md:block">
+            <CardContent className="pt-6">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Platform</TableHead>
+                      <TableHead>Account Name</TableHead>
+                      <TableHead>Account ID</TableHead>
+                      <TableHead>Clients</TableHead>
+                      <TableHead>Currency</TableHead>
+                      <TableHead>Balance</TableHead>
+                      <TableHead>Billing</TableHead>
+                      <TableHead>Next Bill</TableHead>
+                      <TableHead>Active</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedAccounts.map((a: any) => {
+                      const isThreshold = a.billing_type === "threshold_postpaid";
+                      const usagePct = isThreshold && a.threshold_limit > 0
+                        ? Math.round((a.current_threshold_spend / a.threshold_limit) * 100)
+                        : 0;
+                      const daysUntilBill = a.next_billing_date
+                        ? differenceInDays(new Date(a.next_billing_date), new Date())
+                        : null;
+                      const accountAssignments = getAccountAssignments(a.id);
+
+                      return (
+                        <TableRow key={a.id}>
+                          <TableCell>
+                            <Badge variant="secondary" className="capitalize">{a.platform_name}</Badge>
+                            {a.api_integration_id && (() => {
+                              const int = integrations.find(i => i.id === a.api_integration_id);
+                              return int ? (
+                                <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">
+                                  {int.instance_name || `${int.platform} integration`}
+                                </p>
+                              ) : null;
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <button onClick={() => navigate(`/admin/ad-accounts/${a.id}`)} className="font-medium text-sm text-primary hover:underline flex items-center gap-1">
+                              {a.account_name || a.ad_account_id}
+                              <ExternalLink className="h-3 w-3" />
+                            </button>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{a.ad_account_id}</TableCell>
+                          <TableCell className="text-sm">
+                            {accountAssignments.length > 0 ? (
+                              <Badge variant="secondary">{accountAssignments.length} client{accountAssignments.length !== 1 ? "s" : ""}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell><Badge variant={a.account_currency === "BDT" ? "outline" : "default"}>{a.account_currency}</Badge></TableCell>
+                          <TableCell>
+                            {isThreshold && a.threshold_limit > 0 ? (
+                              <div className="min-w-[140px]">
+                                <div className="flex justify-between text-[11px] font-mono mb-1">
+                                  <span className={usagePct >= 80 ? "text-destructive" : usagePct >= 60 ? "text-warning" : "text-success"}>
+                                    ${(a.current_threshold_spend ?? 0).toFixed(2)}
+                                  </span>
+                                  <span className="text-muted-foreground">/ ${a.threshold_limit}</span>
+                                </div>
+                                <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                                  <div
+                                    className={`h-full transition-all ${usagePct >= 80 ? "bg-destructive" : usagePct >= 60 ? "bg-warning" : "bg-success"}`}
+                                    style={{ width: `${Math.min(usagePct, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={isThreshold ? "destructive" : "secondary"} className="text-[10px]">
+                              {isThreshold ? "Threshold" : "Prepaid"}
                             </Badge>
-                          ) : a.next_billing_date ? (
-                            <span className="text-xs text-muted-foreground">{a.next_billing_date}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell><Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} /></TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              <TablePagination totalItems={filteredAccounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          </TableCell>
+                          <TableCell>
+                            {daysUntilBill !== null && daysUntilBill >= 0 ? (
+                              <Badge variant={daysUntilBill <= 2 ? "destructive" : "outline"} className="text-[10px]">
+                                {daysUntilBill === 0 ? "Today" : daysUntilBill === 1 ? "Tomorrow" : `${daysUntilBill}d`}
+                              </Badge>
+                            ) : a.next_billing_date ? (
+                              <span className="text-xs text-muted-foreground">{a.next_billing_date}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell><Switch checked={a.is_active} onCheckedChange={() => toggleActive(a.id, a.is_active)} /></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pagination for both views */}
+          <TablePagination totalItems={filteredAccounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
+        </>
+      )}
     </div>
   );
 }
