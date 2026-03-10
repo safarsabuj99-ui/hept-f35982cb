@@ -300,38 +300,78 @@ Deno.serve(async (req) => {
           console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "tiktok") {
-          // ===== TIKTOK: Real API with stat_time_day =====
+          // ===== TIKTOK: BC-scoped reporting to bypass geo-restrictions =====
           if (!integration?.api_token) {
             errors.push(`TikTok ${account.ad_account_id}: No API token`);
             continue;
           }
 
-          const params = new URLSearchParams({
-            advertiser_id: account.ad_account_id,
-            report_type: "BASIC",
-            data_level: "AUCTION_CAMPAIGN",
-            dimensions: '["campaign_id","stat_time_day"]',
-            metrics: '["campaign_name","spend"]',
-            start_date: startDateStr,
-            end_date: endDateStr,
-            page_size: "500",
-          });
+          const bcId = integration.app_id || "";
+          let json: any = null;
 
-          const res = await fetch(
-            `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-            {
-              headers: {
-                "Access-Token": integration.api_token,
-                "Content-Type": "application/json",
-              },
+          // Try BC-scoped reporting first (bypasses geo-restriction error 41000)
+          if (bcId) {
+            const bcParams = new URLSearchParams({
+              bc_id: bcId,
+              advertiser_ids: JSON.stringify([account.ad_account_id]),
+              service_type: "AUCTION",
+              report_type: "BASIC",
+              data_level: "AUCTION_CAMPAIGN",
+              dimensions: '["campaign_id","stat_time_day"]',
+              metrics: '["campaign_name","spend"]',
+              start_date: startDateStr,
+              end_date: endDateStr,
+              page_size: "500",
+            });
+
+            const bcRes = await fetch(
+              `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${bcParams}`,
+              {
+                headers: {
+                  "Access-Token": integration.api_token,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            json = await bcRes.json();
+            if (json.code !== 0) {
+              console.warn(`TikTok BC-scoped report failed for ${account.ad_account_id}: [code ${json.code}] ${json.message}. Falling back to standard API.`);
+              json = null; // fall through to standard
+            } else {
+              console.log(`TikTok BC-scoped report succeeded for ${account.ad_account_id}`);
             }
-          );
+          }
 
-          const json = await res.json();
-          if (json.code !== 0) {
-            console.error(`TikTok API error for ${account.ad_account_id} (${account.account_name}):`, JSON.stringify(json));
-            errors.push(`TikTok ${account.ad_account_id}: [code ${json.code}] ${json.message}`);
-            continue;
+          // Fallback: standard advertiser-scoped reporting (may fail with 41000)
+          if (!json) {
+            const params = new URLSearchParams({
+              advertiser_id: account.ad_account_id,
+              report_type: "BASIC",
+              data_level: "AUCTION_CAMPAIGN",
+              dimensions: '["campaign_id","stat_time_day"]',
+              metrics: '["campaign_name","spend"]',
+              start_date: startDateStr,
+              end_date: endDateStr,
+              page_size: "500",
+            });
+
+            const res = await fetch(
+              `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
+              {
+                headers: {
+                  "Access-Token": integration.api_token,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            json = await res.json();
+            if (json.code !== 0) {
+              console.error(`TikTok API error for ${account.ad_account_id}:`, JSON.stringify(json));
+              errors.push(`TikTok ${account.ad_account_id}: [code ${json.code}] ${json.message}`);
+              continue;
+            }
           }
 
           const rows = json.data?.list || [];
