@@ -95,6 +95,12 @@ export default function Settings() {
       toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Sync Complete", description: data?.message || `${fn} finished successfully.` });
+      // Surface any platform-specific errors (e.g. TikTok geo-restriction)
+      if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+        for (const err of data.errors) {
+          toast({ title: "Sync Warning", description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
+        }
+      }
       fetchLastSynced();
     }
   };
