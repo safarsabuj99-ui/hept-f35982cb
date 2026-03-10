@@ -119,13 +119,17 @@ async function fetchTikTokAccounts(appId: string, token: string) {
       throw new Error(`TikTok BC Asset API error: ${errText}`);
     }
     const bcJson = await bcRes.json();
+    console.log("TikTok BC Asset response sample:", JSON.stringify(bcJson.data?.list?.[0] ?? "empty list"));
     if (bcJson.code !== 0) {
       throw new Error(`TikTok BC error: ${bcJson.message} (code ${bcJson.code})`);
     }
 
     const list = bcJson.data?.list ?? [];
     for (const item of list) {
-      const advId = item.advertiser_id || item.asset_id;
+      const advId = item.advertiser_id 
+        || item.asset_id 
+        || item.id
+        || item.advertiser_info?.advertiser_id;
       if (advId) {
         advertiserIds.push(String(advId));
       }
