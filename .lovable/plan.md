@@ -1,34 +1,46 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## TikTok Business Center Integration — What Needs to Change
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+### The Problem
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+Your current TikTok discovery function (`auto-import-accounts`) expects **comma-separated advertiser IDs** in the App ID field. But with a Business Center, you don't know the advertiser IDs upfront — you need to **discover them from the BC ID first**.
 
-## Technical Change
+### What I'll Change
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+**1. Update the `auto-import-accounts` edge function** — Modify `fetchTikTokAccounts()` to:
+- First call `GET /open_api/v1.3/bc/advertiser/get/` with the BC ID to discover all advertiser IDs under the Business Center
+- Then call `/open_api/v1.3/advertiser/info/` with those discovered IDs to get account details
+- Handle pagination (TikTok returns max 100 per page)
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+**2. Update the `test-connection` edge function** — Change the TikTok test to validate using the BC endpoint (`/open_api/v1.3/bc/info/`) instead of the user info endpoint, confirming BC access and showing BC name.
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+**3. Update the TikTok setup guide** in the Integrations page — Replace the outdated steps with the correct OAuth flow:
+- Step 1: Open your Advertiser Authorization URL and click Confirm
+- Step 2: Copy the `auth_code` from the redirect URL
+- Step 3: Exchange for a long-lived token (via a new edge function)
+- App ID = Business Center ID
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+**4. Create a `tiktok-exchange-token` edge function** — A new function that:
+- Accepts `auth_code`, `app_id`, and `app_secret`
+- Calls TikTok's `POST /open_api/v1.3/oauth2/access_token/` to exchange for a long-lived token
+- Returns the token so it can be saved to the integration
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+**5. Add a "TikTok OAuth" button** in the Add Instance dialog — When TikTok is selected, show an additional field for auth code and a button to exchange it for a token automatically.
 
-No database or edge function changes needed.
+### What You Need to Provide
+
+- **App Secret** from TikTok Developer Portal (My Apps → HEPT → Basic Information) — I'll securely store this as a backend secret
+- **Business Center ID**: `7602648217663048705` (already known)
+- **Auth Code**: `3a8695d6afe8d5124284d252b079d66f783ab2b4` (already captured, but these expire in ~10 minutes, so we'll need a fresh one when ready)
+
+### Step-by-Step After Implementation
+
+1. I store your TikTok App Secret securely in the backend
+2. You go to Integrations → Add Instance → TikTok
+3. Enter Instance Name: "HEPT AGENCY"
+4. Enter App ID (BC ID): `7602648217663048705`
+5. Open the authorization URL, click Confirm, paste the auth code
+6. Click "Exchange Token" — system auto-generates the long-lived token
+7. Go to Ad Accounts → Sync from API — all accounts under your BC are discovered automatically
+
