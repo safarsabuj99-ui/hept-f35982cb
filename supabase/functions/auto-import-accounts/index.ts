@@ -150,7 +150,7 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
   // Step 2a: Fetch advertiser details via BC endpoint (currency, name, status)
   const detailMap: Record<string, { currency: string; name: string }> = {};
   try {
-    const detailUrl = `https://business-api.tiktok.com/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
+    const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
     console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
     const detailRes = await fetch(detailUrl, {
       headers: { "Access-Token": token, "Content-Type": "application/json" },
