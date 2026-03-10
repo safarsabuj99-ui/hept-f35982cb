@@ -375,7 +375,7 @@ Deno.serve(async (req) => {
         });
 
         const res = await fetch(
-          `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?${params}`,
+          `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
           {
             headers: {
               "Access-Token": accessToken,
