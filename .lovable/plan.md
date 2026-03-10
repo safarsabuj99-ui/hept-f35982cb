@@ -1,34 +1,72 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Cloudflare Worker: TikTok API Proxy Relay
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+Since both direct and BC-scoped TikTok API calls are blocked by error 41000 (geo-restriction on server IP), we need an external proxy in an allowed region. A **Cloudflare Worker** is ideal — free tier supports 100K requests/day, deployed globally, and takes ~5 minutes to set up.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### The Cloudflare Worker Code
 
-## Technical Change
+You'll deploy this as a Cloudflare Worker. It transparently forwards any request to `business-api.tiktok.com`, preserving headers, path, query params, and body:
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
+```javascript
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    
+    // Forward everything after the worker domain to TikTok
+    const tiktokUrl = `https://business-api.tiktok.com${url.pathname}${url.search}`;
+    
+    // Clone headers, remove Host
+    const headers = new Headers(request.headers);
+    headers.delete("Host");
+    
+    const response = await fetch(tiktokUrl, {
+      method: request.method,
+      headers,
+      body: request.method !== "GET" ? request.body : undefined,
+    });
+    
+    // Return response with CORS
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set("Access-Control-Allow-Origin", "*");
+    
+    return new Response(response.body, {
+      status: response.status,
+      headers: newHeaders,
+    });
+  }
+};
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+
+### Deployment Steps
+
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create Worker**
+2. Name it something like `tiktok-proxy`
+3. Paste the code above and click **Deploy**
+4. Your proxy URL will be: `https://tiktok-proxy.<your-subdomain>.workers.dev`
+5. In your app's **Settings** page, paste that URL into the **TikTok API Proxy URL** field and save
+6. Trigger a manual sync — the edge functions will route TikTok calls through your worker
+
+### How It Works With Your Code
+
+Your sync functions already have `getTikTokBaseUrl(proxyUrl)` which replaces `https://business-api.tiktok.com` with the proxy URL. So a call like:
+
+```
+https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?...
 ```
 
-Updated code -- exclude transfer credits:
+Becomes:
+
 ```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+https://tiktok-proxy.your-subdomain.workers.dev/open_api/v1.3/report/integrated/get/?...
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+The Worker forwards it to TikTok from Cloudflare's network (US/EU IPs), bypassing the geo-block.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### Important Notes
 
-No database or edge function changes needed.
+- **Free tier**: 100,000 requests/day — more than enough for ad sync
+- **Region**: Cloudflare Workers run on edge nodes globally; TikTok typically allows US/EU IPs
+- **Security**: The Access-Token header passes through to TikTok, so only your edge functions (with valid tokens) can use it meaningfully
+- **No code changes needed** in Lovable — just paste the Worker URL in Settings
+
