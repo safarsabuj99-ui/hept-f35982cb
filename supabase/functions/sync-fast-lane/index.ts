@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
+
+/** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
+function getTikTokBaseUrl(proxyUrl: string | null): string {
+  if (proxyUrl) {
+    // Remove trailing slash
+    return proxyUrl.replace(/\/+$/, "");
+  }
+  return TIKTOK_BASE_URL;
+}
+
 /** Get today's date string in Asia/Dhaka timezone */
 function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
