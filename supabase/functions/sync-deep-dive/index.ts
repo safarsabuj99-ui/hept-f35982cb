@@ -116,6 +116,13 @@ Deno.serve(async (req) => {
     let skippedCampaigns = 0;
     const errors: string[] = [];
 
+    // Get TikTok proxy URL setting
+    const { data: proxySetting } = await supabase
+      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
+    const tiktokProxyUrl = proxySetting?.value || null;
+    const tiktokBase = getTikTokBaseUrl(tiktokProxyUrl);
+    if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
+
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
       const platform = account.platform_name;
