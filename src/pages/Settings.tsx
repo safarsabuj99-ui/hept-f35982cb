@@ -275,6 +275,43 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Globe className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>TikTok API Proxy</CardTitle>
+              <CardDescription>Route TikTok calls through a proxy to bypass geo-restrictions</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Proxy Base URL</Label>
+                <Input
+                  type="url"
+                  value={tiktokProxyUrl}
+                  onChange={(e) => setTiktokProxyUrl(e.target.value)}
+                  placeholder="https://your-proxy.workers.dev"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty for direct API calls. Set to a relay server URL to bypass TikTok error 41000 (geo-restriction).
+                </p>
+              </div>
+              <Button onClick={handleSaveProxy} className="w-full" disabled={savingProxy}>
+                {savingProxy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Proxy URL
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
