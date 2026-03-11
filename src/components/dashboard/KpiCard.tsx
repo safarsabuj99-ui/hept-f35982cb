@@ -33,7 +33,8 @@ function useCountUp(target: string, loading?: boolean) {
     
     if (isNaN(endVal)) { setDisplay(target); return; }
     
-    const startVal = 0;
+    const prevMatch = prevRef.current.match(/[\d,.]+/);
+    const startVal = prevMatch ? parseFloat(prevMatch[0].replace(/,/g, "")) : 0;
     const duration = 800;
     const startTime = performance.now();
     const hasDecimals = numMatch[0].includes(".");

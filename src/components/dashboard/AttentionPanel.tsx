@@ -16,7 +16,7 @@ export function AttentionPanel() {
             <AlertTriangle className="h-4 w-4" />
             Attention Required
           </div>
-          <TabsList className="h-8 bg-transparent p-0 gap-1">
+          <TabsList className="h-8 bg-transparent p-0 gap-1 overflow-x-auto flex-nowrap">
             <TabsTrigger value="alerts" className="h-7 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-muted">
               <AlertTriangle className="h-3 w-3" /> Alerts
             </TabsTrigger>

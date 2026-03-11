@@ -42,7 +42,6 @@ export function ClientOverviewTable({ clients, loading }: Props) {
   });
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtBdt = (_n: number) => "—";
 
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
     <button onClick={() => handleSort(k)} className="inline-flex items-center gap-1 hover:text-foreground transition-colors">
@@ -59,7 +58,12 @@ export function ClientOverviewTable({ clients, loading }: Props) {
         {loading ? (
           <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : sorted.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No clients yet.</p>
+          <div className="py-8 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">No clients yet.</p>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/clients/new"><Plus className="h-3.5 w-3.5 mr-1.5" /> New Client</Link>
+            </Button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -67,8 +71,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                 <TableRow>
                   <TableHead><SortBtn k="full_name" label="Name" /></TableHead>
                   <TableHead className="hidden sm:table-cell">Business</TableHead>
-                  <TableHead className="text-right"><SortBtn k="balance" label="Balance (USD)" /></TableHead>
-                  <TableHead className="text-right hidden md:table-cell">Balance (BDT)</TableHead>
+                  <TableHead className="text-right"><SortBtn k="balance" label="Balance" /></TableHead>
                   <TableHead className="text-right hidden lg:table-cell"><SortBtn k="todaySpend" label="Today's Spend" /></TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -83,14 +86,11 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                         {fmt(c.balance)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right hidden md:table-cell font-mono text-sm text-muted-foreground">
-                      {fmtBdt(c.balance)}
-                    </TableCell>
                     <TableCell className="text-right hidden lg:table-cell font-mono text-sm">
                       {c.todaySpend > 0 ? fmt(c.todaySpend) : "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
                           <Link to={`/admin/clients/${c.user_id}`}><Eye className="h-3.5 w-3.5" /></Link>
                         </Button>
