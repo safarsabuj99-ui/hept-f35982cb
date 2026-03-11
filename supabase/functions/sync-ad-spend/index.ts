@@ -16,6 +16,20 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
+/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, { headers });
+    const json = await res.json();
+    if (json.code === 41000 && attempt < maxRetries) {
+      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+    return json;
+  }
+}
+
 /** Split a date range into 30-day chunks for TikTok API compatibility */
 function generateDateChunks(startDate: string, endDate: string, maxDays = 30): Array<{start: string, end: string}> {
   const chunks: Array<{start: string, end: string}> = [];
@@ -409,12 +423,12 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
 
-            const bcRes = await fetch(
+            const bcRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
-              { headers: { "Access-Token": accessToken, "Content-Type": "application/json" } }
+              { "Access-Token": accessToken, "Content-Type": "application/json" }
             );
 
-            cJson = await bcRes.json();
+            cJson = bcRes;
             if (cJson.code !== 0) {
               console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
               cJson = null;
@@ -433,12 +447,12 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
 
-            const res = await fetch(
+            const directRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-              { headers: { "Access-Token": accessToken, "Content-Type": "application/json" } }
+              { "Access-Token": accessToken, "Content-Type": "application/json" }
             );
 
-            cJson = await res.json();
+            cJson = directRes;
             if (cJson.code !== 0) {
               console.error(`TikTok chunk ${chunk.start}-${chunk.end} error:`, JSON.stringify(cJson));
               errors.push(`TikTok ${advertiserId}: [code ${cJson.code}] ${cJson.message}`);
