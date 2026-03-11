@@ -432,7 +432,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         <div className="flex items-center justify-between mt-2.5 mb-2">
           <div className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="text-xs text-muted-foreground capitalize">{row.status}</span>
+            <span className="text-xs text-muted-foreground capitalize">{normalizeStatus(row.status)}</span>
           </div>
           {canToggle && (
             <div className="flex items-center gap-1">
