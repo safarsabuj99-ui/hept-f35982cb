@@ -237,6 +237,7 @@ Deno.serve(async (req) => {
       }
     } else if (platform === "tiktok") {
       const optStatus = isEnableAction ? "ENABLE" : "DISABLE";
+      console.log(`TikTok ${action}: calling ${tiktokBase}/open_api/v1.3/campaign/status/update/ with advertiser_id=${adAccount.ad_account_id}, campaign=${rawId}, operation_status=${optStatus}`);
       const res = await fetch(
         `${tiktokBase}/open_api/v1.3/campaign/status/update/`,
         {
@@ -249,9 +250,21 @@ Deno.serve(async (req) => {
           }),
         }
       );
-      const json = await res.json();
+      const resText = await res.text();
+      console.log(`TikTok ${action} response: ${resText}`);
+      let json: any;
+      try { json = JSON.parse(resText); } catch { json = { code: -1, message: resText }; }
       if (json.code === 0) {
         apiSuccess = true;
+      } else if (json.code === 41000 || (json.message && json.message.includes("banned Country"))) {
+        // Geo-restriction — check actual status and sync if already correct
+        const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
+        console.log(`TikTok geo-blocked, checking current status: ${currentStatus}`);
+        if (isEnableAction ? isOnStatus("tiktok", currentStatus) : isOffStatus("tiktok", currentStatus)) {
+          alreadyInState = true;
+        } else {
+          apiMessage = "TikTok API is geo-restricted. Ensure your Cloudflare proxy has Smart Placement enabled for POST requests.";
+        }
       } else {
         const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
         if (isEnableAction ? isOnStatus("tiktok", currentStatus) : isOffStatus("tiktok", currentStatus)) {
