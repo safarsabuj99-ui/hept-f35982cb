@@ -14,6 +14,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X } fr
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { TablePagination } from "@/components/TablePagination";
@@ -59,6 +60,9 @@ const fmtNum = (n: number) => {
   return n.toLocaleString();
 };
 
+/** Check if a status string represents an "active" campaign (including enriched TikTok statuses) */
+const isActiveStatus = (status: string) => status === "active" || status.startsWith("active -");
+
 const columnHelper = createColumnHelper<CampaignRow>();
 
 interface DeepDiveTableProps {
@@ -69,8 +73,8 @@ interface DeepDiveTableProps {
 export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pausingId, setPausingId] = useState<string | null>(null);
-  const [confirmPause, setConfirmPause] = useState<CampaignRow | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [confirmToggle, setConfirmToggle] = useState<{ row: CampaignRow; action: "pause" | "enable" } | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -111,7 +115,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   }, [filteredData, currentPage, pageSize]);
 
   const selectableRows = useMemo(
-    () => paginatedData.filter(r => r.campaign_id && r.status === "active"),
+    () => paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)),
     [paginatedData]
   );
 
@@ -141,22 +145,23 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     }
   }, [selectableRows, selectedIds]);
 
-  const handlePause = async (row: CampaignRow) => {
+  const handleToggle = async (row: CampaignRow, action: "pause" | "enable") => {
     if (!row.campaign_id) return;
-    setPausingId(row.campaign_id);
+    setTogglingId(row.campaign_id);
     try {
       const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
-        body: { campaign_id: row.campaign_id },
+        body: { campaign_id: row.campaign_id, action },
       });
       if (error) throw error;
       if (result?.error) throw new Error(result.error);
-      toast({ title: "Campaign Paused", description: result?.message || "Campaign has been paused successfully." });
+      const verb = action === "enable" ? "Enabled" : "Paused";
+      toast({ title: `Campaign ${verb}`, description: result?.message || `Campaign has been ${verb.toLowerCase()} successfully.` });
       onCampaignPaused?.();
     } catch (err: any) {
-      toast({ title: "Failed to pause", description: err.message, variant: "destructive" });
+      toast({ title: `Failed to ${action}`, description: err.message, variant: "destructive" });
     } finally {
-      setPausingId(null);
-      setConfirmPause(null);
+      setTogglingId(null);
+      setConfirmToggle(null);
     }
   };
 
@@ -171,7 +176,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       setBulkProgress({ current: i + 1, total: ids.length });
       try {
         const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
-          body: { campaign_id: ids[i] },
+          body: { campaign_id: ids[i], action: "pause" },
         });
         if (error) throw error;
         if (result?.error) throw new Error(result.error);
@@ -211,7 +216,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       },
       cell: (info) => {
         const row = info.row.original;
-        const isSelectable = row.campaign_id && row.status === "active";
+        const isSelectable = row.campaign_id && isActiveStatus(row.status);
         if (!isSelectable) return <div className="w-4" />;
         return (
           <Checkbox
@@ -247,35 +252,44 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       cell: (info) => {
         const row = info.row.original;
         const status = info.getValue();
-        const isPausing = pausingId === row.campaign_id;
+        const isToggling = togglingId === row.campaign_id;
+        const active = isActiveStatus(status);
 
         const redStatuses = ["not delivering", "disapproved", "with issues"];
-        const yellowStatuses = ["in process", "pending review"];
+        const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
         const dimStatuses = ["archived", "deleted"];
 
         let dotClass = "bg-muted-foreground/40";
-        if (status === "active") dotClass = "bg-green-500";
-        else if (redStatuses.includes(status)) dotClass = "bg-red-500";
-        else if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
-        else if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
+        if (active) dotClass = "bg-green-500";
+        if (redStatuses.includes(status)) dotClass = "bg-red-500";
+        if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
+        if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
+        // Override: active with enriched label gets yellow dot
+        if (status.startsWith("active -")) dotClass = "bg-yellow-500";
+
+        const canToggle = row.campaign_id && (active || status === "paused");
 
         return (
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-              <span className="text-xs text-muted-foreground capitalize">{status}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+              <span className="text-xs text-muted-foreground capitalize truncate">{status}</span>
             </div>
-            {status === "active" && row.campaign_id && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                disabled={isPausing}
-                onClick={(e) => { e.stopPropagation(); setConfirmPause(row); }}
-                title="Pause campaign"
-              >
-                {isPausing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
-              </Button>
+            {canToggle && (
+              <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                {isToggling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : (
+                  <Switch
+                    checked={active}
+                    onCheckedChange={() => {
+                      const action = active ? "pause" : "enable";
+                      setConfirmToggle({ row, action });
+                    }}
+                    className="scale-75"
+                  />
+                )}
+              </div>
             )}
           </div>
         );
@@ -328,7 +342,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
       },
     }),
-  ], [pausingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll]);
+  ], [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll]);
 
   const table = useReactTable({
     data: paginatedData,
@@ -359,16 +373,19 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     const roas = safeDivide(row.conversion_value, row.spend);
     const cpo = safeDivide(row.spend, row.results);
     const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
-    const isSelectable = row.campaign_id && row.status === "active";
+    const isSelectable = row.campaign_id && isActiveStatus(row.status);
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
-    const isPausing = pausingId === row.campaign_id;
+    const isToggling = togglingId === row.campaign_id;
+    const active = isActiveStatus(row.status);
+    const canToggle = row.campaign_id && (active || row.status === "paused");
 
     const redStatuses = ["not delivering", "disapproved", "with issues"];
-    const yellowStatuses = ["in process", "pending review"];
+    const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
     let dotClass = "bg-muted-foreground/40";
-    if (row.status === "active") dotClass = "bg-green-500";
-    else if (redStatuses.includes(row.status)) dotClass = "bg-red-500";
-    else if (yellowStatuses.includes(row.status)) dotClass = "bg-yellow-500";
+    if (active) dotClass = "bg-green-500";
+    if (redStatuses.includes(row.status)) dotClass = "bg-red-500";
+    if (yellowStatuses.includes(row.status)) dotClass = "bg-yellow-500";
+    if (row.status.startsWith("active -")) dotClass = "bg-yellow-500";
 
     let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
     if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
@@ -404,17 +421,21 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className={`h-2 w-2 rounded-full ${dotClass}`} />
             <span className="text-xs text-muted-foreground capitalize">{row.status}</span>
           </div>
-          {row.status === "active" && row.campaign_id && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1"
-              disabled={isPausing}
-              onClick={() => setConfirmPause(row)}
-            >
-              {isPausing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Power className="h-3 w-3" />}
-              Pause
-            </Button>
+          {canToggle && (
+            <div className="flex items-center gap-1">
+              {isToggling ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : (
+                <Switch
+                  checked={active}
+                  onCheckedChange={() => {
+                    const action = active ? "pause" : "enable";
+                    setConfirmToggle({ row, action });
+                  }}
+                  className="scale-75"
+                />
+              )}
+            </div>
           )}
         </div>
 
@@ -600,24 +621,32 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         onPageSizeChange={setPageSize}
       />
 
-      {/* Single pause confirm */}
-      <AlertDialog open={!!confirmPause} onOpenChange={() => setConfirmPause(null)}>
+      {/* Toggle confirm dialog (pause or enable) */}
+      <AlertDialog open={!!confirmToggle} onOpenChange={() => setConfirmToggle(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Pause Campaign?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmToggle?.action === "enable" ? "Enable" : "Pause"} Campaign?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will pause <strong>"{confirmPause?.campaign_name}"</strong> directly on the ad platform.
-              Once paused, you will not be able to turn it back on from here — contact your account manager to resume.
+              {confirmToggle?.action === "enable" ? (
+                <>This will enable <strong>"{confirmToggle?.row.campaign_name}"</strong> on the ad platform. It will start delivering ads again.</>
+              ) : (
+                <>This will pause <strong>"{confirmToggle?.row.campaign_name}"</strong> directly on the ad platform. It will stop delivering ads.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => confirmPause && handlePause(confirmPause)}
+              className={confirmToggle?.action === "enable"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              }
+              onClick={() => confirmToggle && handleToggle(confirmToggle.row, confirmToggle.action)}
             >
-              {pausingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Pause Campaign
+              {togglingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {confirmToggle?.action === "enable" ? "Enable Campaign" : "Pause Campaign"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -630,7 +659,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <AlertDialogTitle>Pause {selectedIds.size} Campaign{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
             <AlertDialogDescription>
               This will pause <strong>{selectedIds.size} active campaign{selectedIds.size > 1 ? "s" : ""}</strong> directly on their ad platforms.
-              Once paused, campaigns cannot be resumed from here — contact your account manager.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

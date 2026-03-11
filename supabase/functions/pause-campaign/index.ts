@@ -59,6 +59,15 @@ function isOffStatus(platform: string, status: string | null): boolean {
   return false;
 }
 
+function isOnStatus(platform: string, status: string | null): boolean {
+  if (!status) return false;
+  const s = status.toUpperCase();
+  if (platform === "meta") return s === "ACTIVE";
+  if (platform === "google") return s === "ENABLED";
+  if (platform === "tiktok") return ["ENABLE", "CAMPAIGN_STATUS_ENABLE"].includes(s);
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -85,12 +94,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { campaign_id } = await req.json();
+    const { campaign_id, action = "pause" } = await req.json();
     if (!campaign_id) {
       return new Response(JSON.stringify({ error: "campaign_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isEnableAction = action === "enable";
 
     const { data: campaign, error: campErr } = await supabase
       .from("campaigns")
@@ -104,23 +115,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (campaign.status === "paused") {
-      return new Response(JSON.stringify({ error: "Campaign is already paused. Clients cannot resume campaigns." }), {
+    // Check if already in desired state
+    if (!isEnableAction && campaign.status === "paused") {
+      return new Response(JSON.stringify({ error: "Campaign is already paused." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (isEnableAction && campaign.status === "active") {
+      return new Response(JSON.stringify({ error: "Campaign is already active." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Permission check
+    // Permission check — only admins can enable campaigns
     const { data: roleData } = await supabase
       .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
     const isAdmin = !!roleData;
+
+    if (isEnableAction && !isAdmin) {
+      return new Response(JSON.stringify({ error: "Only admins can enable campaigns" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!isAdmin) {
       const { data: ownership } = await supabase
         .from("ad_account_clients").select("id")
         .eq("ad_account_id", campaign.ad_account_id).eq("client_id", user.id).maybeSingle();
       if (!ownership) {
-        return new Response(JSON.stringify({ error: "You don't have permission to pause this campaign" }), {
+        return new Response(JSON.stringify({ error: "You don't have permission for this campaign" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -152,7 +175,7 @@ Deno.serve(async (req) => {
     const platform = campaign.platform;
     let apiSuccess = false;
     let apiMessage = "";
-    let alreadyOff = false;
+    let alreadyInState = false;
 
     // Get TikTok proxy URL setting
     const { data: proxySetting } = await supabase
@@ -161,28 +184,29 @@ Deno.serve(async (req) => {
     const tiktokBase = tiktokProxyUrl ? tiktokProxyUrl.replace(/\/+$/, "") : "https://business-api.tiktok.com";
 
     if (platform === "meta") {
+      const targetStatus = isEnableAction ? "ACTIVE" : "PAUSED";
       const res = await fetch(
         `https://graph.facebook.com/v21.0/${rawId}?access_token=${integration.api_token}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ status: "PAUSED" }).toString(),
+          body: new URLSearchParams({ status: targetStatus }).toString(),
         }
       );
       const json = await res.json();
       if (json.success || res.ok) {
         apiSuccess = true;
       } else {
-        // Pause failed — check if already off on platform
         const currentStatus = await checkMetaStatus(rawId, integration.api_token);
-        if (isOffStatus("meta", currentStatus)) {
-          alreadyOff = true;
+        if (isEnableAction ? isOnStatus("meta", currentStatus) : isOffStatus("meta", currentStatus)) {
+          alreadyInState = true;
         } else {
           apiMessage = json.error?.message || "Meta API error";
         }
       }
     } else if (platform === "google") {
       const customerId = adAccount.ad_account_id.replace(/-/g, "");
+      const targetStatus = isEnableAction ? "ENABLED" : "PAUSED";
       const res = await fetch(
         `https://googleads.googleapis.com/v18/customers/${customerId}/campaigns:mutate`,
         {
@@ -194,7 +218,7 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             operations: [{
-              update: { resourceName: `customers/${customerId}/campaigns/${rawId}`, status: "PAUSED" },
+              update: { resourceName: `customers/${customerId}/campaigns/${rawId}`, status: targetStatus },
               updateMask: "status",
             }],
           }),
@@ -205,13 +229,14 @@ Deno.serve(async (req) => {
         apiSuccess = true;
       } else {
         const currentStatus = await checkGoogleStatus(customerId, rawId, integration.api_token, integration.app_id || "");
-        if (isOffStatus("google", currentStatus)) {
-          alreadyOff = true;
+        if (isEnableAction ? isOnStatus("google", currentStatus) : isOffStatus("google", currentStatus)) {
+          alreadyInState = true;
         } else {
           apiMessage = json.error?.message || "Google API error";
         }
       }
     } else if (platform === "tiktok") {
+      const optStatus = isEnableAction ? "ENABLE" : "DISABLE";
       const res = await fetch(
         `${tiktokBase}/open_api/v1.3/campaign/status/update/`,
         {
@@ -220,7 +245,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             advertiser_id: adAccount.ad_account_id,
             campaign_ids: [rawId],
-            opt_status: "DISABLE",
+            opt_status: optStatus,
           }),
         }
       );
@@ -229,39 +254,41 @@ Deno.serve(async (req) => {
         apiSuccess = true;
       } else {
         const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
-        if (isOffStatus("tiktok", currentStatus)) {
-          alreadyOff = true;
+        if (isEnableAction ? isOnStatus("tiktok", currentStatus) : isOffStatus("tiktok", currentStatus)) {
+          alreadyInState = true;
         } else {
           apiMessage = json.message || "TikTok API error";
         }
       }
     }
 
-    if (!apiSuccess && !alreadyOff) {
-      return new Response(JSON.stringify({ error: `Failed to pause on platform: ${apiMessage}` }), {
+    if (!apiSuccess && !alreadyInState) {
+      return new Response(JSON.stringify({ error: `Failed to ${action} on platform: ${apiMessage}` }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Update local DB
+    const newStatus = isEnableAction ? "active" : "paused";
     await supabase
       .from("campaigns")
-      .update({ status: "paused", updated_at: new Date().toISOString() })
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq("id", campaign_id);
 
-    const auditDesc = alreadyOff
-      ? `Campaign "${campaign.name}" (${platform}) was already off on platform — local status synced`
-      : `Paused campaign "${campaign.name}" (${platform}) via client dashboard`;
+    const actionVerb = isEnableAction ? "enabled" : "paused";
+    const auditDesc = alreadyInState
+      ? `Campaign "${campaign.name}" (${platform}) was already ${actionVerb} on platform — local status synced`
+      : `${isEnableAction ? "Enabled" : "Paused"} campaign "${campaign.name}" (${platform}) via dashboard`;
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,
-      action_type: "campaign_paused",
+      action_type: isEnableAction ? "campaign_enabled" : "campaign_paused",
       description: auditDesc,
     });
 
-    const message = alreadyOff
-      ? `Campaign "${campaign.name}" was already off on the platform — local status updated`
-      : `Campaign "${campaign.name}" has been paused`;
+    const message = alreadyInState
+      ? `Campaign "${campaign.name}" was already ${actionVerb} on the platform — local status updated`
+      : `Campaign "${campaign.name}" has been ${actionVerb}`;
 
     return new Response(
       JSON.stringify({ success: true, message }),

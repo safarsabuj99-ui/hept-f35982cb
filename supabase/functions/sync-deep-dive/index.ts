@@ -564,11 +564,38 @@ Deno.serve(async (req) => {
             const statusJson = await statusRes.json();
             if (statusJson.code === 0 && statusJson.data?.list) {
               for (const c of statusJson.data.list) {
-                const opStatus = c.operation_status || c.secondary_status || "";
-                if (opStatus === "CAMPAIGN_STATUS_ENABLE" || opStatus === "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL") {
-                  tiktokStatusMap[c.campaign_id] = "active";
-                } else {
+                const opStatus = (c.operation_status || "").toUpperCase();
+                const secStatus = (c.secondary_status || "").toUpperCase();
+
+                // Map TikTok operation_status to our status
+                // Campaign is "on" if operation_status is ENABLE, even if all ad groups are paused
+                const activeStatuses = [
+                  "CAMPAIGN_STATUS_ENABLE",
+                  "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL",
+                  "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED",
+                  "CAMPAIGN_STATUS_BUDGET_EXCEED",
+                  "CAMPAIGN_STATUS_NOT_START",
+                ];
+                const deletedStatuses = ["CAMPAIGN_STATUS_DELETE"];
+
+                if (deletedStatuses.includes(opStatus)) {
+                  tiktokStatusMap[c.campaign_id] = "deleted";
+                } else if (opStatus === "CAMPAIGN_STATUS_DISABLE") {
                   tiktokStatusMap[c.campaign_id] = "paused";
+                } else if (activeStatuses.includes(opStatus)) {
+                  // Enrich with secondary_status for delivery label
+                  if (secStatus.includes("ALL_ADGROUP_PAUSED") || opStatus === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED") {
+                    tiktokStatusMap[c.campaign_id] = "active - ad groups paused";
+                  } else if (secStatus.includes("BUDGET_EXCEED") || opStatus === "CAMPAIGN_STATUS_BUDGET_EXCEED") {
+                    tiktokStatusMap[c.campaign_id] = "active - budget exceeded";
+                  } else if (secStatus.includes("NOT_START") || opStatus === "CAMPAIGN_STATUS_NOT_START") {
+                    tiktokStatusMap[c.campaign_id] = "active - not started";
+                  } else {
+                    tiktokStatusMap[c.campaign_id] = "active";
+                  }
+                } else {
+                  // Unknown status — default to the raw value
+                  tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
                 }
               }
             }
