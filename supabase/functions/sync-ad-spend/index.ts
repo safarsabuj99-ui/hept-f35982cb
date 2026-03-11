@@ -447,12 +447,12 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
 
-            const res = await fetch(
+            const directRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-              { headers: { "Access-Token": accessToken, "Content-Type": "application/json" } }
+              { "Access-Token": accessToken, "Content-Type": "application/json" }
             );
 
-            cJson = await res.json();
+            cJson = directRes;
             if (cJson.code !== 0) {
               console.error(`TikTok chunk ${chunk.start}-${chunk.end} error:`, JSON.stringify(cJson));
               errors.push(`TikTok ${advertiserId}: [code ${cJson.code}] ${cJson.message}`);
