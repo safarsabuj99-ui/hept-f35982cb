@@ -60,8 +60,19 @@ const fmtNum = (n: number) => {
   return n.toLocaleString();
 };
 
-/** Check if a status string represents an "active" campaign (including enriched TikTok statuses) */
-const isActiveStatus = (status: string) => status === "active" || status.startsWith("active -");
+/** Check if a status string represents an "active" campaign (including enriched TikTok statuses and raw API values) */
+const isActiveStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "active" || s.startsWith("active -") || s === "enable";
+};
+
+/** Normalize raw platform status values to clean display labels */
+const normalizeStatus = (status: string) => {
+  const s = status.toLowerCase();
+  if (s === "enable") return "active";
+  if (s === "disable") return "paused";
+  return status;
+};
 
 const columnHelper = createColumnHelper<CampaignRow>();
 
