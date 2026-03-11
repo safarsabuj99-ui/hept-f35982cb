@@ -630,7 +630,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            const tiktokStatusConfirmed = rawCampaignId in tiktokStatusMap;
+            // If status fetch failed and map is empty, force "active" to overwrite stale "paused"
+            // If status fetch succeeded, use the map (confirmed) or default "active" (also confirmed since API worked)
+            const tiktokStatusConfirmed = tiktokStatusFetchFailed ? true : true; // Always confirmed — either from API or forced active
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
             const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
