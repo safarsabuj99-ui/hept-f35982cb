@@ -86,9 +86,6 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                         {fmt(c.balance)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right hidden md:table-cell font-mono text-sm text-muted-foreground">
-                      {fmtBdt(c.balance)}
-                    </TableCell>
                     <TableCell className="text-right hidden lg:table-cell font-mono text-sm">
                       {c.todaySpend > 0 ? fmt(c.todaySpend) : "—"}
                     </TableCell>
