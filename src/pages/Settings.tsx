@@ -178,6 +178,29 @@ export default function Settings() {
               </Button>
             ))}
           </div>
+          {/* Per-platform Deep Dive sync */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Deep Dive by Platform</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["meta", "google", "tiktok"] as const).map((platform) => {
+                const syncKey = `sync-deep-dive:${platform}`;
+                const anySyncing = Object.values(syncing).some(Boolean);
+                return (
+                  <Button
+                    key={platform}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 capitalize"
+                    disabled={syncing[syncKey] || anySyncing}
+                    onClick={() => handleManualSync("sync-deep-dive", platform)}
+                  >
+                    {syncing[syncKey] ? <Loader2 className="h-3 w-3 animate-spin" /> : <BarChart3 className="h-3 w-3" />}
+                    {platform === "meta" ? "Meta" : platform === "google" ? "Google" : "TikTok"}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
           <Button
             className="w-full"
             disabled={syncing.all || Object.values(syncing).some(Boolean)}
