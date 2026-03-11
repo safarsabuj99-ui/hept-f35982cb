@@ -58,7 +58,12 @@ export function ClientOverviewTable({ clients, loading }: Props) {
         {loading ? (
           <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : sorted.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No clients yet.</p>
+          <div className="py-8 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">No clients yet.</p>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/clients/new"><Plus className="h-3.5 w-3.5 mr-1.5" /> New Client</Link>
+            </Button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
