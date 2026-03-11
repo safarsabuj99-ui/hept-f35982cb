@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             advertiser_id: adAccount.ad_account_id,
             campaign_ids: [rawId],
-            opt_status: optStatus,
+            operation_status: optStatus,
           }),
         }
       );
