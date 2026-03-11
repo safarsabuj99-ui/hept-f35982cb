@@ -52,6 +52,12 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+    // Parse optional platform filter from request body
+    let body: any = {};
+    try { body = await req.json(); } catch {}
+    const platformFilter: string | null = body?.platform || null;
+    if (platformFilter) console.log(`Platform filter active: ${platformFilter}`);
+
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
       .from("ad_account_clients")
@@ -78,11 +84,17 @@ Deno.serve(async (req) => {
     }
 
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
-    const { data: accounts, error: accErr } = await supabase
+    let accountsQuery = supabase
       .from("ad_accounts")
       .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
+
+    if (platformFilter) {
+      accountsQuery = accountsQuery.eq("platform_name", platformFilter);
+    }
+
+    const { data: accounts, error: accErr } = await accountsQuery;
 
     if (accErr) throw accErr;
     if (!accounts || accounts.length === 0) {
