@@ -19,6 +19,7 @@ import ClientDashboard from "@/pages/ClientDashboard";
 import ManagerDashboard from "@/pages/ManagerDashboard";
 
 import Settings from "@/pages/Settings";
+import AdminProfile from "@/pages/AdminProfile";
 import AuditLogs from "@/pages/AuditLogs";
 
 import TeamManagement from "@/pages/TeamManagement";
