@@ -217,7 +217,8 @@ Deno.serve(async (req) => {
           name: string,
           status: string,
           clientId: string | null,
-          statusConfirmed: boolean = true
+          statusConfirmed: boolean = true,
+          objective: string = ""
         ) => {
           // Try to find existing
           const { data: existing } = await supabase
@@ -229,9 +230,11 @@ Deno.serve(async (req) => {
           if (existing) {
             // If status is NOT confirmed from platform API, preserve the existing DB status
             const finalStatus = statusConfirmed ? status : existing.status;
+            const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
+            if (objective) updatePayload.objective = objective;
             await supabase
               .from("campaigns")
-              .update({ name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() })
+              .update(updatePayload)
               .eq("id", existing.id);
             return { id: existing.id, status: finalStatus };
           } else {
@@ -246,6 +249,7 @@ Deno.serve(async (req) => {
                 status,
                 ad_account_id: account.id,
                 client_id: clientId,
+                objective: objective || "",
               })
               .select("id")
               .single();
