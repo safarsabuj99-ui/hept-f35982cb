@@ -34,6 +34,7 @@ import OrderManagement from "@/pages/OrderManagement";
 import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
+import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 
 
@@ -115,6 +116,7 @@ const App = () => (
                 }
               >
                 <Route path="/dashboard" element={<ClientDashboard />} />
+                <Route path="/dashboard/wallet" element={<ClientWallet />} />
                 <Route path="/dashboard/campaigns" element={<MyCampaignRequests />} />
                 <Route path="/dashboard/campaigns/new" element={<NewCampaignRequest />} />
                 <Route path="/dashboard/reports" element={<ClientReports />} />

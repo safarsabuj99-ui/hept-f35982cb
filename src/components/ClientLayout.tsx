@@ -1,19 +1,29 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { BarChart3, LogOut, Shield, Megaphone, LayoutDashboard, FileBarChart, ArrowLeft } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  BarChart3, LogOut, Megaphone, LayoutDashboard, FileBarChart,
+  ArrowLeft, Wallet
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function ClientLayout() {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const { isImpersonating, stopImpersonating } = useImpersonation();
+  const { profile } = useProfile();
+
+  const initials = profile?.full_name
+    ? profile.full_name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.[0]?.toUpperCase() || "?";
 
   const tabs = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: (p: string) => p === "/dashboard" },
+    { to: "/dashboard/wallet", icon: Wallet, label: "Wallet", match: (p: string) => p.startsWith("/dashboard/wallet") },
     { to: "/dashboard/campaigns", icon: Megaphone, label: "Campaigns", match: (p: string) => p.startsWith("/dashboard/campaigns") },
     { to: "/dashboard/reports", icon: FileBarChart, label: "Reports", match: (p: string) => p.startsWith("/dashboard/reports") },
   ];
@@ -29,55 +39,66 @@ export function ClientLayout() {
           </Button>
         </div>
       )}
+
       {/* Gradient accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-accent" />
-      <header className="sticky top-0 z-50 flex h-12 md:h-16 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 md:px-8">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary breathing-glow" />
-          <span className="text-lg font-bold tracking-tight hidden sm:inline">AdSpend Portal</span>
-          <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex gap-1 ml-1">
-            <Shield className="h-2.5 w-2.5" /> Client
-          </Badge>
+
+      {/* Premium glassmorphic header */}
+      <header className="client-header sticky top-0 z-50 flex h-14 md:h-16 items-center justify-between px-4 md:px-8">
+        {/* Left: Logo */}
+        <div className="flex items-center gap-2.5">
+          <div className="client-logo-orb">
+            <BarChart3 className="h-4 w-4 text-primary-foreground relative z-10" />
+          </div>
+          <span className="text-base font-bold tracking-tight hidden sm:inline">AdSpend</span>
         </div>
+
+        {/* Center: Desktop pill nav */}
+        <nav className="hidden md:flex items-center gap-1 client-nav-bar">
+          {tabs.map((tab) => {
+            const isActive = tab.match(location.pathname);
+            return (
+              <Link
+                key={tab.to}
+                to={tab.to}
+                className={cn(
+                  "client-nav-pill flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-all duration-200",
+                  isActive
+                    ? "client-nav-pill-active"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                )}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right: Avatar + controls */}
         <div className="flex items-center gap-2 md:gap-3">
-          <span className="hidden text-sm text-muted-foreground md:inline">
-            {user?.email}
-          </span>
           <ThemeToggle />
           {!isImpersonating && (
-            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 press-effect h-8 px-2 md:px-3">
+            <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5 press-effect h-8 px-2 md:px-3 text-muted-foreground hover:text-foreground">
               <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign Out</span>
+              <span className="hidden sm:inline text-xs">Sign Out</span>
             </Button>
           )}
+          <Avatar className="h-8 w-8 md:h-9 md:w-9 client-avatar-ring">
+            <AvatarFallback className="client-avatar-fallback text-xs font-bold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
         </div>
       </header>
-      {/* Desktop sub-nav — hidden on mobile */}
-      <div className="hidden md:block border-b bg-card/50 px-4 md:px-8">
-        <nav className="flex gap-1 -mb-px">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200",
-                tab.match(location.pathname)
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              )}
-            >
-              <tab.icon className="h-4 w-4" /> {tab.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
+
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 pb-20 md:pb-6">
         <div className="page-enter">
           <Outlet />
         </div>
       </main>
 
-      {/* Mobile bottom tab bar */}
+      {/* Mobile bottom tab bar — premium frosted glass */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bottom-tab-bar">
         <nav className="flex items-center justify-around px-2 py-1">
           {tabs.map((tab) => {
