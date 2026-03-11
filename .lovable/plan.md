@@ -1,34 +1,55 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix Campaign Page: Remove Full-Page Loading on Date Change
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Problems
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+1. **Full-page skeleton on every date filter click** — When the user changes the date preset (Today, Yesterday, etc.), `setLoading(true)` triggers on line 30, which renders the full-page skeleton (lines 191-204) instead of just updating the table content. This makes every date change feel like a fresh page load.
 
-## Technical Change
+2. **"Today" showing data when it shouldn't** — This is likely the same issue: the full skeleton flash makes it look like stale data is briefly shown before the new data loads. The actual date filtering logic is correct.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+3. **Console warning** — `AlertDialog` inside `DeepDiveTable` is trying to pass a ref to a function component that doesn't accept refs.
 
-Current code:
+## Fix
+
+### 1. Split loading into initial load vs. data refresh (`CampaignMapping.tsx`)
+
+Replace the single `loading` state with two states:
+- `initialLoading` — true only on first mount, shows the skeleton
+- `refreshing` — true during date changes, shows a subtle loading indicator (e.g., opacity reduction or a small spinner) instead of replacing the entire page
+
+```typescript
+const [initialLoading, setInitialLoading] = useState(true);
+const [refreshing, setRefreshing] = useState(false);
+
+const fetchData = useCallback(async () => {
+  if (!initialLoading) setRefreshing(true);
+  // ... fetch logic ...
+  setInitialLoading(false);
+  setRefreshing(false);
+}, [dateRange]);
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+
+Only show the full skeleton on `initialLoading`. During `refreshing`, keep the existing content visible with a subtle opacity transition or a small loading bar.
+
+### 2. Use `CampaignAnalyticsPanel` for design parity
+
+The campaign page currently duplicates the KPI cards and tabs layout that `CampaignAnalyticsPanel` already provides with better styling (responsive padding, icon sizing). Replace the manual KPI cards + tabs section (lines 242-321) with:
+
+```tsx
+<CampaignAnalyticsPanel campaignRows={filteredRows} onRefresh={fetchData} />
 ```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+This ensures exact design parity with the client-side analytics and eliminates duplicated code.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### 3. Fix AlertDialog ref warning in `DeepDiveTable`
+
+The `AlertDialog` component wraps a function component that doesn't forward refs. Wrap it properly or use `asChild` pattern to eliminate the console warning.
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/CampaignMapping.tsx` | Replace single `loading` with `initialLoading`/`refreshing`; use `CampaignAnalyticsPanel` instead of manual KPI cards |
+| `src/components/client-analytics/DeepDiveTable.tsx` | Fix AlertDialog ref warning |
 
-No database or edge function changes needed.
