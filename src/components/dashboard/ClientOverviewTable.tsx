@@ -71,8 +71,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                 <TableRow>
                   <TableHead><SortBtn k="full_name" label="Name" /></TableHead>
                   <TableHead className="hidden sm:table-cell">Business</TableHead>
-                  <TableHead className="text-right"><SortBtn k="balance" label="Balance (USD)" /></TableHead>
-                  <TableHead className="text-right hidden md:table-cell">Balance (BDT)</TableHead>
+                  <TableHead className="text-right"><SortBtn k="balance" label="Balance" /></TableHead>
                   <TableHead className="text-right hidden lg:table-cell"><SortBtn k="todaySpend" label="Today's Spend" /></TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
