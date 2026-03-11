@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Clock, MonitorSmartphone, ClipboardCheck } from "lucide-react";
 
 interface DashboardHeaderProps {
