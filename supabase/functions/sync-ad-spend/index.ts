@@ -423,12 +423,12 @@ Deno.serve(async (req) => {
               page_size: "500",
             });
 
-            const bcRes = await fetch(
+            const bcRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
-              { headers: { "Access-Token": accessToken, "Content-Type": "application/json" } }
+              { "Access-Token": accessToken, "Content-Type": "application/json" }
             );
 
-            cJson = await bcRes.json();
+            cJson = bcRes;
             if (cJson.code !== 0) {
               console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
               cJson = null;
