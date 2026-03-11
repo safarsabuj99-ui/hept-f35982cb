@@ -278,7 +278,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         // Override: active with enriched label gets yellow dot
         if (status.startsWith("active -")) dotClass = "bg-yellow-500";
 
-        const canToggle = row.campaign_id && (active || status === "paused");
+        const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
+        const canToggle = row.campaign_id && (active || isPaused);
 
         return (
           <div className="flex items-center gap-2">
