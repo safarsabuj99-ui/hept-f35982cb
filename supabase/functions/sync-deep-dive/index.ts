@@ -583,13 +583,11 @@ Deno.serve(async (req) => {
               advertiser_id: account.ad_account_id,
               page_size: "500",
             });
-            const statusRes = await fetch(
+            const statusRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
-              { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
+              { "Access-Token": integration.api_token, "Content-Type": "application/json" }
             );
-            const statusText = await statusRes.text();
-            let statusJson: any;
-            try { statusJson = JSON.parse(statusText); } catch { statusJson = {}; }
+            const statusJson = statusRes;
             console.log(`TikTok status fetch response code: ${statusJson.code}, campaigns found: ${statusJson.data?.list?.length ?? 0}`);
             if (statusJson.code === 0 && statusJson.data?.list) {
               for (const c of statusJson.data.list) {
