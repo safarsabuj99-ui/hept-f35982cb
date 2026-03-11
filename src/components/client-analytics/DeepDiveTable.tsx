@@ -571,20 +571,67 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className="font-mono text-xs font-medium">{fmt(row.spend)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Results</span>
-            <span className="font-mono text-xs font-medium">{row.results.toLocaleString()}</span>
+            <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
+            <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">CPR</span>
-            <span className="font-mono text-xs">{fmt(cpo)}</span>
-          </div>
+
+          {/* Sales funnel metrics */}
+          {row.objective === "sales" && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">View Content</span>
+                <span className="font-mono text-xs">{fmtNum(row.view_content ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Add to Cart</span>
+                <span className="font-mono text-xs">{fmtNum(row.add_to_cart ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Checkout</span>
+                <span className="font-mono text-xs">{fmtNum(row.initiate_checkout ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Purchase</span>
+                <span className="font-mono text-xs font-medium">{fmtNum(row.purchase ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Cost/Purchase</span>
+                <span className="font-mono text-xs">{fmt((row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0)}</span>
+              </div>
+            </>
+          )}
+
+          {/* Messages metrics */}
+          {row.objective === "messages" && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Messages</span>
+                <span className="font-mono text-xs font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Cost/Message</span>
+                <span className="font-mono text-xs">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
+              </div>
+            </>
+          )}
+
+          {/* Generic metrics for non-sales/messages */}
+          {row.objective !== "sales" && row.objective !== "messages" && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Results</span>
+                <span className="font-mono text-xs font-medium">{row.results.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">CPR</span>
+                <span className="font-mono text-xs">{fmt(cpo)}</span>
+              </div>
+            </>
+          )}
+
           <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground uppercase">ROAS</span>
             <Badge variant="outline" className={`text-[10px] font-mono h-5 ${roasClass}`}>{roas.toFixed(2)}x</Badge>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
-            <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
