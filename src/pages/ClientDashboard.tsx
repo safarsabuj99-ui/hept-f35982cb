@@ -149,6 +149,24 @@ export default function ClientDashboard() {
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // Calculate BDT negative balance using per-platform rates
+  const totalNegativeBdt = useMemo(() => {
+    if (balance >= 0) return 0;
+    const flatRates = (pricingConfig as any)?.flat_rates || {};
+    const platforms = ["meta", "tiktok", "google"] as const;
+    let totalBdt = 0;
+    for (const p of platforms) {
+      const pCredits = transactions.filter(t => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      const pDebits = transactions.filter(t => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      const pBalance = pCredits - pDebits;
+      if (pBalance < 0) {
+        const rate = Number(flatRates[p]) || 120;
+        totalBdt += Math.abs(pBalance) * rate;
+      }
+    }
+    return totalBdt;
+  }, [balance, transactions, pricingConfig]);
+
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
     setDatePreset(p);
