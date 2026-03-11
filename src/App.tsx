@@ -19,6 +19,7 @@ import ClientDashboard from "@/pages/ClientDashboard";
 import ManagerDashboard from "@/pages/ManagerDashboard";
 
 import Settings from "@/pages/Settings";
+import AdminProfile from "@/pages/AdminProfile";
 import AuditLogs from "@/pages/AuditLogs";
 
 import TeamManagement from "@/pages/TeamManagement";
@@ -74,6 +75,7 @@ const App = () => (
                 <Route path="/admin/clients/:userId" element={<ClientDetail />} />
                 <Route path="/admin/add-funds" element={<AddFunds />} />
                 <Route path="/admin/pending" element={<Navigate to="/admin/payment-requests" replace />} />
+                <Route path="/admin/profile" element={<AdminProfile />} />
                 <Route path="/admin/settings" element={<Settings />} />
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 

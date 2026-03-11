@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Clock, MonitorSmartphone, ClipboardCheck } from "lucide-react";
 
 interface DashboardHeaderProps {
@@ -9,10 +10,11 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: DashboardHeaderProps) {
   const { user } = useAuth();
+  const { profile } = useProfile();
   
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const displayName = user?.email?.split("@")[0] ?? "Admin";
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "Admin";
   
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",

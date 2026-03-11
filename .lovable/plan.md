@@ -1,40 +1,34 @@
 
 
-# Admin Profile — Show Name + Profile Settings Page
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-The dashboard header shows `raohas10` (email prefix) because it does `user?.email?.split("@")[0]`. A `profiles` table already exists with `full_name`, `business_name`, `email`, `phone`, etc. — it just isn't being fetched.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Plan
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. Create a `useProfile` hook
-New file: `src/hooks/useProfile.tsx`
-- Fetches the current user's profile from `profiles` table on mount
-- Returns `{ profile, loading, refetch }`
-- Exposes `full_name`, `business_name`, `email`, `phone`
+## Technical Change
 
-### 2. Update DashboardHeader to show profile name
-**File:** `src/components/dashboard/DashboardHeader.tsx`
-- Use `useProfile` hook
-- Display `profile?.full_name || email prefix` as the greeting name
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 3. Create Admin Profile page
-New file: `src/pages/AdminProfile.tsx`
-- Editable form with fields: Full Name, Company/Business Name, Email (read-only from auth), Phone
-- Fetches current profile data on load, saves updates to `profiles` table
-- Clean card-based layout matching the Settings page style
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 4. Add route and nav link
-**File:** `src/App.tsx` — Add `/admin/profile` route
-**File:** `src/components/AdminLayout.tsx` — Add "Profile" nav item under SYSTEM section (with User icon)
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### Files Changed
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `src/hooks/useProfile.tsx` | New hook to fetch/cache current user's profile |
-| `src/components/dashboard/DashboardHeader.tsx` | Use profile `full_name` for greeting |
-| `src/pages/AdminProfile.tsx` | New profile settings page with editable form |
-| `src/App.tsx` | Add `/admin/profile` route |
-| `src/components/AdminLayout.tsx` | Add Profile nav link |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.

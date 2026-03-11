@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone,
+  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,7 @@ const allSections: NavSection[] = [
   {
     title: "System",
     items: [
+      { to: "/admin/profile", icon: UserCircle, label: "My Profile" },
       { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
       { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_configure_system" },
     ],
