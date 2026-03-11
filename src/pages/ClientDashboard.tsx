@@ -174,9 +174,11 @@ export default function ClientDashboard() {
 
   const filterByDate = useCallback((items: any[], dateField: string) => {
     if (!dateRange) return items;
+    const fromStr = format(dateRange.from, "yyyy-MM-dd");
+    const toStr = format(dateRange.to, "yyyy-MM-dd");
     return items.filter((item) => {
-      const d = new Date(item[dateField]);
-      return d >= dateRange.from && d <= dateRange.to;
+      const d = item[dateField]?.substring(0, 10);
+      return d >= fromStr && d <= toStr;
     });
   }, [dateRange]);
 
