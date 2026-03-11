@@ -115,13 +115,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Normalize legacy raw statuses for guard checks
+    const normalizedStatus = campaign.status.toLowerCase() === "enable" ? "active"
+      : campaign.status.toLowerCase() === "disable" ? "paused"
+      : campaign.status;
+
     // Check if already in desired state
-    if (!isEnableAction && campaign.status === "paused") {
+    if (!isEnableAction && normalizedStatus === "paused") {
       return new Response(JSON.stringify({ error: "Campaign is already paused." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (isEnableAction && campaign.status === "active") {
+    if (isEnableAction && normalizedStatus === "active") {
       return new Response(JSON.stringify({ error: "Campaign is already active." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

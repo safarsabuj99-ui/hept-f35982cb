@@ -60,8 +60,19 @@ const fmtNum = (n: number) => {
   return n.toLocaleString();
 };
 
-/** Check if a status string represents an "active" campaign (including enriched TikTok statuses) */
-const isActiveStatus = (status: string) => status === "active" || status.startsWith("active -");
+/** Check if a status string represents an "active" campaign (including enriched TikTok statuses and raw API values) */
+const isActiveStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "active" || s.startsWith("active -") || s === "enable";
+};
+
+/** Normalize raw platform status values to clean display labels */
+const normalizeStatus = (status: string) => {
+  const s = status.toLowerCase();
+  if (s === "enable") return "active";
+  if (s === "disable") return "paused";
+  return status;
+};
 
 const columnHelper = createColumnHelper<CampaignRow>();
 
@@ -267,13 +278,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         // Override: active with enriched label gets yellow dot
         if (status.startsWith("active -")) dotClass = "bg-yellow-500";
 
-        const canToggle = row.campaign_id && (active || status === "paused");
+        const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
+        const canToggle = row.campaign_id && (active || isPaused);
 
         return (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
-              <span className="text-xs text-muted-foreground capitalize truncate">{status}</span>
+              <span className="text-xs text-muted-foreground capitalize truncate">{normalizeStatus(status)}</span>
             </div>
             {canToggle && (
               <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -377,15 +389,17 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
-    const canToggle = row.campaign_id && (active || row.status === "paused");
+    const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+    const canToggle = row.campaign_id && (active || isPaused);
 
+    const normalized = normalizeStatus(row.status);
     const redStatuses = ["not delivering", "disapproved", "with issues"];
     const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
     let dotClass = "bg-muted-foreground/40";
     if (active) dotClass = "bg-green-500";
-    if (redStatuses.includes(row.status)) dotClass = "bg-red-500";
-    if (yellowStatuses.includes(row.status)) dotClass = "bg-yellow-500";
-    if (row.status.startsWith("active -")) dotClass = "bg-yellow-500";
+    if (redStatuses.includes(normalized)) dotClass = "bg-red-500";
+    if (yellowStatuses.includes(normalized)) dotClass = "bg-yellow-500";
+    if (normalized.startsWith("active -")) dotClass = "bg-yellow-500";
 
     let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
     if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
@@ -419,7 +433,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         <div className="flex items-center justify-between mt-2.5 mb-2">
           <div className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="text-xs text-muted-foreground capitalize">{row.status}</span>
+            <span className="text-xs text-muted-foreground capitalize">{normalizeStatus(row.status)}</span>
           </div>
           {canToggle && (
             <div className="flex items-center gap-1">
