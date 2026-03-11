@@ -462,6 +462,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          objective: string
           original_name_tag: string
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
@@ -474,6 +475,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          objective?: string
           original_name_tag?: string
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
@@ -486,6 +488,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          objective?: string
           original_name_tag?: string
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_id?: string
@@ -548,46 +551,70 @@ export type Database = {
       }
       daily_metrics: {
         Row: {
+          add_to_cart: number
           campaign_id: string
           clicks: number
           conversion_value: number
+          cost_per_message: number
+          cost_per_purchase: number
           cpc: number
+          cpm: number
           ctr: number
           data_date: string
           id: string
           impressions: number
+          initiate_checkout: number
+          messaging_conversations: number
+          purchase: number
           results: number
           roas: number
           spend: number
           synced_at: string
+          view_content: number
         }
         Insert: {
+          add_to_cart?: number
           campaign_id: string
           clicks?: number
           conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
           cpc?: number
+          cpm?: number
           ctr?: number
           data_date: string
           id?: string
           impressions?: number
+          initiate_checkout?: number
+          messaging_conversations?: number
+          purchase?: number
           results?: number
           roas?: number
           spend?: number
           synced_at?: string
+          view_content?: number
         }
         Update: {
+          add_to_cart?: number
           campaign_id?: string
           clicks?: number
           conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
           cpc?: number
+          cpm?: number
           ctr?: number
           data_date?: string
           id?: string
           impressions?: number
+          initiate_checkout?: number
+          messaging_conversations?: number
+          purchase?: number
           results?: number
           roas?: number
           spend?: number
           synced_at?: string
+          view_content?: number
         }
         Relationships: [
           {

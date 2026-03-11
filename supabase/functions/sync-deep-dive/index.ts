@@ -217,7 +217,8 @@ Deno.serve(async (req) => {
           name: string,
           status: string,
           clientId: string | null,
-          statusConfirmed: boolean = true
+          statusConfirmed: boolean = true,
+          objective: string = ""
         ) => {
           // Try to find existing
           const { data: existing } = await supabase
@@ -229,9 +230,11 @@ Deno.serve(async (req) => {
           if (existing) {
             // If status is NOT confirmed from platform API, preserve the existing DB status
             const finalStatus = statusConfirmed ? status : existing.status;
+            const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
+            if (objective) updatePayload.objective = objective;
             await supabase
               .from("campaigns")
-              .update({ name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() })
+              .update(updatePayload)
               .eq("id", existing.id);
             return { id: existing.id, status: finalStatus };
           } else {
@@ -246,6 +249,7 @@ Deno.serve(async (req) => {
                 status,
                 ad_account_id: account.id,
                 client_id: clientId,
+                objective: objective || "",
               })
               .select("id")
               .single();
@@ -276,6 +280,14 @@ Deno.serve(async (req) => {
             ctr: number;
             cpc: number;
             roas: number;
+            view_content?: number;
+            add_to_cart?: number;
+            initiate_checkout?: number;
+            purchase?: number;
+            messaging_conversations?: number;
+            cost_per_purchase?: number;
+            cost_per_message?: number;
+            cpm?: number;
           }
         ) => {
           const { error } = await supabase
@@ -284,7 +296,22 @@ Deno.serve(async (req) => {
               {
                 campaign_id: campaignDbId,
                 data_date: dataDate,
-                ...metrics,
+                spend: metrics.spend,
+                impressions: metrics.impressions,
+                clicks: metrics.clicks,
+                results: metrics.results,
+                conversion_value: metrics.conversion_value,
+                ctr: metrics.ctr,
+                cpc: metrics.cpc,
+                roas: metrics.roas,
+                view_content: metrics.view_content ?? 0,
+                add_to_cart: metrics.add_to_cart ?? 0,
+                initiate_checkout: metrics.initiate_checkout ?? 0,
+                purchase: metrics.purchase ?? 0,
+                messaging_conversations: metrics.messaging_conversations ?? 0,
+                cost_per_purchase: metrics.cost_per_purchase ?? 0,
+                cost_per_message: metrics.cost_per_message ?? 0,
+                cpm: metrics.cpm ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
@@ -298,10 +325,11 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Fetch real campaign statuses from Meta
+          // Fetch real campaign statuses AND objectives from Meta
           const metaStatusMap: Record<string, string> = {};
+          const metaObjectiveMap: Record<string, string> = {};
           try {
-            let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
+            let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status,objective&limit=500&access_token=${integration.api_token}`;
             while (statusNextUrl) {
               const statusRes = await fetch(statusNextUrl);
               const statusJson = await statusRes.json();
@@ -318,6 +346,26 @@ Deno.serve(async (req) => {
                   else if (rawStatus === "ARCHIVED") metaStatusMap[c.id] = "archived";
                   else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
                   else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
+
+                  // Map Meta objective to simplified label
+                  const rawObj = (c.objective || "").toUpperCase();
+                  if (rawObj === "OUTCOME_SALES" || rawObj === "PRODUCT_CATALOG_SALES" || rawObj === "CONVERSIONS") {
+                    metaObjectiveMap[c.id] = "sales";
+                  } else if (rawObj === "MESSAGES") {
+                    metaObjectiveMap[c.id] = "messages";
+                  } else if (rawObj === "OUTCOME_TRAFFIC" || rawObj === "LINK_CLICKS") {
+                    metaObjectiveMap[c.id] = "traffic";
+                  } else if (rawObj === "OUTCOME_LEADS" || rawObj === "LEAD_GENERATION") {
+                    metaObjectiveMap[c.id] = "leads";
+                  } else if (rawObj === "OUTCOME_ENGAGEMENT" || rawObj === "POST_ENGAGEMENT" || rawObj === "PAGE_LIKES") {
+                    metaObjectiveMap[c.id] = "engagement";
+                  } else if (rawObj === "OUTCOME_AWARENESS" || rawObj === "BRAND_AWARENESS" || rawObj === "REACH") {
+                    metaObjectiveMap[c.id] = "awareness";
+                  } else if (rawObj === "VIDEO_VIEWS") {
+                    metaObjectiveMap[c.id] = "video_views";
+                  } else if (rawObj) {
+                    metaObjectiveMap[c.id] = rawObj.toLowerCase().replace(/_/g, " ");
+                  }
                 }
               }
               statusNextUrl = statusJson.paging?.next || null;
@@ -356,14 +404,29 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Extract results and conversion_value from actions
+            // Extract results, conversion_value, and granular funnel actions
             let results = 0;
             let conversionValue = 0;
+            let viewContent = 0;
+            let addToCart = 0;
+            let initiateCheckout = 0;
+            let purchaseCount = 0;
+            let messagingConversations = 0;
+
             if (row.actions) {
               for (const action of row.actions) {
-                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(action.action_type)) {
-                  results += parseInt(action.value || "0", 10);
+                const at = action.action_type;
+                const val = parseInt(action.value || "0", 10);
+                // Generic results
+                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) {
+                  results += val;
                 }
+                // Granular funnel actions
+                if (at === "offsite_conversion.fb_pixel_view_content") viewContent += val;
+                if (at === "offsite_conversion.fb_pixel_add_to_cart") addToCart += val;
+                if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
+                if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
+                if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
               }
             }
             if (row.action_values) {
@@ -377,19 +440,31 @@ Deno.serve(async (req) => {
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
+            const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
+            const costPerPurchase = purchaseCount > 0 ? spendUsd / purchaseCount : 0;
+            const costPerMessage = messagingConversations > 0 ? spendUsd / messagingConversations : 0;
             const platformId = `meta_${rawCampaignId}`;
+            const objective = metaObjectiveMap[rawCampaignId] || "";
 
             // ID Locking: upsert into campaigns table
             const statusConfirmed = rawCampaignId in metaStatusMap;
             const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
-            const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed);
+            const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
             const campaignDbId = campaignResult.id;
             const finalStatus = campaignResult.status;
 
-            // Upsert daily metrics
+            // Upsert daily metrics with funnel actions
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
+              view_content: viewContent,
+              add_to_cart: addToCart,
+              initiate_checkout: initiateCheckout,
+              purchase: purchaseCount,
+              messaging_conversations: messagingConversations,
+              cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
+              cost_per_message: Math.round(costPerMessage * 100) / 100,
+              cpm: Math.round(cpmValue * 100) / 100,
             });
 
             // Also write to legacy campaign_performance for backward compatibility
