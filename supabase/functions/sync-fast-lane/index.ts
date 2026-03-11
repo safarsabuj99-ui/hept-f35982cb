@@ -11,10 +11,23 @@ const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
 /** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
 function getTikTokBaseUrl(proxyUrl: string | null): string {
   if (proxyUrl) {
-    // Remove trailing slash
     return proxyUrl.replace(/\/+$/, "");
   }
   return TIKTOK_BASE_URL;
+}
+
+/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, { headers });
+    const json = await res.json();
+    if (json.code === 41000 && attempt < maxRetries) {
+      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+    return json;
+  }
 }
 
 /** Split a date range into 30-day chunks for TikTok API compatibility */

@@ -93,22 +93,30 @@ async function syncMetaBilling(adAccountId: string, token: string) {
   return result;
 }
 
+/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, { headers });
+    const json = await res.json();
+    if (json.code === 41000 && attempt < maxRetries) {
+      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+    return json;
+  }
+}
+
 // ── TikTok: fetch advertiser balance info ──
 async function syncTikTokBilling(adAccountId: string, token: string, tiktokBase: string) {
   const result: Record<string, any> = {};
   try {
     const url = `${tiktokBase}/open_api/v1.3/advertiser/info/?advertiser_ids=${JSON.stringify([adAccountId])}`;
-    const res = await fetch(url, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const adv = json.data?.list?.[0];
-      if (adv) {
-        // TikTok returns balance in the advertiser info
-        if (adv.balance !== undefined) {
-          result.account_spending_limit = Number(adv.balance);
-        }
+    const json = await tiktokFetchWithRetry(url, { "Access-Token": token, "Content-Type": "application/json" });
+    const adv = json.data?.list?.[0];
+    if (adv) {
+      if (adv.balance !== undefined) {
+        result.account_spending_limit = Number(adv.balance);
       }
     }
   } catch { /* skip */ }
