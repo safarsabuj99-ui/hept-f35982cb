@@ -96,8 +96,11 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     if (!effectiveClientId) return;
-    supabase.from("profiles").select("full_name").eq("user_id", effectiveClientId).single()
-      .then(({ data }) => { if (data?.full_name) setClientName(data.full_name); });
+    supabase.from("profiles").select("full_name, pricing_config").eq("user_id", effectiveClientId).single()
+      .then(({ data }) => {
+        if (data?.full_name) setClientName(data.full_name);
+        if (data?.pricing_config) setPricingConfig(data.pricing_config);
+      });
   }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
