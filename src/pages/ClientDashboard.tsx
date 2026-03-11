@@ -86,6 +86,7 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
+  const [pricingConfig, setPricingConfig] = useState<any>(null);
 
   const [depositOpen, setDepositOpen] = useState(false);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
@@ -95,8 +96,11 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     if (!effectiveClientId) return;
-    supabase.from("profiles").select("full_name").eq("user_id", effectiveClientId).single()
-      .then(({ data }) => { if (data?.full_name) setClientName(data.full_name); });
+    supabase.from("profiles").select("full_name, pricing_config").eq("user_id", effectiveClientId).single()
+      .then(({ data }) => {
+        if (data?.full_name) setClientName(data.full_name);
+        if (data?.pricing_config) setPricingConfig(data.pricing_config);
+      });
   }, [effectiveClientId]);
 
   const fetchAll = useCallback(async () => {
@@ -144,6 +148,24 @@ export default function ClientDashboard() {
   const balance = credits - debits;
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Calculate BDT negative balance using per-platform rates
+  const totalNegativeBdt = useMemo(() => {
+    if (balance >= 0) return 0;
+    const flatRates = (pricingConfig as any)?.flat_rates || {};
+    const platforms = ["meta", "tiktok", "google"] as const;
+    let totalBdt = 0;
+    for (const p of platforms) {
+      const pCredits = transactions.filter(t => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      const pDebits = transactions.filter(t => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
+      const pBalance = pCredits - pDebits;
+      if (pBalance < 0) {
+        const rate = Number(flatRates[p]) || 120;
+        totalBdt += Math.abs(pBalance) * rate;
+      }
+    }
+    return totalBdt;
+  }, [balance, transactions, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
@@ -242,6 +264,11 @@ export default function ClientDashboard() {
               <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
                 {fmt(balance)}
               </p>
+              {balance < 0 && totalNegativeBdt > 0 && (
+                <p className="text-sm font-mono text-red-300 mt-0.5">
+                  ৳{totalNegativeBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
             <Button
               onClick={() => setDepositOpen(true)}
