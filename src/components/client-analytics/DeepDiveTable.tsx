@@ -41,6 +41,15 @@ export interface CampaignRow {
   conversion_value: number;
   ad_account_name?: string;
   campaign_id?: string;
+  objective?: string;
+  view_content?: number;
+  add_to_cart?: number;
+  initiate_checkout?: number;
+  purchase?: number;
+  messaging_conversations?: number;
+  cost_per_purchase?: number;
+  cost_per_message?: number;
+  cpm?: number;
 }
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {

@@ -114,11 +114,20 @@ export default function CampaignMapping() {
           status: campaign.status ?? "active",
           ad_account_name: adAccountNameMap[campaign.ad_account_id] || "",
           campaign_id: campaign.id,
+          objective: campaign.objective || "",
           impressions: 0,
           clicks: 0,
           spend: 0,
           results: 0,
           conversion_value: 0,
+          view_content: 0,
+          add_to_cart: 0,
+          initiate_checkout: 0,
+          purchase: 0,
+          messaging_conversations: 0,
+          cost_per_purchase: 0,
+          cost_per_message: 0,
+          cpm: 0,
         };
       }
       map[key].impressions += Number(m.impressions);
@@ -126,6 +135,18 @@ export default function CampaignMapping() {
       map[key].spend += Number(m.spend);
       map[key].results += Number(m.results ?? 0);
       map[key].conversion_value += Number(m.conversion_value ?? 0);
+      map[key].view_content = (map[key].view_content ?? 0) + Number(m.view_content ?? 0);
+      map[key].add_to_cart = (map[key].add_to_cart ?? 0) + Number(m.add_to_cart ?? 0);
+      map[key].initiate_checkout = (map[key].initiate_checkout ?? 0) + Number(m.initiate_checkout ?? 0);
+      map[key].purchase = (map[key].purchase ?? 0) + Number(m.purchase ?? 0);
+      map[key].messaging_conversations = (map[key].messaging_conversations ?? 0) + Number(m.messaging_conversations ?? 0);
+    }
+
+    // Recalculate cost_per_purchase and cost_per_message from aggregated totals
+    for (const row of Object.values(map)) {
+      if ((row.purchase ?? 0) > 0) row.cost_per_purchase = row.spend / row.purchase!;
+      if ((row.messaging_conversations ?? 0) > 0) row.cost_per_message = row.spend / row.messaging_conversations!;
+      if (row.impressions > 0) row.cpm = (row.spend / row.impressions) * 1000;
     }
 
     // Inject active campaigns with no metrics
@@ -137,6 +158,7 @@ export default function CampaignMapping() {
           status: "active",
           ad_account_name: adAccountNameMap[c.ad_account_id] || "",
           campaign_id: c.id,
+          objective: c.objective || "",
           impressions: 0,
           clicks: 0,
           spend: 0,
