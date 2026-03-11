@@ -1,34 +1,48 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix TikTok "Enable" Status — Show Active + Toggle
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+The TikTok campaigns in the database have a raw status value `"Enable"` (from before the status mapping was added). The UI's `isActiveStatus()` function only checks for `"active"` or `"active -..."`, so:
+- No green dot or "active" label appears — it shows the raw `"Enable"` text
+- No toggle switch renders (toggle requires status to be `"active"` or `"paused"`)
 
-## Technical Change
+Re-running a Deep Dive sync **would** fix this (the mapping logic is now correct), but we should also make the UI and the `pause-campaign` function resilient to legacy raw statuses.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+## Fix
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### 1. Update `isActiveStatus` in `DeepDiveTable.tsx`
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+Add `"enable"` to the active status check so raw TikTok statuses are treated as active:
+
+```typescript
+const isActiveStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "active" || s.startsWith("active -") || s === "enable";
+};
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+This immediately shows the toggle and green dot for campaigns with `"Enable"` status.
+
+### 2. Normalize display label
+
+In the Delivery column cell, map `"Enable"` → `"Active"` and `"Disable"` → `"Paused"` for display so users see clean labels instead of raw API values:
+
+```typescript
+const displayStatus = status.toLowerCase() === "enable" ? "active" 
+  : status.toLowerCase() === "disable" ? "paused" 
+  : status;
+```
+
+### 3. Update `pause-campaign` to handle "Enable" status
+
+The pause-campaign function checks `campaign.status === "paused"` and `campaign.status === "active"` for guard clauses. Add `"enable"` as an alias for active so toggling works on campaigns with legacy status.
+
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/components/client-analytics/DeepDiveTable.tsx` | Add `"enable"` to `isActiveStatus`, normalize display label, apply in both desktop and mobile views |
+| `supabase/functions/pause-campaign/index.ts` | Handle `"enable"` as alias for `"active"` in guard clauses |
 
-No database or edge function changes needed.
