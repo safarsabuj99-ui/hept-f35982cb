@@ -1,0 +1,1 @@
+UPDATE campaigns SET status = 'active', updated_at = now() WHERE platform = 'tiktok' AND status = 'paused';
