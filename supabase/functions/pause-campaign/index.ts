@@ -298,9 +298,11 @@ Deno.serve(async (req) => {
       .eq("id", campaign_id);
 
     const actionVerb = isEnableAction ? "enabled" : "paused";
-    const auditDesc = alreadyInState
-      ? `Campaign "${campaign.name}" (${platform}) was already ${actionVerb} on platform — local status synced`
-      : `${isEnableAction ? "Enabled" : "Paused"} campaign "${campaign.name}" (${platform}) via dashboard`;
+    const auditDesc = localOnly
+      ? `Campaign "${campaign.name}" (${platform}) ${actionVerb} locally — platform API geo-restricted`
+      : alreadyInState
+        ? `Campaign "${campaign.name}" (${platform}) was already ${actionVerb} on platform — local status synced`
+        : `${isEnableAction ? "Enabled" : "Paused"} campaign "${campaign.name}" (${platform}) via dashboard`;
 
     await supabase.from("audit_logs").insert({
       user_id: user.id,
@@ -308,9 +310,11 @@ Deno.serve(async (req) => {
       description: auditDesc,
     });
 
-    const message = alreadyInState
-      ? `Campaign "${campaign.name}" was already ${actionVerb} on the platform — local status updated`
-      : `Campaign "${campaign.name}" has been ${actionVerb}`;
+    const message = localOnly
+      ? `Campaign "${campaign.name}" has been ${actionVerb} locally. Platform-side change could not be confirmed due to geo-restriction.`
+      : alreadyInState
+        ? `Campaign "${campaign.name}" was already ${actionVerb} on the platform — local status updated`
+        : `Campaign "${campaign.name}" has been ${actionVerb}`;
 
     return new Response(
       JSON.stringify({ success: true, message }),
