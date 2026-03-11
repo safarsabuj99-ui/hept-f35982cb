@@ -264,6 +264,11 @@ export default function ClientDashboard() {
               <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
                 {fmt(balance)}
               </p>
+              {balance < 0 && totalNegativeBdt > 0 && (
+                <p className="text-sm font-mono text-red-300 mt-0.5">
+                  ৳{totalNegativeBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              )}
             </div>
             <Button
               onClick={() => setDepositOpen(true)}
