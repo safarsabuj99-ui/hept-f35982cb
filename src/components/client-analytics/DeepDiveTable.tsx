@@ -388,15 +388,17 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
-    const canToggle = row.campaign_id && (active || row.status === "paused");
+    const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+    const canToggle = row.campaign_id && (active || isPaused);
 
+    const normalized = normalizeStatus(row.status);
     const redStatuses = ["not delivering", "disapproved", "with issues"];
     const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
     let dotClass = "bg-muted-foreground/40";
     if (active) dotClass = "bg-green-500";
-    if (redStatuses.includes(row.status)) dotClass = "bg-red-500";
-    if (yellowStatuses.includes(row.status)) dotClass = "bg-yellow-500";
-    if (row.status.startsWith("active -")) dotClass = "bg-yellow-500";
+    if (redStatuses.includes(normalized)) dotClass = "bg-red-500";
+    if (yellowStatuses.includes(normalized)) dotClass = "bg-yellow-500";
+    if (normalized.startsWith("active -")) dotClass = "bg-yellow-500";
 
     let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
     if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
