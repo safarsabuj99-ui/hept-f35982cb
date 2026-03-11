@@ -280,6 +280,14 @@ Deno.serve(async (req) => {
             ctr: number;
             cpc: number;
             roas: number;
+            view_content?: number;
+            add_to_cart?: number;
+            initiate_checkout?: number;
+            purchase?: number;
+            messaging_conversations?: number;
+            cost_per_purchase?: number;
+            cost_per_message?: number;
+            cpm?: number;
           }
         ) => {
           const { error } = await supabase
@@ -288,7 +296,22 @@ Deno.serve(async (req) => {
               {
                 campaign_id: campaignDbId,
                 data_date: dataDate,
-                ...metrics,
+                spend: metrics.spend,
+                impressions: metrics.impressions,
+                clicks: metrics.clicks,
+                results: metrics.results,
+                conversion_value: metrics.conversion_value,
+                ctr: metrics.ctr,
+                cpc: metrics.cpc,
+                roas: metrics.roas,
+                view_content: metrics.view_content ?? 0,
+                add_to_cart: metrics.add_to_cart ?? 0,
+                initiate_checkout: metrics.initiate_checkout ?? 0,
+                purchase: metrics.purchase ?? 0,
+                messaging_conversations: metrics.messaging_conversations ?? 0,
+                cost_per_purchase: metrics.cost_per_purchase ?? 0,
+                cost_per_message: metrics.cost_per_message ?? 0,
+                cpm: metrics.cpm ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
