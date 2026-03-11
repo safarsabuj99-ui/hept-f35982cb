@@ -1,34 +1,29 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix TikTok Toggle Button & Delivery Status
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Problems Found
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+1. **Bug in `sync-deep-dive`**: Line 627 references undefined variable `statusText` — this throws a runtime error during TikTok status fetching, which gets caught by the try/catch and marks status fetch as failed. While the fallback defaults campaigns to "active", the error noise masks real issues.
 
-## Technical Change
+2. **Toggle button missing**: The toggle only appears for campaigns with status `active` or `paused`. After clearing data and re-syncing, if the sync fails due to 41000 geo-restriction (even with retry), no campaigns exist in the DB, so nothing renders. The toggle logic itself is correct.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+3. **TikTok on/off works the same as Meta**: The `pause-campaign` edge function already handles TikTok with local-only fallback for geo-blocked scenarios. No changes needed there.
 
-Current code:
+## Fix
+
+### File: `supabase/functions/sync-deep-dive/index.ts`
+**Line 627** — Fix the undefined `statusText` variable:
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+// Before (BUG):
+console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || statusText.substring(0, 200)}`);
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+// After (FIX):
+console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || 'unknown error'}`);
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+This is a one-line fix. The undefined `statusText` reference causes an exception that silently breaks the TikTok status fetch, preventing proper status mapping. Once fixed:
+- TikTok campaigns will correctly show "active", "paused", "active - ad groups paused", etc. in the Delivery column
+- The toggle switch will appear for all campaigns with "active" or "paused" status
+- On/off toggling will work identically to Meta (already implemented with local-only fallback)
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
