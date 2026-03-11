@@ -748,6 +748,21 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       <TableCell />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
+                      {hasObjectiveData.sales && (
+                        <>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.viewContent)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.addToCart)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.initiateCheckout)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.purchase)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmt(totalCostPerPurchase)}</TableCell>
+                        </>
+                      )}
+                      {hasObjectiveData.messages && (
+                        <>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.messagingConversations)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmt(totalCostPerMessage)}</TableCell>
+                        </>
+                      )}
                       <TableCell className="font-mono text-sm">{totals.results.toLocaleString()}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpo)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totals.spend)}</TableCell>
