@@ -218,152 +218,254 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     onCampaignPaused?.();
   };
 
-  const columns = useMemo(() => [
-    columnHelper.display({
-      id: "select",
-      header: () => {
-        const allIds = selectableRows.map(r => r.campaign_id!);
-        const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
-        const someSelected = allIds.some(id => selectedIds.has(id)) && !allSelected;
-        return (
-          <Checkbox
-            checked={allSelected ? true : someSelected ? "indeterminate" : false}
-            onCheckedChange={toggleSelectAll}
-            aria-label="Select all"
-            className="translate-y-[2px]"
-          />
-        );
-      },
-      cell: (info) => {
-        const row = info.row.original;
-        const isSelectable = row.campaign_id && isActiveStatus(row.status);
-        if (!isSelectable) return <div className="w-4" />;
-        return (
-          <Checkbox
-            checked={selectedIds.has(row.campaign_id!)}
-            onCheckedChange={() => toggleSelect(row.campaign_id!)}
-            aria-label={`Select ${row.campaign_name}`}
-            className="translate-y-[2px]"
-            onClick={(e) => e.stopPropagation()}
-          />
-        );
-      },
-    }),
-    columnHelper.accessor("campaign_name", {
-      header: "Campaign",
-      cell: (info) => (
-        <div className="min-w-[180px]">
-          <span className="font-medium text-sm truncate max-w-[260px] block">{info.getValue()}</span>
-          {info.row.original.ad_account_name && (
-            <span className="text-[11px] text-muted-foreground truncate block">{info.row.original.ad_account_name}</span>
-          )}
-        </div>
-      ),
-    }),
-    columnHelper.accessor("platform", {
-      header: "Platform",
-      cell: (info) => {
-        const p = PLATFORM_BADGE[info.getValue()] || { label: info.getValue(), className: "bg-muted text-muted-foreground border-border" };
-        return <Badge variant="outline" className={`text-[10px] font-semibold ${p.className}`}>{p.label}</Badge>;
-      },
-    }),
-    columnHelper.accessor("status", {
-      header: "Delivery",
-      cell: (info) => {
-        const row = info.row.original;
-        const status = info.getValue();
-        const isToggling = togglingId === row.campaign_id;
-        const active = isActiveStatus(status);
+  // Detect which objective columns have data
+  const hasObjectiveData = useMemo(() => {
+    const has = { sales: false, messages: false };
+    for (const r of data) {
+      if ((r.view_content ?? 0) > 0 || (r.add_to_cart ?? 0) > 0 || (r.initiate_checkout ?? 0) > 0 || (r.purchase ?? 0) > 0) has.sales = true;
+      if ((r.messaging_conversations ?? 0) > 0) has.messages = true;
+    }
+    return has;
+  }, [data]);
 
-        const redStatuses = ["not delivering", "disapproved", "with issues"];
-        const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
-        const dimStatuses = ["archived", "deleted"];
-
-        let dotClass = "bg-muted-foreground/40";
-        if (active) dotClass = "bg-green-500";
-        if (redStatuses.includes(status)) dotClass = "bg-red-500";
-        if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
-        if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
-        // Override: active with enriched label gets yellow dot
-        if (status.startsWith("active -")) dotClass = "bg-yellow-500";
-
-        const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
-        const canToggle = row.campaign_id && (active || isPaused);
-
-        return (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
-              <span className="text-xs text-muted-foreground capitalize truncate">{normalizeStatus(status)}</span>
-            </div>
-            {canToggle && (
-              <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                {isToggling ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                ) : (
-                  <Switch
-                    checked={active}
-                    onCheckedChange={() => {
-                      const action = active ? "pause" : "enable";
-                      setConfirmToggle({ row, action });
-                    }}
-                    className="scale-75"
-                  />
-                )}
-              </div>
+  const columns = useMemo(() => {
+    const cols: any[] = [
+      columnHelper.display({
+        id: "select",
+        header: () => {
+          const allIds = selectableRows.map(r => r.campaign_id!);
+          const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+          const someSelected = allIds.some(id => selectedIds.has(id)) && !allSelected;
+          return (
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Select all"
+              className="translate-y-[2px]"
+            />
+          );
+        },
+        cell: (info) => {
+          const row = info.row.original;
+          const isSelectable = row.campaign_id && isActiveStatus(row.status);
+          if (!isSelectable) return <div className="w-4" />;
+          return (
+            <Checkbox
+              checked={selectedIds.has(row.campaign_id!)}
+              onCheckedChange={() => toggleSelect(row.campaign_id!)}
+              aria-label={`Select ${row.campaign_name}`}
+              className="translate-y-[2px]"
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+      }),
+      columnHelper.accessor("campaign_name", {
+        header: "Campaign",
+        cell: (info) => (
+          <div className="min-w-[180px]">
+            <span className="font-medium text-sm truncate max-w-[260px] block">{info.getValue()}</span>
+            {info.row.original.ad_account_name && (
+              <span className="text-[11px] text-muted-foreground truncate block">{info.row.original.ad_account_name}</span>
             )}
           </div>
-        );
-      },
-    }),
-    columnHelper.accessor("impressions", {
-      header: "Impressions",
-      cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
-    }),
-    columnHelper.display({
-      id: "cpm",
-      header: "CPM",
-      cell: (info) => {
-        const row = info.row.original;
-        const cpm = safeDivide(row.spend, row.impressions) * 1000;
-        return <span className="font-mono text-sm">{fmt(cpm)}</span>;
-      },
-    }),
-    columnHelper.accessor("results", {
-      header: "Results",
-      cell: (info) => <span className="font-mono text-sm font-medium">{info.getValue().toLocaleString()}</span>,
-    }),
-    columnHelper.display({
-      id: "cpo",
-      header: "Cost/Result",
-      cell: (info) => {
-        const row = info.row.original;
-        const cpo = safeDivide(row.spend, row.results);
-        return <span className="font-mono text-sm">{fmt(cpo)}</span>;
-      },
-    }),
-    columnHelper.accessor("spend", {
-      header: "Spent",
-      cell: (info) => <span className="font-mono text-sm font-medium">{fmt(info.getValue())}</span>,
-    }),
-    columnHelper.display({
-      id: "roas",
-      header: "ROAS",
-      cell: (info) => {
-        const row = info.row.original;
-        const roas = safeDivide(row.conversion_value, row.spend);
-        let className = "font-mono text-xs ";
-        if (roas > 3) {
-          className += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
-        } else if (roas < 1.5) {
-          className += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
-        } else {
-          className += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
-        }
-        return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
-      },
-    }),
-  ], [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll]);
+        ),
+      }),
+      columnHelper.accessor("platform", {
+        header: "Platform",
+        cell: (info) => {
+          const p = PLATFORM_BADGE[info.getValue()] || { label: info.getValue(), className: "bg-muted text-muted-foreground border-border" };
+          return <Badge variant="outline" className={`text-[10px] font-semibold ${p.className}`}>{p.label}</Badge>;
+        },
+      }),
+      columnHelper.accessor("status", {
+        header: "Delivery",
+        cell: (info) => {
+          const row = info.row.original;
+          const status = info.getValue();
+          const isToggling = togglingId === row.campaign_id;
+          const active = isActiveStatus(status);
+
+          const redStatuses = ["not delivering", "disapproved", "with issues"];
+          const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
+          const dimStatuses = ["archived", "deleted"];
+
+          let dotClass = "bg-muted-foreground/40";
+          if (active) dotClass = "bg-green-500";
+          if (redStatuses.includes(status)) dotClass = "bg-red-500";
+          if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
+          if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
+          // Override: active with enriched label gets yellow dot
+          if (status.startsWith("active -")) dotClass = "bg-yellow-500";
+
+          const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
+          const canToggle = row.campaign_id && (active || isPaused);
+
+          return (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+                <span className="text-xs text-muted-foreground capitalize truncate">{normalizeStatus(status)}</span>
+              </div>
+              {canToggle && (
+                <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  {isToggling ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      checked={active}
+                      onCheckedChange={() => {
+                        const action = active ? "pause" : "enable";
+                        setConfirmToggle({ row, action });
+                      }}
+                      className="scale-75"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor("impressions", {
+        header: "Impressions",
+        cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
+      }),
+      columnHelper.display({
+        id: "cpm",
+        header: "CPM",
+        cell: (info) => {
+          const row = info.row.original;
+          const cpm = row.cpm ?? safeDivide(row.spend, row.impressions) * 1000;
+          return <span className="font-mono text-sm">{fmt(cpm)}</span>;
+        },
+      }),
+    ];
+
+    // Sales funnel columns — show if any campaign has sales data
+    if (hasObjectiveData.sales) {
+      cols.push(
+        columnHelper.display({
+          id: "view_content",
+          header: "View Content",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.view_content ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "add_to_cart",
+          header: "Add to Cart",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.add_to_cart ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "initiate_checkout",
+          header: "Checkout",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.initiate_checkout ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "purchase",
+          header: "Purchase",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm font-medium">{fmtNum(row.purchase ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "cost_per_purchase",
+          header: "Cost/Purchase",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            const cpp = (row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0;
+            return <span className="font-mono text-sm">{fmt(cpp)}</span>;
+          },
+        }),
+      );
+    }
+
+    // Messages columns — show if any campaign has messaging data
+    if (hasObjectiveData.messages) {
+      cols.push(
+        columnHelper.display({
+          id: "messaging_conversations",
+          header: "Messages",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "cost_per_message",
+          header: "Cost/Message",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            const cpm = (row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0;
+            return <span className="font-mono text-sm">{fmt(cpm)}</span>;
+          },
+        }),
+      );
+    }
+
+    // Generic results column (always show)
+    cols.push(
+      columnHelper.accessor("results", {
+        header: "Results",
+        cell: (info) => <span className="font-mono text-sm font-medium">{info.getValue().toLocaleString()}</span>,
+      }),
+      columnHelper.display({
+        id: "cpo",
+        header: "Cost/Result",
+        cell: (info) => {
+          const row = info.row.original;
+          const cpo = safeDivide(row.spend, row.results);
+          return <span className="font-mono text-sm">{fmt(cpo)}</span>;
+        },
+      }),
+      columnHelper.accessor("spend", {
+        header: "Spent",
+        cell: (info) => <span className="font-mono text-sm font-medium">{fmt(info.getValue())}</span>,
+      }),
+      columnHelper.display({
+        id: "roas",
+        header: "ROAS",
+        cell: (info) => {
+          const row = info.row.original;
+          const roas = safeDivide(row.conversion_value, row.spend);
+          let className = "font-mono text-xs ";
+          if (roas > 3) {
+            className += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+          } else if (roas < 1.5) {
+            className += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+          } else {
+            className += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+          }
+          return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
+        },
+      }),
+    );
+
+    return cols;
+  }, [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll, hasObjectiveData]);
 
   const table = useReactTable({
     data: paginatedData,
