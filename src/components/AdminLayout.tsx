@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone,
+  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
