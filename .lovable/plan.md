@@ -1,39 +1,34 @@
 
 
-# Optimize sync-deep-dive for Platform-Specific Syncs
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-The `sync-deep-dive` function processes all platforms (Meta, Google, TikTok) sequentially in a single invocation. With multiple accounts and months of historical data, it regularly times out (edge functions have a ~60s limit). There's no way to sync just one platform.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
 ## Solution
-Add an optional `platform` query parameter to filter which accounts get synced. The frontend Settings page will pass this parameter when triggering individual syncs, and "Sync All" will omit it to sync everything.
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Changes
+## Technical Change
 
-### 1. Edge Function: `supabase/functions/sync-deep-dive/index.ts`
-- Parse an optional `platform` param from the request body (e.g. `{ "platform": "tiktok" }`)
-- When provided, filter the `accounts` query to only include `platform_name = platform`
-- No other logic changes — the rest of the function works as-is
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-Key code change (after line 50, inside the try block):
-```typescript
-let body: any = {};
-try { body = await req.json(); } catch {}
-const platformFilter: string | null = body?.platform || null;
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-Then at line 82, add `.eq("platform_name", platformFilter)` conditionally when `platformFilter` is set.
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-### 2. Frontend: `src/pages/Settings.tsx`
-- Update the sync invocation to pass `{ platform: "tiktok" }` / `{ platform: "meta" }` etc. when a specific sync is triggered
-- No change needed if Settings already calls each function individually (it does — each sync button triggers a different edge function, not platform-filtered deep-dive)
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-Actually, since the Settings page already has separate buttons for different *functions* (fast-lane, deep-dive, ad-spend, billing), the platform filter is most useful for programmatic/retry calls. The simplest high-value change is just adding the optional filter to the edge function so it can be called with `{ "platform": "tiktok" }` to avoid timeouts.
-
-### Summary of File Changes
 | File | Change |
 |------|--------|
-| `supabase/functions/sync-deep-dive/index.ts` | Accept optional `platform` body param; filter accounts query when provided |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-This is a minimal, backward-compatible change — calling without the param works exactly as before.
-
+No database or edge function changes needed.
