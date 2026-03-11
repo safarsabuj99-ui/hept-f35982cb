@@ -75,6 +75,7 @@ const App = () => (
                 <Route path="/admin/clients/:userId" element={<ClientDetail />} />
                 <Route path="/admin/add-funds" element={<AddFunds />} />
                 <Route path="/admin/pending" element={<Navigate to="/admin/payment-requests" replace />} />
+                <Route path="/admin/profile" element={<AdminProfile />} />
                 <Route path="/admin/settings" element={<Settings />} />
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 
