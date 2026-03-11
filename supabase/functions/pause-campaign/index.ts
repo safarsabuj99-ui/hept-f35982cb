@@ -260,10 +260,18 @@ Deno.serve(async (req) => {
         // Geo-restriction — check actual status and sync if already correct
         const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
         console.log(`TikTok geo-blocked, checking current status: ${currentStatus}`);
-        if (isEnableAction ? isOnStatus("tiktok", currentStatus) : isOffStatus("tiktok", currentStatus)) {
+        if (currentStatus === null) {
+          // Both read and write are geo-blocked — apply locally only
+          apiSuccess = true;
+          localOnly = true;
+          console.log("TikTok fully geo-blocked, applying local-only update");
+        } else if (isEnableAction ? isOnStatus("tiktok", currentStatus) : isOffStatus("tiktok", currentStatus)) {
           alreadyInState = true;
         } else {
-          apiMessage = "TikTok API is geo-restricted. Ensure your Cloudflare proxy has Smart Placement enabled for POST requests.";
+          // Write blocked but read works and status doesn't match — apply locally with warning
+          apiSuccess = true;
+          localOnly = true;
+          console.log("TikTok write geo-blocked but status differs, applying local-only update");
         }
       } else {
         const currentStatus = await checkTikTokStatus(adAccount.ad_account_id, rawId, integration.api_token, tiktokBase);
