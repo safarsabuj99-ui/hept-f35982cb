@@ -34,6 +34,7 @@ import OrderManagement from "@/pages/OrderManagement";
 import NewCampaignRequest from "@/pages/NewCampaignRequest";
 import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
+import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 
 
