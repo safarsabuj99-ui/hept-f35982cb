@@ -1,34 +1,30 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Add BDT Negative Balance to Dashboard Hero
 
 ## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The client dashboard hero section shows "Available Balance" in USD only. When the balance is negative, the client needs to see the equivalent BDT (৳) amount based on their per-platform rates from `pricing_config.flat_rates`.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Plan
 
-## Technical Change
+### File: `src/pages/ClientDashboard.tsx`
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+1. **Fetch `pricing_config`** from the `profiles` table (same pattern as `ClientWallet.tsx` line 41-43) — add state + useEffect
+2. **Compute platform balances** from transactions (credits - debits per platform: meta, tiktok, google)
+3. **Calculate `totalNegativeBdt`** — when total balance < 0, sum each negative platform balance × its rate from `pricing_config.flat_rates` (fallback 120)
+4. **Display BDT below USD** in the hero balance card (lines 238-245) — only when balance is negative, show `৳X,XXX.XX` in a smaller line beneath the USD amount, styled with `text-red-300` to indicate debt
 
-Current code:
+### Code Change (Hero Balance Card)
+```tsx
+<p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground">
+  {fmt(balance)}
+</p>
+{balance < 0 && totalNegativeBdt > 0 && (
+  <p className="text-sm font-mono text-red-300 mt-0.5">
+    ৳{totalNegativeBdt.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+  </p>
+)}
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### No new files — single file edit to `src/pages/ClientDashboard.tsx`
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
