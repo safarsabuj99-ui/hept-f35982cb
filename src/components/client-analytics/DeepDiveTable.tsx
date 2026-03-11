@@ -477,12 +477,17 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   });
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, results: 0, convValue: 0 };
+    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0 };
     for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
       t.results += r.results;
       t.convValue += r.conversion_value;
+      t.viewContent += r.view_content ?? 0;
+      t.addToCart += r.add_to_cart ?? 0;
+      t.initiateCheckout += r.initiate_checkout ?? 0;
+      t.purchase += r.purchase ?? 0;
+      t.messagingConversations += r.messaging_conversations ?? 0;
     }
     return t;
   }, [filteredData]);
@@ -490,6 +495,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const totalRoas = safeDivide(totals.convValue, totals.spend);
   const totalCpm = safeDivide(totals.spend, totals.impressions) * 1000;
   const totalCpo = safeDivide(totals.spend, totals.results);
+  const totalCostPerPurchase = safeDivide(totals.spend, totals.purchase);
+  const totalCostPerMessage = safeDivide(totals.spend, totals.messagingConversations);
 
   // Mobile campaign card component
   const MobileCampaignCard = ({ row }: { row: CampaignRow }) => {
