@@ -284,7 +284,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
-              <span className="text-xs text-muted-foreground capitalize truncate">{status}</span>
+              <span className="text-xs text-muted-foreground capitalize truncate">{normalizeStatus(status)}</span>
             </div>
             {canToggle && (
               <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
