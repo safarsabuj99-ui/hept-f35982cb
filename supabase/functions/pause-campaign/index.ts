@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
     let apiSuccess = false;
     let apiMessage = "";
     let alreadyInState = false;
+    let localOnly = false;
 
     // Get TikTok proxy URL setting
     const { data: proxySetting } = await supabase
