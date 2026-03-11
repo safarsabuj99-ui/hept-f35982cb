@@ -505,7 +505,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <SelectItem value="all">All Statuses</SelectItem>
             {uniqueStatuses.map((s) => (
               <SelectItem key={s} value={s}>
-                <span className="capitalize">{s}</span>
+                <span className="capitalize">{normalizeStatus(s)}</span>
               </SelectItem>
             ))}
           </SelectContent>
