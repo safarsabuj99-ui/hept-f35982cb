@@ -624,7 +624,7 @@ Deno.serve(async (req) => {
               }
             } else {
               // API returned non-zero code or no data — treat as failed
-              console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || statusText.substring(0, 200)}`);
+              console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || 'unknown error'}`);
               tiktokStatusFetchFailed = true;
             }
           } catch (e: any) {
