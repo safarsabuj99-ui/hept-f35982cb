@@ -549,26 +549,28 @@ Deno.serve(async (req) => {
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };
 
-          // Fetch real campaign statuses from TikTok (try direct first, then proxy)
+          // Fetch real campaign statuses from TikTok
           const tiktokStatusMap: Record<string, string> = {};
+          let tiktokStatusFetchFailed = false;
           try {
             const statusParams = new URLSearchParams({
               advertiser_id: account.ad_account_id,
               page_size: "500",
             });
-            // Try direct TikTok first (campaign/get may not be geo-blocked)
             const statusRes = await fetch(
               `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
               { headers: { "Access-Token": integration.api_token, "Content-Type": "application/json" } }
             );
-            const statusJson = await statusRes.json();
+            const statusText = await statusRes.text();
+            let statusJson: any;
+            try { statusJson = JSON.parse(statusText); } catch { statusJson = {}; }
+            console.log(`TikTok status fetch response code: ${statusJson.code}, campaigns found: ${statusJson.data?.list?.length ?? 0}`);
             if (statusJson.code === 0 && statusJson.data?.list) {
               for (const c of statusJson.data.list) {
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
+                console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
 
-                // Map TikTok operation_status to our status
-                // Campaign is "on" if operation_status is ENABLE, even if all ad groups are paused
                 const activeStatuses = [
                   "CAMPAIGN_STATUS_ENABLE",
                   "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL",
@@ -583,7 +585,6 @@ Deno.serve(async (req) => {
                 } else if (opStatus === "CAMPAIGN_STATUS_DISABLE") {
                   tiktokStatusMap[c.campaign_id] = "paused";
                 } else if (activeStatuses.includes(opStatus)) {
-                  // Enrich with secondary_status for delivery label
                   if (secStatus.includes("ALL_ADGROUP_PAUSED") || opStatus === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED") {
                     tiktokStatusMap[c.campaign_id] = "active - ad groups paused";
                   } else if (secStatus.includes("BUDGET_EXCEED") || opStatus === "CAMPAIGN_STATUS_BUDGET_EXCEED") {
@@ -594,13 +595,18 @@ Deno.serve(async (req) => {
                     tiktokStatusMap[c.campaign_id] = "active";
                   }
                 } else {
-                  // Unknown status — default to the raw value
                   tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
                 }
               }
+            } else {
+              // API returned non-zero code or no data — treat as failed
+              console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || statusText.substring(0, 200)}`);
+              tiktokStatusFetchFailed = true;
             }
           } catch (e: any) {
+            console.error(`TikTok status fetch exception: ${e.message}`);
             errors.push(`TikTok status fetch: ${e.message}`);
+            tiktokStatusFetchFailed = true;
           }
 
           const rows = json.data?.list || [];
