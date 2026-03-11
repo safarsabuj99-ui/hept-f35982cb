@@ -39,7 +39,7 @@ export default function CampaignMapping() {
       return;
     }
 
-    let campaignsQuery = supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+    let campaignsQuery = supabase.from("campaigns").select("*, objective").order("created_at", { ascending: false });
     campaignsQuery = campaignsQuery.in("ad_account_id", mappedAccountIds);
 
     const [{ data: camps }, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
