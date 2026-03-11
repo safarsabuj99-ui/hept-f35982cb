@@ -104,15 +104,17 @@ export default function Settings() {
     }
   };
 
-  const handleManualSync = async (fn: SyncFunction) => {
-    setSyncing((prev) => ({ ...prev, [fn]: true }));
-    const { data, error } = await supabase.functions.invoke(fn);
-    setSyncing((prev) => ({ ...prev, [fn]: false }));
+  const handleManualSync = async (fn: SyncFunction, platform?: string) => {
+    const syncKey = platform ? `${fn}:${platform}` : fn;
+    setSyncing((prev) => ({ ...prev, [syncKey]: true }));
+    const body = platform ? { platform } : undefined;
+    const { data, error } = await supabase.functions.invoke(fn, { body });
+    setSyncing((prev) => ({ ...prev, [syncKey]: false }));
     if (error) {
       toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Sync Complete", description: data?.message || `${fn} finished successfully.` });
-      // Surface any platform-specific errors (e.g. TikTok geo-restriction)
+      const label = platform ? `${fn} (${platform})` : fn;
+      toast({ title: "Sync Complete", description: data?.message || `${label} finished successfully.` });
       if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
         for (const err of data.errors) {
           toast({ title: "Sync Warning", description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
