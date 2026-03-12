@@ -1102,7 +1102,7 @@ export function DeepDiveTable({
 
         {/* Floating bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-xl border border-border/50 glass-card p-3 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
             </span>
