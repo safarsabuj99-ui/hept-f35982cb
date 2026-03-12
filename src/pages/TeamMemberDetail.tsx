@@ -87,6 +87,9 @@ export default function TeamMemberDetail() {
   const [unassignedClients, setUnassignedClients] = useState<ClientRow[]>([]);
   const [assignSearch, setAssignSearch] = useState("");
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
+  const [selectedAssigned, setSelectedAssigned] = useState<Set<string>>(new Set());
+  const [selectedUnassigned, setSelectedUnassigned] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Activity state
   const [auditLogs, setAuditLogs] = useState<AuditRow[]>([]);
