@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { DeepDiveTable, CampaignRow, PresetType } from "@/components/client-analytics/DeepDiveTable";
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { usePresetPreferences } from "@/hooks/usePresetPreferences";
 import { DollarSign, ShoppingCart, TrendingUp, Target, Radio } from "lucide-react";
 
 const fmt = (n: number) =>
@@ -16,7 +17,11 @@ interface CampaignAnalyticsPanelProps {
   onRefresh: () => void;
 }
 
+type PlatformTab = "all" | "meta" | "tiktok" | "google";
+
 export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnalyticsPanelProps) {
+  const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
+
   const totals = useMemo(() => {
     const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
     for (const r of campaignRows) {
@@ -50,6 +55,17 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
   const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
   const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
   const googleRows = useMemo(() => campaignRows.filter(r => r.platform === "google"), [campaignRows]);
+
+  const renderDeepDiveTable = (data: CampaignRow[], platform: PlatformTab) => (
+    <DeepDiveTable
+      data={data}
+      onCampaignPaused={onRefresh}
+      defaultPreset={getDefaultPreset(platform)}
+      onSetDefaultPreset={(preset) => setDefaultPreset(platform, preset)}
+      savedColumnOrder={getColumnOrder(platform)}
+      onColumnOrderChange={(order) => setColumnOrder(platform, order)}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -136,16 +152,16 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
               </TabsList>
             </div>
             <TabsContent value="all">
-              <DeepDiveTable data={campaignRows} onCampaignPaused={onRefresh} />
+              {renderDeepDiveTable(campaignRows, "all")}
             </TabsContent>
             <TabsContent value="meta">
-              <DeepDiveTable data={metaRows} onCampaignPaused={onRefresh} />
+              {renderDeepDiveTable(metaRows, "meta")}
             </TabsContent>
             <TabsContent value="tiktok">
-              <DeepDiveTable data={tiktokRows} onCampaignPaused={onRefresh} />
+              {renderDeepDiveTable(tiktokRows, "tiktok")}
             </TabsContent>
             <TabsContent value="google">
-              <DeepDiveTable data={googleRows} onCampaignPaused={onRefresh} />
+              {renderDeepDiveTable(googleRows, "google")}
             </TabsContent>
           </Tabs>
         </TabsContent>
