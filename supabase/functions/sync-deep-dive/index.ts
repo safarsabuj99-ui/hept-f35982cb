@@ -469,6 +469,8 @@ Deno.serve(async (req) => {
               initiate_checkout: initiateCheckout,
               purchase: purchaseCount,
               messaging_conversations: messagingConversations,
+              new_messaging_contacts: newMessagingContacts,
+              reach,
               cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
               cost_per_message: Math.round(costPerMessage * 100) / 100,
               cpm: Math.round(cpmValue * 100) / 100,

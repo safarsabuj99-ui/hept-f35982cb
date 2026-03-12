@@ -420,6 +420,27 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           },
         }),
         columnHelper.display({
+          id: "new_messaging_contacts",
+          header: "New Contacts",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.new_messaging_contacts ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "returning_messaging",
+          header: "Returning",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            const returning = Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0));
+            return <span className="font-mono text-sm">{fmtNum(returning)}</span>;
+          },
+        }),
+        columnHelper.display({
           id: "cost_per_message",
           header: "Cost/Message",
           cell: (info) => {
