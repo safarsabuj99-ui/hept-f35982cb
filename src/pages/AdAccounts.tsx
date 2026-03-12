@@ -8,9 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Monitor, Download, ExternalLink, Search } from "lucide-react";
+import { Loader2, Plus, Monitor, Download, ExternalLink, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,6 +62,11 @@ export default function AdAccounts() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Bulk delete state
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
   const fetchData = async () => {
     const [{ data: accs }, { data: roles }, { data: profiles }, { data: ints }, { data: assigns }] = await Promise.all([
       supabase.from("ad_accounts" as any).select("*").order("created_at", { ascending: false }) as any,
@@ -87,6 +97,9 @@ export default function AdAccounts() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Clear selection on search/filter/page change
+  useEffect(() => { setSelectedAccounts(new Set()); }, [searchQuery, currentPage, pageSize]);
 
   const handleCreate = async () => {
     if (!form.platform_name || !form.ad_account_id) return;
@@ -182,6 +195,71 @@ export default function AdAccounts() {
     return "text-emerald-500";
   };
 
+  // Bulk selection helpers
+  const toggleAccountSelection = (id: string) => {
+    setSelectedAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    const pageIds = paginatedAccounts.map((a: any) => a.id);
+    const allSelected = pageIds.every((id: string) => selectedAccounts.has(id));
+    if (allSelected) {
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id: string) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id: string) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedAccounts.size === 0) return;
+    setBulkDeleting(true);
+    setConfirmDeleteOpen(false);
+
+    const ids = Array.from(selectedAccounts);
+    let deleted = 0;
+    let failed = 0;
+
+    for (const id of ids) {
+      try {
+        // Cascade delete related data in order
+        await (supabase.from("ad_account_clients" as any) as any).delete().eq("ad_account_id", id);
+        await (supabase.from("billing_notifications" as any) as any).delete().eq("ad_account_id", id);
+        await (supabase.from("campaign_performance" as any) as any).delete().eq("ad_account_id", id);
+        await (supabase.from("daily_ad_spend" as any) as any).delete().eq("ad_account_id", id);
+        await (supabase.from("campaign_mappings" as any) as any).delete().eq("ad_account_id", id);
+        await (supabase.from("campaigns" as any) as any).delete().eq("ad_account_id", id);
+        const { error } = await (supabase.from("ad_accounts" as any) as any).delete().eq("id", id);
+        if (error) throw error;
+        deleted++;
+      } catch (err: any) {
+        console.error(`Failed to delete account ${id}:`, err);
+        failed++;
+      }
+    }
+
+    setBulkDeleting(false);
+    setSelectedAccounts(new Set());
+
+    toast({
+      title: "Bulk Delete Complete",
+      description: `Deleted ${deleted} account(s)${failed > 0 ? `, ${failed} failed` : ""}`,
+      variant: failed > 0 ? "destructive" : undefined,
+    });
+    fetchData();
+  };
+
   const filteredAccounts = accounts.filter((a: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -194,6 +272,8 @@ export default function AdAccounts() {
   });
 
   const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const allPageSelected = paginatedAccounts.length > 0 && paginatedAccounts.every((a: any) => selectedAccounts.has(a.id));
+  const somePageSelected = paginatedAccounts.some((a: any) => selectedAccounts.has(a.id));
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -375,9 +455,13 @@ export default function AdAccounts() {
 
               return (
                 <div key={a.id} className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
-                  {/* Top row: Platform + Active toggle */}
+                  {/* Top row: Checkbox + Platform + Active toggle */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedAccounts.has(a.id)}
+                        onCheckedChange={() => toggleAccountSelection(a.id)}
+                      />
                       <Badge variant="secondary" className="capitalize text-xs">{a.platform_name}</Badge>
                       {integration && (
                         <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
@@ -468,6 +552,14 @@ export default function AdAccounts() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allPageSelected}
+                          onCheckedChange={toggleSelectAllOnPage}
+                          aria-label="Select all on page"
+                          {...(somePageSelected && !allPageSelected ? { "data-state": "indeterminate" } : {})}
+                        />
+                      </TableHead>
                       <TableHead>Platform</TableHead>
                       <TableHead>Account Name</TableHead>
                       <TableHead>Account ID</TableHead>
@@ -491,7 +583,14 @@ export default function AdAccounts() {
                       const accountAssignments = getAccountAssignments(a.id);
 
                       return (
-                        <TableRow key={a.id}>
+                        <TableRow key={a.id} className={selectedAccounts.has(a.id) ? "bg-muted/50" : ""}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedAccounts.has(a.id)}
+                              onCheckedChange={() => toggleAccountSelection(a.id)}
+                              aria-label={`Select ${a.account_name || a.ad_account_id}`}
+                            />
+                          </TableCell>
                           <TableCell>
                             <Badge variant="secondary" className="capitalize">{a.platform_name}</Badge>
                             {a.api_integration_id && (() => {
@@ -568,6 +667,48 @@ export default function AdAccounts() {
           <TablePagination totalItems={filteredAccounts.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={(s) => { setPageSize(s); setCurrentPage(1); }} />
         </>
       )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedAccounts.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border bg-card px-5 py-3 shadow-lg">
+          <span className="text-sm font-medium">
+            {selectedAccounts.size} account{selectedAccounts.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmDeleteOpen(true)}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            Delete Selected
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedAccounts(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete {selectedAccounts.size} ad account{selectedAccounts.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the selected ad account{selectedAccounts.size !== 1 ? "s" : ""} and all related data including client assignments, campaigns, spend history, and billing notifications. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete {selectedAccounts.size} Account{selectedAccounts.size !== 1 ? "s" : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
