@@ -124,6 +124,7 @@ export function DeepDiveTable({
   onSetDefaultPreset,
   savedColumnOrder,
   onColumnOrderChange,
+  canToggleCampaigns = true,
 }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
