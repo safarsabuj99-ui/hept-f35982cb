@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface PlatformDetail {
   platform: string;
