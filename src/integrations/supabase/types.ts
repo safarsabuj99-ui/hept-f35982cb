@@ -785,6 +785,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          is_active: boolean
           is_super_admin: boolean
           manager_id: string | null
           mapping_keyword: string | null
@@ -808,6 +809,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          is_active?: boolean
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
@@ -831,6 +833,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          is_active?: boolean
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null

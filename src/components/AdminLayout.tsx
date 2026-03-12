@@ -56,7 +56,7 @@ const allSections: NavSection[] = [
   {
     title: "Advertising",
     items: [
-      { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts" },
+      { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts", permKey: "can_view_ad_accounts" },
       { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
       { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
     ],
@@ -65,7 +65,7 @@ const allSections: NavSection[] = [
     title: "Finance",
     items: [
       { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
-      { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_manage_finance" },
+      { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_approve_payments" },
       { to: "/admin/orders", icon: Megaphone, label: "Orders", permKey: "can_manage_campaigns" },
     ],
   },
@@ -74,7 +74,7 @@ const allSections: NavSection[] = [
     items: [
       { to: "/admin/profile", icon: UserCircle, label: "My Profile" },
       { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
-      { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_configure_system" },
+      { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_view_audit_logs" },
     ],
   },
 ];

@@ -27,7 +27,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("role")
       .eq("user_id", userId)
       .single();
-    setRole((data?.role as AppRole) ?? null);
+    const userRole = (data?.role as AppRole) ?? null;
+    setRole(userRole);
+
+    // Check is_active for non-admin roles
+    if (userRole === "manager") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_active")
+        .eq("user_id", userId)
+        .single();
+      if (profile && !(profile as any).is_active) {
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setRole(null);
+      }
+    }
   };
 
   useEffect(() => {
