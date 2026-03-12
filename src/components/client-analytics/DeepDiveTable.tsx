@@ -566,15 +566,19 @@ export function DeepDiveTable({
         cell: (info) => {
           const row = info.row.original;
           const roas = safeDivide(row.conversion_value, row.spend);
-          let className = "font-mono text-xs ";
+          let badgeClass = "font-mono text-xs ";
+          let glowClass = "";
           if (roas > 3) {
-            className += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+            badgeClass += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+            glowClass = "roas-glow-green";
           } else if (roas < 1.5) {
-            className += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+            badgeClass += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+            glowClass = "roas-glow-red";
           } else {
-            className += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+            badgeClass += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+            glowClass = "roas-glow-yellow";
           }
-          return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
+          return <Badge variant="outline" className={cn(badgeClass, glowClass)}>{roas.toFixed(2)}x</Badge>;
         },
       }),
     );
