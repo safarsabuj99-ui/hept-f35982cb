@@ -1038,8 +1038,8 @@ export function DeepDiveTable({
                             <TableCell
                               key={cell.id}
                               className={cn(
-                                frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
-                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                frozen && `sticky ${stickyLeft} z-10 bg-card/95 dark:bg-card/95`,
+                                isLastFrozen && "campaign-frozen-separator",
                                 isSelected && frozen && "bg-primary/5",
                               )}
                             >
