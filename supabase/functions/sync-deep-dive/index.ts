@@ -412,6 +412,7 @@ Deno.serve(async (req) => {
             let initiateCheckout = 0;
             let purchaseCount = 0;
             let messagingConversations = 0;
+            let newMessagingContacts = 0;
 
             if (row.actions) {
               for (const action of row.actions) {
