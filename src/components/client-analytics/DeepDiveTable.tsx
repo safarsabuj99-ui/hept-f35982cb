@@ -329,6 +329,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           );
         },
       }),
+      columnHelper.display({
+        id: "reach",
+        header: "Reach",
+        cell: (info) => <span className="font-mono text-sm">{fmtNum(info.row.original.reach ?? 0)}</span>,
+      }),
       columnHelper.accessor("impressions", {
         header: "Impressions",
         cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
