@@ -43,6 +43,7 @@ const allSections: NavSection[] = [
     title: "",
     items: [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
+      { to: "/admin/attention", icon: AlertTriangle, label: "Attention", permKey: "can_view_dashboard_stats" },
     ],
   },
   {
