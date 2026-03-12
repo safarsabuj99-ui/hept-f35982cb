@@ -965,9 +965,9 @@ export function DeepDiveTable({
                         className={cn(
                           header.id === "select" ? "w-10" : "cursor-pointer",
                           "select-none transition-all duration-200 text-xs uppercase tracking-wider",
-                          // Frozen column styling
+                          // Frozen column styling — no visible divider, content slides under with soft shadow
                           frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
-                          isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/20 after:via-primary/10 after:to-transparent",
+                          isLastFrozen && "[box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.08)]",
                           // Draggable styling
                           isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
                           // Drag state
@@ -1030,7 +1030,7 @@ export function DeepDiveTable({
                               key={cell.id}
                               className={cn(
                                 frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
-                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                isLastFrozen && "[box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.06)]",
                                 isSelected && frozen && "bg-primary/5",
                               )}
                             >
@@ -1046,7 +1046,7 @@ export function DeepDiveTable({
                       <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
                       <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
                       <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 [box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.06)]")} />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
