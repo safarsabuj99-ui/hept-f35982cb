@@ -703,9 +703,37 @@ export default function TeamMemberDetail() {
                 </p>
               ) : (
                 <>
+                  {/* Bulk action bar */}
+                  {selectedAssigned.size > 0 && (
+                    <div className="mb-4 flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                      <p className="text-sm font-medium">
+                        {selectedAssigned.size} client{selectedAssigned.size !== 1 ? "s" : ""} selected
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedAssigned(new Set())}>
+                          Clear
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkUnassign}
+                          disabled={bulkProcessing}
+                        >
+                          {bulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserMinus className="mr-1.5 h-3.5 w-3.5" />}
+                          Unassign Selected
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={paginatedClients.length > 0 && selectedAssigned.size === paginatedClients.length}
+                            onCheckedChange={toggleAllAssigned}
+                          />
+                        </TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead className="text-right">Balance (USD)</TableHead>
@@ -715,7 +743,13 @@ export default function TeamMemberDetail() {
                     </TableHeader>
                     <TableBody>
                       {paginatedClients.map((c) => (
-                        <TableRow key={c.user_id}>
+                        <TableRow key={c.user_id} data-state={selectedAssigned.has(c.user_id) ? "selected" : undefined}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedAssigned.has(c.user_id)}
+                              onCheckedChange={() => toggleAssignedSelection(c.user_id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">
                             <Link to={`/admin/clients/${c.user_id}`} className="hover:underline text-primary">
                               {c.full_name}
@@ -749,7 +783,7 @@ export default function TeamMemberDetail() {
                     totalItems={filteredClients.length}
                     pageSize={clientPageSize}
                     currentPage={clientPage}
-                    onPageChange={setClientPage}
+                    onPageChange={(p) => { setClientPage(p); setSelectedAssigned(new Set()); }}
                     onPageSizeChange={setClientPageSize}
                   />
                 </>
@@ -757,11 +791,11 @@ export default function TeamMemberDetail() {
             </CardContent>
           </Card>
 
-          {/* Assign Client Dialog */}
-          <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-            <DialogContent className="sm:max-w-md max-h-[70vh] overflow-y-auto">
+          {/* Assign Client Dialog — multi-select */}
+          <Dialog open={assignDialogOpen} onOpenChange={(open) => { setAssignDialogOpen(open); if (!open) setSelectedUnassigned(new Set()); }}>
+            <DialogContent className="sm:max-w-md max-h-[70vh] flex flex-col">
               <DialogHeader>
-                <DialogTitle>Assign Client</DialogTitle>
+                <DialogTitle>Assign Clients</DialogTitle>
               </DialogHeader>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -781,25 +815,41 @@ export default function TeamMemberDetail() {
                   No unassigned clients found.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="flex-1 overflow-y-auto space-y-1">
+                  {/* Select all */}
+                  <div className="flex items-center gap-3 rounded-lg border border-dashed p-3 mb-2">
+                    <Checkbox
+                      checked={filteredUnassigned.length > 0 && selectedUnassigned.size === filteredUnassigned.length}
+                      onCheckedChange={toggleAllUnassigned}
+                    />
+                    <span className="text-sm font-medium">Select all ({filteredUnassigned.length})</span>
+                  </div>
                   {filteredUnassigned.map((c) => (
-                    <div
+                    <label
                       key={c.user_id}
-                      className="flex items-center justify-between rounded-lg border p-3"
+                      className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
                     >
-                      <div>
-                        <p className="font-medium text-sm">{c.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{c.email}</p>
+                      <Checkbox
+                        checked={selectedUnassigned.has(c.user_id)}
+                        onCheckedChange={() => toggleUnassignedSelection(c.user_id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{c.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.email}</p>
                       </div>
-                      <Button size="sm" onClick={() => handleAssignClient(c.user_id)}>
-                        Assign
-                      </Button>
-                    </div>
+                    </label>
                   ))}
                 </div>
               )}
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Close</Button>
+              <DialogFooter className="mt-3 gap-2">
+                <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={handleBulkAssign}
+                  disabled={selectedUnassigned.size === 0 || bulkProcessing}
+                >
+                  {bulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}
+                  Assign {selectedUnassigned.size > 0 ? `(${selectedUnassigned.size})` : ""}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
