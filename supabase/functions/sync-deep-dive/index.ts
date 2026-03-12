@@ -418,6 +418,7 @@ Deno.serve(async (req) => {
             let purchaseCount = 0;
             let messagingConversations = 0;
             let newMessagingContacts = 0;
+            let createOrder = 0;
 
             if (row.actions) {
               for (const action of row.actions) {
@@ -434,6 +435,7 @@ Deno.serve(async (req) => {
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
+                if (at === "onsite_conversion.messaging_block_create_order") createOrder += val;
               }
             }
             if (row.action_values) {
