@@ -290,6 +290,7 @@ Deno.serve(async (req) => {
             cpm?: number;
             reach?: number;
             new_messaging_contacts?: number;
+            create_order?: number;
           }
         ) => {
           const { error } = await supabase
@@ -316,6 +317,7 @@ Deno.serve(async (req) => {
                 cpm: metrics.cpm ?? 0,
                 reach: metrics.reach ?? 0,
                 new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
+                create_order: metrics.create_order ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
