@@ -947,24 +947,33 @@ export function DeepDiveTable({
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border">
+        <div className="hidden md:block overflow-x-auto rounded-lg border relative">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
                   {hg.headers.map((header) => {
-                    const isDraggable = header.id !== "select";
+                    const frozen = isFrozen(header.id);
+                    const isDraggable = !frozen;
                     const isBeingDragged = draggedCol === header.id;
                     const isDropTarget = dropTarget === header.id;
+                    const isLastFrozen = header.id === "status";
+                    const stickyLeft = FROZEN_LEFT[header.id];
                     return (
                       <TableHead
                         key={header.id}
                         className={cn(
                           header.id === "select" ? "w-10" : "cursor-pointer",
-                          "select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider",
-                          isDraggable && "cursor-grab active:cursor-grabbing",
-                          isBeingDragged && "opacity-50",
-                          isDropTarget && "border-l-2 border-primary"
+                          "select-none transition-all duration-200 text-xs uppercase tracking-wider",
+                          // Frozen column styling
+                          frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
+                          isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/20 after:via-primary/10 after:to-transparent",
+                          // Draggable styling
+                          isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
+                          // Drag state
+                          isBeingDragged && "opacity-30 scale-[0.97] bg-primary/5",
+                          // Drop target - animated gradient indicator
+                          isDropTarget && "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-gradient-to-b before:from-primary before:via-primary/60 before:to-transparent before:animate-pulse before:rounded-full bg-accent/40",
                         )}
                         onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
                         draggable={isDraggable}
@@ -975,6 +984,9 @@ export function DeepDiveTable({
                         onDragEnd={handleDragEnd}
                       >
                         <div className="flex items-center gap-1">
+                          {isDraggable && (
+                            <GripVertical className="h-3 w-3 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
+                          )}
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {header.id !== "select" && (
                             header.column.getIsSorted() === "asc" ? (
@@ -1008,20 +1020,33 @@ export function DeepDiveTable({
                         key={row.id}
                         className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
+                        {row.getVisibleCells().map((cell) => {
+                          const colId = cell.column.id;
+                          const frozen = isFrozen(colId);
+                          const isLastFrozen = colId === "status";
+                          const stickyLeft = FROZEN_LEFT[colId];
+                          return (
+                            <TableCell
+                              key={cell.id}
+                              className={cn(
+                                frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
+                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                isSelected && frozen && "bg-primary/5",
+                              )}
+                            >
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     );
                   })}
                   {filteredData.length > 1 && (
                     <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell />
-                      <TableCell className="text-sm">Totals</TableCell>
-                      <TableCell />
-                      <TableCell />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
+                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
+                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent")} />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
