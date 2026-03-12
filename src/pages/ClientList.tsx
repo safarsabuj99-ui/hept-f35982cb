@@ -10,6 +10,7 @@ import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus } fr
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ClientRow {
   user_id: string;
