@@ -2,12 +2,9 @@ import { useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DeepDiveTable, CampaignRow, PresetType } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { usePresetPreferences } from "@/hooks/usePresetPreferences";
-import { DollarSign, ShoppingCart, TrendingUp, Target, ChevronDown, ChevronUp } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DollarSign, ShoppingCart, TrendingUp, Target } from "lucide-react";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -20,16 +17,8 @@ interface CampaignAnalyticsPanelProps {
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
-const PLATFORM_ACCENT: Record<PlatformTab, string> = {
-  all: "hsl(var(--primary))",
-  meta: "#3b82f6",
-  tiktok: "#e4405f",
-  google: "#f59e0b",
-};
-
 export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnalyticsPanelProps) {
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
-  const [overviewOpen, setOverviewOpen] = useState(true);
 
   const totals = useMemo(() => {
     const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
@@ -45,19 +34,6 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
 
   const avgRoas = safeDivide(totals.convValue, totals.spend);
   const avgCpo = safeDivide(totals.spend, totals.results);
-
-  const platformStats = useMemo(() => {
-    const map: Record<string, { platform: string; totalSpend: number; totalResults: number; totalConversionValue: number }> = {};
-    for (const r of campaignRows) {
-      if (!map[r.platform]) {
-        map[r.platform] = { platform: r.platform, totalSpend: 0, totalResults: 0, totalConversionValue: 0 };
-      }
-      map[r.platform].totalSpend += r.spend;
-      map[r.platform].totalResults += r.results;
-      map[r.platform].totalConversionValue += r.conversion_value;
-    }
-    return Object.values(map);
-  }, [campaignRows]);
 
   const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
   const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
@@ -108,26 +84,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
         />
       </div>
 
-      {/* Inline Overview — Collapsible */}
-      <Collapsible open={overviewOpen} onOpenChange={setOverviewOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors group w-full">
-          <span className="uppercase tracking-wider text-[11px]">Overview</span>
-          <div className="flex-1 h-px bg-border" />
-          {overviewOpen ? (
-            <ChevronUp className="h-4 w-4 transition-transform" />
-          ) : (
-            <ChevronDown className="h-4 w-4 transition-transform" />
-          )}
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SalesFunnel impressions={totals.impressions} clicks={totals.clicks} results={totals.results} />
-            <PlatformComparison data={platformStats} />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Platform Tabs — Flat, Premium Styling */}
+      {/* Platform Tabs — Premium Styling */}
       <Tabs defaultValue="all" className="space-y-4">
         <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
           <TabsList className="inline-flex w-auto gap-1 bg-muted/40 backdrop-blur-sm border border-border/50 p-1 rounded-xl">

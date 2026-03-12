@@ -65,9 +65,9 @@ export interface CampaignRow {
 export type PresetType = "auto" | "messages" | "sales" | "performance";
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
-  meta: { label: "Meta", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
-  tiktok: { label: "TikTok", className: "bg-foreground/10 text-foreground border-foreground/20" },
-  google: { label: "Google", className: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  meta: { label: "Meta", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
+  tiktok: { label: "TikTok", className: "bg-foreground/5 text-foreground/80 border-foreground/15" },
+  google: { label: "Google", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
 };
 
 const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
@@ -316,9 +316,9 @@ export function DeepDiveTable({
         header: "Campaign",
         cell: (info) => (
           <div className="min-w-[180px]">
-            <span className="font-medium text-sm truncate max-w-[260px] block">{info.getValue()}</span>
+            <span className="font-semibold text-[13px] leading-tight truncate max-w-[260px] block text-foreground">{info.getValue()}</span>
             {info.row.original.ad_account_name && (
-              <span className="text-[11px] text-muted-foreground truncate block">{info.row.original.ad_account_name}</span>
+              <span className="text-[10px] text-muted-foreground/60 truncate block mt-0.5">{info.row.original.ad_account_name}</span>
             )}
           </div>
         ),
@@ -327,7 +327,7 @@ export function DeepDiveTable({
         header: "Platform",
         cell: (info) => {
           const p = PLATFORM_BADGE[info.getValue()] || { label: info.getValue(), className: "bg-muted text-muted-foreground border-border" };
-          return <Badge variant="outline" className={`text-[10px] font-semibold ${p.className}`}>{p.label}</Badge>;
+          return <Badge variant="outline" className={`text-[10px] font-medium rounded-md px-2 py-0.5 ${p.className}`}>{p.label}</Badge>;
         },
       }),
       columnHelper.accessor("status", {
@@ -343,23 +343,23 @@ export function DeepDiveTable({
           const dimStatuses = ["archived", "deleted"];
 
           let dotClass = "bg-muted-foreground/40";
-          if (active) dotClass = "bg-green-500";
+          if (active) dotClass = "bg-emerald-500";
           if (redStatuses.includes(status)) dotClass = "bg-red-500";
-          if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
+          if (yellowStatuses.includes(status)) dotClass = "bg-amber-500";
           if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
-          if (status.startsWith("active -")) dotClass = "bg-yellow-500";
+          if (status.startsWith("active -")) dotClass = "bg-amber-500";
 
           const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
           const canToggle = row.campaign_id && (active || isPaused);
 
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotClass}`} />
                 <span className="text-xs text-muted-foreground capitalize truncate">{normalizeStatus(status)}</span>
               </div>
               {canToggle && (
-                <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <div className="shrink-0 flex items-center" onClick={(e) => e.stopPropagation()}>
                   {isToggling ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                   ) : (
@@ -369,7 +369,7 @@ export function DeepDiveTable({
                         const action = active ? "pause" : "enable";
                         setConfirmToggle({ row, action });
                       }}
-                      className="scale-75"
+                      className="scale-[0.7]"
                     />
                   )}
                 </div>
@@ -381,11 +381,11 @@ export function DeepDiveTable({
       columnHelper.display({
         id: "reach",
         header: "Reach",
-        cell: (info) => <span className="font-mono text-sm">{fmtNum(info.row.original.reach ?? 0)}</span>,
+        cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(info.row.original.reach ?? 0)}</span>,
       }),
       columnHelper.accessor("impressions", {
         header: "Impressions",
-        cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
+        cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(info.getValue())}</span>,
       }),
       columnHelper.display({
         id: "cpm",
@@ -393,7 +393,7 @@ export function DeepDiveTable({
         cell: (info) => {
           const row = info.row.original;
           const cpm = row.cpm ?? safeDivide(row.spend, row.impressions) * 1000;
-          return <span className="font-mono text-sm">{fmt(cpm)}</span>;
+          return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpm)}</span>;
         },
       }),
     ];
@@ -407,8 +407,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm">{fmtNum(row.view_content ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(row.view_content ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -417,8 +417,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm">{fmtNum(row.add_to_cart ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(row.add_to_cart ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -427,8 +427,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm">{fmtNum(row.initiate_checkout ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(row.initiate_checkout ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -437,8 +437,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm font-medium">{fmtNum(row.purchase ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(row.purchase ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -447,9 +447,9 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/30 text-xs">—</span>;
             const cpp = (row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0;
-            return <span className="font-mono text-sm">{fmt(cpp)}</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpp)}</span>;
           },
         }),
       );
@@ -464,8 +464,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(row.messaging_conversations ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -474,8 +474,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm">{fmtNum(row.new_messaging_contacts ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(row.new_messaging_contacts ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -484,9 +484,9 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/30 text-xs">—</span>;
             const returning = Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0));
-            return <span className="font-mono text-sm">{fmtNum(returning)}</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(returning)}</span>;
           },
         }),
         columnHelper.display({
@@ -495,8 +495,8 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
-            return <span className="font-mono text-sm">{fmtNum(row.create_order ?? 0)}</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/30 text-xs">—</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(row.create_order ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -505,9 +505,9 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/30 text-xs">—</span>;
             const cpm = (row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0;
-            return <span className="font-mono text-sm">{fmt(cpm)}</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpm)}</span>;
           },
         }),
       );
@@ -518,7 +518,7 @@ export function DeepDiveTable({
       cols.push(
         columnHelper.accessor("clicks", {
           header: "Clicks",
-          cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(info.getValue())}</span>,
         }),
         columnHelper.display({
           id: "ctr",
@@ -526,7 +526,7 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const ctr = row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0;
-            return <span className="font-mono text-sm">{ctr.toFixed(2)}%</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{ctr.toFixed(2)}%</span>;
           },
         }),
         columnHelper.display({
@@ -535,7 +535,7 @@ export function DeepDiveTable({
           cell: (info) => {
             const row = info.row.original;
             const cpc = row.clicks > 0 ? row.spend / row.clicks : 0;
-            return <span className="font-mono text-sm">{fmt(cpc)}</span>;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpc)}</span>;
           },
         }),
       );
@@ -545,7 +545,7 @@ export function DeepDiveTable({
     cols.push(
       columnHelper.accessor("results", {
         header: "Results",
-        cell: (info) => <span className="font-mono text-sm font-medium">{info.getValue().toLocaleString()}</span>,
+        cell: (info) => <span className="font-mono text-[13px] text-foreground font-semibold tabular-nums">{info.getValue().toLocaleString()}</span>,
       }),
       columnHelper.display({
         id: "cpo",
@@ -553,12 +553,12 @@ export function DeepDiveTable({
         cell: (info) => {
           const row = info.row.original;
           const cpo = safeDivide(row.spend, row.results);
-          return <span className="font-mono text-sm">{fmt(cpo)}</span>;
+          return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpo)}</span>;
         },
       }),
       columnHelper.accessor("spend", {
         header: "Spent",
-        cell: (info) => <span className="font-mono text-sm font-medium">{fmt(info.getValue())}</span>,
+        cell: (info) => <span className="font-mono text-[13px] text-foreground font-semibold tabular-nums">{fmt(info.getValue())}</span>,
       }),
       columnHelper.display({
         id: "roas",
@@ -566,15 +566,15 @@ export function DeepDiveTable({
         cell: (info) => {
           const row = info.row.original;
           const roas = safeDivide(row.conversion_value, row.spend);
-          let className = "font-mono text-xs ";
+          let className = "font-mono text-[10px] font-semibold ";
           if (roas > 3) {
-            className += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+            className += "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
           } else if (roas < 1.5) {
-            className += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+            className += "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
           } else {
-            className += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+            className += "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
           }
-          return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
+          return <Badge variant="outline" className={`rounded-md px-2 py-0.5 ${className}`}>{roas.toFixed(2)}x</Badge>;
         },
       }),
     );
@@ -589,7 +589,6 @@ export function DeepDiveTable({
   // Update column order when columns change (preset switch)
   useEffect(() => {
     if (savedColumnOrder && savedColumnOrder.length > 0) {
-      // Merge: keep saved order for columns that still exist, add new ones at end
       const currentIds = new Set(defaultColumnOrder);
       const validSaved = savedColumnOrder.filter(id => currentIds.has(id));
       const newCols = defaultColumnOrder.filter(id => !validSaved.includes(id));
@@ -618,9 +617,8 @@ export function DeepDiveTable({
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", columnId);
 
-    // Create premium ghost element
     const ghost = document.createElement("div");
-    ghost.className = "fixed pointer-events-none px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider shadow-lg border";
+    ghost.className = "fixed pointer-events-none px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider shadow-lg border";
     ghost.style.cssText = `background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); z-index: 9999; top: -100px; left: -100px;`;
     ghost.textContent = (e.currentTarget as HTMLElement).textContent?.trim() || columnId;
     document.body.appendChild(ghost);
@@ -649,7 +647,6 @@ export function DeepDiveTable({
       const fromIdx = newOrder.indexOf(draggedCol);
       const toIdx = newOrder.indexOf(targetId);
       if (fromIdx === -1 || toIdx === -1) return prev;
-      // Don't allow dropping into frozen positions
       if (toIdx < FROZEN_COLS.length) return prev;
       newOrder.splice(fromIdx, 1);
       newOrder.splice(toIdx, 0, draggedCol);
@@ -712,21 +709,24 @@ export function DeepDiveTable({
     const redStatuses = ["not delivering", "disapproved", "with issues"];
     const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
     let dotClass = "bg-muted-foreground/40";
-    if (active) dotClass = "bg-green-500";
+    if (active) dotClass = "bg-emerald-500";
     if (redStatuses.includes(normalized)) dotClass = "bg-red-500";
-    if (yellowStatuses.includes(normalized)) dotClass = "bg-yellow-500";
-    if (normalized.startsWith("active -")) dotClass = "bg-yellow-500";
+    if (yellowStatuses.includes(normalized)) dotClass = "bg-amber-500";
+    if (normalized.startsWith("active -")) dotClass = "bg-amber-500";
 
-    let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
-    if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
-    else if (roas < 1.5) roasClass = "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+    let roasClass = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
+    if (roas > 3) roasClass = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+    else if (roas < 1.5) roasClass = "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
 
     const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
 
     return (
-      <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
+      <div className={cn(
+        "rounded-xl border border-border/50 bg-card p-4 transition-all duration-200",
+        isSelected && "ring-1 ring-primary/50 bg-primary/5"
+      )}>
         <div className="flex items-start gap-2.5">
           {isSelectable ? (
             <Checkbox
@@ -739,18 +739,18 @@ export function DeepDiveTable({
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">{row.campaign_name}</span>
-              <Badge variant="outline" className={`text-[10px] font-semibold shrink-0 ${pb.className}`}>{pb.label}</Badge>
+              <span className="text-sm font-semibold truncate text-foreground">{row.campaign_name}</span>
+              <Badge variant="outline" className={`text-[10px] font-medium rounded-md shrink-0 ${pb.className}`}>{pb.label}</Badge>
             </div>
             {row.ad_account_name && (
-              <p className="text-[10px] text-muted-foreground truncate mt-0.5">{row.ad_account_name}</p>
+              <p className="text-[10px] text-muted-foreground/60 truncate mt-0.5">{row.ad_account_name}</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-2.5 mb-2">
+        <div className="flex items-center justify-between mt-3 mb-2.5">
           <div className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
             <span className="text-xs text-muted-foreground capitalize">{normalizeStatus(row.status)}</span>
           </div>
           {canToggle && (
@@ -764,48 +764,48 @@ export function DeepDiveTable({
                     const action = active ? "pause" : "enable";
                     setConfirmToggle({ row, action });
                   }}
-                  className="scale-75"
+                  className="scale-[0.7]"
                 />
               )}
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 border-t border-border/50">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-border/30">
           <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Spend</span>
-            <span className="font-mono text-xs font-medium">{fmt(row.spend)}</span>
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Spend</span>
+            <span className="font-mono text-xs font-semibold tabular-nums">{fmt(row.spend)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Reach</span>
-            <span className="font-mono text-xs">{fmtNum(row.reach ?? 0)}</span>
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Reach</span>
+            <span className="font-mono text-xs tabular-nums">{fmtNum(row.reach ?? 0)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
-            <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Impr.</span>
+            <span className="font-mono text-xs tabular-nums">{fmtNum(row.impressions)}</span>
           </div>
 
           {showMobileSales && (
             <>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">View Content</span>
-                <span className="font-mono text-xs">{fmtNum(row.view_content ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">View Content</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.view_content ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Add to Cart</span>
-                <span className="font-mono text-xs">{fmtNum(row.add_to_cart ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Add to Cart</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.add_to_cart ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Checkout</span>
-                <span className="font-mono text-xs">{fmtNum(row.initiate_checkout ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Checkout</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.initiate_checkout ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Purchase</span>
-                <span className="font-mono text-xs font-medium">{fmtNum(row.purchase ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Purchase</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.purchase ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Cost/Purchase</span>
-                <span className="font-mono text-xs">{fmt((row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Purchase</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0)}</span>
               </div>
             </>
           )}
@@ -813,24 +813,24 @@ export function DeepDiveTable({
           {showMobileMessages && (
             <>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Messages</span>
-                <span className="font-mono text-xs font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Messages</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.messaging_conversations ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">New Contacts</span>
-                <span className="font-mono text-xs">{fmtNum(row.new_messaging_contacts ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">New Contacts</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.new_messaging_contacts ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Returning</span>
-                <span className="font-mono text-xs">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Returning</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Create Order</span>
-                <span className="font-mono text-xs">{fmtNum(row.create_order ?? 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Create Order</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.create_order ?? 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Cost/Message</span>
-                <span className="font-mono text-xs">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Message</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
               </div>
             </>
           )}
@@ -838,36 +838,36 @@ export function DeepDiveTable({
           {showMobilePerformance && (
             <>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
-                <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">CTR</span>
-                <span className="font-mono text-xs">{(row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0).toFixed(2)}%</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CTR</span>
+                <span className="font-mono text-xs tabular-nums">{(row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0).toFixed(2)}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">CPC</span>
-                <span className="font-mono text-xs">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPC</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">Results</span>
-                <span className="font-mono text-xs font-medium">{row.results.toLocaleString()}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Results</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{row.results.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] text-muted-foreground uppercase">CPR</span>
-                <span className="font-mono text-xs">{fmt(cpo)}</span>
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPR</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(cpo)}</span>
               </div>
             </>
           )}
 
           <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">ROAS</span>
-            <Badge variant="outline" className={`text-[10px] font-mono h-5 ${roasClass}`}>{roas.toFixed(2)}x</Badge>
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">ROAS</span>
+            <Badge variant="outline" className={`text-[10px] font-mono h-5 rounded-md ${roasClass}`}>{roas.toFixed(2)}x</Badge>
           </div>
           {!showMobilePerformance && (
             <div className="flex justify-between">
-              <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
-              <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
             </div>
           )}
         </div>
@@ -877,19 +877,20 @@ export function DeepDiveTable({
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+      {/* Premium Glassmorphic Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 p-2 rounded-xl bg-muted/30 backdrop-blur-sm border border-border/40">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
           <Input
             placeholder="Search campaigns..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 sm:h-9 text-sm"
+            className="pl-10 h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg focus-visible:ring-primary/30 placeholder:text-muted-foreground/40"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
-            <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+          <SelectTrigger className="w-full sm:w-[150px] h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg">
+            <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/50" />
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -901,10 +902,10 @@ export function DeepDiveTable({
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <Select value={selectedPreset} onValueChange={(v) => handlePresetChange(v as PresetType)}>
-            <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
-              <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            <SelectTrigger className="w-full sm:w-[150px] h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg">
+              <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/50" />
               <SelectValue placeholder="Preset" />
             </SelectTrigger>
             <SelectContent>
@@ -919,12 +920,12 @@ export function DeepDiveTable({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={selectedPreset === defaultPreset ? "secondary" : "outline"}
+                    variant={selectedPreset === defaultPreset ? "secondary" : "ghost"}
                     size="icon"
-                    className="h-10 sm:h-9 w-10 sm:w-9 shrink-0"
+                    className="h-10 sm:h-9 w-10 sm:w-9 shrink-0 rounded-lg"
                     onClick={() => onSetDefaultPreset(selectedPreset)}
                   >
-                    <Star className={cn("h-4 w-4", selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground")} />
+                    <Star className={cn("h-4 w-4", selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground/50")} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -938,20 +939,20 @@ export function DeepDiveTable({
 
       <div className="relative">
         {/* Mobile card view */}
-        <div className="flex flex-col gap-2 md:hidden">
+        <div className="flex flex-col gap-2.5 md:hidden">
           {paginatedData.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">No campaign data available</div>
+            <div className="py-16 text-center text-muted-foreground/60 text-sm">No campaign data available</div>
           ) : (
             paginatedData.map((row, i) => <MobileCampaignCard key={`${row.campaign_name}-${i}`} row={row} />)
           )}
         </div>
 
-        {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-r-lg border-t border-r border-b relative">
+        {/* Desktop table view — Premium Container */}
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-border/50 shadow-sm bg-card">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
+                <TableRow key={hg.id} className="border-b border-border/50 hover:bg-transparent">
                   {hg.headers.map((header) => {
                     const frozen = isFrozen(header.id);
                     const isDraggable = !frozen;
@@ -964,16 +965,12 @@ export function DeepDiveTable({
                         key={header.id}
                         className={cn(
                           header.id === "select" ? "w-10" : "cursor-pointer",
-                          "select-none transition-all duration-200 text-xs uppercase tracking-wider",
-                          // Frozen column styling — no visible divider, content slides under with soft shadow
-                          frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
-                          isLastFrozen && "[box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.08)]",
-                          // Draggable styling
-                          isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
-                          // Drag state
-                          isBeingDragged && "opacity-30 scale-[0.97] bg-primary/5",
-                          // Drop target - animated gradient indicator
-                          isDropTarget && "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-gradient-to-b before:from-primary before:via-primary/60 before:to-transparent before:animate-pulse before:rounded-full bg-accent/40",
+                          "select-none transition-all duration-200 text-[11px] uppercase tracking-widest font-medium text-muted-foreground/60 py-3 px-4 bg-transparent",
+                          frozen && `sticky ${stickyLeft} z-20 bg-card`,
+                          isLastFrozen && "[box-shadow:4px_0_8px_-4px_hsl(var(--foreground)/0.05)]",
+                          isDraggable && "cursor-grab active:cursor-grabbing hover:text-muted-foreground",
+                          isBeingDragged && "opacity-30 scale-[0.97]",
+                          isDropTarget && "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-primary before:animate-pulse before:rounded-full",
                         )}
                         onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
                         draggable={isDraggable}
@@ -984,17 +981,14 @@ export function DeepDiveTable({
                         onDragEnd={handleDragEnd}
                       >
                         <div className="flex items-center gap-1">
-                          {isDraggable && (
-                            <GripVertical className="h-3 w-3 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
-                          )}
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {header.id !== "select" && (
                             header.column.getIsSorted() === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
+                              <ArrowUp className="h-3 w-3 text-primary" />
                             ) : header.column.getIsSorted() === "desc" ? (
-                              <ArrowDown className="h-3 w-3" />
+                              <ArrowDown className="h-3 w-3 text-primary" />
                             ) : (
-                              <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+                              <ArrowUpDown className="h-3 w-3 text-muted-foreground/30" />
                             )
                           )}
                         </div>
@@ -1007,7 +1001,7 @@ export function DeepDiveTable({
             <TableBody>
               {table.getRowModel().rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={columns.length} className="text-center py-16 text-muted-foreground/50">
                     No campaign data available
                   </TableCell>
                 </TableRow>
@@ -1018,7 +1012,10 @@ export function DeepDiveTable({
                     return (
                       <TableRow
                         key={row.id}
-                        className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                        className={cn(
+                          "border-b border-border/30 transition-colors duration-150 hover:bg-muted/20",
+                          isSelected && "bg-primary/[0.03]"
+                        )}
                       >
                         {row.getVisibleCells().map((cell) => {
                           const colId = cell.column.id;
@@ -1029,9 +1026,10 @@ export function DeepDiveTable({
                             <TableCell
                               key={cell.id}
                               className={cn(
-                                frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
-                                isLastFrozen && "[box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.06)]",
-                                isSelected && frozen && "bg-primary/5",
+                                "py-3.5 px-4",
+                                frozen && `sticky ${stickyLeft} z-10 bg-card`,
+                                isLastFrozen && "[box-shadow:4px_0_8px_-4px_hsl(var(--foreground)/0.04)]",
+                                isSelected && frozen && "bg-primary/[0.03]",
                               )}
                             >
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1042,44 +1040,44 @@ export function DeepDiveTable({
                     );
                   })}
                   {filteredData.length > 1 && (
-                    <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
-                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 [box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.06)]")} />
-                      <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
-                      <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
-                      <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
+                    <TableRow className="bg-muted/20 font-semibold border-t border-border/50 hover:bg-muted/20">
+                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/20 py-3.5 px-4")} />
+                      <TableCell className={cn("text-[13px] font-semibold text-foreground/70 sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/20 py-3.5 px-4")}>Totals</TableCell>
+                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/20 py-3.5 px-4")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/20 [box-shadow:4px_0_8px_-4px_hsl(var(--foreground)/0.04)] py-3.5 px-4")} />
+                      <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.reach)}</TableCell>
+                      <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.impressions)}</TableCell>
+                      <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmt(totalCpm)}</TableCell>
                       {showColumns.sales && (
                         <>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.viewContent)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.addToCart)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.initiateCheckout)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.purchase)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmt(totalCostPerPurchase)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.viewContent)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.addToCart)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.initiateCheckout)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.purchase)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmt(totalCostPerPurchase)}</TableCell>
                         </>
                       )}
                       {showColumns.messages && (
                         <>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.messagingConversations)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.newMessagingContacts)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(Math.max(0, totals.messagingConversations - totals.newMessagingContacts))}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.createOrder)}</TableCell>
-                          <TableCell className="font-mono text-sm">{fmt(totalCostPerMessage)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.messagingConversations)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.newMessagingContacts)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(Math.max(0, totals.messagingConversations - totals.newMessagingContacts))}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.createOrder)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmt(totalCostPerMessage)}</TableCell>
                         </>
                       )}
                       {showColumns.performance && (
                         <>
-                          <TableCell className="font-mono text-sm">{fmtNum(totals.clicks)}</TableCell>
-                          <TableCell className="font-mono text-sm">{(totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0).toFixed(2)}%</TableCell>
-                          <TableCell className="font-mono text-sm">{fmt(totals.clicks > 0 ? totals.spend / totals.clicks : 0)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmtNum(totals.clicks)}</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{(totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0).toFixed(2)}%</TableCell>
+                          <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmt(totals.clicks > 0 ? totals.spend / totals.clicks : 0)}</TableCell>
                         </>
                       )}
-                      <TableCell className="font-mono text-sm">{totals.results.toLocaleString()}</TableCell>
-                      <TableCell className="font-mono text-sm">{fmt(totalCpo)}</TableCell>
-                      <TableCell className="font-mono text-sm">{fmt(totals.spend)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono text-xs bg-primary/10 text-primary border-primary/30">
+                      <TableCell className="font-mono text-[13px] font-semibold tabular-nums py-3.5 px-4">{totals.results.toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-[13px] tabular-nums py-3.5 px-4">{fmt(totalCpo)}</TableCell>
+                      <TableCell className="font-mono text-[13px] font-semibold tabular-nums py-3.5 px-4">{fmt(totals.spend)}</TableCell>
+                      <TableCell className="py-3.5 px-4">
+                        <Badge variant="outline" className="font-mono text-[10px] font-semibold rounded-md bg-primary/10 text-primary border-primary/20">
                           {totalRoas.toFixed(2)}x
                         </Badge>
                       </TableCell>
@@ -1093,7 +1091,7 @@ export function DeepDiveTable({
 
         {/* Floating bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+          <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
             </span>
@@ -1102,7 +1100,7 @@ export function DeepDiveTable({
                 variant="ghost"
                 size="sm"
                 onClick={() => setSelectedIds(new Set())}
-                className="h-8 text-xs"
+                className="h-8 text-xs rounded-lg"
               >
                 <X className="h-3.5 w-3.5 mr-1" /> Clear
               </Button>
@@ -1110,7 +1108,7 @@ export function DeepDiveTable({
                 variant="destructive"
                 size="sm"
                 onClick={() => setShowBulkConfirm(true)}
-                className="h-8 text-xs"
+                className="h-8 text-xs rounded-lg"
               >
                 <Power className="h-3.5 w-3.5 mr-1" /> Pause All
               </Button>
