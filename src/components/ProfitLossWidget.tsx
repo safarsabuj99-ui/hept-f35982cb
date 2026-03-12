@@ -160,6 +160,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
   const marginPct = data && data.totalRevenueBdt > 0 ? ((data.totalProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
   const isProfit = data ? data.totalProfitBdt >= 0 : true;
 
+  if (!hasPermission("can_view_profit")) return null;
   if (loading) return <Skeleton className="h-[200px]" />;
 
   return (
