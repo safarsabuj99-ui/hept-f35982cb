@@ -204,34 +204,38 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
     console.warn(`TikTok BC advertiser detail call failed (falling back to defaults): ${e.message}`);
   }
 
-  // Step 2b: Fetch balances via BC endpoint
+  // Step 2b: Fetch balances via BC endpoint — batch in chunks of 20
   const balanceMap: Record<string, { cash: number; grant: number }> = {};
-  try {
-    const idsParam = encodeURIComponent(JSON.stringify(advertiserIds));
-    const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
-    console.log(`TikTok balance URL: ${balanceUrl}`);
-    const balRes = await fetch(balanceUrl, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    const balJson = await balRes.json();
-    console.log(`TikTok balance response code: ${balJson.code}`);
-    if (balJson.code === 0 && balJson.data?.list) {
-      for (const b of balJson.data.list) {
-        const bId = String(b.advertiser_id || "");
-        if (bId) {
-          balanceMap[bId] = {
-            cash: Number(b.cash_balance ?? b.balance ?? 0),
-            grant: Number(b.grant_balance ?? 0),
-          };
+  const chunkSize = 20;
+  for (let i = 0; i < advertiserIds.length; i += chunkSize) {
+    const chunk = advertiserIds.slice(i, i + chunkSize);
+    try {
+      const idsParam = encodeURIComponent(JSON.stringify(chunk));
+      const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
+      console.log(`TikTok balance URL (batch ${Math.floor(i / chunkSize) + 1}): ${balanceUrl}`);
+      const balRes = await fetch(balanceUrl, {
+        headers: { "Access-Token": token, "Content-Type": "application/json" },
+      });
+      const balJson = await safeJson(balRes);
+      console.log(`TikTok balance batch ${Math.floor(i / chunkSize) + 1} response code: ${balJson.code}`);
+      if (balJson.code === 0 && balJson.data?.list) {
+        for (const b of balJson.data.list) {
+          const bId = String(b.advertiser_id || "");
+          if (bId) {
+            balanceMap[bId] = {
+              cash: Number(b.cash_balance ?? b.balance ?? 0),
+              grant: Number(b.grant_balance ?? 0),
+            };
+          }
         }
+      } else {
+        console.warn(`TikTok balance batch ${Math.floor(i / chunkSize) + 1} failed: ${balJson.message || "unknown"}`);
       }
-      console.log(`TikTok balances fetched for ${Object.keys(balanceMap).length} accounts`);
-    } else {
-      console.warn(`TikTok balance fetch failed: ${balJson.message || "unknown"}`);
+    } catch (e) {
+      console.warn(`TikTok balance batch failed (falling back to defaults): ${e.message}`);
     }
-  } catch (e) {
-    console.warn(`TikTok balance call failed (falling back to defaults): ${e.message}`);
   }
+  console.log(`TikTok balances fetched for ${Object.keys(balanceMap).length} accounts`);
 
   // Step 3: Build enriched accounts with fallback
   return advertiserIds.map((id, idx) => {
