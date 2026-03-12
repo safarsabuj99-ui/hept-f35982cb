@@ -1051,11 +1051,11 @@ export function DeepDiveTable({
                     );
                   })}
                   {filteredData.length > 1 && (
-                    <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
-                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent")} />
+                    <TableRow className="campaign-totals-row font-semibold">
+                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10")} />
+                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10")}>Totals</TableCell>
+                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 campaign-frozen-separator")} />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
