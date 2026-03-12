@@ -19,11 +19,9 @@ interface ProfitLossWidgetProps {
 }
 
 export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
+  const { hasPermission } = usePermissions();
   const [data, setData] = useState<ProfitData | null>(null);
   const [loading, setLoading] = useState(true);
-  const { hasPermission } = usePermissions();
-
-  if (!hasPermission("can_view_profit")) return null;
 
   useEffect(() => {
     const fetchData = async () => {

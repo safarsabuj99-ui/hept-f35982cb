@@ -213,6 +213,8 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     setExpanded((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
+  if (!canViewProfit) return null;
+
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-3">
