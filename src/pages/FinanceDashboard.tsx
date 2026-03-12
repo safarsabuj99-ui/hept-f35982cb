@@ -18,6 +18,8 @@ interface ClientProfit {
 }
 
 export default function FinanceDashboard() {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [wac, setWac] = useState(0);
   const [netProfit, setNetProfit] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
