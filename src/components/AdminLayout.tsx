@@ -65,7 +65,7 @@ const allSections: NavSection[] = [
     title: "Finance",
     items: [
       { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
-      { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_manage_finance" },
+      { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_approve_payments" },
       { to: "/admin/orders", icon: Megaphone, label: "Orders", permKey: "can_manage_campaigns" },
     ],
   },
