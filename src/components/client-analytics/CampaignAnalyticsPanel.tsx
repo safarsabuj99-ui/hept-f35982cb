@@ -13,6 +13,7 @@ const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
   onRefresh: () => void;
+  canToggleCampaigns?: boolean;
 }
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
