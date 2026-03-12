@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
+import { usePermissions } from "@/hooks/usePermissions";
 interface ClientProfit {
   name: string;
   totalSpendUsd: number;
@@ -17,6 +18,8 @@ interface ClientProfit {
 }
 
 export default function FinanceDashboard() {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [wac, setWac] = useState(0);
   const [netProfit, setNetProfit] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -209,21 +212,23 @@ export default function FinanceDashboard() {
 
       {/* Main KPI Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card className="border-success/30">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
-                {loading ? <Skeleton className="h-8 w-28" /> : (
-                  <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
-                    ৳{netProfit.toLocaleString()}
-                  </p>
-                )}
+        {canViewProfit && (
+          <Card className="border-success/30">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
+                  {loading ? <Skeleton className="h-8 w-28" /> : (
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                      ৳{netProfit.toLocaleString()}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -266,33 +271,35 @@ export default function FinanceDashboard() {
       </div>
 
       {/* P&L Summary */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div className="py-2 border-b sm:border-b-0">
-              <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
-              )}
+      {canViewProfit && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="py-2 border-b sm:border-b-0">
+                <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2 border-b sm:border-b-0">
+                <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{(totalRevenue - totalCogs).toLocaleString()}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="py-2 border-b sm:border-b-0">
-              <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
-              )}
-            </div>
-            <div className="py-2">
-              <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
-                  ৳{(totalRevenue - totalCogs).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Client Profitability */}
       <Card>
@@ -310,13 +317,13 @@ export default function FinanceDashboard() {
                   <div key={c.name} className="rounded-xl border p-4 space-y-3 bg-card">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{c.name}</span>
-                      {c.margin < 5 ? (
+                      {canViewProfit && (c.margin < 5 ? (
                         <Badge variant="destructive" className="gap-1">
                           <AlertTriangle className="h-3 w-3" /> {c.margin}%
                         </Badge>
                       ) : (
                         <Badge variant="secondary">{c.margin}%</Badge>
-                      )}
+                      ))}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
@@ -331,12 +338,14 @@ export default function FinanceDashboard() {
                         <p className="text-xs text-muted-foreground">COGS (BDT)</p>
                         <p className="font-mono font-medium text-destructive">৳{c.cogsBdt.toLocaleString()}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Profit (BDT)</p>
-                        <p className={`font-mono font-medium ${c.netProfit >= 0 ? "text-success" : "text-destructive"}`}>
-                          ৳{c.netProfit.toLocaleString()}
-                        </p>
-                      </div>
+                      {canViewProfit && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Profit (BDT)</p>
+                          <p className={`font-mono font-medium ${c.netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                            ৳{c.netProfit.toLocaleString()}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -351,8 +360,8 @@ export default function FinanceDashboard() {
                       <TableHead className="text-right">Spend (USD)</TableHead>
                       <TableHead className="text-right">Revenue (BDT)</TableHead>
                       <TableHead className="text-right">COGS (BDT)</TableHead>
-                      <TableHead className="text-right">Profit (BDT)</TableHead>
-                      <TableHead className="text-right">Margin</TableHead>
+                      {canViewProfit && <TableHead className="text-right">Profit (BDT)</TableHead>}
+                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -362,20 +371,24 @@ export default function FinanceDashboard() {
                         <TableCell className="text-right font-mono">${c.totalSpendUsd.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono">৳{c.revenueBdt.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-destructive">৳{c.cogsBdt.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
-                            ৳{c.netProfit.toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {c.margin < 5 ? (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertTriangle className="h-3 w-3" /> {c.margin}%
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">{c.margin}%</Badge>
-                          )}
-                        </TableCell>
+                        {canViewProfit && (
+                          <TableCell className="text-right font-mono">
+                            <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
+                              ৳{c.netProfit.toLocaleString()}
+                            </span>
+                          </TableCell>
+                        )}
+                        {canViewProfit && (
+                          <TableCell className="text-right">
+                            {c.margin < 5 ? (
+                              <Badge variant="destructive" className="gap-1">
+                                <AlertTriangle className="h-3 w-3" /> {c.margin}%
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">{c.margin}%</Badge>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>

@@ -14,7 +14,8 @@ export type PermissionKey =
   | "can_manage_expenses"
   | "can_view_audit_logs"
   | "can_manage_wallets"
-  | "can_view_reports";
+  | "can_view_reports"
+  | "can_view_profit";
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "can_view_dashboard_stats",
@@ -29,6 +30,7 @@ export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "can_view_audit_logs",
   "can_manage_wallets",
   "can_view_reports",
+  "can_view_profit",
 ];
 
 export interface PermissionGroup {
@@ -49,6 +51,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "can_manage_expenses", label: "Log & Manage Expenses" },
       { key: "can_manage_wallets", label: "Add Funds & Platform Transfers" },
       { key: "can_view_reports", label: "View Finance Reports & Profitability" },
+      { key: "can_view_profit", label: "View Profit & Margins" },
     ],
   },
   {
@@ -88,6 +91,7 @@ export const ROLE_PRESETS: RolePresetConfig[] = [
       "can_manage_expenses",
       "can_manage_wallets",
       "can_view_reports",
+      "can_view_profit",
     ],
   },
   {

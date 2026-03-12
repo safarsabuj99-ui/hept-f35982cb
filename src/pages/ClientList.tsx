@@ -10,6 +10,7 @@ import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus } fr
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ClientRow {
   user_id: string;
@@ -27,6 +28,8 @@ interface MarginData {
 }
 
 export default function ClientList() {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -262,7 +265,7 @@ export default function ClientList() {
                       <TableHead className="hidden sm:table-cell">Business</TableHead>
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead>Pricing</TableHead>
-                      <TableHead className="text-right">Margin</TableHead>
+                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
                       <TableHead className="text-right">Balance</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
@@ -286,9 +289,11 @@ export default function ClientList() {
                             {getPricingLabel(c.pricing_config)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <MarginIndicator clientId={c.user_id} />
-                        </TableCell>
+                        {canViewProfit && (
+                          <TableCell className="text-right">
+                            <MarginIndicator clientId={c.user_id} />
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">
                           {(() => {
                             const bal = balances[c.user_id] ?? 0;

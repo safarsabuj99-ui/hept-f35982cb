@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface PlatformDetail {
   platform: string;
@@ -42,11 +43,14 @@ interface ProfitabilityTableProps {
 }
 
 export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [rows, setRows] = useState<ProfitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
+    if (!canViewProfit) return;
     fetchData();
   }, [dateRange]);
 
@@ -208,6 +212,8 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
   const toggleExpand = (idx: number) => {
     setExpanded((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
+
+  if (!canViewProfit) return null;
 
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">

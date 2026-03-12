@@ -6,6 +6,7 @@ import { Loader2, TrendingUp } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { format } from "date-fns";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface PlatformProfit {
   platform: string;
@@ -34,6 +35,8 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [rows, setRows] = useState<PlatformProfit[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
@@ -165,6 +168,12 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const totalProfit = rows.reduce((s, r) => s + r.profitBdt, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.spendUsd * r.billingRate, 0);
   const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+  if (!canViewProfit) {
+    return (
+      <Card><CardContent className="py-8"><p className="text-sm text-muted-foreground text-center">You don't have permission to view profit data.</p></CardContent></Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
