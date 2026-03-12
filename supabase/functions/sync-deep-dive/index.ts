@@ -393,6 +393,7 @@ Deno.serve(async (req) => {
             nextUrl = json.paging?.next || null;
           }
 
+          let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
@@ -423,6 +424,11 @@ Deno.serve(async (req) => {
             let createOrder = 0;
 
             if (row.actions) {
+              // Debug: log all action types for the first row of each account
+              if (metaRowIndex < 3) {
+                const allTypes = row.actions.map((a: any) => `${a.action_type}=${a.value}`);
+                console.log(`Meta actions [${account.ad_account_id}] campaign="${campaignName}" date=${row.date_start}: ${allTypes.join(', ')}`);
+              }
               for (const action of row.actions) {
                 const at = action.action_type;
                 const val = parseInt(action.value || "0", 10);
@@ -437,9 +443,13 @@ Deno.serve(async (req) => {
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
-                if (at === "onsite_conversion.messaging_block_create_order") createOrder += val;
+                // Broad match for create_order - covers multiple possible Meta action types
+                if (at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order")) {
+                  createOrder += val;
+                }
               }
             }
+            metaRowIndex++;
             if (row.action_values) {
               for (const av of row.action_values) {
                 if (av.action_type === "offsite_conversion.fb_pixel_purchase") {

@@ -1,51 +1,34 @@
 
 
-# Fix: "Create Order" Metric Not Showing Data
+# Fix: Platform Transfers Inflating Today's Collections
 
-## Root Cause
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-The action type `onsite_conversion.messaging_block_create_order` may not be the correct Meta API action type. Meta has several possible action types for order-related events, and the exact string depends on how the advertiser's pixel/events are configured. The data is likely coming through under a different action type name.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Fix
+## Technical Change
 
-**Add debug logging** to the sync function to capture all action types returned by Meta, so we can identify the exact action type string for "Create Order." Then update the parser to match the correct one.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-Additionally, Meta may use multiple possible action types for order creation:
-- `onsite_conversion.messaging_block_create_order`
-- `offsite_conversion.fb_pixel_custom` (custom event)
-- `app_custom_event.fb_mobile_order_created`
-- `onsite_conversion.lead_grouped` with sub-types
-
-### Changes to `supabase/functions/sync-deep-dive/index.ts`
-
-1. **Add action-type logging** — For the first few rows of each Meta account, log ALL action types found in the `actions[]` array. This will reveal the exact string Meta uses for "Create Order."
-
-2. **Broaden the matching** — Match multiple possible action type patterns that could represent order creation:
-   - Keep `onsite_conversion.messaging_block_create_order`  
-   - Add `offsite_conversion.fb_pixel_lead` (sometimes used for orders)
-   - Add any action type containing `create_order` as a substring match
-
-### Implementation
-
-```typescript
-// In the actions parsing loop, add logging for first row per account:
-if (rowIndex === 0) {
-  const allTypes = row.actions?.map((a: any) => `${a.action_type}=${a.value}`) || [];
-  console.log(`Meta actions for ${campaignName}: ${allTypes.join(', ')}`);
-}
-
-// Broaden create_order matching:
-if (at === "onsite_conversion.messaging_block_create_order" 
-    || at.includes("create_order")) {
-  createOrder += val;
-}
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-After deploying, run one sync and check the edge function logs. The logged action types will reveal the exact Meta action type name. We can then update the parser to match precisely.
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `sync-deep-dive/index.ts` | Add action type debug logging + broaden create_order matching |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-No database changes needed — the `create_order` column already exists.
-
+No database or edge function changes needed.
