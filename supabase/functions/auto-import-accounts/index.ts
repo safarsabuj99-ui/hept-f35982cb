@@ -6,6 +6,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Safe JSON parser for proxy responses that may prepend/append garbage ──
+async function safeJson(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text.trim());
+  } catch {
+    const jsonStart = text.search(/[\{\[]/);
+    const lastBrace = text.lastIndexOf('}');
+    const lastBracket = text.lastIndexOf(']');
+    const jsonEnd = Math.max(lastBrace, lastBracket);
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      try {
+        return JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+      } catch {
+        throw new Error(`Invalid JSON response: ${text.substring(0, 200)}`);
+      }
+    }
+    throw new Error(`Non-JSON response: ${text.substring(0, 200)}`);
+  }
+}
+
 // ── Meta: fetch billing cycle data for a single ad account ──
 async function fetchMetaBillingCycle(adAccountId: string, token: string) {
   try {
@@ -119,7 +140,7 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
       const errText = await bcRes.text();
       throw new Error(`TikTok BC Asset API error: ${errText}`);
     }
-    const bcJson = await bcRes.json();
+    const bcJson = await safeJson(bcRes);
     console.log("TikTok BC Asset response sample:", JSON.stringify(bcJson.data?.list?.[0] ?? "empty list"));
     if (bcJson.code !== 0) {
       throw new Error(`TikTok BC error: ${bcJson.message} (code ${bcJson.code})`);
@@ -137,8 +158,8 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
       }
     }
 
-    // Check if there are more pages
     const totalCount = bcJson.data?.page_info?.total_number ?? list.length;
+    console.log(`TikTok BC Asset page ${page}: got ${list.length} items, total_number=${totalCount}`);
     if (page * pageSize >= totalCount || list.length === 0) break;
     page++;
   }
@@ -147,65 +168,74 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
 
   console.log(`Building ${advertiserIds.length} TikTok accounts with enrichment from BC endpoints`);
 
-  // Step 2a: Fetch advertiser details via BC endpoint (currency, name, status)
+  // Step 2a: Fetch advertiser details via BC endpoint with pagination (max page_size=50)
   const detailMap: Record<string, { currency: string; name: string }> = {};
   try {
-    const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
-    console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
-    const detailRes = await fetch(detailUrl, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    const detailJson = await detailRes.json();
-    console.log(`TikTok BC advertiser detail response code: ${detailJson.code}`);
-    if (detailJson.code === 0 && detailJson.data?.list) {
-      for (const adv of detailJson.data.list) {
-        const advId = String(adv.advertiser_id || adv.id || "");
-        if (advId) {
-          detailMap[advId] = {
-            currency: adv.currency || "USD",
-            name: adv.advertiser_name || adv.name || "",
-          };
+    let detailPage = 1;
+    const detailPageSize = 50;
+    while (true) {
+      const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=${detailPage}&page_size=${detailPageSize}`;
+      console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
+      const detailRes = await fetch(detailUrl, {
+        headers: { "Access-Token": token, "Content-Type": "application/json" },
+      });
+      const detailJson = await safeJson(detailRes);
+      console.log(`TikTok BC advertiser detail page ${detailPage} response code: ${detailJson.code}`);
+      if (detailJson.code === 0 && detailJson.data?.list) {
+        for (const adv of detailJson.data.list) {
+          const advId = String(adv.advertiser_id || adv.id || "");
+          if (advId) {
+            detailMap[advId] = {
+              currency: adv.currency || "USD",
+              name: adv.advertiser_name || adv.name || "",
+            };
+          }
         }
+        const detailTotal = detailJson.data?.page_info?.total_number ?? detailJson.data.list.length;
+        if (detailPage * detailPageSize >= detailTotal || detailJson.data.list.length === 0) break;
+        detailPage++;
+      } else {
+        console.warn(`TikTok BC advertiser detail failed: ${detailJson.message || "unknown"}`);
+        break;
       }
-      console.log(`TikTok BC advertiser details fetched for ${Object.keys(detailMap).length} accounts`);
-      if (detailJson.data.list.length > 0) {
-        console.log(`TikTok BC advertiser detail sample: ${JSON.stringify(detailJson.data.list[0])}`);
-      }
-    } else {
-      console.warn(`TikTok BC advertiser detail failed: ${detailJson.message || "unknown"}`);
     }
+    console.log(`TikTok BC advertiser details fetched for ${Object.keys(detailMap).length} accounts`);
   } catch (e) {
     console.warn(`TikTok BC advertiser detail call failed (falling back to defaults): ${e.message}`);
   }
 
-  // Step 2b: Fetch balances via BC endpoint
+  // Step 2b: Fetch balances via BC endpoint — batch in chunks of 20
   const balanceMap: Record<string, { cash: number; grant: number }> = {};
-  try {
-    const idsParam = encodeURIComponent(JSON.stringify(advertiserIds));
-    const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
-    console.log(`TikTok balance URL: ${balanceUrl}`);
-    const balRes = await fetch(balanceUrl, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    const balJson = await balRes.json();
-    console.log(`TikTok balance response code: ${balJson.code}`);
-    if (balJson.code === 0 && balJson.data?.list) {
-      for (const b of balJson.data.list) {
-        const bId = String(b.advertiser_id || "");
-        if (bId) {
-          balanceMap[bId] = {
-            cash: Number(b.cash_balance ?? b.balance ?? 0),
-            grant: Number(b.grant_balance ?? 0),
-          };
+  const chunkSize = 20;
+  for (let i = 0; i < advertiserIds.length; i += chunkSize) {
+    const chunk = advertiserIds.slice(i, i + chunkSize);
+    try {
+      const idsParam = encodeURIComponent(JSON.stringify(chunk));
+      const balanceUrl = `${tiktokBase}/open_api/v1.3/advertiser/balance/get/?bc_id=${bcId}&advertiser_ids=${idsParam}`;
+      console.log(`TikTok balance URL (batch ${Math.floor(i / chunkSize) + 1}): ${balanceUrl}`);
+      const balRes = await fetch(balanceUrl, {
+        headers: { "Access-Token": token, "Content-Type": "application/json" },
+      });
+      const balJson = await safeJson(balRes);
+      console.log(`TikTok balance batch ${Math.floor(i / chunkSize) + 1} response code: ${balJson.code}`);
+      if (balJson.code === 0 && balJson.data?.list) {
+        for (const b of balJson.data.list) {
+          const bId = String(b.advertiser_id || "");
+          if (bId) {
+            balanceMap[bId] = {
+              cash: Number(b.cash_balance ?? b.balance ?? 0),
+              grant: Number(b.grant_balance ?? 0),
+            };
+          }
         }
+      } else {
+        console.warn(`TikTok balance batch ${Math.floor(i / chunkSize) + 1} failed: ${balJson.message || "unknown"}`);
       }
-      console.log(`TikTok balances fetched for ${Object.keys(balanceMap).length} accounts`);
-    } else {
-      console.warn(`TikTok balance fetch failed: ${balJson.message || "unknown"}`);
+    } catch (e) {
+      console.warn(`TikTok balance batch failed (falling back to defaults): ${e.message}`);
     }
-  } catch (e) {
-    console.warn(`TikTok balance call failed (falling back to defaults): ${e.message}`);
   }
+  console.log(`TikTok balances fetched for ${Object.keys(balanceMap).length} accounts`);
 
   // Step 3: Build enriched accounts with fallback
   return advertiserIds.map((id, idx) => {
