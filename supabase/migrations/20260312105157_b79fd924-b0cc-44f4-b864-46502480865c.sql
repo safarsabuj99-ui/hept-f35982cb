@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_metrics ADD COLUMN create_order integer NOT NULL DEFAULT 0;
