@@ -37,6 +37,7 @@ import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
+import AttentionRequired from "@/pages/AttentionRequired";
 
 
 import NotFound from "@/pages/NotFound";
@@ -71,6 +72,7 @@ const App = () => (
                 }
               >
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/attention" element={<AttentionRequired />} />
                 
                 <Route path="/admin/clients" element={<ClientList />} />
                 <Route path="/admin/clients/new" element={<NewClient />} />
