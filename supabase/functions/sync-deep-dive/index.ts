@@ -314,6 +314,8 @@ Deno.serve(async (req) => {
                 cost_per_purchase: metrics.cost_per_purchase ?? 0,
                 cost_per_message: metrics.cost_per_message ?? 0,
                 cpm: metrics.cpm ?? 0,
+                reach: metrics.reach ?? 0,
+                new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
