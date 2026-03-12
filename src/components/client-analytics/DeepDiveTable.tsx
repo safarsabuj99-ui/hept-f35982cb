@@ -610,15 +610,27 @@ export function DeepDiveTable({
   });
 
   // Drag handlers
+  const dragGhostRef = useRef<HTMLDivElement | null>(null);
+
   const handleDragStart = (e: React.DragEvent, columnId: string) => {
-    if (columnId === "select") return;
+    if (isFrozen(columnId)) return;
     setDraggedCol(columnId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", columnId);
+
+    // Create premium ghost element
+    const ghost = document.createElement("div");
+    ghost.className = "fixed pointer-events-none px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider shadow-lg border";
+    ghost.style.cssText = `background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); z-index: 9999; top: -100px; left: -100px;`;
+    ghost.textContent = (e.currentTarget as HTMLElement).textContent?.trim() || columnId;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+    dragGhostRef.current = ghost;
+    setTimeout(() => ghost.remove(), 0);
   };
 
   const handleDragOver = (e: React.DragEvent, columnId: string) => {
-    if (!draggedCol || columnId === "select" || draggedCol === columnId) return;
+    if (!draggedCol || isFrozen(columnId) || draggedCol === columnId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(columnId);
@@ -630,16 +642,17 @@ export function DeepDiveTable({
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    if (!draggedCol || draggedCol === targetId || targetId === "select") return;
+    if (!draggedCol || draggedCol === targetId || isFrozen(targetId)) return;
 
     setColumnOrder((prev) => {
       const newOrder = [...prev];
       const fromIdx = newOrder.indexOf(draggedCol);
       const toIdx = newOrder.indexOf(targetId);
       if (fromIdx === -1 || toIdx === -1) return prev;
+      // Don't allow dropping into frozen positions
+      if (toIdx < FROZEN_COLS.length) return prev;
       newOrder.splice(fromIdx, 1);
       newOrder.splice(toIdx, 0, draggedCol);
-      // Persist
       onColumnOrderChange?.(newOrder);
       return newOrder;
     });
@@ -651,6 +664,10 @@ export function DeepDiveTable({
   const handleDragEnd = () => {
     setDraggedCol(null);
     setDropTarget(null);
+    if (dragGhostRef.current) {
+      dragGhostRef.current.remove();
+      dragGhostRef.current = null;
+    }
   };
 
   const totals = useMemo(() => {
