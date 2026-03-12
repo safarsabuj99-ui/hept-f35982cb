@@ -784,6 +784,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       <TableCell className="text-sm">Totals</TableCell>
                       <TableCell />
                       <TableCell />
+                      <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
                       {hasObjectiveData.sales && (
@@ -798,6 +799,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       {hasObjectiveData.messages && (
                         <>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.messagingConversations)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.newMessagingContacts)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(Math.max(0, totals.messagingConversations - totals.newMessagingContacts))}</TableCell>
                           <TableCell className="font-mono text-sm">{fmt(totalCostPerMessage)}</TableCell>
                         </>
                       )}
