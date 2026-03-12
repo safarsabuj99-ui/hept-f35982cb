@@ -947,7 +947,7 @@ export function DeepDiveTable({
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border relative">
+        <div className="hidden md:block overflow-x-auto rounded-r-lg border-t border-r border-b relative">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
