@@ -18,7 +18,7 @@ interface CampaignAnalyticsPanelProps {
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
-export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnalyticsPanelProps) {
+export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true }: CampaignAnalyticsPanelProps) {
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
 
   const totals = useMemo(() => {
