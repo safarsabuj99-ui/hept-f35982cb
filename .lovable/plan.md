@@ -1,31 +1,34 @@
 
 
-# Add Instance Name Filter to Ad Accounts Search
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What to do
-Extend the existing search filter on the Ad Accounts page to also match against the **instance name** from the linked API integration.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### `src/pages/AdAccounts.tsx`
-1. In the `filteredAccounts` filter function (~line 185), look up the integration's `instance_name` via `a.api_integration_id` from the already-loaded `integrations` state, and include it in the search match.
-2. Update the search placeholder text to mention "instance name".
+## Technical Change
 
-Specifically, the filter block changes from:
-```ts
-return (a.account_name || "").toLowerCase().includes(q)
-  || (a.ad_account_id || "").toLowerCase().includes(q)
-  || (a.platform_name || "").toLowerCase().includes(q);
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+
+Current code:
 ```
-To:
-```ts
-const integration = integrations.find(i => i.id === a.api_integration_id);
-const instanceName = (integration?.instance_name || "").toLowerCase();
-return (a.account_name || "").toLowerCase().includes(q)
-  || (a.ad_account_id || "").toLowerCase().includes(q)
-  || (a.platform_name || "").toLowerCase().includes(q)
-  || instanceName.includes(q);
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-No database changes needed — integration data is already fetched.
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.
