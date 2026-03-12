@@ -882,20 +882,27 @@ export function DeepDiveTable({
     );
   };
 
+  const presets: { value: PresetType; label: string; icon?: typeof LayoutGrid }[] = [
+    { value: "auto", label: "Auto" },
+    { value: "messages", label: "Messages" },
+    { value: "sales", label: "Sales" },
+    { value: "performance", label: "Performance" },
+  ];
+
   return (
     <>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+      <div className="campaign-toolbar flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search campaigns..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 sm:h-9 text-sm"
+            className="pl-9 h-10 sm:h-9 text-sm rounded-full border-border/50 bg-background/80 focus-visible:ring-primary/30"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
+          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm rounded-full">
             <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -908,38 +915,33 @@ export function DeepDiveTable({
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1">
-          <Select value={selectedPreset} onValueChange={(v) => handlePresetChange(v as PresetType)}>
-            <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
-              <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="Preset" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto Detect</SelectItem>
-              <SelectItem value="messages">Messages</SelectItem>
-              <SelectItem value="sales">Sales</SelectItem>
-              <SelectItem value="performance">Performance</SelectItem>
-            </SelectContent>
-          </Select>
-          {onSetDefaultPreset && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={selectedPreset === defaultPreset ? "secondary" : "outline"}
-                    size="icon"
-                    className="h-10 sm:h-9 w-10 sm:w-9 shrink-0"
-                    onClick={() => onSetDefaultPreset(selectedPreset)}
-                  >
-                    <Star className={cn("h-4 w-4", selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{selectedPreset === defaultPreset ? "Current default preset" : "Set as default preset"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 rounded-full p-0.5 border border-border/30 bg-muted/30">
+            {presets.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => handlePresetChange(p.value)}
+                className={cn(
+                  "campaign-preset-pill",
+                  selectedPreset === p.value && "campaign-preset-pill-active"
+                )}
+              >
+                {p.label}
+                {selectedPreset === p.value && onSetDefaultPreset && (
+                  <Star
+                    className={cn(
+                      "h-3 w-3 ml-0.5 transition-colors",
+                      selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground/50 hover:text-primary"
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetDefaultPreset(selectedPreset);
+                    }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
