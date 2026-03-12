@@ -444,7 +444,7 @@ Deno.serve(async (req) => {
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
                 // Broad match for create_order - covers multiple possible Meta action types
-                if (at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order")) {
+                if (at === "onsite_conversion.messaging_order_created_v2" || at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order") || at.includes("order_created")) {
                   createOrder += val;
                 }
               }
