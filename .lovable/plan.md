@@ -1,34 +1,68 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix Create Order + Per-Platform Default Presets + Drag-and-Drop Columns
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## 1. Fix: Create Order Metric Not Showing Data
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+**Root cause found.** Looking at the edge function logs, the actual Meta action type is `onsite_conversion.messaging_order_created_v2` -- NOT `onsite_conversion.messaging_block_create_order`. The current code's substring match `at.includes("create_order")` also misses it because the string contains `order_created`, not `create_order`.
 
-## Technical Change
-
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
+Example from logs:
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+onsite_conversion.messaging_order_created_v2=3
 ```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+**Fix in `sync-deep-dive/index.ts`:** Update the matching condition:
+```typescript
+if (at === "onsite_conversion.messaging_order_created_v2" 
+    || at === "onsite_conversion.messaging_block_create_order" 
+    || at.includes("create_order") 
+    || at.includes("order_created")) {
+  createOrder += val;
+}
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+After fix, a re-sync will populate the `create_order` column with data.
+
+## 2. Per-Platform Default Presets (Saved to Account)
+
+Store preset preferences in the `profiles.permissions` JSONB field (already exists, already a flexible JSON column) under a `campaign_presets` key:
+```json
+{
+  "campaign_presets": {
+    "all": "messages",
+    "meta": "messages", 
+    "tiktok": "performance",
+    "google": "sales"
+  }
+}
+```
+
+No database migration needed -- `permissions` JSONB column already exists on `profiles`.
+
+**Changes:**
+- **`DeepDiveTable.tsx`**: Accept new prop `defaultPreset` and use it as initial value for `selectedPreset` state
+- **`DeepDiveTable.tsx`**: Add a "Set as Default" button/icon next to the preset selector that saves the current preset for the active platform tab
+- **`CampaignAnalyticsPanel.tsx`**: Load preset preferences from profile, pass `defaultPreset` to each platform's `DeepDiveTable` instance
+- **`CampaignMapping.tsx`**: Load user's preset preferences and pass them through to `CampaignAnalyticsPanel`
+
+## 3. Drag-and-Drop Column Reordering
+
+Use `@tanstack/react-table`'s built-in `columnOrder` state combined with native HTML drag events on table headers (no extra library needed).
+
+**Changes in `DeepDiveTable.tsx`:**
+- Add `columnOrder` state to `useReactTable` config
+- Add `draggable`, `onDragStart`, `onDragOver`, `onDrop` handlers to `<TableHead>` elements
+- Visual feedback: highlight drop target with a left/right border indicator
+- Persist column order per-platform in profile `permissions.column_order` JSONB (same approach as presets)
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `sync-deep-dive/index.ts` | Fix action type matching to include `order_created` |
+| `DeepDiveTable.tsx` | Add defaultPreset prop, "Set Default" button, drag-and-drop column reorder |
+| `CampaignAnalyticsPanel.tsx` | Load/pass preset preferences per platform tab |
+| `CampaignMapping.tsx` | Fetch user profile preferences, pass to analytics panel |
 
-No database or edge function changes needed.
+No database migration needed.
+
