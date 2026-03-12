@@ -51,6 +51,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "can_manage_expenses", label: "Log & Manage Expenses" },
       { key: "can_manage_wallets", label: "Add Funds & Platform Transfers" },
       { key: "can_view_reports", label: "View Finance Reports & Profitability" },
+      { key: "can_view_profit", label: "View Profit & Margins" },
     ],
   },
   {
