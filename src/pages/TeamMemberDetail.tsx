@@ -373,6 +373,78 @@ export default function TeamMemberDetail() {
     }
   };
 
+  // ─── Bulk actions ───
+  const toggleAssignedSelection = (id: string) => {
+    setSelectedAssigned((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllAssigned = () => {
+    if (selectedAssigned.size === paginatedClients.length) {
+      setSelectedAssigned(new Set());
+    } else {
+      setSelectedAssigned(new Set(paginatedClients.map((c) => c.user_id)));
+    }
+  };
+
+  const toggleUnassignedSelection = (id: string) => {
+    setSelectedUnassigned((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllUnassigned = () => {
+    if (selectedUnassigned.size === filteredUnassigned.length) {
+      setSelectedUnassigned(new Set());
+    } else {
+      setSelectedUnassigned(new Set(filteredUnassigned.map((c) => c.user_id)));
+    }
+  };
+
+  const handleBulkUnassign = async () => {
+    if (selectedAssigned.size === 0) return;
+    setBulkProcessing(true);
+    const ids = Array.from(selectedAssigned);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ manager_id: null } as any)
+      .in("user_id", ids);
+
+    setBulkProcessing(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Bulk Unassigned", description: `${ids.length} client(s) removed from this manager` });
+      setSelectedAssigned(new Set());
+      fetchClients();
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedUnassigned.size === 0) return;
+    setBulkProcessing(true);
+    const ids = Array.from(selectedUnassigned);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ manager_id: userId } as any)
+      .in("user_id", ids);
+
+    setBulkProcessing(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Bulk Assigned", description: `${ids.length} client(s) assigned to this manager` });
+      setSelectedUnassigned(new Set());
+      setUnassignedClients((prev) => prev.filter((c) => !ids.includes(c.user_id)));
+      fetchClients();
+    }
+  };
+
   const filteredUnassigned = useMemo(() => {
     if (!assignSearch.trim()) return unassignedClients;
     const q = assignSearch.toLowerCase();
