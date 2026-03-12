@@ -37,6 +37,7 @@ import MyCampaignRequests from "@/pages/MyCampaignRequests";
 import ClientReports from "@/pages/ClientReports";
 import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
+import AttentionRequired from "@/pages/AttentionRequired";
 
 
 import NotFound from "@/pages/NotFound";
