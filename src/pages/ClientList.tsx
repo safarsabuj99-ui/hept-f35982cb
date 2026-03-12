@@ -265,7 +265,7 @@ export default function ClientList() {
                       <TableHead className="hidden sm:table-cell">Business</TableHead>
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead>Pricing</TableHead>
-                      <TableHead className="text-right">Margin</TableHead>
+                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
                       <TableHead className="text-right">Balance</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
