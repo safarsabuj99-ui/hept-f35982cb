@@ -288,6 +288,8 @@ Deno.serve(async (req) => {
             cost_per_purchase?: number;
             cost_per_message?: number;
             cpm?: number;
+            reach?: number;
+            new_messaging_contacts?: number;
           }
         ) => {
           const { error } = await supabase
