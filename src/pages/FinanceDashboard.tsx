@@ -369,20 +369,24 @@ export default function FinanceDashboard() {
                         <TableCell className="text-right font-mono">${c.totalSpendUsd.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono">৳{c.revenueBdt.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-destructive">৳{c.cogsBdt.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
-                            ৳{c.netProfit.toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {c.margin < 5 ? (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertTriangle className="h-3 w-3" /> {c.margin}%
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">{c.margin}%</Badge>
-                          )}
-                        </TableCell>
+                        {canViewProfit && (
+                          <TableCell className="text-right font-mono">
+                            <span className={c.netProfit >= 0 ? "text-success" : "text-destructive"}>
+                              ৳{c.netProfit.toLocaleString()}
+                            </span>
+                          </TableCell>
+                        )}
+                        {canViewProfit && (
+                          <TableCell className="text-right">
+                            {c.margin < 5 ? (
+                              <Badge variant="destructive" className="gap-1">
+                                <AlertTriangle className="h-3 w-3" /> {c.margin}%
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">{c.margin}%</Badge>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
