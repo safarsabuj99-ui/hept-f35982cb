@@ -956,11 +956,11 @@ export function DeepDiveTable({
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border relative">
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-border/50 relative glass-card">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
+                <TableRow key={hg.id} className="campaign-table-header border-b border-border/50">
                   {hg.headers.map((header) => {
                     const frozen = isFrozen(header.id);
                     const isDraggable = !frozen;
