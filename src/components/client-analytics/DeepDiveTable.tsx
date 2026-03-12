@@ -975,8 +975,8 @@ export function DeepDiveTable({
                           header.id === "select" ? "w-10" : "cursor-pointer",
                           "select-none transition-all duration-200 text-xs uppercase tracking-wider",
                           // Frozen column styling
-                          frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
-                          isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/20 after:via-primary/10 after:to-transparent",
+                          frozen && `sticky ${stickyLeft} z-20 bg-muted/80 dark:bg-muted/40`,
+                          isLastFrozen && "campaign-frozen-separator",
                           // Draggable styling
                           isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
                           // Drag state
