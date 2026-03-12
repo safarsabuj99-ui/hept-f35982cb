@@ -338,12 +338,14 @@ export default function FinanceDashboard() {
                         <p className="text-xs text-muted-foreground">COGS (BDT)</p>
                         <p className="font-mono font-medium text-destructive">৳{c.cogsBdt.toLocaleString()}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Profit (BDT)</p>
-                        <p className={`font-mono font-medium ${c.netProfit >= 0 ? "text-success" : "text-destructive"}`}>
-                          ৳{c.netProfit.toLocaleString()}
-                        </p>
-                      </div>
+                      {canViewProfit && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Profit (BDT)</p>
+                          <p className={`font-mono font-medium ${c.netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                            ৳{c.netProfit.toLocaleString()}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

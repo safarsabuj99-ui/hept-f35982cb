@@ -289,9 +289,11 @@ export default function ClientList() {
                             {getPricingLabel(c.pricing_config)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <MarginIndicator clientId={c.user_id} />
-                        </TableCell>
+                        {canViewProfit && (
+                          <TableCell className="text-right">
+                            <MarginIndicator clientId={c.user_id} />
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">
                           {(() => {
                             const bal = balances[c.user_id] ?? 0;

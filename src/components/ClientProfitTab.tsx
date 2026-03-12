@@ -35,6 +35,12 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
+  const { hasPermission } = usePermissions();
+  if (!hasPermission("can_view_profit")) {
+    return (
+      <Card><CardContent className="py-8"><p className="text-sm text-muted-foreground text-center">You don't have permission to view profit data.</p></CardContent></Card>
+    );
+  }
   const [rows, setRows] = useState<PlatformProfit[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });

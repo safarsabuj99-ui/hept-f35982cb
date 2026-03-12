@@ -91,6 +91,7 @@ export const ROLE_PRESETS: RolePresetConfig[] = [
       "can_manage_expenses",
       "can_manage_wallets",
       "can_view_reports",
+      "can_view_profit",
     ],
   },
   {
