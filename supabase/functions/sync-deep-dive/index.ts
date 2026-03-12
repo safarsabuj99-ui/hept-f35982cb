@@ -409,6 +409,7 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, rawCampaignId);
             if (!clientId) {
               skippedCampaigns++;
+              console.warn(`[SKIP] Meta campaign "${campaignName}" (id=${rawCampaignId}, account=${account.ad_account_id}) — no keyword match. Spend=$${spend.toFixed(2)}`);
               continue;
             }
 
@@ -718,7 +719,15 @@ Deno.serve(async (req) => {
                     tiktokStatusMap[c.campaign_id] = "active";
                   }
                 } else {
-                  tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
+                  // Normalize raw "Enable"/"Disable" strings
+                  const rawLower = opStatus.toLowerCase();
+                  if (rawLower === "enable") {
+                    tiktokStatusMap[c.campaign_id] = "active";
+                  } else if (rawLower === "disable") {
+                    tiktokStatusMap[c.campaign_id] = "paused";
+                  } else {
+                    tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
+                  }
                 }
               }
             } else {
@@ -750,6 +759,7 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, platformId);
             if (!clientId) {
               skippedCampaigns++;
+              console.warn(`[SKIP] TikTok campaign "${campaignName}" (id=${rawCampaignId}, account=${account.ad_account_id}) — no keyword match. Spend=$${spend.toFixed(2)}`);
               continue;
             }
 
