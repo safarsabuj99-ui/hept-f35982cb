@@ -428,6 +428,7 @@ Deno.serve(async (req) => {
                 if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
+                if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
               }
             }
             if (row.action_values) {
