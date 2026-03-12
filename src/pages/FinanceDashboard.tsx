@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
+import { usePermissions } from "@/hooks/usePermissions";
 interface ClientProfit {
   name: string;
   totalSpendUsd: number;
