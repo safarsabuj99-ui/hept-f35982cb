@@ -394,6 +394,7 @@ Deno.serve(async (req) => {
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
+            const reach = parseInt(row.reach || "0", 10);
             const clicks = parseInt(row.clicks || "0", 10);
             const ctr = parseFloat(row.ctr || "0");
             const cpc = parseFloat(row.cpc || "0");
