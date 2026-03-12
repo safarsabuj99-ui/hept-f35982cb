@@ -569,6 +569,114 @@
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid hsl(var(--primary-foreground) / 0.15);
   }
+
+  /* ===== Campaign Analytics Table Styles ===== */
+
+  .campaign-toolbar {
+    @apply rounded-xl border border-border/50 p-3;
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .campaign-preset-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer border;
+    border-color: transparent;
+    color: hsl(var(--muted-foreground));
+    background: transparent;
+  }
+
+  .campaign-preset-pill:hover {
+    background: hsl(var(--accent) / 0.5);
+    color: hsl(var(--foreground));
+  }
+
+  .campaign-preset-pill-active {
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 12px -3px hsl(var(--primary) / 0.2);
+  }
+
+  .campaign-table-header {
+    background: linear-gradient(90deg, hsl(var(--muted) / 0.8), hsl(var(--muted) / 0.5), hsl(var(--muted) / 0.3));
+    backdrop-filter: blur(8px);
+  }
+
+  .campaign-row-hover {
+    @apply transition-all duration-200;
+    border-left: 2px solid transparent;
+  }
+
+  .campaign-row-hover:hover {
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.04), transparent);
+    border-left-color: hsl(var(--primary) / 0.4);
+  }
+
+  .campaign-totals-row {
+    background: linear-gradient(90deg, hsl(var(--primary) / 0.06), hsl(var(--primary) / 0.03), transparent);
+    border-top: 2px solid hsl(var(--primary) / 0.2);
+  }
+
+  .roas-glow-green {
+    box-shadow: 0 0 8px -2px hsl(142 71% 45% / 0.3);
+  }
+
+  .roas-glow-red {
+    box-shadow: 0 0 8px -2px hsl(0 72% 51% / 0.3);
+  }
+
+  .roas-glow-yellow {
+    box-shadow: 0 0 8px -2px hsl(38 92% 50% / 0.3);
+  }
+
+  .campaign-mobile-card {
+    @apply relative overflow-hidden rounded-xl border border-border/50 p-4;
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .campaign-mobile-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(var(--border) / 0.4), transparent 50%, hsl(var(--border) / 0.2));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .campaign-status-accent-active {
+    border-left: 3px solid hsl(142 71% 45%);
+  }
+
+  .campaign-status-accent-paused {
+    border-left: 3px solid hsl(var(--muted-foreground) / 0.3);
+  }
+
+  .campaign-status-accent-issue {
+    border-left: 3px solid hsl(0 72% 51%);
+  }
+
+  .campaign-frozen-separator {
+    position: relative;
+  }
+
+  .campaign-frozen-separator::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.25), hsl(var(--primary) / 0.08), transparent);
+    box-shadow: 2px 0 8px -2px hsl(var(--primary) / 0.1);
+  }
 }
 
 /* === Keyframes === */

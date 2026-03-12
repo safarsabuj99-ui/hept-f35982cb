@@ -1,12 +1,13 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DeepDiveTable, CampaignRow, PresetType } from "@/components/client-analytics/DeepDiveTable";
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { usePresetPreferences } from "@/hooks/usePresetPreferences";
+import { KpiCard } from "@/components/dashboard/KpiCard";
 import { DollarSign, ShoppingCart, TrendingUp, Target, Radio } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -68,88 +69,80 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
   );
 
   return (
-    <div className="space-y-4">
-      {/* KPI Summary Cards */}
+    <div className="space-y-5">
+      {/* KPI Summary Cards — Premium KpiCard */}
       <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
-            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-primary/10">
-              <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-            </div>
-            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Spend</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
-            <p className="text-xl md:text-2xl font-bold font-mono">{fmt(totals.spend)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
-            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-green-500/10">
-              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Results</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
-            <p className="text-xl md:text-2xl font-bold font-mono">{totals.results.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
-            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-blue-500/10">
-              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg ROAS</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
-            <p className="text-xl md:text-2xl font-bold font-mono">{avgRoas.toFixed(2)}x</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2 md:gap-3 p-3 md:p-6 pb-1 md:pb-2">
-            <div className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-xl bg-orange-500/10">
-              <Target className="h-4 w-4 md:h-5 md:w-5 text-orange-600 dark:text-orange-400" />
-            </div>
-            <CardTitle className="text-[10px] md:text-xs font-medium text-muted-foreground uppercase tracking-wider">Avg CPO</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-1 md:pt-0">
-            <p className="text-xl md:text-2xl font-bold font-mono">{fmt(avgCpo)}</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Total Spend"
+          value={fmt(totals.spend)}
+          icon={DollarSign}
+          accentColor="hsl(var(--primary))"
+          staggerIndex={0}
+        />
+        <KpiCard
+          title="Total Results"
+          value={totals.results.toLocaleString()}
+          icon={ShoppingCart}
+          accentColor="hsl(142 71% 45%)"
+          staggerIndex={1}
+        />
+        <KpiCard
+          title="Avg ROAS"
+          value={`${avgRoas.toFixed(2)}x`}
+          icon={TrendingUp}
+          accentColor="hsl(214 80% 52%)"
+          staggerIndex={2}
+        />
+        <KpiCard
+          title="Avg CPO"
+          value={fmt(avgCpo)}
+          icon={Target}
+          accentColor="hsl(38 92% 50%)"
+          staggerIndex={3}
+        />
       </div>
 
-      {/* Tabbed Content */}
+      {/* Tabbed Content — Glassmorphic Tabs */}
       <Tabs defaultValue="live" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="live" className="gap-1.5">
-            <Radio className="h-4 w-4" /> Live Campaigns
+        <div className="inline-flex rounded-full p-1 border border-border/50" style={{ background: 'hsl(var(--muted) / 0.5)', backdropFilter: 'blur(8px)' }}>
+          <TabsTrigger
+            value="live"
+            className="gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground transition-all duration-200"
+          >
+            <Radio className="h-3.5 w-3.5" /> Live Campaigns
             {activeCampaigns > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{activeCampaigns}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-        </TabsList>
+          <TabsTrigger
+            value="overview"
+            className="rounded-full px-4 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground transition-all duration-200"
+          >
+            Overview
+          </TabsTrigger>
+        </div>
 
         <TabsContent value="live">
           <Tabs defaultValue="all" className="space-y-4">
             <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
-              <TabsList className="inline-flex w-auto">
-                <TabsTrigger value="all">
+              <div className="inline-flex rounded-full p-1 border border-border/50" style={{ background: 'hsl(var(--muted) / 0.4)', backdropFilter: 'blur(8px)' }}>
+                <TabsTrigger value="all" className="rounded-full px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all duration-200">
                   All
                   <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{campaignRows.length}</Badge>
                 </TabsTrigger>
-                <TabsTrigger value="meta">
+                <TabsTrigger value="meta" className="rounded-full px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all duration-200 data-[state=active]:text-[hsl(214,80%,52%)]">
                   Meta
                   {metaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{metaRows.length}</Badge>}
                 </TabsTrigger>
-                <TabsTrigger value="tiktok">
+                <TabsTrigger value="tiktok" className="rounded-full px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all duration-200">
                   TikTok
                   {tiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{tiktokRows.length}</Badge>}
                 </TabsTrigger>
-                <TabsTrigger value="google">
+                <TabsTrigger value="google" className="rounded-full px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all duration-200 data-[state=active]:text-[hsl(38,92%,50%)]">
                   Google
                   {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
                 </TabsTrigger>
-              </TabsList>
+              </div>
             </div>
             <TabsContent value="all">
               {renderDeepDiveTable(campaignRows, "all")}

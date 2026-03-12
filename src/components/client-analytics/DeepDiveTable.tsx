@@ -566,15 +566,19 @@ export function DeepDiveTable({
         cell: (info) => {
           const row = info.row.original;
           const roas = safeDivide(row.conversion_value, row.spend);
-          let className = "font-mono text-xs ";
+          let badgeClass = "font-mono text-xs ";
+          let glowClass = "";
           if (roas > 3) {
-            className += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+            badgeClass += "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
+            glowClass = "roas-glow-green";
           } else if (roas < 1.5) {
-            className += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+            badgeClass += "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+            glowClass = "roas-glow-red";
           } else {
-            className += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+            badgeClass += "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+            glowClass = "roas-glow-yellow";
           }
-          return <Badge variant="outline" className={className}>{roas.toFixed(2)}x</Badge>;
+          return <Badge variant="outline" className={cn(badgeClass, glowClass)}>{roas.toFixed(2)}x</Badge>;
         },
       }),
     );
@@ -725,8 +729,11 @@ export function DeepDiveTable({
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
 
+    const statusAccent = active ? "campaign-status-accent-active" :
+      (redStatuses.includes(normalized) ? "campaign-status-accent-issue" : "campaign-status-accent-paused");
+
     return (
-      <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
+      <div className={cn("campaign-mobile-card relative", statusAccent, isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
         <div className="flex items-start gap-2.5">
           {isSelectable ? (
             <Checkbox
@@ -875,20 +882,27 @@ export function DeepDiveTable({
     );
   };
 
+  const presets: { value: PresetType; label: string; icon?: typeof LayoutGrid }[] = [
+    { value: "auto", label: "Auto" },
+    { value: "messages", label: "Messages" },
+    { value: "sales", label: "Sales" },
+    { value: "performance", label: "Performance" },
+  ];
+
   return (
     <>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+      <div className="campaign-toolbar flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search campaigns..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 sm:h-9 text-sm"
+            className="pl-9 h-10 sm:h-9 text-sm rounded-full border-border/50 bg-background/80 focus-visible:ring-primary/30"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
+          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm rounded-full">
             <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -901,38 +915,33 @@ export function DeepDiveTable({
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1">
-          <Select value={selectedPreset} onValueChange={(v) => handlePresetChange(v as PresetType)}>
-            <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
-              <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="Preset" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Auto Detect</SelectItem>
-              <SelectItem value="messages">Messages</SelectItem>
-              <SelectItem value="sales">Sales</SelectItem>
-              <SelectItem value="performance">Performance</SelectItem>
-            </SelectContent>
-          </Select>
-          {onSetDefaultPreset && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={selectedPreset === defaultPreset ? "secondary" : "outline"}
-                    size="icon"
-                    className="h-10 sm:h-9 w-10 sm:w-9 shrink-0"
-                    onClick={() => onSetDefaultPreset(selectedPreset)}
-                  >
-                    <Star className={cn("h-4 w-4", selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{selectedPreset === defaultPreset ? "Current default preset" : "Set as default preset"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 rounded-full p-0.5 border border-border/30 bg-muted/30">
+            {presets.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => handlePresetChange(p.value)}
+                className={cn(
+                  "campaign-preset-pill",
+                  selectedPreset === p.value && "campaign-preset-pill-active"
+                )}
+              >
+                {p.label}
+                {selectedPreset === p.value && onSetDefaultPreset && (
+                  <Star
+                    className={cn(
+                      "h-3 w-3 ml-0.5 transition-colors",
+                      selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground/50 hover:text-primary"
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetDefaultPreset(selectedPreset);
+                    }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -947,11 +956,11 @@ export function DeepDiveTable({
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border relative">
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-border/50 relative glass-card">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
+                <TableRow key={hg.id} className="campaign-table-header border-b border-border/50">
                   {hg.headers.map((header) => {
                     const frozen = isFrozen(header.id);
                     const isDraggable = !frozen;
@@ -966,8 +975,8 @@ export function DeepDiveTable({
                           header.id === "select" ? "w-10" : "cursor-pointer",
                           "select-none transition-all duration-200 text-xs uppercase tracking-wider",
                           // Frozen column styling
-                          frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
-                          isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/20 after:via-primary/10 after:to-transparent",
+                          frozen && `sticky ${stickyLeft} z-20 bg-muted/80 dark:bg-muted/40`,
+                          isLastFrozen && "campaign-frozen-separator",
                           // Draggable styling
                           isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
                           // Drag state
@@ -1018,7 +1027,7 @@ export function DeepDiveTable({
                     return (
                       <TableRow
                         key={row.id}
-                        className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                        className={cn("campaign-row-hover", isSelected && "bg-primary/5")}
                       >
                         {row.getVisibleCells().map((cell) => {
                           const colId = cell.column.id;
@@ -1029,8 +1038,8 @@ export function DeepDiveTable({
                             <TableCell
                               key={cell.id}
                               className={cn(
-                                frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
-                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                frozen && `sticky ${stickyLeft} z-10 bg-card/95 dark:bg-card/95`,
+                                isLastFrozen && "campaign-frozen-separator",
                                 isSelected && frozen && "bg-primary/5",
                               )}
                             >
@@ -1042,11 +1051,11 @@ export function DeepDiveTable({
                     );
                   })}
                   {filteredData.length > 1 && (
-                    <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
-                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
-                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent")} />
+                    <TableRow className="campaign-totals-row font-semibold">
+                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10")} />
+                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10")}>Totals</TableCell>
+                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 campaign-frozen-separator")} />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
@@ -1093,7 +1102,7 @@ export function DeepDiveTable({
 
         {/* Floating bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+          <div className="sticky bottom-16 md:bottom-0 mt-2 flex items-center justify-between gap-3 rounded-xl border border-border/50 glass-card p-3 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
             </span>
