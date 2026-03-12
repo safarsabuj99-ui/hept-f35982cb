@@ -565,7 +565,9 @@ export type Database = {
           impressions: number
           initiate_checkout: number
           messaging_conversations: number
+          new_messaging_contacts: number
           purchase: number
+          reach: number
           results: number
           roas: number
           spend: number
@@ -587,7 +589,9 @@ export type Database = {
           impressions?: number
           initiate_checkout?: number
           messaging_conversations?: number
+          new_messaging_contacts?: number
           purchase?: number
+          reach?: number
           results?: number
           roas?: number
           spend?: number
@@ -609,7 +613,9 @@ export type Database = {
           impressions?: number
           initiate_checkout?: number
           messaging_conversations?: number
+          new_messaging_contacts?: number
           purchase?: number
+          reach?: number
           results?: number
           roas?: number
           spend?: number
