@@ -28,6 +28,8 @@ interface MarginData {
 }
 
 export default function ClientList() {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
