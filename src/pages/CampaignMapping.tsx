@@ -128,6 +128,8 @@ export default function CampaignMapping() {
           cost_per_purchase: 0,
           cost_per_message: 0,
           cpm: 0,
+          reach: 0,
+          new_messaging_contacts: 0,
         };
       }
       map[key].impressions += Number(m.impressions);
