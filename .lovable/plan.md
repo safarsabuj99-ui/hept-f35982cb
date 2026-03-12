@@ -1,34 +1,44 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix: TikTok Import Only Fetching 8 of 28 Accounts
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## Root Cause Analysis
+
+Looking at the edge function logs and code, there are **two issues** causing the incomplete import:
+
+1. **Proxy returning corrupted JSON** — The `/bc/advertiser/get/` detail call already fails with `"Unexpected non-whitespace character after JSON"`. The same proxy corruption could be truncating the `/bc/asset/get/` response, returning only a partial first page (8 of 28 accounts).
+
+2. **Detail endpoint ignores pagination** — Line 153 hardcodes `page=1&page_size=100` for the `/bc/advertiser/get/` enrichment call. Per TikTok API limits (max `page_size=50`), this silently fails or returns partial data.
 
 ## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Technical Change
+### `supabase/functions/auto-import-accounts/index.ts`
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+**A. Robust JSON parsing for proxy responses**
+Add a `safeJson()` helper (same pattern used in `test-connection`) that extracts valid JSON even when the proxy prepends/appends garbage characters. Apply it to ALL TikTok API fetch calls.
 
-Current code:
+**B. Paginate the detail endpoint**
+Change the `/bc/advertiser/get/` call from a single `page_size=100` request to a paginated loop with `page_size=50`, collecting all advertiser details across pages.
+
+**C. Paginate the balance endpoint**
+The `/advertiser/balance/get/` endpoint has a limit on how many advertiser IDs can be passed at once. Batch advertiser IDs into chunks of 20 to avoid silent truncation.
+
+**D. Add discovery count logging**
+Log the `total_number` from the BC asset response so we can verify all accounts are being discovered.
+
+### Specific Changes
+
+```text
+auto-import-accounts/index.ts
+├── Add safeJson() helper (top of file)
+├── fetchTikTokAccounts()
+│   ├── Replace bcRes.json() → safeJson(bcRes)  
+│   ├── Log total_number from page_info
+│   ├── Paginate /bc/advertiser/get/ with page_size=50 loop
+│   ├── Replace detailRes.json() → safeJson(detailRes)
+│   ├── Batch /advertiser/balance/get/ in chunks of 20
+│   └── Replace balRes.json() → safeJson(balRes)
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+No database changes needed. No frontend changes needed.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
