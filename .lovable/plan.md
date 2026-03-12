@@ -1,34 +1,29 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Bulk Delete Ad Accounts
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What We'll Build
+Add multi-select checkboxes to the Ad Accounts table (desktop and mobile) with a floating bulk action bar for deleting multiple ad accounts at once, using the same cascade deletion logic from AdAccountDetail.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Changes — `src/pages/AdAccounts.tsx`
 
-## Technical Change
+### State
+- `selectedAccounts: Set<string>` — tracks selected account IDs
+- `bulkDeleting: boolean` — loading state during deletion
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### Deletion Logic
+- `handleBulkDelete()` — loops through selected IDs, for each runs the same cascade: delete from `ad_account_clients`, `billing_notifications`, `campaign_performance`, `daily_ad_spend`, `campaign_mappings`, `campaigns`, then `ad_accounts`. Shows progress toast, refreshes data on completion, clears selection.
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### UI
+- **Desktop table**: Add a checkbox column (header = select all on current page, rows = individual select)
+- **Mobile cards**: Add a checkbox in each card's top row
+- **Floating bulk action bar**: When `selectedAccounts.size > 0`, render a fixed-bottom bar showing count + "Delete Selected" button (destructive style)
+- **Confirmation dialog**: AlertDialog before executing deletion — "Are you sure you want to permanently delete X ad account(s) and all related data?"
+- Clear selection on search/filter/page change
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### Imports
+- Add `Trash2` from lucide-react
+- Add `AlertDialog` components (already used in AdAccountDetail)
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+No database changes needed.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
