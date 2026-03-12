@@ -185,9 +185,12 @@ export default function AdAccounts() {
   const filteredAccounts = accounts.filter((a: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
+    const integration = integrations.find((i: any) => i.id === a.api_integration_id);
+    const instanceName = (integration?.instance_name || "").toLowerCase();
     return (a.account_name || "").toLowerCase().includes(q)
       || (a.ad_account_id || "").toLowerCase().includes(q)
-      || (a.platform_name || "").toLowerCase().includes(q);
+      || (a.platform_name || "").toLowerCase().includes(q)
+      || instanceName.includes(q);
   });
 
   const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
