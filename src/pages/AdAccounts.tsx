@@ -338,7 +338,7 @@ export default function AdAccounts() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search by account name, ID, or platform..."
+          placeholder="Search by account name, ID, platform, or instance name..."
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
           className="pl-9 w-full sm:max-w-md"
