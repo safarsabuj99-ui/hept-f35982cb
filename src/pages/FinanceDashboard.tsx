@@ -317,13 +317,13 @@ export default function FinanceDashboard() {
                   <div key={c.name} className="rounded-xl border p-4 space-y-3 bg-card">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{c.name}</span>
-                      {c.margin < 5 ? (
+                      {canViewProfit && (c.margin < 5 ? (
                         <Badge variant="destructive" className="gap-1">
                           <AlertTriangle className="h-3 w-3" /> {c.margin}%
                         </Badge>
                       ) : (
                         <Badge variant="secondary">{c.margin}%</Badge>
-                      )}
+                      ))}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
