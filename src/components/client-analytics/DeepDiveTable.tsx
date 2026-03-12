@@ -729,8 +729,11 @@ export function DeepDiveTable({
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
 
+    const statusAccent = active ? "campaign-status-accent-active" :
+      (redStatuses.includes(normalized) ? "campaign-status-accent-issue" : "campaign-status-accent-paused");
+
     return (
-      <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
+      <div className={cn("campaign-mobile-card relative", statusAccent, isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
         <div className="flex items-start gap-2.5">
           {isSelectable ? (
             <Checkbox
