@@ -1,21 +1,34 @@
 
 
-# Fix: Remove Left Border Line on Frozen Columns
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-The table container at line 950 has `rounded-lg border` which draws a full border around the table. The **left border** creates a visible vertical line that clashes with the frozen column design — it looks like a misaligned divider (the red-marked line in your screenshot).
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Fix
-In `DeepDiveTable.tsx` line 950, replace the uniform `border` with selective borders that exclude the left side, or use a different approach:
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-- Change the container from `border` to `border-t border-r border-b` (remove left border)
-- OR better: keep `border` but set `border-left: none` so `rounded-lg` still works on other corners
-- Apply `rounded-l-none` to avoid the rounded corner gap on the left
+## Technical Change
 
-This is a single-line CSS class change on the table wrapper div.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-## File
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
+
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
 | File | Change |
 |------|--------|
-| `DeepDiveTable.tsx` (line 950) | Remove left border from table container |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
