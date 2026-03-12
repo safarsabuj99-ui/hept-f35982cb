@@ -113,6 +113,7 @@ interface DeepDiveTableProps {
   onSetDefaultPreset?: (preset: PresetType) => void;
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
+  canToggleCampaigns?: boolean;
 }
 
 export function DeepDiveTable({
