@@ -1,34 +1,32 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Add "Hide Profit" Permission Flag
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## What to do
+Add a new permission key `can_view_profit` that controls whether a manager can see profit/margin data across the app. When disabled, profit columns, P&L widgets, and profitability tables are hidden — the manager can still see spend/revenue but not margins.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+## Changes
 
-## Technical Change
+### 1. `src/hooks/usePermissions.tsx`
+- Add `"can_view_profit"` to `PermissionKey` type, `ALL_PERMISSION_KEYS` array
+- Add it to the **Financials** group with label "View Profit & Margins"
+- Add it to `finance_manager` and `full_manager` presets (not campaign_manager or view_only)
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### 2. `src/pages/FinanceDashboard.tsx`
+- Import `usePermissions`
+- Conditionally hide: Net Profit KPI card, margin column in client profitability table, P&L summary row
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### 3. `src/components/dashboard/ProfitabilityTable.tsx`
+- Gate the Profit (BDT) and Margin columns behind `can_view_profit`
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+### 4. `src/components/ProfitLossWidget.tsx`
+- Hide the entire widget if `can_view_profit` is false
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### 5. `src/pages/ClientList.tsx`
+- Hide the margin badge/column in client list if permission is off
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+### 6. `src/components/ClientProfitTab.tsx`
+- Gate the entire profit tab content
 
-No database or edge function changes needed.
+No database changes needed — permissions are stored in JSONB.
+
