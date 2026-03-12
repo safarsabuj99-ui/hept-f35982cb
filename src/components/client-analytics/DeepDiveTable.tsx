@@ -705,7 +705,7 @@ export function DeepDiveTable({
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
     const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
-    const canToggle = row.campaign_id && (active || isPaused);
+    const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
 
     const normalized = normalizeStatus(row.status);
     const redStatuses = ["not delivering", "disapproved", "with issues"];
