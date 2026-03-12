@@ -95,6 +95,16 @@ const normalizeStatus = (status: string) => {
 
 const columnHelper = createColumnHelper<CampaignRow>();
 
+// Frozen columns that stay pinned to the left and are NOT draggable
+const FROZEN_COLS = ["select", "campaign_name", "platform", "status"];
+const FROZEN_LEFT: Record<string, string> = {
+  select: "left-0",
+  campaign_name: "left-[40px]",
+  platform: "left-[228px]",
+  status: "left-[312px]",
+};
+const isFrozen = (id: string) => FROZEN_COLS.includes(id);
+
 interface DeepDiveTableProps {
   data: CampaignRow[];
   onCampaignPaused?: () => void;
