@@ -358,8 +358,8 @@ export default function FinanceDashboard() {
                       <TableHead className="text-right">Spend (USD)</TableHead>
                       <TableHead className="text-right">Revenue (BDT)</TableHead>
                       <TableHead className="text-right">COGS (BDT)</TableHead>
-                      <TableHead className="text-right">Profit (BDT)</TableHead>
-                      <TableHead className="text-right">Margin</TableHead>
+                      {canViewProfit && <TableHead className="text-right">Profit (BDT)</TableHead>}
+                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
