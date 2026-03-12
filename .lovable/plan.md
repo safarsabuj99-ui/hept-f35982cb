@@ -1,34 +1,39 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+# Fix Frozen Columns + Premium Drag-and-Drop UX
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+## 1. Freeze "Select", "Campaign", "Platform", "Delivery" Columns
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+These 3 data columns (+ checkbox) must be **pinned to the left** and **not draggable**. They stay visible when scrolling horizontally.
 
-## Technical Change
+**Implementation in `DeepDiveTable.tsx`:**
+- Define a `FROZEN_COLS` set: `["select", "campaign_name", "platform", "status"]`
+- Prevent drag on frozen columns: skip `draggable`, `onDragStart`, `onDragOver`, `onDrop` for these IDs
+- Prevent dropping INTO frozen column positions
+- Apply `sticky left-*` positioning with `z-10` and background color to frozen `<TableHead>` and `<TableCell>` elements:
+  - `select`: `sticky left-0`
+  - `campaign_name`: `sticky left-[40px]` (after checkbox width)
+  - `platform`: `sticky left-[220px]` (after campaign col)
+  - `status`: `sticky left-[300px]` (after platform col)
+- Add a subtle right shadow/border on the last frozen column (`status`) to visually separate frozen from scrollable area
+- Ensure frozen columns are always first in `columnOrder` and cannot be reordered
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+## 2. Premium Drag-and-Drop UX
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+Current DnD is basic (opacity + border-left). Upgrade to a polished experience:
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+**Visual enhancements:**
+- **Dragged column**: Apply a glowing highlight/scale effect instead of just opacity reduction. Add a gradient accent line at top of the dragged header.
+- **Drop target**: Show an animated gradient line indicator (primary color pulse) at the insertion point instead of a plain border-left
+- **Ghost preview**: Use `e.dataTransfer.setDragImage` with a styled clone for a cleaner drag ghost
+- **Drop zone feedback**: Add a subtle background color shift on valid drop targets during dragover
+- **Transition**: Animate column reorder with a brief CSS transition on the table headers
+- **Cursor**: Use `grab` on hover, `grabbing` while dragging via CSS classes
+- Add a small grip/drag icon (⠿ or GripVertical from lucide) to draggable column headers to signal they're movable
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `DeepDiveTable.tsx` | Freeze first 3+checkbox columns with sticky positioning; exclude from drag; premium DnD styling with gradient indicators, grip icons, and animated feedback |
 
-No database or edge function changes needed.
