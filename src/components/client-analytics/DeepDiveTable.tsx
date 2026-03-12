@@ -505,7 +505,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   });
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0 };
+    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0, reach: 0, newMessagingContacts: 0 };
     for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
@@ -516,6 +516,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       t.initiateCheckout += r.initiate_checkout ?? 0;
       t.purchase += r.purchase ?? 0;
       t.messagingConversations += r.messaging_conversations ?? 0;
+      t.reach += r.reach ?? 0;
+      t.newMessagingContacts += r.new_messaging_contacts ?? 0;
     }
     return t;
   }, [filteredData]);
