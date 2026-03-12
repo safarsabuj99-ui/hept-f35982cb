@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,11 +6,12 @@ import {
   flexRender,
   createColumnHelper,
   SortingState,
+  ColumnOrderState,
 } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +30,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface CampaignRow {
   campaign_name: string;
@@ -55,7 +62,7 @@ export interface CampaignRow {
   create_order?: number;
 }
 
-type PresetType = "auto" | "messages" | "sales" | "performance";
+export type PresetType = "auto" | "messages" | "sales" | "performance";
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
   meta: { label: "Meta", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
@@ -74,13 +81,11 @@ const fmtNum = (n: number) => {
   return n.toLocaleString();
 };
 
-/** Check if a status string represents an "active" campaign (including enriched TikTok statuses and raw API values) */
 const isActiveStatus = (status: string) => {
   const s = status.toLowerCase();
   return s === "active" || s.startsWith("active -") || s === "enable";
 };
 
-/** Normalize raw platform status values to clean display labels */
 const normalizeStatus = (status: string) => {
   const s = status.toLowerCase();
   if (s === "enable") return "active";
@@ -93,16 +98,29 @@ const columnHelper = createColumnHelper<CampaignRow>();
 interface DeepDiveTableProps {
   data: CampaignRow[];
   onCampaignPaused?: () => void;
+  defaultPreset?: PresetType;
+  onPresetChange?: (preset: PresetType) => void;
+  onSetDefaultPreset?: (preset: PresetType) => void;
+  savedColumnOrder?: string[];
+  onColumnOrderChange?: (order: string[]) => void;
 }
 
-export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
+export function DeepDiveTable({
+  data,
+  onCampaignPaused,
+  defaultPreset = "auto",
+  onPresetChange,
+  onSetDefaultPreset,
+  savedColumnOrder,
+  onColumnOrderChange,
+}: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [confirmToggle, setConfirmToggle] = useState<{ row: CampaignRow; action: "pause" | "enable" } | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedPreset, setSelectedPreset] = useState<PresetType>("auto");
+  const [selectedPreset, setSelectedPreset] = useState<PresetType>(defaultPreset);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -110,6 +128,18 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [bulkPausing, setBulkPausing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+
+  // Drag-and-drop state
+  const [draggedCol, setDraggedCol] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  // Sync preset from prop when it changes
+  useEffect(() => { setSelectedPreset(defaultPreset); }, [defaultPreset]);
+
+  const handlePresetChange = (v: PresetType) => {
+    setSelectedPreset(v);
+    onPresetChange?.(v);
+  };
 
   useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [searchQuery, statusFilter]);
 
@@ -224,7 +254,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     onCampaignPaused?.();
   };
 
-  // Detect which objective columns have data (used for "auto" preset)
   const hasObjectiveData = useMemo(() => {
     const has = { sales: false, messages: false };
     for (const r of data) {
@@ -234,12 +263,10 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     return has;
   }, [data]);
 
-  // Determine effective column visibility based on preset
   const showColumns = useMemo(() => {
     if (selectedPreset === "sales") return { sales: true, messages: false, performance: false };
     if (selectedPreset === "messages") return { sales: false, messages: true, performance: false };
     if (selectedPreset === "performance") return { sales: false, messages: false, performance: true };
-    // Auto: use data detection
     return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false };
   }, [selectedPreset, hasObjectiveData]);
 
@@ -545,14 +572,76 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     return cols;
   }, [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll, showColumns, selectedPreset]);
 
+  // Column order state for drag-and-drop
+  const defaultColumnOrder = useMemo(() => columns.map((c: any) => c.id ?? c.accessorKey ?? ""), [columns]);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(savedColumnOrder ?? defaultColumnOrder);
+
+  // Update column order when columns change (preset switch)
+  useEffect(() => {
+    if (savedColumnOrder && savedColumnOrder.length > 0) {
+      // Merge: keep saved order for columns that still exist, add new ones at end
+      const currentIds = new Set(defaultColumnOrder);
+      const validSaved = savedColumnOrder.filter(id => currentIds.has(id));
+      const newCols = defaultColumnOrder.filter(id => !validSaved.includes(id));
+      setColumnOrder([...validSaved, ...newCols]);
+    } else {
+      setColumnOrder(defaultColumnOrder);
+    }
+  }, [defaultColumnOrder, savedColumnOrder]);
+
   const table = useReactTable({
     data: paginatedData,
     columns,
-    state: { sorting },
+    state: { sorting, columnOrder },
     onSortingChange: setSorting,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  // Drag handlers
+  const handleDragStart = (e: React.DragEvent, columnId: string) => {
+    if (columnId === "select") return;
+    setDraggedCol(columnId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", columnId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnId: string) => {
+    if (!draggedCol || columnId === "select" || draggedCol === columnId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget(columnId);
+  };
+
+  const handleDragLeave = () => {
+    setDropTarget(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedCol || draggedCol === targetId || targetId === "select") return;
+
+    setColumnOrder((prev) => {
+      const newOrder = [...prev];
+      const fromIdx = newOrder.indexOf(draggedCol);
+      const toIdx = newOrder.indexOf(targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      newOrder.splice(fromIdx, 1);
+      newOrder.splice(toIdx, 0, draggedCol);
+      // Persist
+      onColumnOrderChange?.(newOrder);
+      return newOrder;
+    });
+
+    setDraggedCol(null);
+    setDropTarget(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCol(null);
+    setDropTarget(null);
+  };
 
   const totals = useMemo(() => {
     const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0, reach: 0, newMessagingContacts: 0, createOrder: 0 };
@@ -605,14 +694,12 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
     else if (roas < 1.5) roasClass = "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
 
-    // Determine which mobile metrics to show based on preset
     const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
 
     return (
       <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
-        {/* Top row: checkbox + name + platform */}
         <div className="flex items-start gap-2.5">
           {isSelectable ? (
             <Checkbox
@@ -634,7 +721,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           </div>
         </div>
 
-        {/* Status row */}
         <div className="flex items-center justify-between mt-2.5 mb-2">
           <div className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${dotClass}`} />
@@ -658,7 +744,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           )}
         </div>
 
-        {/* Metrics grid */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 border-t border-border/50">
           <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground uppercase">Spend</span>
@@ -673,7 +758,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
           </div>
 
-          {/* Sales funnel metrics */}
           {showMobileSales && (
             <>
               <div className="flex justify-between">
@@ -699,7 +783,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             </>
           )}
 
-          {/* Messages metrics */}
           {showMobileMessages && (
             <>
               <div className="flex justify-between">
@@ -725,7 +808,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             </>
           )}
 
-          {/* Performance metrics */}
           {showMobilePerformance && (
             <>
               <div className="flex justify-between">
@@ -792,18 +874,39 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={selectedPreset} onValueChange={(v) => setSelectedPreset(v as PresetType)}>
-          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
-            <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-            <SelectValue placeholder="Preset" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="auto">Auto Detect</SelectItem>
-            <SelectItem value="messages">Messages</SelectItem>
-            <SelectItem value="sales">Sales</SelectItem>
-            <SelectItem value="performance">Performance</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1">
+          <Select value={selectedPreset} onValueChange={(v) => handlePresetChange(v as PresetType)}>
+            <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
+              <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Preset" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Auto Detect</SelectItem>
+              <SelectItem value="messages">Messages</SelectItem>
+              <SelectItem value="sales">Sales</SelectItem>
+              <SelectItem value="performance">Performance</SelectItem>
+            </SelectContent>
+          </Select>
+          {onSetDefaultPreset && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={selectedPreset === defaultPreset ? "secondary" : "outline"}
+                    size="icon"
+                    className="h-10 sm:h-9 w-10 sm:w-9 shrink-0"
+                    onClick={() => onSetDefaultPreset(selectedPreset)}
+                  >
+                    <Star className={cn("h-4 w-4", selectedPreset === defaultPreset ? "fill-primary text-primary" : "text-muted-foreground")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{selectedPreset === defaultPreset ? "Current default preset" : "Set as default preset"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -822,26 +925,43 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
-                  {hg.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      className={`${header.id === "select" ? "w-10" : "cursor-pointer"} select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider`}
-                      onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
-                    >
-                      <div className="flex items-center gap-1">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.id !== "select" && (
-                          header.column.getIsSorted() === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : header.column.getIsSorted() === "desc" ? (
-                            <ArrowDown className="h-3 w-3" />
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
-                          )
+                  {hg.headers.map((header) => {
+                    const isDraggable = header.id !== "select";
+                    const isBeingDragged = draggedCol === header.id;
+                    const isDropTarget = dropTarget === header.id;
+                    return (
+                      <TableHead
+                        key={header.id}
+                        className={cn(
+                          header.id === "select" ? "w-10" : "cursor-pointer",
+                          "select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider",
+                          isDraggable && "cursor-grab active:cursor-grabbing",
+                          isBeingDragged && "opacity-50",
+                          isDropTarget && "border-l-2 border-primary"
                         )}
-                      </div>
-                    </TableHead>
-                  ))}
+                        onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
+                        draggable={isDraggable}
+                        onDragStart={(e) => handleDragStart(e, header.id)}
+                        onDragOver={(e) => handleDragOver(e, header.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, header.id)}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <div className="flex items-center gap-1">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {header.id !== "select" && (
+                            header.column.getIsSorted() === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : header.column.getIsSorted() === "desc" ? (
+                              <ArrowDown className="h-3 w-3" />
+                            ) : (
+                              <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+                            )
+                          )}
+                        </div>
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableHeader>
@@ -955,7 +1075,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
         onPageSizeChange={setPageSize}
       />
 
-      {/* Toggle confirm dialog (pause or enable) */}
+      {/* Toggle confirm dialog */}
       <AlertDialog open={!!confirmToggle} onOpenChange={() => setConfirmToggle(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
