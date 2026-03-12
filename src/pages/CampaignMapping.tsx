@@ -130,6 +130,7 @@ export default function CampaignMapping() {
           cpm: 0,
           reach: 0,
           new_messaging_contacts: 0,
+          create_order: 0,
         };
       }
       map[key].impressions += Number(m.impressions);
