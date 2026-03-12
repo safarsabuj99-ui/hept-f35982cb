@@ -393,6 +393,7 @@ Deno.serve(async (req) => {
             nextUrl = json.paging?.next || null;
           }
 
+          let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
