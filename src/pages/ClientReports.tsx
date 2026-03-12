@@ -24,6 +24,15 @@ export default function ClientReports() {
     if (!effectiveClientId) return;
     setLoading(true);
 
+    // Fetch client permissions
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("client_permissions")
+      .eq("user_id", effectiveClientId)
+      .maybeSingle();
+    const perms = (profileData as any)?.client_permissions || {};
+    setCanToggleCampaigns(perms.can_toggle_campaigns === true);
+
     const { data: accClients } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id")
