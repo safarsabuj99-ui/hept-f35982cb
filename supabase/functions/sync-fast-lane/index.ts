@@ -427,6 +427,7 @@ Deno.serve(async (req) => {
 
             if (!matchedClientId) {
               skipped++;
+              console.warn(`[SKIP] TikTok campaign "${campaignName}" (account=${account.ad_account_id}) — no keyword match. Spend=$${spend.toFixed(2)}`);
               continue;
             }
 
