@@ -646,6 +646,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                 <span className="font-mono text-xs font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">New Contacts</span>
+                <span className="font-mono text-xs">{fmtNum(row.new_messaging_contacts ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Returning</span>
+                <span className="font-mono text-xs">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Cost/Message</span>
                 <span className="font-mono text-xs">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
               </div>
