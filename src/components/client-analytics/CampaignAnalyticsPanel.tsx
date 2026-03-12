@@ -104,7 +104,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
 
       {/* Tabbed Content — Glassmorphic Tabs */}
       <Tabs defaultValue="live" className="space-y-4">
-        <div className="inline-flex rounded-full p-1 border border-border/50" style={{ background: 'hsl(var(--muted) / 0.5)', backdropFilter: 'blur(8px)' }}>
+        <TabsList className="inline-flex rounded-full p-1 border border-border/50 bg-transparent h-auto" style={{ background: 'hsl(var(--muted) / 0.5)', backdropFilter: 'blur(8px)' }}>
           <TabsTrigger
             value="live"
             className="gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground transition-all duration-200"
@@ -120,7 +120,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
           >
             Overview
           </TabsTrigger>
-        </div>
+        </TabsList>
 
         <TabsContent value="live">
           <Tabs defaultValue="all" className="space-y-4">
