@@ -158,8 +158,8 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
       }
     }
 
-    // Check if there are more pages
     const totalCount = bcJson.data?.page_info?.total_number ?? list.length;
+    console.log(`TikTok BC Asset page ${page}: got ${list.length} items, total_number=${totalCount}`);
     if (page * pageSize >= totalCount || list.length === 0) break;
     page++;
   }
