@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { format } from "date-fns";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface ProfitData {
   totalRevenueBdt: number;
