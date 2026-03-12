@@ -559,6 +559,7 @@ export type Database = {
           cost_per_purchase: number
           cpc: number
           cpm: number
+          create_order: number
           ctr: number
           data_date: string
           id: string
@@ -583,6 +584,7 @@ export type Database = {
           cost_per_purchase?: number
           cpc?: number
           cpm?: number
+          create_order?: number
           ctr?: number
           data_date: string
           id?: string
@@ -607,6 +609,7 @@ export type Database = {
           cost_per_purchase?: number
           cpc?: number
           cpm?: number
+          create_order?: number
           ctr?: number
           data_date?: string
           id?: string

@@ -10,7 +10,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,7 +52,10 @@ export interface CampaignRow {
   cpm?: number;
   reach?: number;
   new_messaging_contacts?: number;
+  create_order?: number;
 }
+
+type PresetType = "auto" | "messages" | "sales" | "performance";
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
   meta: { label: "Meta", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
@@ -99,6 +102,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   const [confirmToggle, setConfirmToggle] = useState<{ row: CampaignRow; action: "pause" | "enable" } | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedPreset, setSelectedPreset] = useState<PresetType>("auto");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -220,7 +224,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     onCampaignPaused?.();
   };
 
-  // Detect which objective columns have data
+  // Detect which objective columns have data (used for "auto" preset)
   const hasObjectiveData = useMemo(() => {
     const has = { sales: false, messages: false };
     for (const r of data) {
@@ -229,6 +233,15 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     }
     return has;
   }, [data]);
+
+  // Determine effective column visibility based on preset
+  const showColumns = useMemo(() => {
+    if (selectedPreset === "sales") return { sales: true, messages: false, performance: false };
+    if (selectedPreset === "messages") return { sales: false, messages: true, performance: false };
+    if (selectedPreset === "performance") return { sales: false, messages: false, performance: true };
+    // Auto: use data detection
+    return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false };
+  }, [selectedPreset, hasObjectiveData]);
 
   const columns = useMemo(() => {
     const cols: any[] = [
@@ -297,7 +310,6 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           if (redStatuses.includes(status)) dotClass = "bg-red-500";
           if (yellowStatuses.includes(status)) dotClass = "bg-yellow-500";
           if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
-          // Override: active with enriched label gets yellow dot
           if (status.startsWith("active -")) dotClass = "bg-yellow-500";
 
           const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
@@ -349,8 +361,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       }),
     ];
 
-    // Sales funnel columns — show if any campaign has sales data
-    if (hasObjectiveData.sales) {
+    // Sales funnel columns
+    if (showColumns.sales) {
       cols.push(
         columnHelper.display({
           id: "view_content",
@@ -358,7 +370,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm">{fmtNum(row.view_content ?? 0)}</span>;
           },
         }),
@@ -368,7 +380,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm">{fmtNum(row.add_to_cart ?? 0)}</span>;
           },
         }),
@@ -378,7 +390,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm">{fmtNum(row.initiate_checkout ?? 0)}</span>;
           },
         }),
@@ -388,7 +400,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm font-medium">{fmtNum(row.purchase ?? 0)}</span>;
           },
         }),
@@ -398,7 +410,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "sales") return <span className="text-muted-foreground/40 text-xs">—</span>;
             const cpp = (row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0;
             return <span className="font-mono text-sm">{fmt(cpp)}</span>;
           },
@@ -406,8 +418,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       );
     }
 
-    // Messages columns — show if any campaign has messaging data
-    if (hasObjectiveData.messages) {
+    // Messages columns
+    if (showColumns.messages) {
       cols.push(
         columnHelper.display({
           id: "messaging_conversations",
@@ -415,7 +427,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>;
           },
         }),
@@ -425,7 +437,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
             return <span className="font-mono text-sm">{fmtNum(row.new_messaging_contacts ?? 0)}</span>;
           },
         }),
@@ -435,9 +447,19 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
             const returning = Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0));
             return <span className="font-mono text-sm">{fmtNum(returning)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "create_order",
+          header: "Create Order",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.create_order ?? 0)}</span>;
           },
         }),
         columnHelper.display({
@@ -446,9 +468,37 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           cell: (info) => {
             const row = info.row.original;
             const obj = row.objective || "";
-            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            if (selectedPreset === "auto" && obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
             const cpm = (row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0;
             return <span className="font-mono text-sm">{fmt(cpm)}</span>;
+          },
+        }),
+      );
+    }
+
+    // Performance columns (clicks, CTR, CPC)
+    if (showColumns.performance) {
+      cols.push(
+        columnHelper.accessor("clicks", {
+          header: "Clicks",
+          cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
+        }),
+        columnHelper.display({
+          id: "ctr",
+          header: "CTR",
+          cell: (info) => {
+            const row = info.row.original;
+            const ctr = row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0;
+            return <span className="font-mono text-sm">{ctr.toFixed(2)}%</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "cpc",
+          header: "CPC",
+          cell: (info) => {
+            const row = info.row.original;
+            const cpc = row.clicks > 0 ? row.spend / row.clicks : 0;
+            return <span className="font-mono text-sm">{fmt(cpc)}</span>;
           },
         }),
       );
@@ -493,7 +543,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     );
 
     return cols;
-  }, [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll, hasObjectiveData]);
+  }, [togglingId, selectedIds, selectableRows, toggleSelect, toggleSelectAll, showColumns, selectedPreset]);
 
   const table = useReactTable({
     data: paginatedData,
@@ -505,10 +555,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   });
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0, reach: 0, newMessagingContacts: 0 };
+    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0, reach: 0, newMessagingContacts: 0, createOrder: 0 };
     for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
+      t.clicks += r.clicks;
       t.results += r.results;
       t.convValue += r.conversion_value;
       t.viewContent += r.view_content ?? 0;
@@ -518,6 +569,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       t.messagingConversations += r.messaging_conversations ?? 0;
       t.reach += r.reach ?? 0;
       t.newMessagingContacts += r.new_messaging_contacts ?? 0;
+      t.createOrder += r.create_order ?? 0;
     }
     return t;
   }, [filteredData]);
@@ -552,6 +604,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
     let roasClass = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
     if (roas > 3) roasClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30";
     else if (roas < 1.5) roasClass = "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+
+    // Determine which mobile metrics to show based on preset
+    const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
+    const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
+    const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
 
     return (
       <div className={cn("mobile-card relative", isSelected && "ring-1 ring-primary/50 bg-primary/5")}>
@@ -617,7 +674,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           </div>
 
           {/* Sales funnel metrics */}
-          {row.objective === "sales" && (
+          {showMobileSales && (
             <>
               <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">View Content</span>
@@ -643,7 +700,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           )}
 
           {/* Messages metrics */}
-          {row.objective === "messages" && (
+          {showMobileMessages && (
             <>
               <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Messages</span>
@@ -658,15 +715,31 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                 <span className="font-mono text-xs">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Create Order</span>
+                <span className="font-mono text-xs">{fmtNum(row.create_order ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Cost/Message</span>
                 <span className="font-mono text-xs">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
               </div>
             </>
           )}
 
-          {/* Generic metrics for non-sales/messages */}
-          {row.objective !== "sales" && row.objective !== "messages" && (
+          {/* Performance metrics */}
+          {showMobilePerformance && (
             <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
+                <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">CTR</span>
+                <span className="font-mono text-xs">{(row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0).toFixed(2)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">CPC</span>
+                <span className="font-mono text-xs">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Results</span>
                 <span className="font-mono text-xs font-medium">{row.results.toLocaleString()}</span>
@@ -682,10 +755,12 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className="text-[10px] text-muted-foreground uppercase">ROAS</span>
             <Badge variant="outline" className={`text-[10px] font-mono h-5 ${roasClass}`}>{roas.toFixed(2)}x</Badge>
           </div>
-          <div className="flex justify-between">
-            <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
-            <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
-          </div>
+          {!showMobilePerformance && (
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground uppercase">Clicks</span>
+              <span className="font-mono text-xs">{fmtNum(row.clicks)}</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -715,6 +790,18 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                 <span className="capitalize">{normalizeStatus(s)}</span>
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedPreset} onValueChange={(v) => setSelectedPreset(v as PresetType)}>
+          <SelectTrigger className="w-full sm:w-[160px] h-10 sm:h-9 text-sm">
+            <LayoutGrid className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            <SelectValue placeholder="Preset" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto Detect</SelectItem>
+            <SelectItem value="messages">Messages</SelectItem>
+            <SelectItem value="sales">Sales</SelectItem>
+            <SelectItem value="performance">Performance</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -791,7 +878,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
-                      {hasObjectiveData.sales && (
+                      {showColumns.sales && (
                         <>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.viewContent)}</TableCell>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.addToCart)}</TableCell>
@@ -800,12 +887,20 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                           <TableCell className="font-mono text-sm">{fmt(totalCostPerPurchase)}</TableCell>
                         </>
                       )}
-                      {hasObjectiveData.messages && (
+                      {showColumns.messages && (
                         <>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.messagingConversations)}</TableCell>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.newMessagingContacts)}</TableCell>
                           <TableCell className="font-mono text-sm">{fmtNum(Math.max(0, totals.messagingConversations - totals.newMessagingContacts))}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.createOrder)}</TableCell>
                           <TableCell className="font-mono text-sm">{fmt(totalCostPerMessage)}</TableCell>
+                        </>
+                      )}
+                      {showColumns.performance && (
+                        <>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.clicks)}</TableCell>
+                          <TableCell className="font-mono text-sm">{(totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0).toFixed(2)}%</TableCell>
+                          <TableCell className="font-mono text-sm">{fmt(totals.clicks > 0 ? totals.spend / totals.clicks : 0)}</TableCell>
                         </>
                       )}
                       <TableCell className="font-mono text-sm">{totals.results.toLocaleString()}</TableCell>

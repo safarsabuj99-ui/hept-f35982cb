@@ -290,6 +290,7 @@ Deno.serve(async (req) => {
             cpm?: number;
             reach?: number;
             new_messaging_contacts?: number;
+            create_order?: number;
           }
         ) => {
           const { error } = await supabase
@@ -316,6 +317,7 @@ Deno.serve(async (req) => {
                 cpm: metrics.cpm ?? 0,
                 reach: metrics.reach ?? 0,
                 new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
+                create_order: metrics.create_order ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
@@ -418,6 +420,7 @@ Deno.serve(async (req) => {
             let purchaseCount = 0;
             let messagingConversations = 0;
             let newMessagingContacts = 0;
+            let createOrder = 0;
 
             if (row.actions) {
               for (const action of row.actions) {
@@ -434,6 +437,7 @@ Deno.serve(async (req) => {
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
+                if (at === "onsite_conversion.messaging_block_create_order") createOrder += val;
               }
             }
             if (row.action_values) {
@@ -470,6 +474,7 @@ Deno.serve(async (req) => {
               purchase: purchaseCount,
               messaging_conversations: messagingConversations,
               new_messaging_contacts: newMessagingContacts,
+              create_order: createOrder,
               reach,
               cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
               cost_per_message: Math.round(costPerMessage * 100) / 100,
