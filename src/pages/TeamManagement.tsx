@@ -257,7 +257,11 @@ export default function TeamManagement() {
                 <TableBody>
                   {paginatedManagers.map((m) => (
                     <TableRow key={m.user_id} className={!m.is_active ? "opacity-50" : ""}>
-                      <TableCell className="font-medium">{m.full_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link to={`/admin/team/${m.user_id}`} className="hover:underline text-primary">
+                          {m.full_name}
+                        </Link>
+                      </TableCell>
                       <TableCell>{m.email}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">

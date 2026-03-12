@@ -23,6 +23,7 @@ import AdminProfile from "@/pages/AdminProfile";
 import AuditLogs from "@/pages/AuditLogs";
 
 import TeamManagement from "@/pages/TeamManagement";
+import TeamMemberDetail from "@/pages/TeamMemberDetail";
 import AdAccounts from "@/pages/AdAccounts";
 import Integrations from "@/pages/Integrations";
 import CampaignMapping from "@/pages/CampaignMapping";
@@ -81,6 +82,7 @@ const App = () => (
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 
                 <Route path="/admin/team" element={<TeamManagement />} />
+                <Route path="/admin/team/:userId" element={<TeamMemberDetail />} />
                 <Route path="/admin/ad-accounts" element={<AdAccounts />} />
                 <Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
