@@ -608,6 +608,10 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className="font-mono text-xs font-medium">{fmt(row.spend)}</span>
           </div>
           <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Reach</span>
+            <span className="font-mono text-xs">{fmtNum(row.reach ?? 0)}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
             <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
           </div>
