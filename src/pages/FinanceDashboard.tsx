@@ -271,33 +271,35 @@ export default function FinanceDashboard() {
       </div>
 
       {/* P&L Summary */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div className="py-2 border-b sm:border-b-0">
-              <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
-              )}
+      {canViewProfit && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+              <div className="py-2 border-b sm:border-b-0">
+                <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2 border-b sm:border-b-0">
+                <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
+                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
+                  <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{(totalRevenue - totalCogs).toLocaleString()}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="py-2 border-b sm:border-b-0">
-              <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
-              )}
-            </div>
-            <div className="py-2">
-              <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
-              {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
-                  ৳{(totalRevenue - totalCogs).toLocaleString()}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Client Profitability */}
       <Card>
