@@ -168,33 +168,38 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
 
   console.log(`Building ${advertiserIds.length} TikTok accounts with enrichment from BC endpoints`);
 
-  // Step 2a: Fetch advertiser details via BC endpoint (currency, name, status)
+  // Step 2a: Fetch advertiser details via BC endpoint with pagination (max page_size=50)
   const detailMap: Record<string, { currency: string; name: string }> = {};
   try {
-    const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=1&page_size=100`;
-    console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
-    const detailRes = await fetch(detailUrl, {
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-    });
-    const detailJson = await detailRes.json();
-    console.log(`TikTok BC advertiser detail response code: ${detailJson.code}`);
-    if (detailJson.code === 0 && detailJson.data?.list) {
-      for (const adv of detailJson.data.list) {
-        const advId = String(adv.advertiser_id || adv.id || "");
-        if (advId) {
-          detailMap[advId] = {
-            currency: adv.currency || "USD",
-            name: adv.advertiser_name || adv.name || "",
-          };
+    let detailPage = 1;
+    const detailPageSize = 50;
+    while (true) {
+      const detailUrl = `${tiktokBase}/open_api/v1.3/bc/advertiser/get/?bc_id=${bcId}&page=${detailPage}&page_size=${detailPageSize}`;
+      console.log(`TikTok BC advertiser detail URL: ${detailUrl}`);
+      const detailRes = await fetch(detailUrl, {
+        headers: { "Access-Token": token, "Content-Type": "application/json" },
+      });
+      const detailJson = await safeJson(detailRes);
+      console.log(`TikTok BC advertiser detail page ${detailPage} response code: ${detailJson.code}`);
+      if (detailJson.code === 0 && detailJson.data?.list) {
+        for (const adv of detailJson.data.list) {
+          const advId = String(adv.advertiser_id || adv.id || "");
+          if (advId) {
+            detailMap[advId] = {
+              currency: adv.currency || "USD",
+              name: adv.advertiser_name || adv.name || "",
+            };
+          }
         }
+        const detailTotal = detailJson.data?.page_info?.total_number ?? detailJson.data.list.length;
+        if (detailPage * detailPageSize >= detailTotal || detailJson.data.list.length === 0) break;
+        detailPage++;
+      } else {
+        console.warn(`TikTok BC advertiser detail failed: ${detailJson.message || "unknown"}`);
+        break;
       }
-      console.log(`TikTok BC advertiser details fetched for ${Object.keys(detailMap).length} accounts`);
-      if (detailJson.data.list.length > 0) {
-        console.log(`TikTok BC advertiser detail sample: ${JSON.stringify(detailJson.data.list[0])}`);
-      }
-    } else {
-      console.warn(`TikTok BC advertiser detail failed: ${detailJson.message || "unknown"}`);
     }
+    console.log(`TikTok BC advertiser details fetched for ${Object.keys(detailMap).length} accounts`);
   } catch (e) {
     console.warn(`TikTok BC advertiser detail call failed (falling back to defaults): ${e.message}`);
   }
