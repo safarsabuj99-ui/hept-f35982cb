@@ -140,7 +140,7 @@ async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: str
       const errText = await bcRes.text();
       throw new Error(`TikTok BC Asset API error: ${errText}`);
     }
-    const bcJson = await bcRes.json();
+    const bcJson = await safeJson(bcRes);
     console.log("TikTok BC Asset response sample:", JSON.stringify(bcJson.data?.list?.[0] ?? "empty list"));
     if (bcJson.code !== 0) {
       throw new Error(`TikTok BC error: ${bcJson.message} (code ${bcJson.code})`);
