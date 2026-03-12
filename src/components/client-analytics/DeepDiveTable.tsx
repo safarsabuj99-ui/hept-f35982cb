@@ -113,6 +113,7 @@ interface DeepDiveTableProps {
   onSetDefaultPreset?: (preset: PresetType) => void;
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
+  canToggleCampaigns?: boolean;
 }
 
 export function DeepDiveTable({
@@ -123,6 +124,7 @@ export function DeepDiveTable({
   onSetDefaultPreset,
   savedColumnOrder,
   onColumnOrderChange,
+  canToggleCampaigns = true,
 }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,8 +183,8 @@ export function DeepDiveTable({
   }, [filteredData, currentPage, pageSize]);
 
   const selectableRows = useMemo(
-    () => paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)),
-    [paginatedData]
+    () => canToggleCampaigns ? paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)) : [],
+    [paginatedData, canToggleCampaigns]
   );
 
   const toggleSelect = useCallback((id: string) => {
@@ -350,7 +352,7 @@ export function DeepDiveTable({
           if (status.startsWith("active -")) dotClass = "bg-amber-500";
 
           const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
-          const canToggle = row.campaign_id && (active || isPaused);
+          const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
 
           return (
             <div className="flex items-center gap-2.5">
@@ -703,7 +705,7 @@ export function DeepDiveTable({
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
     const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
-    const canToggle = row.campaign_id && (active || isPaused);
+    const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
 
     const normalized = normalizeStatus(row.status);
     const redStatuses = ["not delivering", "disapproved", "with issues"];

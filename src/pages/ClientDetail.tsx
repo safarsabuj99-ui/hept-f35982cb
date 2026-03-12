@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3 } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock } from "lucide-react";
 import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
 import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
 import { TablePagination } from "@/components/TablePagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -645,6 +646,43 @@ export default function ClientDetail() {
                   </Select>
                   <p className="text-xs text-muted-foreground">Timezone for date normalization during sync.</p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Client Access Permissions */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Client Access</CardTitle>
+              </div>
+              <CardDescription>Control what this client can see and do in their dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between max-w-md">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Campaign On/Off Control</Label>
+                  <p className="text-xs text-muted-foreground">Allow client to pause and enable campaigns from their dashboard.</p>
+                </div>
+                <Switch
+                  checked={((profile?.client_permissions as any)?.can_toggle_campaigns) === true}
+                  onCheckedChange={async (checked) => {
+                    const currentPerms = (profile?.client_permissions as any) || {};
+                    const newPerms = { ...currentPerms, can_toggle_campaigns: checked };
+                    const { data, error } = await supabase
+                      .from("profiles")
+                      .update({ client_permissions: newPerms } as any)
+                      .eq("user_id", userId!)
+                      .select();
+                    if (error) {
+                      toast({ title: "Error", description: error.message, variant: "destructive" });
+                    } else if (data?.[0]) {
+                      setProfile(data[0]);
+                      toast({ title: checked ? "Permission Granted" : "Permission Revoked", description: `Campaign toggle ${checked ? "enabled" : "disabled"} for this client.` });
+                    }
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

@@ -18,10 +18,20 @@ export default function ClientReports() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [preset, setPreset] = useState<ClientDatePreset>("today");
+  const [canToggleCampaigns, setCanToggleCampaigns] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;
     setLoading(true);
+
+    // Fetch client permissions
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("client_permissions")
+      .eq("user_id", effectiveClientId)
+      .maybeSingle();
+    const perms = (profileData as any)?.client_permissions || {};
+    setCanToggleCampaigns(perms.can_toggle_campaigns === true);
 
     const { data: accClients } = await supabase
       .from("ad_account_clients")
@@ -178,7 +188,7 @@ export default function ClientReports() {
 
       <ClientDateFilter onRangeChange={handleRangeChange} activePreset={preset} />
 
-      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} />
+      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} canToggleCampaigns={canToggleCampaigns} />
     </div>
   );
 }

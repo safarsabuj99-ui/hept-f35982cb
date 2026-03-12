@@ -13,11 +13,12 @@ const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
 interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
   onRefresh: () => void;
+  canToggleCampaigns?: boolean;
 }
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
-export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnalyticsPanelProps) {
+export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true }: CampaignAnalyticsPanelProps) {
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
 
   const totals = useMemo(() => {
@@ -47,6 +48,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
       onSetDefaultPreset={(preset) => setDefaultPreset(platform, preset)}
       savedColumnOrder={getColumnOrder(platform)}
       onColumnOrderChange={(order) => setColumnOrder(platform, order)}
+      canToggleCampaigns={canToggleCampaigns}
     />
   );
 

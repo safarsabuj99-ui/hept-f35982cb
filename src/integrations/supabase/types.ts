@@ -778,6 +778,7 @@ export type Database = {
           auto_pause_balance_usd: number
           auto_pause_threshold_pct: number
           business_name: string | null
+          client_permissions: Json
           created_at: string
           custom_exchange_rate: number | null
           data_fetch_start_date: string | null
@@ -800,6 +801,7 @@ export type Database = {
           auto_pause_balance_usd?: number
           auto_pause_threshold_pct?: number
           business_name?: string | null
+          client_permissions?: Json
           created_at?: string
           custom_exchange_rate?: number | null
           data_fetch_start_date?: string | null
@@ -822,6 +824,7 @@ export type Database = {
           auto_pause_balance_usd?: number
           auto_pause_threshold_pct?: number
           business_name?: string | null
+          client_permissions?: Json
           created_at?: string
           custom_exchange_rate?: number | null
           data_fetch_start_date?: string | null
