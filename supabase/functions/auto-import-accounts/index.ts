@@ -6,6 +6,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Safe JSON parser for proxy responses that may prepend/append garbage ──
+async function safeJson(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text.trim());
+  } catch {
+    const jsonStart = text.search(/[\{\[]/);
+    const lastBrace = text.lastIndexOf('}');
+    const lastBracket = text.lastIndexOf(']');
+    const jsonEnd = Math.max(lastBrace, lastBracket);
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      try {
+        return JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+      } catch {
+        throw new Error(`Invalid JSON response: ${text.substring(0, 200)}`);
+      }
+    }
+    throw new Error(`Non-JSON response: ${text.substring(0, 200)}`);
+  }
+}
+
 // ── Meta: fetch billing cycle data for a single ad account ──
 async function fetchMetaBillingCycle(adAccountId: string, token: string) {
   try {
