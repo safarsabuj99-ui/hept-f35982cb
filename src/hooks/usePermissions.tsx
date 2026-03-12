@@ -8,7 +8,13 @@ export type PermissionKey =
   | "can_manage_clients"
   | "can_manage_campaigns"
   | "can_manage_team"
-  | "can_configure_system";
+  | "can_configure_system"
+  | "can_view_ad_accounts"
+  | "can_approve_payments"
+  | "can_manage_expenses"
+  | "can_view_audit_logs"
+  | "can_manage_wallets"
+  | "can_view_reports";
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "can_view_dashboard_stats",
@@ -17,6 +23,12 @@ export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "can_manage_campaigns",
   "can_manage_team",
   "can_configure_system",
+  "can_view_ad_accounts",
+  "can_approve_payments",
+  "can_manage_expenses",
+  "can_view_audit_logs",
+  "can_manage_wallets",
+  "can_view_reports",
 ];
 
 export interface PermissionGroup {
@@ -31,13 +43,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
   {
     label: "Financials",
-    keys: [{ key: "can_manage_finance", label: "Finance, Wallet, Payments & Expenses" }],
+    keys: [
+      { key: "can_manage_finance", label: "Finance Hub & Cash Flow" },
+      { key: "can_approve_payments", label: "Approve / Reject Payments" },
+      { key: "can_manage_expenses", label: "Log & Manage Expenses" },
+      { key: "can_manage_wallets", label: "Add Funds & Platform Transfers" },
+      { key: "can_view_reports", label: "View Finance Reports & Profitability" },
+    ],
   },
   {
     label: "Operations",
     keys: [
       { key: "can_manage_clients", label: "Create / Edit / Delete Clients" },
       { key: "can_manage_campaigns", label: "Manage Campaign Requests" },
+      { key: "can_view_ad_accounts", label: "View Ad Accounts" },
     ],
   },
   {
@@ -45,9 +64,78 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     keys: [
       { key: "can_manage_team", label: "Manage Team Members" },
       { key: "can_configure_system", label: "API Tokens & Global Settings" },
+      { key: "can_view_audit_logs", label: "View System Audit Logs" },
     ],
   },
 ];
+
+export type RolePreset = "finance_manager" | "campaign_manager" | "full_manager" | "view_only" | "custom";
+
+export interface RolePresetConfig {
+  id: RolePreset;
+  label: string;
+  permissions: PermissionKey[];
+}
+
+export const ROLE_PRESETS: RolePresetConfig[] = [
+  {
+    id: "finance_manager",
+    label: "Finance Manager",
+    permissions: [
+      "can_view_dashboard_stats",
+      "can_manage_finance",
+      "can_approve_payments",
+      "can_manage_expenses",
+      "can_manage_wallets",
+      "can_view_reports",
+    ],
+  },
+  {
+    id: "campaign_manager",
+    label: "Campaign Manager",
+    permissions: [
+      "can_view_dashboard_stats",
+      "can_manage_campaigns",
+      "can_view_ad_accounts",
+      "can_manage_clients",
+    ],
+  },
+  {
+    id: "full_manager",
+    label: "Full Manager",
+    permissions: [...ALL_PERMISSION_KEYS],
+  },
+  {
+    id: "view_only",
+    label: "View Only",
+    permissions: ["can_view_dashboard_stats"],
+  },
+];
+
+/** Given a permissions map, detect which preset matches (or "custom") */
+export function detectPreset(perms: Record<string, boolean>): RolePreset {
+  const enabledKeys = ALL_PERMISSION_KEYS.filter((k) => perms[k] === true);
+  for (const preset of ROLE_PRESETS) {
+    if (
+      preset.permissions.length === enabledKeys.length &&
+      preset.permissions.every((k) => perms[k] === true)
+    ) {
+      return preset.id;
+    }
+  }
+  return "custom";
+}
+
+/** Build a permissions map from a preset */
+export function presetToPermissions(presetId: RolePreset): Record<string, boolean> {
+  const preset = ROLE_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return {};
+  const map: Record<string, boolean> = {};
+  ALL_PERMISSION_KEYS.forEach((k) => {
+    map[k] = preset.permissions.includes(k);
+  });
+  return map;
+}
 
 export function usePermissions() {
   const { user, role } = useAuth();
@@ -81,7 +169,6 @@ export function usePermissions() {
 
   const hasPermission = useCallback(
     (key: PermissionKey): boolean => {
-      // Admins who are super admin bypass all checks
       if (role === "admin" || isSuperAdmin) return true;
       return permissions[key] === true;
     },
