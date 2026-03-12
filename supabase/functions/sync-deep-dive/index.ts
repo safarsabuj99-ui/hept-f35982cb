@@ -719,7 +719,15 @@ Deno.serve(async (req) => {
                     tiktokStatusMap[c.campaign_id] = "active";
                   }
                 } else {
-                  tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
+                  // Normalize raw "Enable"/"Disable" strings
+                  const rawLower = opStatus.toLowerCase();
+                  if (rawLower === "enable") {
+                    tiktokStatusMap[c.campaign_id] = "active";
+                  } else if (rawLower === "disable") {
+                    tiktokStatusMap[c.campaign_id] = "paused";
+                  } else {
+                    tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
+                  }
                 }
               }
             } else {
