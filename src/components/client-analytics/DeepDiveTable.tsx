@@ -1027,7 +1027,7 @@ export function DeepDiveTable({
                     return (
                       <TableRow
                         key={row.id}
-                        className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                        className={cn("campaign-row-hover", isSelected && "bg-primary/5")}
                       >
                         {row.getVisibleCells().map((cell) => {
                           const colId = cell.column.id;
