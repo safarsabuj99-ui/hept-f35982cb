@@ -1030,7 +1030,7 @@ export function DeepDiveTable({
                               key={cell.id}
                               className={cn(
                                 frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
-                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                isLastFrozen && "[box-shadow:6px_0_12px_-4px_hsl(var(--foreground)/0.06)]",
                                 isSelected && frozen && "bg-primary/5",
                               )}
                             >
