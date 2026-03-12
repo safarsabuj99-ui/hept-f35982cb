@@ -288,6 +288,8 @@ Deno.serve(async (req) => {
             cost_per_purchase?: number;
             cost_per_message?: number;
             cpm?: number;
+            reach?: number;
+            new_messaging_contacts?: number;
           }
         ) => {
           const { error } = await supabase
@@ -312,6 +314,8 @@ Deno.serve(async (req) => {
                 cost_per_purchase: metrics.cost_per_purchase ?? 0,
                 cost_per_message: metrics.cost_per_message ?? 0,
                 cpm: metrics.cpm ?? 0,
+                reach: metrics.reach ?? 0,
+                new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
@@ -374,7 +378,7 @@ Deno.serve(async (req) => {
             errors.push(`Meta status fetch: ${e.message}`);
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,reach,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
@@ -390,6 +394,7 @@ Deno.serve(async (req) => {
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
+            const reach = parseInt(row.reach || "0", 10);
             const clicks = parseInt(row.clicks || "0", 10);
             const ctr = parseFloat(row.ctr || "0");
             const cpc = parseFloat(row.cpc || "0");
@@ -412,6 +417,7 @@ Deno.serve(async (req) => {
             let initiateCheckout = 0;
             let purchaseCount = 0;
             let messagingConversations = 0;
+            let newMessagingContacts = 0;
 
             if (row.actions) {
               for (const action of row.actions) {
@@ -427,6 +433,7 @@ Deno.serve(async (req) => {
                 if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
+                if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
               }
             }
             if (row.action_values) {
@@ -462,6 +469,8 @@ Deno.serve(async (req) => {
               initiate_checkout: initiateCheckout,
               purchase: purchaseCount,
               messaging_conversations: messagingConversations,
+              new_messaging_contacts: newMessagingContacts,
+              reach,
               cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
               cost_per_message: Math.round(costPerMessage * 100) / 100,
               cpm: Math.round(cpmValue * 100) / 100,

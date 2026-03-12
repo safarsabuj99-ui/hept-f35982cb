@@ -128,6 +128,8 @@ export default function CampaignMapping() {
           cost_per_purchase: 0,
           cost_per_message: 0,
           cpm: 0,
+          reach: 0,
+          new_messaging_contacts: 0,
         };
       }
       map[key].impressions += Number(m.impressions);
@@ -140,6 +142,8 @@ export default function CampaignMapping() {
       map[key].initiate_checkout = (map[key].initiate_checkout ?? 0) + Number(m.initiate_checkout ?? 0);
       map[key].purchase = (map[key].purchase ?? 0) + Number(m.purchase ?? 0);
       map[key].messaging_conversations = (map[key].messaging_conversations ?? 0) + Number(m.messaging_conversations ?? 0);
+      map[key].reach = (map[key].reach ?? 0) + Number(m.reach ?? 0);
+      map[key].new_messaging_contacts = (map[key].new_messaging_contacts ?? 0) + Number(m.new_messaging_contacts ?? 0);
     }
 
     // Recalculate cost_per_purchase and cost_per_message from aggregated totals

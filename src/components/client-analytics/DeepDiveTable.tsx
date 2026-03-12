@@ -50,6 +50,8 @@ export interface CampaignRow {
   cost_per_purchase?: number;
   cost_per_message?: number;
   cpm?: number;
+  reach?: number;
+  new_messaging_contacts?: number;
 }
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
@@ -327,6 +329,11 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           );
         },
       }),
+      columnHelper.display({
+        id: "reach",
+        header: "Reach",
+        cell: (info) => <span className="font-mono text-sm">{fmtNum(info.row.original.reach ?? 0)}</span>,
+      }),
       columnHelper.accessor("impressions", {
         header: "Impressions",
         cell: (info) => <span className="font-mono text-sm">{fmtNum(info.getValue())}</span>,
@@ -413,6 +420,27 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
           },
         }),
         columnHelper.display({
+          id: "new_messaging_contacts",
+          header: "New Contacts",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            return <span className="font-mono text-sm">{fmtNum(row.new_messaging_contacts ?? 0)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "returning_messaging",
+          header: "Returning",
+          cell: (info) => {
+            const row = info.row.original;
+            const obj = row.objective || "";
+            if (obj && obj !== "messages") return <span className="text-muted-foreground/40 text-xs">—</span>;
+            const returning = Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0));
+            return <span className="font-mono text-sm">{fmtNum(returning)}</span>;
+          },
+        }),
+        columnHelper.display({
           id: "cost_per_message",
           header: "Cost/Message",
           cell: (info) => {
@@ -477,7 +505,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
   });
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0 };
+    const t = { spend: 0, impressions: 0, results: 0, convValue: 0, viewContent: 0, addToCart: 0, initiateCheckout: 0, purchase: 0, messagingConversations: 0, reach: 0, newMessagingContacts: 0 };
     for (const r of filteredData) {
       t.spend += r.spend;
       t.impressions += r.impressions;
@@ -488,6 +516,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
       t.initiateCheckout += r.initiate_checkout ?? 0;
       t.purchase += r.purchase ?? 0;
       t.messagingConversations += r.messaging_conversations ?? 0;
+      t.reach += r.reach ?? 0;
+      t.newMessagingContacts += r.new_messaging_contacts ?? 0;
     }
     return t;
   }, [filteredData]);
@@ -578,6 +608,10 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
             <span className="font-mono text-xs font-medium">{fmt(row.spend)}</span>
           </div>
           <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground uppercase">Reach</span>
+            <span className="font-mono text-xs">{fmtNum(row.reach ?? 0)}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground uppercase">Impr.</span>
             <span className="font-mono text-xs">{fmtNum(row.impressions)}</span>
           </div>
@@ -614,6 +648,14 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
               <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Messages</span>
                 <span className="font-mono text-xs font-medium">{fmtNum(row.messaging_conversations ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">New Contacts</span>
+                <span className="font-mono text-xs">{fmtNum(row.new_messaging_contacts ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase">Returning</span>
+                <span className="font-mono text-xs">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px] text-muted-foreground uppercase">Cost/Message</span>
@@ -746,6 +788,7 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       <TableCell className="text-sm">Totals</TableCell>
                       <TableCell />
                       <TableCell />
+                      <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
                       {hasObjectiveData.sales && (
@@ -760,6 +803,8 @@ export function DeepDiveTable({ data, onCampaignPaused }: DeepDiveTableProps) {
                       {hasObjectiveData.messages && (
                         <>
                           <TableCell className="font-mono text-sm">{fmtNum(totals.messagingConversations)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(totals.newMessagingContacts)}</TableCell>
+                          <TableCell className="font-mono text-sm">{fmtNum(Math.max(0, totals.messagingConversations - totals.newMessagingContacts))}</TableCell>
                           <TableCell className="font-mono text-sm">{fmt(totalCostPerMessage)}</TableCell>
                         </>
                       )}
