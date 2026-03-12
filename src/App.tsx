@@ -82,6 +82,7 @@ const App = () => (
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 
                 <Route path="/admin/team" element={<TeamManagement />} />
+                <Route path="/admin/team/:userId" element={<TeamMemberDetail />} />
                 <Route path="/admin/ad-accounts" element={<AdAccounts />} />
                 <Route path="/admin/ad-accounts/:accountId" element={<AdAccountDetail />} />
                 <Route path="/admin/integrations" element={<Integrations />} />
