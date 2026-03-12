@@ -50,6 +50,8 @@ export interface CampaignRow {
   cost_per_purchase?: number;
   cost_per_message?: number;
   cpm?: number;
+  reach?: number;
+  new_messaging_contacts?: number;
 }
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
