@@ -11,7 +11,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid, Star } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid, Star, GripVertical } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -94,6 +94,16 @@ const normalizeStatus = (status: string) => {
 };
 
 const columnHelper = createColumnHelper<CampaignRow>();
+
+// Frozen columns that stay pinned to the left and are NOT draggable
+const FROZEN_COLS = ["select", "campaign_name", "platform", "status"];
+const FROZEN_LEFT: Record<string, string> = {
+  select: "left-0",
+  campaign_name: "left-[40px]",
+  platform: "left-[228px]",
+  status: "left-[312px]",
+};
+const isFrozen = (id: string) => FROZEN_COLS.includes(id);
 
 interface DeepDiveTableProps {
   data: CampaignRow[];
@@ -600,15 +610,27 @@ export function DeepDiveTable({
   });
 
   // Drag handlers
+  const dragGhostRef = useRef<HTMLDivElement | null>(null);
+
   const handleDragStart = (e: React.DragEvent, columnId: string) => {
-    if (columnId === "select") return;
+    if (isFrozen(columnId)) return;
     setDraggedCol(columnId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", columnId);
+
+    // Create premium ghost element
+    const ghost = document.createElement("div");
+    ghost.className = "fixed pointer-events-none px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider shadow-lg border";
+    ghost.style.cssText = `background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); z-index: 9999; top: -100px; left: -100px;`;
+    ghost.textContent = (e.currentTarget as HTMLElement).textContent?.trim() || columnId;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+    dragGhostRef.current = ghost;
+    setTimeout(() => ghost.remove(), 0);
   };
 
   const handleDragOver = (e: React.DragEvent, columnId: string) => {
-    if (!draggedCol || columnId === "select" || draggedCol === columnId) return;
+    if (!draggedCol || isFrozen(columnId) || draggedCol === columnId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(columnId);
@@ -620,16 +642,17 @@ export function DeepDiveTable({
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    if (!draggedCol || draggedCol === targetId || targetId === "select") return;
+    if (!draggedCol || draggedCol === targetId || isFrozen(targetId)) return;
 
     setColumnOrder((prev) => {
       const newOrder = [...prev];
       const fromIdx = newOrder.indexOf(draggedCol);
       const toIdx = newOrder.indexOf(targetId);
       if (fromIdx === -1 || toIdx === -1) return prev;
+      // Don't allow dropping into frozen positions
+      if (toIdx < FROZEN_COLS.length) return prev;
       newOrder.splice(fromIdx, 1);
       newOrder.splice(toIdx, 0, draggedCol);
-      // Persist
       onColumnOrderChange?.(newOrder);
       return newOrder;
     });
@@ -641,6 +664,10 @@ export function DeepDiveTable({
   const handleDragEnd = () => {
     setDraggedCol(null);
     setDropTarget(null);
+    if (dragGhostRef.current) {
+      dragGhostRef.current.remove();
+      dragGhostRef.current = null;
+    }
   };
 
   const totals = useMemo(() => {
@@ -920,24 +947,33 @@ export function DeepDiveTable({
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border">
+        <div className="hidden md:block overflow-x-auto rounded-lg border relative">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
                   {hg.headers.map((header) => {
-                    const isDraggable = header.id !== "select";
+                    const frozen = isFrozen(header.id);
+                    const isDraggable = !frozen;
                     const isBeingDragged = draggedCol === header.id;
                     const isDropTarget = dropTarget === header.id;
+                    const isLastFrozen = header.id === "status";
+                    const stickyLeft = FROZEN_LEFT[header.id];
                     return (
                       <TableHead
                         key={header.id}
                         className={cn(
                           header.id === "select" ? "w-10" : "cursor-pointer",
-                          "select-none hover:bg-muted/50 transition-colors text-xs uppercase tracking-wider",
-                          isDraggable && "cursor-grab active:cursor-grabbing",
-                          isBeingDragged && "opacity-50",
-                          isDropTarget && "border-l-2 border-primary"
+                          "select-none transition-all duration-200 text-xs uppercase tracking-wider",
+                          // Frozen column styling
+                          frozen && `sticky ${stickyLeft} z-20 bg-card dark:bg-card`,
+                          isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/20 after:via-primary/10 after:to-transparent",
+                          // Draggable styling
+                          isDraggable && "cursor-grab active:cursor-grabbing hover:bg-accent/60",
+                          // Drag state
+                          isBeingDragged && "opacity-30 scale-[0.97] bg-primary/5",
+                          // Drop target - animated gradient indicator
+                          isDropTarget && "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-gradient-to-b before:from-primary before:via-primary/60 before:to-transparent before:animate-pulse before:rounded-full bg-accent/40",
                         )}
                         onClick={header.id !== "select" ? header.column.getToggleSortingHandler() : undefined}
                         draggable={isDraggable}
@@ -948,6 +984,9 @@ export function DeepDiveTable({
                         onDragEnd={handleDragEnd}
                       >
                         <div className="flex items-center gap-1">
+                          {isDraggable && (
+                            <GripVertical className="h-3 w-3 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
+                          )}
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {header.id !== "select" && (
                             header.column.getIsSorted() === "asc" ? (
@@ -981,20 +1020,33 @@ export function DeepDiveTable({
                         key={row.id}
                         className={`hover:bg-muted/30 transition-colors ${isSelected ? "bg-primary/5" : ""}`}
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
+                        {row.getVisibleCells().map((cell) => {
+                          const colId = cell.column.id;
+                          const frozen = isFrozen(colId);
+                          const isLastFrozen = colId === "status";
+                          const stickyLeft = FROZEN_LEFT[colId];
+                          return (
+                            <TableCell
+                              key={cell.id}
+                              className={cn(
+                                frozen && `sticky ${stickyLeft} z-10 bg-card dark:bg-card`,
+                                isLastFrozen && "after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent",
+                                isSelected && frozen && "bg-primary/5",
+                              )}
+                            >
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     );
                   })}
                   {filteredData.length > 1 && (
                     <TableRow className="bg-muted/40 font-semibold border-t-2">
-                      <TableCell />
-                      <TableCell className="text-sm">Totals</TableCell>
-                      <TableCell />
-                      <TableCell />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["select"], "z-10 bg-muted/40")} />
+                      <TableCell className={cn("text-sm sticky", FROZEN_LEFT["campaign_name"], "z-10 bg-muted/40")}>Totals</TableCell>
+                      <TableCell className={cn("sticky", FROZEN_LEFT["platform"], "z-10 bg-muted/40")} />
+                      <TableCell className={cn("sticky", FROZEN_LEFT["status"], "z-10 bg-muted/40 after:content-[''] after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[3px] after:bg-gradient-to-b after:from-primary/10 after:via-primary/5 after:to-transparent")} />
                       <TableCell className="font-mono text-sm">{fmtNum(totals.reach)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmtNum(totals.impressions)}</TableCell>
                       <TableCell className="font-mono text-sm">{fmt(totalCpm)}</TableCell>
