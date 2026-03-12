@@ -30,6 +30,7 @@ export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "can_view_audit_logs",
   "can_manage_wallets",
   "can_view_reports",
+  "can_view_profit",
 ];
 
 export interface PermissionGroup {
