@@ -169,6 +169,12 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
   const totalRevenue = rows.reduce((s, r) => s + r.spendUsd * r.billingRate, 0);
   const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
+  if (!canViewProfit) {
+    return (
+      <Card><CardContent className="py-8"><p className="text-sm text-muted-foreground text-center">You don't have permission to view profit data.</p></CardContent></Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Date Filter */}

@@ -43,15 +43,14 @@ interface ProfitabilityTableProps {
 }
 
 export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
+  const { hasPermission } = usePermissions();
+  const canViewProfit = hasPermission("can_view_profit");
   const [rows, setRows] = useState<ProfitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
-  const { hasPermission } = usePermissions();
-  const canViewProfit = hasPermission("can_view_profit");
-
-  if (!canViewProfit) return null;
 
   useEffect(() => {
+    if (!canViewProfit) return;
     fetchData();
   }, [dateRange]);
 
