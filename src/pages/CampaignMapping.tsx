@@ -145,6 +145,7 @@ export default function CampaignMapping() {
       map[key].messaging_conversations = (map[key].messaging_conversations ?? 0) + Number(m.messaging_conversations ?? 0);
       map[key].reach = (map[key].reach ?? 0) + Number(m.reach ?? 0);
       map[key].new_messaging_contacts = (map[key].new_messaging_contacts ?? 0) + Number(m.new_messaging_contacts ?? 0);
+      map[key].create_order = (map[key].create_order ?? 0) + Number(m.create_order ?? 0);
     }
 
     // Recalculate cost_per_purchase and cost_per_message from aggregated totals
