@@ -125,7 +125,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
         <TabsContent value="live">
           <Tabs defaultValue="all" className="space-y-4">
             <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
-              <div className="inline-flex rounded-full p-1 border border-border/50" style={{ background: 'hsl(var(--muted) / 0.4)', backdropFilter: 'blur(8px)' }}>
+              <TabsList className="inline-flex rounded-full p-1 border border-border/50 bg-transparent h-auto w-auto" style={{ background: 'hsl(var(--muted) / 0.4)', backdropFilter: 'blur(8px)' }}>
                 <TabsTrigger value="all" className="rounded-full px-3.5 py-1.5 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all duration-200">
                   All
                   <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{campaignRows.length}</Badge>
@@ -142,7 +142,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh }: CampaignAnal
                   Google
                   {googleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{googleRows.length}</Badge>}
                 </TabsTrigger>
-              </div>
+              </TabsList>
             </div>
             <TabsContent value="all">
               {renderDeepDiveTable(campaignRows, "all")}
