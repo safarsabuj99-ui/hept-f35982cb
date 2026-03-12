@@ -183,8 +183,8 @@ export function DeepDiveTable({
   }, [filteredData, currentPage, pageSize]);
 
   const selectableRows = useMemo(
-    () => paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)),
-    [paginatedData]
+    () => canToggleCampaigns ? paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)) : [],
+    [paginatedData, canToggleCampaigns]
   );
 
   const toggleSelect = useCallback((id: string) => {
