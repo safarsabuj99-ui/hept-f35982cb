@@ -1,36 +1,34 @@
 
 
-# Fix: Hide Zero-Data Campaigns from Analytics Panel
+# Fix: Platform Transfers Inflating Today's Collections
 
 ## Problem
-The HEPT 15 ad account shows 11 campaigns in the Spend tab, but only 4 have actual data. The 7 paused campaigns appear because they have `daily_metrics` rows with all-zero values (spend=0, impressions=0, clicks=0, results=0). These clutter the analytics view.
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Root Cause
-In `src/pages/AdAccountDetail.tsx` (lines 315-348), the `spendCampaignRows` builder adds ANY campaign that has a `daily_metrics` row, regardless of whether that row contains meaningful data. Zero-spend, zero-impression rows still create entries in the table.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-## Fix — `src/pages/AdAccountDetail.tsx`
+## Technical Change
 
-After building the `map` from metrics and adding active campaigns without metrics (lines 315-348), filter out rows where **all key metrics are zero** before returning:
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-```typescript
-return Object.values(map).filter(r =>
-  r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
+
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
 );
 ```
 
-This keeps:
-- Active campaigns with any spend/impressions/clicks/results
-- Active campaigns with no metrics rows (the fallback block on line 336 — these show with the toggle so admins can pause/enable them)
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
-This removes:
-- Paused campaigns that have only zero-value metric rows (no useful data to display)
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-## Impact Assessment
-- **KPI totals**: Unaffected — zero values don't contribute to totals anyway
-- **Campaign count badge**: Will show accurate count of campaigns with data (e.g., "All 4" instead of "All 11")
-- **Other pages using CampaignAnalyticsPanel** (ClientReports, ClientDetail): Should apply the same filter for consistency — will check and update those too
-
-## Files to Modify
-- `src/pages/AdAccountDetail.tsx` — filter zero-data campaigns from `spendCampaignRows`
-- Check `src/pages/ClientReports.tsx` and `src/pages/ClientDetail.tsx` for same pattern
-
+No database or edge function changes needed.

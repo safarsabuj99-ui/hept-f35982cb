@@ -344,7 +344,9 @@ export default function AdAccountDetail() {
         };
       }
     }
-    return Object.values(map);
+    return Object.values(map).filter(r =>
+      r.status === 'active' || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+    );
   }, [spendRawMetrics, spendCampaigns]);
 
   const assignedClientIds = new Set(assignments.map((a: any) => a.client_id));
