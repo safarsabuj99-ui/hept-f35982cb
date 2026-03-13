@@ -87,14 +87,24 @@ export function UnassignedSpendAlert() {
             <p className="text-xs text-muted-foreground">+{unmapped.length - 5} more campaigns</p>
           )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-          onClick={() => navigate("/admin/campaigns")}
-        >
-          Map Campaigns Now
-        </Button>
+        <div className="flex gap-2 mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+            onClick={() => navigate("/admin/unassigned-spend")}
+          >
+            View All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => navigate("/admin/campaigns")}
+          >
+            Map Campaigns
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

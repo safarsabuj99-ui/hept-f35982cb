@@ -1,32 +1,34 @@
 
 
-# Unassigned Spend Risks — Full Detail Page
+# Fix: Platform Transfers Inflating Today's Collections
 
-## What We'll Build
-Create a dedicated `/admin/unassigned-spend` page showing the complete list of unassigned campaigns with full details (campaign name, ad account, total spend, last active date). The "Unassigned Spend Risks" card on the Attention Required page will link to this new page.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-## Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### 1. New page: `src/pages/UnassignedSpendRisks.tsx`
-- Reuses the same data-fetching logic from `UnassignedSpendAlert` but enriched:
-  - Fetches `daily_ad_spend` with `ad_account_id`, joins against `ad_accounts` to get account name/platform
-  - Cross-references `campaign_mappings` to identify unmapped campaigns
-- Displays a full searchable table with columns: Campaign Name, Ad Account, Platform, Total Spend (USD), Last Active Date
-- Summary KPI bar at top: Total Unassigned Spend, Number of Unassigned Campaigns
-- Search/filter input to filter by campaign name
-- "Map Campaigns" button linking to `/admin/campaigns`
-- Mobile-responsive: cards on small screens, table on desktop
+## Technical Change
 
-### 2. `src/pages/AttentionRequired.tsx`
-- Make the "Unassigned Spend Risks" card clickable — wrap it with `onClick={() => navigate("/admin/unassigned-spend")}` or add a "View All" button
-- Add cursor-pointer styling to the card
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### 3. `src/App.tsx`
-- Import `UnassignedSpendRisks` page
-- Add route: `/admin/unassigned-spend`
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### 4. `src/components/dashboard/UnassignedSpendAlert.tsx`
-- Update the "Map Campaigns Now" button or add a "View All" link that navigates to `/admin/unassigned-spend`
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-No database changes needed.
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

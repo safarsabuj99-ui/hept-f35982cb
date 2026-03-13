@@ -4,8 +4,10 @@ import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
 import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
 import { BillingHealthWidget } from "@/components/dashboard/BillingHealthWidget";
 import { AlertTriangle, Shield, Unlink, CreditCard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function AttentionRequired() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-6">
       <div>
@@ -38,7 +40,7 @@ export default function AttentionRequired() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card glow-border">
+        <Card className="glass-card glow-border cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all" onClick={() => navigate("/admin/unassigned-spend")}>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Unlink className="h-4 w-4 text-destructive" />
