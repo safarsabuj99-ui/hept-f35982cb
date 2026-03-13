@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { User, Building2, Mail, Phone, Globe, Save } from "lucide-react";
+import { User, Building2, Mail, Phone, Globe, Save, Lock, Eye, EyeOff } from "lucide-react";
 
 const TIMEZONES = [
   "Asia/Dhaka",
