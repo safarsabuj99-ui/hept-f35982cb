@@ -583,6 +583,16 @@ Deno.serve(async (req) => {
             const campaignDbId = campaignResult.id;
             const finalStatus = campaignResult.status;
 
+            // Auto-create campaign_mappings entry
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              platform,
+              client_id: clientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results: Math.round(conversions),
               conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
