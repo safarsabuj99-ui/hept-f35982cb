@@ -169,6 +169,137 @@ export default function AdminProfile() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Change Password */}
+      <ChangePasswordCard />
     </div>
+  );
+}
+
+function ChangePasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setSaving(true);
+
+    // Verify current password by re-authenticating
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) {
+      toast.error("Unable to verify user");
+      setSaving(false);
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      toast.error("Current password is incorrect");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setSaving(false);
+
+    if (error) {
+      toast.error(error.message || "Failed to update password");
+    } else {
+      toast.success("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Lock className="h-5 w-5 text-primary" />
+          Change Password
+        </CardTitle>
+        <CardDescription>Update your account password</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Current Password */}
+        <div className="space-y-2">
+          <Label htmlFor="currentPassword">Current Password</Label>
+          <div className="relative">
+            <Input
+              id="currentPassword"
+              type={showCurrent ? "text" : "password"}
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              placeholder="Enter current password"
+              maxLength={128}
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrent(!showCurrent)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* New Password */}
+        <div className="space-y-2">
+          <Label htmlFor="newPassword">New Password</Label>
+          <div className="relative">
+            <Input
+              id="newPassword"
+              type={showNew ? "text" : "password"}
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              maxLength={128}
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(!showNew)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Confirm Password */}
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword">Confirm New Password</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter new password"
+            maxLength={128}
+          />
+        </div>
+
+        <Button onClick={handleChangePassword} disabled={saving} className="w-full sm:w-auto">
+          <Lock className="h-4 w-4 mr-2" />
+          {saving ? "Updating…" : "Update Password"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
