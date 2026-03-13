@@ -174,6 +174,11 @@ export function DeepDiveTable({
           (r.ad_account_name && r.ad_account_name.toLowerCase().includes(q))
       );
     }
+    filtered.sort((a, b) => {
+      const aActive = isActiveStatus(a.status) ? 0 : 1;
+      const bActive = isActiveStatus(b.status) ? 0 : 1;
+      return aActive - bActive;
+    });
     return filtered;
   }, [data, searchQuery, statusFilter]);
 
