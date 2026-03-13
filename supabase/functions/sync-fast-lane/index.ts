@@ -322,6 +322,17 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // Auto-create campaign_mappings entry for Google
+            const googlePlatformId = `google_${row.campaign?.id || ''}`;
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: googlePlatformId,
+              campaign_name: campaignName,
+              platform: "google" as any,
+              client_id: matchedClientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             spendRecords.push({
               ad_account_id: account.id,
               date: row.segments?.date,
