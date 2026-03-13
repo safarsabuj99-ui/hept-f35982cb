@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { isActiveStatus } from "@/lib/campaignStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -157,11 +158,11 @@ export default function CampaignMapping() {
 
     // Inject active campaigns with no metrics
     for (const c of campaigns) {
-      if (c.status === "active" && !map[c.id]) {
+      if (isActiveStatus(c.status) && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
           platform: c.platform || "unknown",
-          status: "active",
+          status: c.status,
           ad_account_name: adAccountNameMap[c.ad_account_id] || "",
           campaign_id: c.id,
           objective: c.objective || "",
@@ -174,7 +175,9 @@ export default function CampaignMapping() {
       }
     }
 
-    return Object.values(map);
+    return Object.values(map).filter(r =>
+      isActiveStatus(r.status) || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+    );
   }, [metrics, campaigns, adAccountNameMap]);
 
   // Apply client filter
