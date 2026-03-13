@@ -231,6 +231,17 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // Auto-create campaign_mappings entry for Meta
+            const metaPlatformId = `meta_${row.campaign_id || ''}`;
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: metaPlatformId,
+              campaign_name: campaignName,
+              platform: "meta" as any,
+              client_id: matchedClientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             const isBDT = currency === "BDT";
             const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
             const finalUsd = isBDT ? Math.round((spend / accountRate) * 100) / 100 : spend;
