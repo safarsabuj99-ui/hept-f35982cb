@@ -141,11 +141,11 @@ export default function ClientReports() {
     }
     // Inject active campaigns that have no metrics for the selected date range
     for (const c of campaigns) {
-      if (c.status === 'active' && !map[c.id]) {
+      if (isActiveStatus(c.status) && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
           platform: c.platform || "unknown",
-          status: "active",
+          status: c.status,
           ad_account_name: c.ad_account_id ? adAccountMap[c.ad_account_id] || "" : "",
           campaign_id: c.id,
           impressions: 0,
@@ -157,7 +157,7 @@ export default function ClientReports() {
       }
     }
     return Object.values(map).filter(r =>
-      r.status === 'active' || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+      isActiveStatus(r.status) || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
     );
   }, [rawMetrics, adAccountMap, campaigns]);
 

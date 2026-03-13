@@ -376,11 +376,11 @@ export default function ClientDetail() {
       map[key].conversion_value += Number(row.conversion_value ?? 0);
     }
     for (const c of spendCampaigns) {
-      if (c.status === 'active' && !map[c.id]) {
+      if (isActiveStatus(c.status) && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
           platform: c.platform || "unknown",
-          status: "active",
+          status: c.status,
           ad_account_name: c.ad_account_id ? spendAdAccountMap[c.ad_account_id] || "" : "",
           campaign_id: c.id,
           impressions: 0, clicks: 0, spend: 0, results: 0, conversion_value: 0,
@@ -388,7 +388,7 @@ export default function ClientDetail() {
       }
     }
     return Object.values(map).filter(r =>
-      r.status === 'active' || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+      isActiveStatus(r.status) || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
     );
   }, [spendData, spendAdAccountMap, spendCampaigns]);
 
