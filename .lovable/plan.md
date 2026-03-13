@@ -1,34 +1,25 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Sort Active Campaigns First
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+**Problem:** Campaigns are not sorted by status — active campaigns should appear before paused/inactive ones.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+**Solution:** Add a default sort in the `filteredData` memo inside `DeepDiveTable.tsx` that places active campaigns first, while preserving the existing filter and search logic.
 
-## Technical Change
+### Changes
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+**File: `src/components/client-analytics/DeepDiveTable.tsx`**
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+In the `filteredData` useMemo (around line 163-178), after filtering by status and search query, sort the results so active campaigns (`ACTIVE`, `ENABLED`, or similar active statuses via the existing `isActiveStatus` helper) appear first, followed by all others. Within each group, maintain the original order.
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
+```typescript
+// At the end of filteredData memo, before return:
+filtered.sort((a, b) => {
+  const aActive = isActiveStatus(a.status) ? 0 : 1;
+  const bActive = isActiveStatus(b.status) ? 0 : 1;
+  return aActive - bActive;
+});
 ```
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+This is a single-line addition that leverages the existing `isActiveStatus` helper already used in the component.
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
