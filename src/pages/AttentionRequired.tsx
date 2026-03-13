@@ -40,7 +40,7 @@ export default function AttentionRequired() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card glow-border">
+        <Card className="glass-card glow-border cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all" onClick={() => navigate("/admin/unassigned-spend")}>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Unlink className="h-4 w-4 text-destructive" />
