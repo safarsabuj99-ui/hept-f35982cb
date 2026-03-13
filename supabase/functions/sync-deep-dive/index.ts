@@ -782,6 +782,16 @@ Deno.serve(async (req) => {
             const campaignDbId = campaignResult.id;
             const finalTiktokStatus = campaignResult.status;
 
+            // Auto-create campaign_mappings entry
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              platform,
+              client_id: clientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
 
