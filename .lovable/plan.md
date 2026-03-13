@@ -1,34 +1,33 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Hide Non-Active Campaigns With No Data
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+**Problem:** The campaign analytics panel shows some non-active campaigns that have zero metrics data. Only active campaigns should be visible when they have no data; all other campaigns should only appear if they have actual metrics.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+**Current behavior (line 159-161 in ClientReports.tsx):** The filter uses `r.status === 'active'` which is an exact string match. However, campaigns can have statuses like `"active - ad groups paused"`, `"enable"`, or other TikTok-mapped statuses that should also count as active but are currently treated as non-active — meaning they show up only if they have data.
 
-## Technical Change
+**Solution:** Replace the simple `r.status === 'active'` check with a proper `isActiveStatus()` helper (same logic as in `DeepDiveTable.tsx`) across all three files that have this filter pattern.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### Files to change
 
-Current code:
+**1. `src/pages/ClientReports.tsx` (line 159-161)**
+- Extract or import an `isActiveStatus` helper
+- Change filter from `r.status === 'active'` to `isActiveStatus(r.status)`
+- Also update the active campaign injection loop (line 144) to use `isActiveStatus(c.status)` instead of `c.status === 'active'`
+
+**2. `src/pages/ClientDetail.tsx` (line 390-392)**
+- Same change: use `isActiveStatus(r.status)` in the filter
+
+**3. `src/pages/AdAccountDetail.tsx` (line 347-349)**
+- Same change: use `isActiveStatus(r.status)` in the filter
+
+**Helper function** (shared utility or inlined):
+```typescript
+const isActiveStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "active" || s.startsWith("active -") || s === "enable";
+};
 ```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+This ensures only truly inactive/paused campaigns with zero data are hidden, while all active campaigns (including TikTok variants) remain visible.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
