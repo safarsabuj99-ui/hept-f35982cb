@@ -387,7 +387,9 @@ export default function ClientDetail() {
         };
       }
     }
-    return Object.values(map);
+    return Object.values(map).filter(r =>
+      r.status === 'active' || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+    );
   }, [spendData, spendAdAccountMap, spendCampaigns]);
 
   const spendTotals = useMemo(() => {
