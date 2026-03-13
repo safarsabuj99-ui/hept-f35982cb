@@ -4,13 +4,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Search, ArrowLeft, UserPlus } from "lucide-react";
+import { Search, ArrowLeft, UserPlus, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 import { toast } from "sonner";
 
 interface CampaignRow {
@@ -40,13 +41,20 @@ export default function UnassignedSpendRisks() {
   const [assignDialog, setAssignDialog] = useState<CampaignRow | null>(null);
   const [selectedClient, setSelectedClient] = useState("");
   const [assigning, setAssigning] = useState(false);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDialog, setBulkDialog] = useState(false);
+  const [bulkClient, setBulkClient] = useState("");
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
 
-    // Fetch campaigns, campaign_mappings (with client), ad_accounts, clients in parallel
     const [
       { data: allCampaigns },
       { data: mappings },
@@ -61,34 +69,30 @@ export default function UnassignedSpendRisks() {
       supabase.from("user_roles").select("user_id, role").eq("role", "client"),
     ]);
 
-    // Build set of mapped campaign IDs (those with a client_id)
     const mappedIds = new Set(
       (mappings ?? []).filter((m: any) => m.client_id).map((m: any) => m.campaign_id)
     );
 
-    // Account lookup
     const accountMap = new Map(
       (adAccounts ?? []).map((a: any) => [a.id, { name: a.account_name, platform: a.platform_name }])
     );
 
-    // Unmapped campaigns
     const unmapped = (allCampaigns ?? []).filter((c: any) => !mappedIds.has(c.id));
+
+    const clientIds = new Set((clientRoles ?? []).map((r: any) => r.user_id));
+    setClients((clientProfiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
 
     if (unmapped.length === 0) {
       setCampaigns([]);
       setLoading(false);
-      // Build clients list
-      const clientIds = new Set((clientRoles ?? []).map((r: any) => r.user_id));
-      setClients((clientProfiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
       return;
     }
 
-    // Fetch daily_metrics for unmapped campaign IDs (with optional date filter)
-    const unmappedIds = unmapped.map((c: any) => c.id);
+    const unmappedCampaignIds = unmapped.map((c: any) => c.id);
     let metricsQuery = supabase
       .from("daily_metrics")
       .select("campaign_id, spend, data_date")
-      .in("campaign_id", unmappedIds);
+      .in("campaign_id", unmappedCampaignIds);
 
     if (dateRange) {
       metricsQuery = metricsQuery
@@ -98,7 +102,6 @@ export default function UnassignedSpendRisks() {
 
     const { data: metrics } = await metricsQuery;
 
-    // Aggregate spend per campaign
     const spendMap: Record<string, { total: number; lastDate: string }> = {};
     for (const m of metrics ?? []) {
       if (!spendMap[m.campaign_id]) {
@@ -128,11 +131,6 @@ export default function UnassignedSpendRisks() {
       .sort((a, b) => b.total_spend - a.total_spend);
 
     setCampaigns(items);
-
-    // Build clients list
-    const clientIds = new Set((clientRoles ?? []).map((r: any) => r.user_id));
-    setClients((clientProfiles ?? []).filter((p: any) => clientIds.has(p.user_id)));
-
     setLoading(false);
   }, [dateRange]);
 
@@ -140,11 +138,18 @@ export default function UnassignedSpendRisks() {
     fetchData();
   }, [fetchData]);
 
+  // Clear selection when search changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search]);
+
   const handleDateChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
     setDatePreset(preset);
+    setSelectedIds(new Set());
   };
 
+  // Single assign
   const handleAssign = async () => {
     if (!assignDialog || !selectedClient) return;
     setAssigning(true);
@@ -163,6 +168,7 @@ export default function UnassignedSpendRisks() {
     } else {
       toast.success(`"${assignDialog.name}" assigned successfully`);
       setCampaigns((prev) => prev.filter((c) => c.id !== assignDialog.id));
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(assignDialog.id); return n; });
     }
 
     setAssigning(false);
@@ -170,10 +176,77 @@ export default function UnassignedSpendRisks() {
     setSelectedClient("");
   };
 
+  // Bulk assign
+  const handleBulkAssign = async () => {
+    if (!bulkClient || selectedIds.size === 0) return;
+    setBulkAssigning(true);
+    const targets = filtered.filter((c) => selectedIds.has(c.id));
+    setBulkProgress({ done: 0, total: targets.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < targets.length; i++) {
+      const c = targets[i];
+      const { error } = await supabase.from("campaign_mappings").insert({
+        campaign_id: c.id,
+        campaign_name: c.name,
+        platform: c.platform as any,
+        client_id: bulkClient,
+        ad_account_id: c.ad_account_id,
+        is_active: true,
+      });
+      if (error) {
+        failCount++;
+      } else {
+        successCount++;
+      }
+      setBulkProgress({ done: i + 1, total: targets.length });
+    }
+
+    if (successCount > 0) {
+      toast.success(`${successCount} campaign(s) assigned successfully`);
+      setCampaigns((prev) => prev.filter((c) => !selectedIds.has(c.id) || failCount > 0));
+      // More precise: remove only successfully assigned
+      if (failCount === 0) {
+        setCampaigns((prev) => prev.filter((c) => !selectedIds.has(c.id)));
+      }
+    }
+    if (failCount > 0) {
+      toast.error(`${failCount} campaign(s) failed to assign`);
+    }
+
+    setSelectedIds(new Set());
+    setBulkAssigning(false);
+    setBulkDialog(false);
+    setBulkClient("");
+    setBulkProgress({ done: 0, total: 0 });
+  };
+
+  // Selection helpers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
   const filtered = useMemo(
     () => campaigns.filter((c) => c.name.toLowerCase().includes(search.toLowerCase())),
     [campaigns, search]
   );
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
+  const someFilteredSelected = filtered.some((c) => selectedIds.has(c.id));
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((c) => c.id)));
+    }
+  };
 
   const totalRisk = filtered.reduce((s, c) => s + c.total_spend, 0);
   const fmt = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -225,6 +298,24 @@ export default function UnassignedSpendRisks() {
         </Button>
       </div>
 
+      {/* Floating bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-4 z-30 flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-lg">
+          <p className="text-sm font-medium">
+            {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Clear
+            </Button>
+            <Button size="sm" onClick={() => { setBulkDialog(true); setBulkClient(""); }}>
+              <Users className="h-3.5 w-3.5 mr-1.5" />
+              Bulk Assign
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
@@ -237,16 +328,28 @@ export default function UnassignedSpendRisks() {
       ) : isMobile ? (
         <div className="space-y-3">
           {filtered.map((c) => (
-            <Card key={c.id} className="glass-card">
+            <Card
+              key={c.id}
+              className={`glass-card transition-colors ${selectedIds.has(c.id) ? "ring-2 ring-primary" : ""}`}
+            >
               <CardContent className="p-4 space-y-2">
-                <p className="font-medium truncate">{c.name}</p>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{c.ad_account_name}</span>
-                  <Badge variant="outline" className="capitalize">{c.platform}</Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Last active: {c.last_active}</span>
-                  <span className="font-mono text-destructive font-semibold">{fmt(c.total_spend)}</span>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={selectedIds.has(c.id)}
+                    onCheckedChange={() => toggleSelect(c.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{c.name}</p>
+                    <div className="flex items-center justify-between text-sm mt-1">
+                      <span className="text-muted-foreground">{c.ad_account_name}</span>
+                      <Badge variant="outline" className="capitalize">{c.platform}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-sm mt-1">
+                      <span className="text-muted-foreground">Last active: {c.last_active}</span>
+                      <span className="font-mono text-destructive font-semibold">{fmt(c.total_spend)}</span>
+                    </div>
+                  </div>
                 </div>
                 <Button
                   variant="outline"
@@ -266,6 +369,14 @@ export default function UnassignedSpendRisks() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="Select all"
+                    {...(someFilteredSelected && !allFilteredSelected ? { "data-state": "indeterminate" } : {})}
+                  />
+                </TableHead>
                 <TableHead>Campaign Name</TableHead>
                 <TableHead>Ad Account</TableHead>
                 <TableHead>Platform</TableHead>
@@ -276,7 +387,14 @@ export default function UnassignedSpendRisks() {
             </TableHeader>
             <TableBody>
               {filtered.map((c) => (
-                <TableRow key={c.id}>
+                <TableRow key={c.id} className={selectedIds.has(c.id) ? "bg-muted/50" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(c.id)}
+                      onCheckedChange={() => toggleSelect(c.id)}
+                      aria-label={`Select ${c.name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium max-w-[250px] truncate">{c.name}</TableCell>
                   <TableCell>{c.ad_account_name}</TableCell>
                   <TableCell>
@@ -301,7 +419,7 @@ export default function UnassignedSpendRisks() {
         </Card>
       )}
 
-      {/* Assign Dialog */}
+      {/* Single Assign Dialog */}
       <Dialog open={!!assignDialog} onOpenChange={(open) => { if (!open) { setAssignDialog(null); setSelectedClient(""); } }}>
         <DialogContent>
           <DialogHeader>
@@ -334,6 +452,63 @@ export default function UnassignedSpendRisks() {
             </Button>
             <Button onClick={handleAssign} disabled={!selectedClient || assigning}>
               {assigning ? "Assigning…" : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={bulkDialog} onOpenChange={(open) => { if (!open && !bulkAssigning) { setBulkDialog(false); setBulkClient(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Assign to Client</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
+              </p>
+              <div className="mt-2 max-h-32 overflow-y-auto space-y-1 rounded border p-2 text-sm">
+                {filtered.filter((c) => selectedIds.has(c.id)).map((c) => (
+                  <p key={c.id} className="truncate text-muted-foreground">{c.name}</p>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground mb-1.5">Select Client</p>
+              <Select value={bulkClient} onValueChange={setBulkClient} disabled={bulkAssigning}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a client..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((cl) => (
+                    <SelectItem key={cl.user_id} value={cl.user_id}>
+                      {cl.full_name}{cl.business_name ? ` (${cl.business_name})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {bulkAssigning && (
+              <div className="space-y-1">
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  {bulkProgress.done} / {bulkProgress.total} assigned
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setBulkDialog(false); setBulkClient(""); }} disabled={bulkAssigning}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkAssign} disabled={!bulkClient || bulkAssigning}>
+              {bulkAssigning ? `Assigning ${bulkProgress.done}/${bulkProgress.total}…` : `Assign ${selectedIds.size} Campaign${selectedIds.size > 1 ? "s" : ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>
