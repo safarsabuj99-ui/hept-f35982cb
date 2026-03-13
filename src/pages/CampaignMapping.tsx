@@ -175,7 +175,9 @@ export default function CampaignMapping() {
       }
     }
 
-    return Object.values(map);
+    return Object.values(map).filter(r =>
+      isActiveStatus(r.status) || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+    );
   }, [metrics, campaigns, adAccountNameMap]);
 
   // Apply client filter
