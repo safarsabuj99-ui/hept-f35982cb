@@ -354,8 +354,17 @@ Deno.serve(async (req) => {
             });
           }
 
-          for (let i = 0; i < spendRecords.length; i += 100) {
-            const batch = spendRecords.slice(i, i + 100);
+          // Deduplicate by (ad_account_id, date, campaign_name)
+          const dedupedGoogle = Object.values(
+            spendRecords.reduce((acc: Record<string, any>, r) => {
+              const key = `${r.ad_account_id}|${r.date}|${r.campaign_name}`;
+              acc[key] = r;
+              return acc;
+            }, {})
+          );
+
+          for (let i = 0; i < dedupedGoogle.length; i += 100) {
+            const batch = dedupedGoogle.slice(i, i + 100);
             const { error } = await supabase
               .from("daily_ad_spend")
               .upsert(batch, { onConflict: "ad_account_id,date,campaign_name", ignoreDuplicates: false });
