@@ -475,6 +475,16 @@ Deno.serve(async (req) => {
             const campaignDbId = campaignResult.id;
             const finalStatus = campaignResult.status;
 
+            // Auto-create campaign_mappings entry
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              platform,
+              client_id: clientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             // Upsert daily metrics with funnel actions
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
@@ -573,6 +583,16 @@ Deno.serve(async (req) => {
             const campaignDbId = campaignResult.id;
             const finalStatus = campaignResult.status;
 
+            // Auto-create campaign_mappings entry
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              platform,
+              client_id: clientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
+
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results: Math.round(conversions),
               conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
@@ -613,62 +633,80 @@ Deno.serve(async (req) => {
           let tiktokFailed = false;
 
           for (const chunk of dateChunks) {
-            let cJson: any = null;
+            // Pagination loop for each chunk
+            let page = 1;
+            let totalPages = 1;
+            let chunkRows = 0;
 
-            if (bcId) {
-              const bcParams = new URLSearchParams({
-                bc_id: bcId,
-                advertiser_ids: JSON.stringify([account.ad_account_id]),
-                service_type: "AUCTION",
-                report_type: "BASIC",
-                data_level: "AUCTION_CAMPAIGN",
-                dimensions: '["campaign_id","stat_time_day"]',
-                metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
-                start_date: chunk.start,
-                end_date: chunk.end,
-                page_size: "500",
-              });
+            do {
+              let cJson: any = null;
+              let usedBc = false;
 
-              const bcRes = await tiktokFetchWithRetry(
-                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
-                { "Access-Token": integration.api_token, "Content-Type": "application/json" }
-              );
+              if (bcId) {
+                const bcParams = new URLSearchParams({
+                  bc_id: bcId,
+                  advertiser_ids: JSON.stringify([account.ad_account_id]),
+                  service_type: "AUCTION",
+                  report_type: "BASIC",
+                  data_level: "AUCTION_CAMPAIGN",
+                  dimensions: '["campaign_id","stat_time_day"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
+                  start_date: chunk.start,
+                  end_date: chunk.end,
+                  page_size: "500",
+                  page: String(page),
+                });
 
-              cJson = bcRes;
-              if (cJson.code !== 0) {
-                console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
-                cJson = null;
+                const bcRes = await tiktokFetchWithRetry(
+                  `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
+                  { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+                );
+
+                cJson = bcRes;
+                if (cJson.code !== 0) {
+                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                  cJson = null;
+                } else {
+                  usedBc = true;
+                }
               }
-            }
 
-            if (!cJson) {
-              const params = new URLSearchParams({
-                advertiser_id: account.ad_account_id,
-                report_type: "BASIC",
-                data_level: "AUCTION_CAMPAIGN",
-                dimensions: '["campaign_id","stat_time_day"]',
-                metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
-                start_date: chunk.start,
-                end_date: chunk.end,
-                page_size: "500",
-              });
+              if (!cJson) {
+                const params = new URLSearchParams({
+                  advertiser_id: account.ad_account_id,
+                  report_type: "BASIC",
+                  data_level: "AUCTION_CAMPAIGN",
+                  dimensions: '["campaign_id","stat_time_day"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
+                  start_date: chunk.start,
+                  end_date: chunk.end,
+                  page_size: "500",
+                  page: String(page),
+                });
 
-              const directRes = await tiktokFetchWithRetry(
-                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-                { "Access-Token": integration.api_token, "Content-Type": "application/json" }
-              );
+                const directRes = await tiktokFetchWithRetry(
+                  `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
+                  { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+                );
 
-              cJson = directRes;
-              if (cJson.code !== 0) {
-                console.error(`TikTok chunk ${chunk.start}-${chunk.end} error:`, JSON.stringify(cJson));
-                errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
-                tiktokFailed = true;
-                break;
+                cJson = directRes;
+                if (cJson.code !== 0) {
+                  console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
+                  errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
+                  tiktokFailed = true;
+                  break;
+                }
               }
-            }
 
-            allTiktokRows = allTiktokRows.concat(cJson.data?.list || []);
-            console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${(cJson.data?.list || []).length} rows`);
+              const pageRows = cJson.data?.list || [];
+              allTiktokRows = allTiktokRows.concat(pageRows);
+              chunkRows += pageRows.length;
+              totalPages = cJson.data?.page_info?.total_page || 1;
+              page++;
+            } while (page <= totalPages);
+
+            if (tiktokFailed) break;
+            console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
           }
 
           if (tiktokFailed) continue;
@@ -761,6 +799,16 @@ Deno.serve(async (req) => {
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
             const campaignDbId = campaignResult.id;
             const finalTiktokStatus = campaignResult.status;
+
+            // Auto-create campaign_mappings entry
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              platform,
+              client_id: clientId,
+              ad_account_id: account.id,
+              is_active: true,
+            }, { onConflict: "campaign_id" });
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
