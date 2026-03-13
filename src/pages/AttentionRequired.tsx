@@ -4,8 +4,10 @@ import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
 import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
 import { BillingHealthWidget } from "@/components/dashboard/BillingHealthWidget";
 import { AlertTriangle, Shield, Unlink, CreditCard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function AttentionRequired() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-6">
       <div>
