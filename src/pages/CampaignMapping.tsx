@@ -158,11 +158,11 @@ export default function CampaignMapping() {
 
     // Inject active campaigns with no metrics
     for (const c of campaigns) {
-      if (c.status === "active" && !map[c.id]) {
+      if (isActiveStatus(c.status) && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
           platform: c.platform || "unknown",
-          status: "active",
+          status: c.status,
           ad_account_name: adAccountNameMap[c.ad_account_id] || "",
           campaign_id: c.id,
           objective: c.objective || "",
