@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe, Target } from "lucide-react";
+import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe, Target, Activity, CheckCircle2, XCircle, AlertTriangle, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" | "billing-radar";
 
