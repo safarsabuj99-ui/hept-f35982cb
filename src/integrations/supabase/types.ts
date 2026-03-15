@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           id: string
           mapping_keyword: string
+          org_id: string | null
         }
         Insert: {
           ad_account_id: string
@@ -28,6 +29,7 @@ export type Database = {
           created_at?: string
           id?: string
           mapping_keyword?: string
+          org_id?: string | null
         }
         Update: {
           ad_account_id?: string
@@ -35,6 +37,7 @@ export type Database = {
           created_at?: string
           id?: string
           mapping_keyword?: string
+          org_id?: string | null
         }
         Relationships: [
           {
@@ -42,6 +45,13 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_account_clients_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -62,6 +72,7 @@ export type Database = {
           id: string
           is_active: boolean
           next_billing_date: string | null
+          org_id: string | null
           platform_name: Database["public"]["Enums"]["ad_platform"]
           threshold_limit: number | null
         }
@@ -80,6 +91,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           next_billing_date?: string | null
+          org_id?: string | null
           platform_name: Database["public"]["Enums"]["ad_platform"]
           threshold_limit?: number | null
         }
@@ -98,6 +110,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           next_billing_date?: string | null
+          org_id?: string | null
           platform_name?: Database["public"]["Enums"]["ad_platform"]
           threshold_limit?: number | null
         }
@@ -107,6 +120,13 @@ export type Database = {
             columns: ["api_integration_id"]
             isOneToOne: false
             referencedRelation: "api_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -119,6 +139,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          org_id: string | null
           type: Database["public"]["Enums"]["agency_account_type"]
         }
         Insert: {
@@ -128,6 +149,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          org_id?: string | null
           type: Database["public"]["Enums"]["agency_account_type"]
         }
         Update: {
@@ -137,9 +159,18 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          org_id?: string | null
           type?: Database["public"]["Enums"]["agency_account_type"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "agency_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       agency_expenses: {
         Row: {
@@ -150,6 +181,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          org_id: string | null
           paid_from_account_id: string | null
         }
         Insert: {
@@ -160,6 +192,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          org_id?: string | null
           paid_from_account_id?: string | null
         }
         Update: {
@@ -170,9 +203,17 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          org_id?: string | null
           paid_from_account_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "agency_expenses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "agency_expenses_paid_from_account_id_fkey"
             columns: ["paid_from_account_id"]
@@ -192,6 +233,7 @@ export type Database = {
           instance_name: string | null
           is_active: boolean
           last_synced_at: string | null
+          org_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           token_expiry_date: string | null
           updated_by: string | null
@@ -205,6 +247,7 @@ export type Database = {
           instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
+          org_id?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           token_expiry_date?: string | null
           updated_by?: string | null
@@ -218,11 +261,20 @@ export type Database = {
           instance_name?: string | null
           is_active?: boolean
           last_synced_at?: string | null
+          org_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
           token_expiry_date?: string | null
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "api_integrations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -231,6 +283,7 @@ export type Database = {
           description: string
           id: string
           ip_address: string | null
+          org_id: string | null
           user_id: string
         }
         Insert: {
@@ -239,6 +292,7 @@ export type Database = {
           description: string
           id?: string
           ip_address?: string | null
+          org_id?: string | null
           user_id: string
         }
         Update: {
@@ -247,9 +301,18 @@ export type Database = {
           description?: string
           id?: string
           ip_address?: string | null
+          org_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       billing_notifications: {
         Row: {
@@ -260,6 +323,7 @@ export type Database = {
           id: string
           is_read: boolean
           message: string
+          org_id: string | null
           priority: string
           usage_percent: number | null
         }
@@ -271,6 +335,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           message: string
+          org_id?: string | null
           priority?: string
           usage_percent?: number | null
         }
@@ -282,6 +347,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           message?: string
+          org_id?: string | null
           priority?: string
           usage_percent?: number | null
         }
@@ -291,6 +357,13 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -304,6 +377,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          org_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
         }
         Insert: {
@@ -314,6 +388,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          org_id?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
         }
         Update: {
@@ -324,6 +399,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          org_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
         }
         Relationships: [
@@ -332,6 +408,13 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_mappings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -349,6 +432,7 @@ export type Database = {
           date: string
           id: string
           impressions: number
+          org_id: string | null
           results: number
           roas: number
           spend: number
@@ -367,6 +451,7 @@ export type Database = {
           date?: string
           id?: string
           impressions?: number
+          org_id?: string | null
           results?: number
           roas?: number
           spend?: number
@@ -385,6 +470,7 @@ export type Database = {
           date?: string
           id?: string
           impressions?: number
+          org_id?: string | null
           results?: number
           roas?: number
           spend?: number
@@ -397,6 +483,13 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_performance_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -412,6 +505,7 @@ export type Database = {
           id: string
           landing_page_url: string | null
           objective: Database["public"]["Enums"]["campaign_objective"]
+          org_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           rejection_reason: string | null
           start_date: string
@@ -429,6 +523,7 @@ export type Database = {
           id?: string
           landing_page_url?: string | null
           objective: Database["public"]["Enums"]["campaign_objective"]
+          org_id?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           rejection_reason?: string | null
           start_date: string
@@ -446,6 +541,7 @@ export type Database = {
           id?: string
           landing_page_url?: string | null
           objective?: Database["public"]["Enums"]["campaign_objective"]
+          org_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
           rejection_reason?: string | null
           start_date?: string
@@ -453,7 +549,15 @@ export type Database = {
           target_audience_note?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campaign_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campaigns: {
         Row: {
@@ -463,6 +567,7 @@ export type Database = {
           id: string
           name: string
           objective: string
+          org_id: string | null
           original_name_tag: string
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
@@ -476,6 +581,7 @@ export type Database = {
           id?: string
           name?: string
           objective?: string
+          org_id?: string | null
           original_name_tag?: string
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
@@ -489,6 +595,7 @@ export type Database = {
           id?: string
           name?: string
           objective?: string
+          org_id?: string | null
           original_name_tag?: string
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_id?: string
@@ -503,6 +610,13 @@ export type Database = {
             referencedRelation: "ad_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "campaigns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       daily_ad_spend: {
@@ -513,6 +627,7 @@ export type Database = {
           exchange_rate_used: number
           final_billable_usd: number
           id: string
+          org_id: string | null
           raw_currency: Database["public"]["Enums"]["account_currency"]
           raw_spend_amount: number
           synced_at: string
@@ -524,6 +639,7 @@ export type Database = {
           exchange_rate_used?: number
           final_billable_usd?: number
           id?: string
+          org_id?: string | null
           raw_currency?: Database["public"]["Enums"]["account_currency"]
           raw_spend_amount?: number
           synced_at?: string
@@ -535,6 +651,7 @@ export type Database = {
           exchange_rate_used?: number
           final_billable_usd?: number
           id?: string
+          org_id?: string | null
           raw_currency?: Database["public"]["Enums"]["account_currency"]
           raw_spend_amount?: number
           synced_at?: string
@@ -545,6 +662,13 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_ad_spend_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -567,6 +691,7 @@ export type Database = {
           initiate_checkout: number
           messaging_conversations: number
           new_messaging_contacts: number
+          org_id: string | null
           purchase: number
           reach: number
           results: number
@@ -592,6 +717,7 @@ export type Database = {
           initiate_checkout?: number
           messaging_conversations?: number
           new_messaging_contacts?: number
+          org_id?: string | null
           purchase?: number
           reach?: number
           results?: number
@@ -617,6 +743,7 @@ export type Database = {
           initiate_checkout?: number
           messaging_conversations?: number
           new_messaging_contacts?: number
+          org_id?: string | null
           purchase?: number
           reach?: number
           results?: number
@@ -633,6 +760,13 @@ export type Database = {
             referencedRelation: "campaigns"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "daily_metrics_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       fund_transfers: {
@@ -643,6 +777,7 @@ export type Database = {
           from_account_id: string
           id: string
           note: string | null
+          org_id: string | null
           to_account_id: string
         }
         Insert: {
@@ -652,6 +787,7 @@ export type Database = {
           from_account_id: string
           id?: string
           note?: string | null
+          org_id?: string | null
           to_account_id: string
         }
         Update: {
@@ -661,6 +797,7 @@ export type Database = {
           from_account_id?: string
           id?: string
           note?: string | null
+          org_id?: string | null
           to_account_id?: string
         }
         Relationships: [
@@ -669,6 +806,13 @@ export type Database = {
             columns: ["from_account_id"]
             isOneToOne: false
             referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_transfers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
@@ -713,6 +857,104 @@ export type Database = {
         }
         Relationships: []
       }
+      organization_subscriptions: {
+        Row: {
+          amount_bdt: number
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"]
+          created_at: string
+          current_period_end: string
+          current_period_start: string
+          id: string
+          org_id: string
+          payment_method: string | null
+          payment_status: Database["public"]["Enums"]["subscription_payment_status"]
+          plan: Database["public"]["Enums"]["org_plan"]
+          transaction_reference: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_bdt?: number
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"]
+          created_at?: string
+          current_period_end: string
+          current_period_start?: string
+          id?: string
+          org_id: string
+          payment_method?: string | null
+          payment_status?: Database["public"]["Enums"]["subscription_payment_status"]
+          plan: Database["public"]["Enums"]["org_plan"]
+          transaction_reference?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_bdt?: number
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"]
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          org_id?: string
+          payment_method?: string | null
+          payment_status?: Database["public"]["Enums"]["subscription_payment_status"]
+          plan?: Database["public"]["Enums"]["org_plan"]
+          transaction_reference?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_subscriptions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          logo_url: string | null
+          max_ad_accounts: number
+          max_clients: number
+          max_managers: number
+          name: string
+          owner_user_id: string
+          plan: Database["public"]["Enums"]["org_plan"]
+          slug: string
+          status: Database["public"]["Enums"]["org_status"]
+          trial_ends_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          max_ad_accounts?: number
+          max_clients?: number
+          max_managers?: number
+          name: string
+          owner_user_id: string
+          plan?: Database["public"]["Enums"]["org_plan"]
+          slug: string
+          status?: Database["public"]["Enums"]["org_status"]
+          trial_ends_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          max_ad_accounts?: number
+          max_clients?: number
+          max_managers?: number
+          name?: string
+          owner_user_id?: string
+          plan?: Database["public"]["Enums"]["org_plan"]
+          slug?: string
+          status?: Database["public"]["Enums"]["org_status"]
+          trial_ends_at?: string | null
+        }
+        Relationships: []
+      }
       payment_requests: {
         Row: {
           admin_note: string | null
@@ -722,6 +964,7 @@ export type Database = {
           exchange_rate_snapshot: number | null
           final_amount_usd: number | null
           id: string
+          org_id: string | null
           payment_date: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform: string | null
@@ -738,6 +981,7 @@ export type Database = {
           exchange_rate_snapshot?: number | null
           final_amount_usd?: number | null
           id?: string
+          org_id?: string | null
           payment_date?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
@@ -754,6 +998,7 @@ export type Database = {
           exchange_rate_snapshot?: number | null
           final_amount_usd?: number | null
           id?: string
+          org_id?: string | null
           payment_date?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
@@ -763,6 +1008,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payment_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payment_requests_received_in_account_id_fkey"
             columns: ["received_in_account_id"]
@@ -791,6 +1043,7 @@ export type Database = {
           is_super_admin: boolean
           manager_id: string | null
           mapping_keyword: string | null
+          org_id: string | null
           overdraft_limit_usd: number
           permissions: Json
           phone: string | null
@@ -817,6 +1070,7 @@ export type Database = {
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          org_id?: string | null
           overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
@@ -843,6 +1097,7 @@ export type Database = {
           is_super_admin?: boolean
           manager_id?: string | null
           mapping_keyword?: string | null
+          org_id?: string | null
           overdraft_limit_usd?: number
           permissions?: Json
           phone?: string | null
@@ -851,12 +1106,21 @@ export type Database = {
           system_paused_campaigns?: Json
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       settings: {
         Row: {
           id: string
           key: string
+          org_id: string | null
           updated_at: string
           updated_by: string | null
           value: string
@@ -864,6 +1128,7 @@ export type Database = {
         Insert: {
           id?: string
           key: string
+          org_id?: string | null
           updated_at?: string
           updated_by?: string | null
           value: string
@@ -871,11 +1136,20 @@ export type Database = {
         Update: {
           id?: string
           key?: string
+          org_id?: string | null
           updated_at?: string
           updated_by?: string | null
           value?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
@@ -887,6 +1161,7 @@ export type Database = {
           description: string | null
           exchange_rate: number | null
           id: string
+          org_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"] | null
           status: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
@@ -900,6 +1175,7 @@ export type Database = {
           description?: string | null
           exchange_rate?: number | null
           id?: string
+          org_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"] | null
           status?: Database["public"]["Enums"]["transaction_status"]
           type: Database["public"]["Enums"]["transaction_type"]
@@ -913,11 +1189,20 @@ export type Database = {
           description?: string | null
           exchange_rate?: number | null
           id?: string
+          org_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"] | null
           status?: Database["public"]["Enums"]["transaction_status"]
           type?: Database["public"]["Enums"]["transaction_type"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transactions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       usd_inventory_snapshots: {
         Row: {
@@ -926,6 +1211,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          org_id: string | null
           snapshot_date: string
         }
         Insert: {
@@ -934,6 +1220,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          org_id?: string | null
           snapshot_date: string
         }
         Update: {
@@ -942,9 +1229,18 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          org_id?: string | null
           snapshot_date?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "usd_inventory_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       usd_purchases: {
         Row: {
@@ -955,6 +1251,7 @@ export type Database = {
           date: string
           id: string
           notes: string | null
+          org_id: string | null
           paid_from_account_id: string | null
           usd_received: number
         }
@@ -966,6 +1263,7 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
+          org_id?: string | null
           paid_from_account_id?: string | null
           usd_received: number
         }
@@ -977,10 +1275,18 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
+          org_id?: string | null
           paid_from_account_id?: string | null
           usd_received?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "usd_purchases_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "usd_purchases_paid_from_account_id_fkey"
             columns: ["paid_from_account_id"]
@@ -1017,6 +1323,7 @@ export type Database = {
         Args: { _manager_id: string }
         Returns: string[]
       }
+      get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_permission: {
         Args: { _permission_key: string; _user_id: string }
         Returns: boolean
@@ -1037,7 +1344,8 @@ export type Database = {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       agency_account_type: "Cash" | "Bank" | "MFS"
-      app_role: "admin" | "client" | "manager"
+      app_role: "admin" | "client" | "manager" | "platform_owner"
+      billing_cycle: "monthly" | "yearly"
       billing_type: "prepaid" | "threshold_postpaid" | "credit_card"
       campaign_objective:
         | "Message"
@@ -1056,8 +1364,11 @@ export type Database = {
         | "Owner_Draw"
         | "Marketing"
         | "Other"
+      org_plan: "starter" | "growth" | "agency_pro"
+      org_status: "active" | "suspended" | "trial" | "cancelled"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
       payment_request_status: "pending" | "approved" | "rejected"
+      subscription_payment_status: "paid" | "pending" | "overdue" | "cancelled"
       transaction_status: "pending_approval" | "completed" | "rejected"
       transaction_type: "credit" | "debit"
     }
@@ -1190,7 +1501,8 @@ export const Constants = {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       agency_account_type: ["Cash", "Bank", "MFS"],
-      app_role: ["admin", "client", "manager"],
+      app_role: ["admin", "client", "manager", "platform_owner"],
+      billing_cycle: ["monthly", "yearly"],
       billing_type: ["prepaid", "threshold_postpaid", "credit_card"],
       campaign_objective: [
         "Message",
@@ -1212,8 +1524,11 @@ export const Constants = {
         "Marketing",
         "Other",
       ],
+      org_plan: ["starter", "growth", "agency_pro"],
+      org_status: ["active", "suspended", "trial", "cancelled"],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],
       payment_request_status: ["pending", "approved", "rejected"],
+      subscription_payment_status: ["paid", "pending", "overdue", "cancelled"],
       transaction_status: ["pending_approval", "completed", "rejected"],
       transaction_type: ["credit", "debit"],
     },
