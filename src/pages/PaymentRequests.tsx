@@ -167,12 +167,11 @@ export default function PaymentRequests() {
       const pricingConfig = profile?.pricing_config as any;
       const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || {};
 
-      const options: RateOption[] = [];
-      if (platformRates.meta) options.push({ key: "meta", label: "Meta Rate", rate: Number(platformRates.meta) });
-      if (platformRates.tiktok) options.push({ key: "tiktok", label: "TikTok Rate", rate: Number(platformRates.tiktok) });
-      if (platformRates.google) options.push({ key: "google", label: "Google Rate", rate: Number(platformRates.google) });
-
-      if (options.length === 0) options.push({ key: "default", label: "Default Rate", rate: 120 });
+      const options: RateOption[] = [
+        { key: "meta", label: "Meta Rate", rate: Number(platformRates.meta) || 120 },
+        { key: "tiktok", label: "TikTok Rate", rate: Number(platformRates.tiktok) || 120 },
+        { key: "google", label: "Google Rate", rate: Number(platformRates.google) || 120 },
+      ];
 
       setRateOptions(options);
       const platform = request.platform || "";
