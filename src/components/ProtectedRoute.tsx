@@ -11,6 +11,7 @@ const roleHomeMap: Record<string, string> = {
   admin: "/admin",
   manager: "/manager",
   client: "/dashboard",
+  platform_owner: "/platform",
 };
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {

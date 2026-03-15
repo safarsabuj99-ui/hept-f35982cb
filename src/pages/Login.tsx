@@ -41,7 +41,8 @@ export default function Login() {
 
   useEffect(() => {
     if (user && role) {
-      navigate(role === "admin" ? "/admin" : "/dashboard", { replace: true });
+      const dest = role === "platform_owner" ? "/platform" : role === "admin" ? "/admin" : role === "manager" ? "/manager" : "/dashboard";
+      navigate(dest, { replace: true });
     }
   }, [user, role, navigate]);
 
