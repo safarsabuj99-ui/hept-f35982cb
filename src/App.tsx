@@ -49,6 +49,9 @@ import PlatformPlans from "@/pages/PlatformPlans";
 import PlatformAnnouncements from "@/pages/PlatformAnnouncements";
 import PlatformAudit from "@/pages/PlatformAudit";
 import PlatformHealth from "@/pages/PlatformHealth";
+import TenantLifecycle from "@/pages/TenantLifecycle";
+import PlatformRevenue from "@/pages/PlatformRevenue";
+import TenantUsageMetering from "@/pages/TenantUsageMetering";
 
 import NotFound from "@/pages/NotFound";
 
@@ -82,6 +85,9 @@ const App = () => (
                 }
               >
                 <Route path="/platform" element={<PlatformDashboard />} />
+                <Route path="/platform/lifecycle" element={<TenantLifecycle />} />
+                <Route path="/platform/revenue" element={<PlatformRevenue />} />
+                <Route path="/platform/usage" element={<TenantUsageMetering />} />
                 <Route path="/platform/agencies" element={<AgencyList />} />
                 <Route path="/platform/agencies/new" element={<CreateAgency />} />
                 <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />

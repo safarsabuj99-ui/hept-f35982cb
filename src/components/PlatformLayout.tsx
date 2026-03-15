@@ -14,11 +14,14 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity, GitBranch, TrendingUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "Dashboard", url: "/platform", icon: LayoutDashboard },
+  { title: "Lifecycle", url: "/platform/lifecycle", icon: GitBranch },
+  { title: "Revenue", url: "/platform/revenue", icon: TrendingUp },
+  { title: "Usage", url: "/platform/usage", icon: BarChart3 },
   { title: "Agencies", url: "/platform/agencies", icon: Building2 },
   { title: "Billing", url: "/platform/billing", icon: CreditCard },
   { title: "Plans", url: "/platform/plans", icon: Settings },

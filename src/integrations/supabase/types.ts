@@ -860,6 +860,42 @@ export type Database = {
         }
         Relationships: []
       }
+      mrr_snapshots: {
+        Row: {
+          active_count: number
+          churned_mrr: number
+          contraction_mrr: number
+          created_at: string
+          expansion_mrr: number
+          id: string
+          new_mrr: number
+          snapshot_month: string
+          total_mrr: number
+        }
+        Insert: {
+          active_count?: number
+          churned_mrr?: number
+          contraction_mrr?: number
+          created_at?: string
+          expansion_mrr?: number
+          id?: string
+          new_mrr?: number
+          snapshot_month: string
+          total_mrr?: number
+        }
+        Update: {
+          active_count?: number
+          churned_mrr?: number
+          contraction_mrr?: number
+          created_at?: string
+          expansion_mrr?: number
+          id?: string
+          new_mrr?: number
+          snapshot_month?: string
+          total_mrr?: number
+        }
+        Relationships: []
+      }
       organization_subscriptions: {
         Row: {
           amount_bdt: number
@@ -916,6 +952,7 @@ export type Database = {
       organizations: {
         Row: {
           created_at: string
+          grace_period_days: number
           id: string
           logo_url: string | null
           max_ad_accounts: number
@@ -927,11 +964,13 @@ export type Database = {
           plan: Database["public"]["Enums"]["org_plan"]
           slug: string
           status: Database["public"]["Enums"]["org_status"]
+          status_changed_at: string
           suspension_reason: string | null
           trial_ends_at: string | null
         }
         Insert: {
           created_at?: string
+          grace_period_days?: number
           id?: string
           logo_url?: string | null
           max_ad_accounts?: number
@@ -943,11 +982,13 @@ export type Database = {
           plan?: Database["public"]["Enums"]["org_plan"]
           slug: string
           status?: Database["public"]["Enums"]["org_status"]
+          status_changed_at?: string
           suspension_reason?: string | null
           trial_ends_at?: string | null
         }
         Update: {
           created_at?: string
+          grace_period_days?: number
           id?: string
           logo_url?: string | null
           max_ad_accounts?: number
@@ -959,6 +1000,7 @@ export type Database = {
           plan?: Database["public"]["Enums"]["org_plan"]
           slug?: string
           status?: Database["public"]["Enums"]["org_status"]
+          status_changed_at?: string
           suspension_reason?: string | null
           trial_ends_at?: string | null
         }
@@ -1073,6 +1115,7 @@ export type Database = {
         Row: {
           amount_bdt: number
           created_at: string
+          due_date: string | null
           id: string
           invoice_number: string
           notes: string | null
@@ -1086,6 +1129,7 @@ export type Database = {
         Insert: {
           amount_bdt?: number
           created_at?: string
+          due_date?: string | null
           id?: string
           invoice_number: string
           notes?: string | null
@@ -1099,6 +1143,7 @@ export type Database = {
         Update: {
           amount_bdt?: number
           created_at?: string
+          due_date?: string | null
           id?: string
           invoice_number?: string
           notes?: string | null
