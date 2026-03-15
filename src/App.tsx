@@ -46,6 +46,9 @@ import CreateAgency from "@/pages/CreateAgency";
 import AgencyDetail from "@/pages/AgencyDetail";
 import PlatformBilling from "@/pages/PlatformBilling";
 import PlatformPlans from "@/pages/PlatformPlans";
+import PlatformAnnouncements from "@/pages/PlatformAnnouncements";
+import PlatformAudit from "@/pages/PlatformAudit";
+import PlatformHealth from "@/pages/PlatformHealth";
 
 import NotFound from "@/pages/NotFound";
 
