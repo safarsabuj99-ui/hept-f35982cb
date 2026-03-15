@@ -482,6 +482,136 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sync Health Dashboard */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Activity className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle>Sync Health</CardTitle>
+                <CardDescription>Per-account sync status and error tracking</CardDescription>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={fetchSyncHealth} disabled={loadingSyncHealth}>
+              <RefreshCw className={cn("h-4 w-4", loadingSyncHealth && "animate-spin")} />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingSyncHealth ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : syncHealth.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No sync data yet. Syncs will start automatically.</p>
+          ) : (
+            <div className="space-y-3">
+              {syncHealth.map((acc: any) => {
+                const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+                const hasAnyFailure = functions.some(fn => acc.functionStatus[fn]?.latest?.status === "failed");
+                const allSuccess = functions.every(fn => {
+                  const s = acc.functionStatus[fn];
+                  return !s?.latest || s.latest.status === "success";
+                });
+
+                return (
+                  <div key={acc.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {allSuccess ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : hasAnyFailure ? (
+                          <XCircle className="h-4 w-4 text-destructive" />
+                        ) : (
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className="font-medium text-sm">{acc.account_name || acc.ad_account_id}</span>
+                        <Badge variant="outline" className="text-[10px] capitalize">{acc.platform_name}</Badge>
+                      </div>
+                      {hasAnyFailure && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          disabled={retryingAccount === acc.id}
+                          onClick={() => handleForceRetry(acc.id, acc.account_name)}
+                        >
+                          {retryingAccount === acc.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3" />
+                          )}
+                          Retry
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {functions.map(fn => {
+                        const s = acc.functionStatus[fn];
+                        const latest = s?.latest;
+                        const lastSuccess = s?.lastSuccess;
+                        const label = fn.replace("sync-", "").replace("-", " ");
+
+                        if (!latest) {
+                          return (
+                            <div key={fn} className="rounded bg-muted/50 px-2 py-1.5">
+                              <p className="text-[10px] font-medium text-muted-foreground capitalize">{label}</p>
+                              <p className="text-[10px] text-muted-foreground">No data</p>
+                            </div>
+                          );
+                        }
+
+                        const isSuccess = latest.status === "success";
+                        const isFailed = latest.status === "failed";
+
+                        return (
+                          <div key={fn} className={cn(
+                            "rounded px-2 py-1.5",
+                            isSuccess && "bg-green-500/10",
+                            isFailed && "bg-destructive/10",
+                            !isSuccess && !isFailed && "bg-muted/50"
+                          )}>
+                            <p className="text-[10px] font-medium capitalize">{label}</p>
+                            <div className="flex items-center gap-1">
+                              {isSuccess ? (
+                                <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              ) : isFailed ? (
+                                <XCircle className="h-3 w-3 text-destructive" />
+                              ) : (
+                                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                {latest.completed_at
+                                  ? formatDistanceToNow(new Date(latest.completed_at), { addSuffix: true })
+                                  : "running..."}
+                              </span>
+                            </div>
+                            {isFailed && latest.error_code && (
+                              <Badge variant="destructive" className="text-[8px] mt-0.5 h-4 px-1">
+                                {latest.error_code}
+                              </Badge>
+                            )}
+                            {isFailed && lastSuccess && (
+                              <p className="text-[9px] text-muted-foreground mt-0.5">
+                                Last OK: {formatDistanceToNow(new Date(lastSuccess.completed_at), { addSuffix: true })}
+                              </p>
+                            )}
+                            {isSuccess && latest.rows_synced > 0 && (
+                              <p className="text-[9px] text-muted-foreground">{latest.rows_synced} rows</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
