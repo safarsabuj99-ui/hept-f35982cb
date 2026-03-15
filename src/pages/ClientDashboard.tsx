@@ -271,13 +271,24 @@ export default function ClientDashboard() {
               <p className="text-[10px] md:text-xs font-medium text-primary-foreground/60 uppercase tracking-wider mb-0.5">
                 Available Balance
               </p>
-              <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
-                {fmt(balance)}
-              </p>
-              {balance < 0 && totalNegativeBdt > 0 && (
-                <p className="text-sm font-mono text-red-300 mt-0.5">
-                  ৳{totalNegativeBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
+              {balance < 0 ? (
+                <>
+                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                    ৳{Math.abs(balanceBdt).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-sm font-mono text-red-300 mt-0.5">
+                    {fmt(balance)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                    {fmt(balance)}
+                  </p>
+                  <p className="text-sm font-mono text-primary-foreground/70 mt-0.5">
+                    ৳{balanceBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </>
               )}
             </div>
             <Button
