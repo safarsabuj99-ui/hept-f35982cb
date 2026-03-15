@@ -1,34 +1,22 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Register Existing Agency in SaaS Management
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+The admin user `raohas10@gmail.com` (MD SABUJ MIAH, user_id: `d66027e0-9056-43f7-bb4c-b7e30f683182`) exists with role `admin` and `is_super_admin=true`, but:
+- `org_id` is `NULL` — no organization linked
+- The `organizations` table is empty — no agencies exist yet
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### Steps
 
-## Technical Change
+1. **Create organization record** via database migration:
+   - Insert into `organizations` with `owner_user_id` = the existing admin user ID
+   - Set plan to `starter`, status to `active`, reasonable defaults for limits
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+2. **Link admin profile to organization**:
+   - Update `profiles` set `org_id` = the new org ID for user `d66027e0-9056-43f7-bb4c-b7e30f683182`
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+3. **Create a subscription record**:
+   - Insert into `organization_subscriptions` to track the agency's billing
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+This is a data-only change — no code modifications needed. The existing Platform Owner UI will immediately show the agency in the Agencies list.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
