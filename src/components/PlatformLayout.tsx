@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity, GitBranch, TrendingUp, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity, GitBranch, TrendingUp, BarChart3, Users, AlertTriangle, Grid3X3, LineChart, Calculator, HeartPulse, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
