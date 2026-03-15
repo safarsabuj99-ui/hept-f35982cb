@@ -41,6 +41,7 @@ export default function AdAccountDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingDeepDive, setSyncingDeepDive] = useState(false);
   const [account, setAccount] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
 
