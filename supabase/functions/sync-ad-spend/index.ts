@@ -246,6 +246,7 @@ Deno.serve(async (req) => {
             raw_currency: account.account_currency,
             exchange_rate_used: isBDT ? effectiveRate : 1,
             final_billable_usd: finalBillableUsd,
+            client_id: matchedClientId,
             synced_at: new Date().toISOString(),
           });
 
@@ -363,6 +364,7 @@ Deno.serve(async (req) => {
             raw_currency: account.account_currency,
             exchange_rate_used: 1,
             final_billable_usd: spend,
+            client_id: matchedClientId,
             synced_at: new Date().toISOString(),
           });
 
@@ -500,6 +502,7 @@ Deno.serve(async (req) => {
             raw_currency: account.account_currency,
             exchange_rate_used: 1,
             final_billable_usd: spend,
+            client_id: matchedClientId,
             synced_at: new Date().toISOString(),
           });
 
