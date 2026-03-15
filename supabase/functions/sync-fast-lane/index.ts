@@ -110,7 +110,9 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
-    if (targetClientId) {
+    if (adAccountIdsFilter && adAccountIdsFilter.length > 0) {
+      accountQuery = accountQuery.in("id", adAccountIdsFilter);
+    } else if (targetClientId) {
       // Filter to accounts mapped to this specific client
       const clientMappedAccountIds = mappedAssignments
         .filter(r => r.client_id === targetClientId)
