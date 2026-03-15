@@ -1,34 +1,23 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Fix Deposit Request Using Admin ID Instead of Client ID During Impersonation
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+### Problem
+When an admin impersonates a client (via "View as Client") and submits a deposit request from the client dashboard or wallet, the request is created with the **admin's user ID** instead of the **impersonated client's ID**. This happens because both `ClientDashboard.tsx` and `ClientWallet.tsx` pass `clientId={user?.id}` (the authenticated admin) to `DepositFundsDialog`, even though they already have the correct `effectiveClientId` from `useImpersonation()`.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### Root Cause
+Two lines, one in each file:
+- `ClientDashboard.tsx` line 359: `clientId={user?.id}` 
+- `ClientWallet.tsx` line 311: `clientId={user?.id}`
 
-## Technical Change
+Both should use `effectiveClientId` which correctly resolves to the impersonated client's ID when admin is impersonating, or the logged-in user's own ID otherwise.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
-
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### Fix
 
 | File | Change |
 |------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+| `src/pages/ClientDashboard.tsx` | Line 359: Change `clientId={user?.id}` → `clientId={effectiveClientId ?? undefined}` |
+| `src/pages/ClientWallet.tsx` | Line 311: Change `clientId={user?.id}` → `clientId={effectiveClientId ?? undefined}` |
 
-No database or edge function changes needed.
+Two single-line changes. No other files affected.
+
