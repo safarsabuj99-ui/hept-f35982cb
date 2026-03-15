@@ -343,7 +343,7 @@ export default function WalletInventory() {
                     Since {overview.snapshotDate}
                   </Badge>
                   <Badge variant="secondary" className="ml-1 text-[10px] font-normal gap-1">
-                    <Clock className="h-2.5 w-2.5" /> Auto: Monthly
+                    <Clock className="h-2.5 w-2.5" /> Auto: Every 5 min
                   </Badge>
                 </>
               )}

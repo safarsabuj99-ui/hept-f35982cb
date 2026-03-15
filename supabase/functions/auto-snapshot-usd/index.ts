@@ -66,20 +66,24 @@ Deno.serve(async (req) => {
       timeZone: "Asia/Dhaka",
     });
 
-    // 5. Insert new snapshot
-    const { error: insertErr } = await supabase
+    // 5. Upsert today's snapshot (update if exists, insert if not)
+    const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
+    const { error: upsertErr } = await supabase
       .from("usd_inventory_snapshots")
-      .insert({
-        snapshot_date: today,
-        balance_usd: balance,
-        notes: `Auto monthly close — ${monthLabel}`,
-        created_by: "00000000-0000-0000-0000-000000000000",
-      });
+      .upsert(
+        {
+          snapshot_date: today,
+          balance_usd: balance,
+          notes: `Auto refresh — ${monthLabel} (${timestamp})`,
+          created_by: "00000000-0000-0000-0000-000000000000",
+        },
+        { onConflict: "snapshot_date" }
+      );
 
-    if (insertErr) throw insertErr;
+    if (upsertErr) throw upsertErr;
 
     console.log(
-      `Auto snapshot created: $${balance.toFixed(2)} on ${today}`
+      `Auto snapshot upserted: $${balance.toFixed(2)} on ${today}`
     );
 
     return new Response(
