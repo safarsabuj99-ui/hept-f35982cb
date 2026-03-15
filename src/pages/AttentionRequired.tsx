@@ -1,18 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LowBalanceAlerts } from "@/components/LowBalanceAlerts";
 import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
-import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
 import { BillingHealthWidget } from "@/components/dashboard/BillingHealthWidget";
-import { AlertTriangle, Shield, Unlink, CreditCard } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Shield, CreditCard } from "lucide-react";
 
 export default function AttentionRequired() {
-  const navigate = useNavigate();
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Attention Required</h1>
-        <p className="text-muted-foreground text-sm mt-1">Monitor alerts, system health, risks, and billing across all accounts.</p>
+        <p className="text-muted-foreground text-sm mt-1">Monitor alerts, system health, and billing across all accounts.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -40,19 +37,7 @@ export default function AttentionRequired() {
           </CardContent>
         </Card>
 
-        <Card className="glass-card glow-border cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all" onClick={() => navigate("/admin/unassigned-spend")}>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Unlink className="h-4 w-4 text-destructive" />
-              Unassigned Spend Risks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <UnassignedSpendAlert />
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card glow-border">
+        <Card className="glass-card glow-border md:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <CreditCard className="h-4 w-4 text-primary" />

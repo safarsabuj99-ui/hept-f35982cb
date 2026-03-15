@@ -102,7 +102,7 @@ const App = () => (
               >
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/attention" element={<AttentionRequired />} />
-                <Route path="/admin/unassigned-spend" element={<UnassignedSpendRisks />} />
+                
                 
                 <Route path="/admin/clients" element={<ClientList />} />
                 <Route path="/admin/clients/new" element={<NewClient />} />

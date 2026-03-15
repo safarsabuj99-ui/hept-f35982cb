@@ -1,10 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { LowBalanceAlerts } from "@/components/LowBalanceAlerts";
 import { SystemHealthWidget } from "@/components/dashboard/SystemHealthWidget";
-import { UnassignedSpendAlert } from "@/components/dashboard/UnassignedSpendAlert";
-import { AlertTriangle, Shield, Unlink, CreditCard } from "lucide-react";
+import { AlertTriangle, Shield, CreditCard } from "lucide-react";
 import { BillingHealthWidget } from "@/components/dashboard/BillingHealthWidget";
 
 export function AttentionPanel() {
@@ -23,9 +21,6 @@ export function AttentionPanel() {
             <TabsTrigger value="health" className="h-7 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-muted">
               <Shield className="h-3 w-3" /> Health
             </TabsTrigger>
-            <TabsTrigger value="risks" className="h-7 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-muted">
-              <Unlink className="h-3 w-3" /> Risks
-            </TabsTrigger>
             <TabsTrigger value="billing" className="h-7 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-muted">
               <CreditCard className="h-3 w-3" /> Billing
             </TabsTrigger>
@@ -37,9 +32,6 @@ export function AttentionPanel() {
           </TabsContent>
           <TabsContent value="health" className="mt-0">
             <SystemHealthWidget />
-          </TabsContent>
-          <TabsContent value="risks" className="mt-0">
-            <UnassignedSpendAlert />
           </TabsContent>
           <TabsContent value="billing" className="mt-0">
             <BillingHealthWidget />
