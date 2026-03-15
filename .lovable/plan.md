@@ -33,3 +33,44 @@ All three (`sync-deep-dive`, `sync-fast-lane`, `sync-ad-spend`) now return struc
 - Error codes displayed for failed syncs
 - "Force Retry" button for failed accounts
 - Auto-refreshing UI
+
+---
+
+# Tier 1 — Platform Owner SaaS Management — IMPLEMENTED
+
+### Tenant Lifecycle Manager (`/platform/lifecycle`)
+Kanban board: Trial → Active → Suspended → Cancelled with status transitions and grace period tracking.
+
+### MRR/ARR Revenue Dashboard (`/platform/revenue`)
+Real-time MRR, ARR, growth charts, plan breakdown, churned revenue table.
+
+### Tenant Usage Metering (`/platform/usage`)
+Cross-agency resource consumption vs plan limits with color-coded progress bars.
+
+### Payment Collection Tracker (`/platform/billing`)
+Aging invoice buckets (30/60/90+ days), billed vs collected charts, agency health table.
+
+---
+
+# Tier 2 — Intelligence & Analytics — IMPLEMENTED
+
+### Feature 9: Cohort Analysis (`/platform/cohorts`)
+Signup month cohorts with retention heatmap and revenue per cohort.
+
+### Feature 10: Churn Prediction (`/platform/churn`)
+AI-powered risk scoring via `churn-predict` edge function using Lovable AI.
+
+### Feature 11: Feature Adoption (`/platform/adoption`)
+Heatmap grid showing per-agency feature usage intensity.
+
+### Feature 12: Revenue Forecasting (`/platform/forecasting`)
+AI-powered MRR projections via `revenue-forecast` edge function with confidence bands.
+
+### Feature 13: Cost Analytics (`/platform/costs`)
+Manual cost entry, unit economics (cost/tenant, gross margin), revenue vs cost charts.
+
+### Feature 14: Customer Health Scores (`/platform/health-scores`)
+Composite 0-100 scores: Activity (25%) + Payment (35%) + Usage (40%) with recalculate.
+
+### Feature 15: Benchmark Reports (`/platform/benchmarks`)
+Anonymous cross-agency comparisons with percentile distributions.
