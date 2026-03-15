@@ -35,6 +35,7 @@ interface GuardEvent {
 
 export function AutomationConfigTab({
   userId,
+  clientName,
   autoPauseBalanceUsd,
   overdraftLimit,
   systemPausedCampaigns,

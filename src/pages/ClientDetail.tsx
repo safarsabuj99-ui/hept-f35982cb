@@ -739,6 +739,7 @@ export default function ClientDetail() {
         <TabsContent value="automation">
           <AutomationConfigTab
             userId={userId!}
+            clientName={profile?.full_name || ""}
             autoPauseBalanceUsd={Number((profile as any)?.auto_pause_balance_usd ?? 5)}
             overdraftLimit={Number(profile?.overdraft_limit_usd ?? 0)}
             systemPausedCampaigns={
