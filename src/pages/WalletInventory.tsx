@@ -53,6 +53,10 @@ export default function WalletInventory() {
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [overview, setOverview] = useState<UsdOverview>({
+    totalPurchased: 0, totalSpent: 0, availableBalance: 0,
+    dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0, loading: true,
+  });
   const { user } = useAuth();
   const { toast } = useToast();
 
