@@ -63,6 +63,15 @@ export default function Settings() {
         setLoading(false);
       });
     fetchLastSynced();
+    // Load ad accounts for per-account sync
+    supabase
+      .from("ad_accounts")
+      .select("id, account_name, ad_account_id, platform_name")
+      .eq("is_active", true)
+      .order("account_name")
+      .then(({ data }) => {
+        setAdAccounts(data ?? []);
+      });
   }, []);
 
   const handleSaveMargin = async (e: React.FormEvent) => {
