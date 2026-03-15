@@ -292,7 +292,11 @@ export function AutomationConfigTab({
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input type="number" placeholder="5.00" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="pl-7" min="0" step="1" />
               </div>
-              <p className="text-xs text-muted-foreground">Pause when balance ≤ this amount.</p>
+              <p className="text-xs text-muted-foreground">
+                {parseFloat(overdraft) > 0 
+                  ? "Pause when balance ≤ this amount." 
+                  : "No overdraft — guard activates only when balance reaches $0."}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Overdraft Limit (USD)</Label>
