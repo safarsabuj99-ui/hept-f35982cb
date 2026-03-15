@@ -356,7 +356,7 @@ export default function ClientDashboard() {
       <DepositFundsDialog
         open={depositOpen}
         onOpenChange={setDepositOpen}
-        clientId={user?.id}
+        clientId={effectiveClientId ?? undefined}
         onSuccess={fetchAll}
       />
     </div>
