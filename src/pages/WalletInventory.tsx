@@ -338,9 +338,14 @@ export default function WalletInventory() {
               <DollarSign className="h-4 w-4" />
               USD Inventory
               {overview.snapshotDate && (
-                <Badge variant="outline" className="ml-1 text-[10px] font-normal">
-                  Since {overview.snapshotDate}
-                </Badge>
+                <>
+                  <Badge variant="outline" className="ml-1 text-[10px] font-normal">
+                    Since {overview.snapshotDate}
+                  </Badge>
+                  <Badge variant="secondary" className="ml-1 text-[10px] font-normal gap-1">
+                    <Clock className="h-2.5 w-2.5" /> Auto: Monthly
+                  </Badge>
+                </>
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
