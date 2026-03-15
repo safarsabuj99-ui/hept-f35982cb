@@ -1,34 +1,35 @@
 
+# Fully Automated Self-Healing Data Collection System — IMPLEMENTED
 
-# Fix: Platform Transfers Inflating Today's Collections
+## What Was Built
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+### 1. `sync_logs` Table (NEW)
+Tracks every sync attempt per account with status, error codes, retry counts, and row counts. RLS: admin full access, platform_owner read.
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+### 2. `sync-orchestrator` Edge Function (NEW)
+The brain of the system:
+- Accepts `{ function: "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" }`
+- Queries all mapped accounts, sorts by data volume (smallest first)
+- Calls target function **one account at a time** with `{ ad_account_ids: [id] }`
+- Auto-retries failed accounts up to 3 times with exponential backoff
+- Classifies errors: `token_expired`, `geo_blocked`, `rate_limited`, `cpu_timeout`, `api_error`
+- Logs every attempt to `sync_logs`
+- Alerts via `billing_notifications` for token expiry (7-day warning) and persistent failures (5+)
+- Auto-cleans logs older than 30 days
 
-## Technical Change
+### 3. Updated Sync Functions
+All three (`sync-deep-dive`, `sync-fast-lane`, `sync-ad-spend`) now return structured `{ ok, error_code, rows_synced }` responses for orchestrator classification.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+### 4. Cron Jobs (pg_cron)
+| Job | Schedule | Target |
+|-----|----------|--------|
+| `orchestrator-fast-lane` | Every 15 min | sync-orchestrator → sync-fast-lane |
+| `orchestrator-deep-dive` | Every hour | sync-orchestrator → sync-deep-dive |
+| `orchestrator-ad-spend` | Every 30 min | sync-orchestrator → sync-ad-spend |
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
-
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
-
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
-
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
-
-No database or edge function changes needed.
+### 5. Sync Health Dashboard (Settings Page)
+- Per-account sync status with green/red indicators
+- Last sync time per function per account
+- Error codes displayed for failed syncs
+- "Force Retry" button for failed accounts
+- Auto-refreshing UI
