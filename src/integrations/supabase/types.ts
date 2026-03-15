@@ -919,10 +919,12 @@ export type Database = {
           max_clients: number
           max_managers: number
           name: string
+          notes: string | null
           owner_user_id: string
           plan: Database["public"]["Enums"]["org_plan"]
           slug: string
           status: Database["public"]["Enums"]["org_status"]
+          suspension_reason: string | null
           trial_ends_at: string | null
         }
         Insert: {
@@ -933,10 +935,12 @@ export type Database = {
           max_clients?: number
           max_managers?: number
           name: string
+          notes?: string | null
           owner_user_id: string
           plan?: Database["public"]["Enums"]["org_plan"]
           slug: string
           status?: Database["public"]["Enums"]["org_status"]
+          suspension_reason?: string | null
           trial_ends_at?: string | null
         }
         Update: {
@@ -947,10 +951,12 @@ export type Database = {
           max_clients?: number
           max_managers?: number
           name?: string
+          notes?: string | null
           owner_user_id?: string
           plan?: Database["public"]["Enums"]["org_plan"]
           slug?: string
           status?: Database["public"]["Enums"]["org_status"]
+          suspension_reason?: string | null
           trial_ends_at?: string | null
         }
         Relationships: []
@@ -1023,6 +1029,140 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      platform_announcements: {
+        Row: {
+          body: string
+          created_at: string
+          ends_at: string | null
+          id: string
+          is_active: boolean
+          starts_at: string
+          target_plan: string | null
+          title: string
+          type: Database["public"]["Enums"]["announcement_type"]
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          starts_at?: string
+          target_plan?: string | null
+          title: string
+          type?: Database["public"]["Enums"]["announcement_type"]
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          starts_at?: string
+          target_plan?: string | null
+          title?: string
+          type?: Database["public"]["Enums"]["announcement_type"]
+        }
+        Relationships: []
+      }
+      platform_invoices: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          id: string
+          invoice_number: string
+          notes: string | null
+          org_id: string
+          payment_date: string | null
+          payment_method: string | null
+          period_end: string
+          period_start: string
+          status: Database["public"]["Enums"]["invoice_status"]
+        }
+        Insert: {
+          amount_bdt?: number
+          created_at?: string
+          id?: string
+          invoice_number: string
+          notes?: string | null
+          org_id: string
+          payment_date?: string | null
+          payment_method?: string | null
+          period_end: string
+          period_start: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          id?: string
+          invoice_number?: string
+          notes?: string | null
+          org_id?: string
+          payment_date?: string | null
+          payment_method?: string | null
+          period_end?: string
+          period_start?: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_invoices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_plans: {
+        Row: {
+          created_at: string
+          features: Json
+          id: string
+          is_active: boolean
+          is_popular: boolean
+          key: string
+          max_ad_accounts: number
+          max_clients: number
+          max_managers: number
+          name: string
+          price_bdt_monthly: number
+          price_bdt_yearly: number
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_popular?: boolean
+          key: string
+          max_ad_accounts?: number
+          max_clients?: number
+          max_managers?: number
+          name: string
+          price_bdt_monthly?: number
+          price_bdt_yearly?: number
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_popular?: boolean
+          key?: string
+          max_ad_accounts?: number
+          max_clients?: number
+          max_managers?: number
+          name?: string
+          price_bdt_monthly?: number
+          price_bdt_yearly?: number
+          sort_order?: number
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -1344,6 +1484,7 @@ export type Database = {
       account_currency: "USD" | "BDT"
       ad_platform: "meta" | "tiktok" | "google"
       agency_account_type: "Cash" | "Bank" | "MFS"
+      announcement_type: "info" | "warning" | "maintenance"
       app_role: "admin" | "client" | "manager" | "platform_owner"
       billing_cycle: "monthly" | "yearly"
       billing_type: "prepaid" | "threshold_postpaid" | "credit_card"
@@ -1364,6 +1505,7 @@ export type Database = {
         | "Owner_Draw"
         | "Marketing"
         | "Other"
+      invoice_status: "draft" | "sent" | "paid" | "overdue" | "void"
       org_plan: "starter" | "growth" | "agency_pro"
       org_status: "active" | "suspended" | "trial" | "cancelled"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
@@ -1501,6 +1643,7 @@ export const Constants = {
       account_currency: ["USD", "BDT"],
       ad_platform: ["meta", "tiktok", "google"],
       agency_account_type: ["Cash", "Bank", "MFS"],
+      announcement_type: ["info", "warning", "maintenance"],
       app_role: ["admin", "client", "manager", "platform_owner"],
       billing_cycle: ["monthly", "yearly"],
       billing_type: ["prepaid", "threshold_postpaid", "credit_card"],
@@ -1524,6 +1667,7 @@ export const Constants = {
         "Marketing",
         "Other",
       ],
+      invoice_status: ["draft", "sent", "paid", "overdue", "void"],
       org_plan: ["starter", "growth", "agency_pro"],
       org_status: ["active", "suspended", "trial", "cancelled"],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],
