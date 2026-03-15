@@ -747,6 +747,8 @@ export default function ClientDetail() {
                 ? profile.system_paused_campaigns
                 : []
             }
+            guardPausedAt={(profile as any)?.guard_paused_at || null}
+            guardResumeWindowHours={Number((profile as any)?.guard_resume_window_hours ?? 24)}
             onSaved={loadAll}
           />
         </TabsContent>
