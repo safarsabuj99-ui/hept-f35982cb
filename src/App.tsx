@@ -103,6 +103,13 @@ const App = () => (
                 <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
                 <Route path="/platform/audit" element={<PlatformAudit />} />
                 <Route path="/platform/health" element={<PlatformHealth />} />
+                <Route path="/platform/cohorts" element={<PlatformCohorts />} />
+                <Route path="/platform/churn" element={<PlatformChurnPrediction />} />
+                <Route path="/platform/adoption" element={<PlatformFeatureAdoption />} />
+                <Route path="/platform/forecasting" element={<PlatformForecasting />} />
+                <Route path="/platform/costs" element={<PlatformCostAnalytics />} />
+                <Route path="/platform/health-scores" element={<PlatformHealthScores />} />
+                <Route path="/platform/benchmarks" element={<PlatformBenchmarks />} />
               </Route>
 
               {/* Super Admin routes */}
