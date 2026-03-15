@@ -221,6 +221,28 @@ export default function Settings() {
     fetchLastSynced();
   };
 
+  const handleForceRetry = async (accountId: string, accountName: string) => {
+    setRetryingAccount(accountId);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-orchestrator", {
+        body: { function: "sync-deep-dive" },
+      });
+      // The orchestrator syncs all accounts; for a targeted retry we use the direct function
+      const { data: retryData, error: retryErr } = await supabase.functions.invoke("sync-deep-dive", {
+        body: { ad_account_ids: [accountId] },
+      });
+      if (retryErr) {
+        toast({ title: "Retry Failed", description: retryErr.message, variant: "destructive" });
+      } else {
+        toast({ title: "Retry Complete", description: `Sync retried for ${accountName}` });
+        fetchSyncHealth();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setRetryingAccount(null);
+  };
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
