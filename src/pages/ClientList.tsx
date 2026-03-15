@@ -144,7 +144,7 @@ export default function ClientList() {
         if (totalBal >= 0) continue;
         const profile = profileMap[cid];
         const pConfig = profile?.pricing_config as any;
-        const rates = pConfig?.flat_rates || pConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+        const rates = getPlatformRates(pConfig);
         const platBals = platformBalMap[cid] || {};
         let bdtTotal = 0;
         // Only iterate known platforms, same as Client Dashboard

@@ -220,7 +220,7 @@ export default function AdminDashboard() {
     for (const client of clients) {
       if (client.balance >= 0) continue;
       const pc = (client as any).pricing_config;
-      const flatRates = pc?.flat_rates || {};
+      const flatRates = getPlatformRates(pc);
       // Get client's completed transactions grouped by platform
       // We need to recalculate per-platform balances from transactions
       const clientTxns = (allTransactions || []).filter((t: any) => t.client_id === client.user_id && t.status === "completed");

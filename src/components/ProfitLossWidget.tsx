@@ -139,7 +139,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         const profile = profileMap[cid];
         if (!profile) continue;
         const pricingConfig = profile.pricing_config as any;
-        const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+        const rates = getPlatformRates(pricingConfig);
 
         for (const [platform, spendUsd] of Object.entries(platformSpends)) {
           const rate = Number(rates[platform] || 120);

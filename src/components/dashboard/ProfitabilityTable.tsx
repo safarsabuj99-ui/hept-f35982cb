@@ -164,7 +164,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       const profile = profileMap[cid];
       if (!profile) continue;
       const pricingConfig = profile.pricing_config as any;
-      const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+      const rates = getPlatformRates(pricingConfig);
 
       let revenueBdt = 0, cogsBdt = 0, totalSpend = 0;
       const platforms: PlatformDetail[] = [];

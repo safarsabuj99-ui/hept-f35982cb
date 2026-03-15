@@ -165,7 +165,7 @@ export default function PaymentRequests() {
 
       const profile = profileRes.data;
       const pricingConfig = profile?.pricing_config as any;
-      const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || {};
+      const platformRates = getPlatformRates(pricingConfig);
 
       const options: RateOption[] = [
         { key: "meta", label: "Meta Rate", rate: Number(platformRates.meta) || 120 },

@@ -95,7 +95,7 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
 
     // Client's billing rates
     const pricingConfig = (profileRes.data?.pricing_config as any) || {};
-    const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 145, tiktok: 150, google: 150 };
+    const rates = getPlatformRates(pricingConfig);
 
     // Client's ad account IDs
     const clientAccIds = new Set((accClientsRes.data ?? []).map((a: any) => a.ad_account_id));
