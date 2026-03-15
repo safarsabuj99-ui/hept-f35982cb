@@ -1,34 +1,35 @@
 
+# Fully Automated Self-Healing Data Collection System — IMPLEMENTED
 
-## Bug: Cross-Client Campaign Leakage in Shared Ad Accounts
+## What Was Built
 
-### Root Cause
+### 1. `sync_logs` Table (NEW)
+Tracks every sync attempt per account with status, error codes, retry counts, and row counts. RLS: admin full access, platform_owner read.
 
-When an ad account is shared between multiple clients (each with a different `mapping_keyword`), the current UI queries return **all campaigns on that ad account**, not just the ones belonging to the specific client.
+### 2. `sync-orchestrator` Edge Function (NEW)
+The brain of the system:
+- Accepts `{ function: "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" }`
+- Queries all mapped accounts, sorts by data volume (smallest first)
+- Calls target function **one account at a time** with `{ ad_account_ids: [id] }`
+- Auto-retries failed accounts up to 3 times with exponential backoff
+- Classifies errors: `token_expired`, `geo_blocked`, `rate_limited`, `cpu_timeout`, `api_error`
+- Logs every attempt to `sync_logs`
+- Alerts via `billing_notifications` for token expiry (7-day warning) and persistent failures (5+)
+- Auto-cleans logs older than 30 days
 
-The sync function (`sync-deep-dive`) correctly sets `client_id` on each campaign row based on keyword matching. But both `ClientDetail.tsx` and `ClientReports.tsx` query like this:
+### 3. Updated Sync Functions
+All three (`sync-deep-dive`, `sync-fast-lane`, `sync-ad-spend`) now return structured `{ ok, error_code, rows_synced }` responses for orchestrator classification.
 
-```typescript
-// Current (BROKEN): Gets ALL campaigns on the shared ad account
-supabase.from("campaigns")
-  .select("id, name, platform, status, ad_account_id")
-  .in("ad_account_id", accountIds);
-```
+### 4. Cron Jobs (pg_cron)
+| Job | Schedule | Target |
+|-----|----------|--------|
+| `orchestrator-fast-lane` | Every 15 min | sync-orchestrator → sync-fast-lane |
+| `orchestrator-deep-dive` | Every hour | sync-orchestrator → sync-deep-dive |
+| `orchestrator-ad-spend` | Every 30 min | sync-orchestrator → sync-ad-spend |
 
-This means "musa test" sees campaigns like "Niloy0.2/Rafa2" that belong to a different client (FARISH) simply because they share the same ad account.
-
-### Fix
-
-Add a `.eq("client_id", userId)` filter to campaign queries in both pages. The `client_id` column already exists on the `campaigns` table and is populated correctly by the sync engine.
-
-### Files to Change
-
-| File | Change |
-|------|--------|
-| `src/pages/ClientDetail.tsx` | Add `.eq("client_id", userId)` to the campaigns query in `loadSpendData()` |
-| `src/pages/ClientReports.tsx` | Add `.eq("client_id", effectiveClientId)` to the campaigns query in `fetchData()` |
-
-### Why This Won't Happen Again
-
-The `campaigns` table has `client_id` set by the sync engine via keyword matching. By filtering on `client_id` at query time, even if 10 clients share the same ad account, each client only sees their own campaigns. This is a 2-line fix — one filter added per page.
-
+### 5. Sync Health Dashboard (Settings Page)
+- Per-account sync status with green/red indicators
+- Last sync time per function per account
+- Error codes displayed for failed syncs
+- "Force Retry" button for failed accounts
+- Auto-refreshing UI
