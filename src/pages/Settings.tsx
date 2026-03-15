@@ -53,6 +53,66 @@ export default function Settings() {
     if (data?.last_synced_at) setLastSyncedAt(data.last_synced_at);
   };
 
+  const fetchSyncHealth = async () => {
+    setLoadingSyncHealth(true);
+    try {
+      // Get all ad accounts
+      const { data: accounts } = await supabase
+        .from("ad_accounts")
+        .select("id, account_name, ad_account_id, platform_name")
+        .eq("is_active", true)
+        .order("account_name");
+
+      if (!accounts?.length) { setSyncHealth([]); setLoadingSyncHealth(false); return; }
+
+      // Get latest sync_log per account per function
+      const { data: logs } = await supabase
+        .from("sync_logs" as any)
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      // Get token expiry info
+      const { data: integrations } = await supabase
+        .from("api_integrations")
+        .select("id, token_expiry_date, platform");
+
+      const integrationMap: Record<string, any> = {};
+      for (const i of integrations ?? []) integrationMap[i.id] = i;
+
+      // Build health data per account
+      const healthData = accounts.map((acc: any) => {
+        const accountLogs = (logs ?? []).filter((l: any) => l.ad_account_id === acc.id);
+        const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+        const functionStatus: Record<string, any> = {};
+
+        for (const fn of functions) {
+          const fnLogs = accountLogs.filter((l: any) => l.function_name === fn);
+          const latest = fnLogs[0];
+          const lastSuccess = fnLogs.find((l: any) => l.status === "success");
+          const recentFailures = fnLogs.filter((l: any) => l.status === "failed").length;
+
+          functionStatus[fn] = {
+            latest,
+            lastSuccess,
+            recentFailures,
+          };
+        }
+
+        return {
+          ...acc,
+          functionStatus,
+          totalLogs: accountLogs.length,
+        };
+      });
+
+      setSyncHealth(healthData);
+    } catch (err) {
+      console.error("Failed to load sync health:", err);
+    }
+    setLoadingSyncHealth(false);
+  };
+
   useEffect(() => {
     supabase
       .from("settings" as any)
@@ -67,6 +127,7 @@ export default function Settings() {
         setLoading(false);
       });
     fetchLastSynced();
+    fetchSyncHealth();
     // Load ad accounts for per-account sync
     supabase
       .from("ad_accounts")
