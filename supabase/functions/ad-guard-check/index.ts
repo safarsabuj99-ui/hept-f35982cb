@@ -74,12 +74,18 @@ Deno.serve(async (req) => {
 
       const balance = totalDeposits - totalDebits;
       const pauseThreshold = Number(profile.auto_pause_balance_usd ?? 5);
+      const clientOverdraft = Number(profile.overdraft_limit_usd ?? 0);
+
+      // Overdraft-aware pause logic:
+      // - If client has overdraft (> 0): pause when balance <= threshold
+      // - If client has NO overdraft (0): only pause when balance <= 0
+      const effectiveThreshold = clientOverdraft > 0 ? pauseThreshold : 0;
 
       const alreadyPaused = Array.isArray(profile.system_paused_campaigns)
         ? profile.system_paused_campaigns
         : [];
 
-      if (balance <= pauseThreshold && alreadyPaused.length === 0) {
+      if (balance <= effectiveThreshold && alreadyPaused.length === 0) {
         // Find active campaigns for this client
         const clientCampaigns = (allCampaigns ?? []).filter(
           (c: any) => c.client_id === profile.user_id
