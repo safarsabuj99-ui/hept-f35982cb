@@ -71,8 +71,51 @@ export default function WalletInventory() {
     setLoading(false);
   }, []);
 
+  const fetchOverview = useCallback(async () => {
+    setOverview(prev => ({ ...prev, loading: true }));
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
+
+    const [purchasesRes, spendRes, burn7Res, txnRes] = await Promise.all([
+      // All-time total USD purchased
+      supabase.from("usd_purchases").select("usd_received"),
+      // All-time total spend from daily_metrics
+      supabase.from("daily_metrics").select("spend"),
+      // Last 7 days spend for burn rate
+      supabase.from("daily_metrics").select("spend").gte("data_date", sevenDaysAgoStr),
+      // All completed transactions for client obligations
+      supabase.from("transactions").select("type, amount, client_id").eq("status", "completed"),
+    ]);
+
+    const totalPurchased = (purchasesRes.data ?? []).reduce((s: number, r: any) => s + Number(r.usd_received), 0);
+    const totalSpent = (spendRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const last7Spend = (burn7Res.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const dailyBurn = last7Spend / 7;
+    const availableBalance = totalPurchased - totalSpent;
+    const runwayDays = dailyBurn > 0 ? availableBalance / dailyBurn : availableBalance > 0 ? 999 : 0;
+
+    // Client obligations: sum net positive balances per client
+    const clientBalances: Record<string, number> = {};
+    for (const t of (txnRes.data ?? []) as any[]) {
+      const cid = t.client_id;
+      if (!clientBalances[cid]) clientBalances[cid] = 0;
+      clientBalances[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
+    }
+    const clientObligations = Object.values(clientBalances).filter(b => b > 0).reduce((s, b) => s + b, 0);
+    const usdNeeded = Math.max(0, clientObligations - availableBalance);
+
+    setOverview({
+      totalPurchased, totalSpent, availableBalance, dailyBurn,
+      runwayDays: Math.max(0, Math.floor(runwayDays)),
+      clientObligations, usdNeeded, loading: false,
+    });
+  }, []);
+
   useEffect(() => {
     fetchPurchases(dateRange);
+    fetchOverview();
     supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
   }, []);
 
