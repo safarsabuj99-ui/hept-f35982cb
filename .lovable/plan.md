@@ -1,43 +1,34 @@
 
 
-## Plan: Auto-Refresh USD Balance Every 5 Minutes
+# Fix: Platform Transfers Inflating Today's Collections
 
-### Problem
-The current auto-snapshot runs monthly. You want the USD balance to stay fresh — recalculated every 5 minutes, especially after data syncs pull in new spend.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### Solution
-Change the edge function to run every 5 minutes and **upsert** (update-or-insert) today's snapshot instead of inserting a new row each time. This keeps the balance current without flooding the snapshots table.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### Changes
+## Technical Change
 
-**1. Update `supabase/functions/auto-snapshot-usd/index.ts`**
-- Change the insert to an **upsert** on `snapshot_date` so that repeated runs on the same day just update the existing row instead of creating duplicates.
-- Add a unique constraint on `snapshot_date` to support upsert.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-**2. Database: Add unique constraint**
-```sql
-ALTER TABLE usd_inventory_snapshots 
-  ADD CONSTRAINT usd_inventory_snapshots_snapshot_date_key UNIQUE (snapshot_date);
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-**3. Update cron schedule**
-- Delete the existing monthly cron job
-- Create a new one running every 5 minutes: `*/5 * * * *`
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-**4. Update `src/pages/WalletInventory.tsx`**
-- Change the "Auto: Monthly" badge to "Auto: Every 5 min"
-
-### How It Works
-- Every 5 minutes, the function calculates: `Last Snapshot Balance + Purchases Since - Spend Since`
-- It upserts today's date as the snapshot — so during the day, today's row keeps getting refreshed
-- At midnight when a new day starts, yesterday's snapshot becomes the historical record
-- The frontend always reads the latest snapshot, so the balance stays accurate within 5 minutes of any sync
-
-### Files to Change
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| Database | Add unique constraint on `snapshot_date`; reschedule cron to `*/5 * * * *` |
-| `supabase/functions/auto-snapshot-usd/index.ts` | Change `.insert()` to `.upsert()` with `onConflict: 'snapshot_date'` |
-| `src/pages/WalletInventory.tsx` | Update badge text |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.

@@ -1,0 +1,1 @@
+ALTER TABLE usd_inventory_snapshots ADD CONSTRAINT usd_inventory_snapshots_snapshot_date_key UNIQUE (snapshot_date);
