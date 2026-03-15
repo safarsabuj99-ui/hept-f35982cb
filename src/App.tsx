@@ -46,6 +46,9 @@ import CreateAgency from "@/pages/CreateAgency";
 import AgencyDetail from "@/pages/AgencyDetail";
 import PlatformBilling from "@/pages/PlatformBilling";
 import PlatformPlans from "@/pages/PlatformPlans";
+import PlatformAnnouncements from "@/pages/PlatformAnnouncements";
+import PlatformAudit from "@/pages/PlatformAudit";
+import PlatformHealth from "@/pages/PlatformHealth";
 
 import NotFound from "@/pages/NotFound";
 
@@ -84,6 +87,9 @@ const App = () => (
                 <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
                 <Route path="/platform/billing" element={<PlatformBilling />} />
                 <Route path="/platform/plans" element={<PlatformPlans />} />
+                <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
+                <Route path="/platform/audit" element={<PlatformAudit />} />
+                <Route path="/platform/health" element={<PlatformHealth />} />
               </Route>
 
               {/* Super Admin routes */}

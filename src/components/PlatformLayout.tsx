@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
@@ -22,6 +22,9 @@ const navItems = [
   { title: "Agencies", url: "/platform/agencies", icon: Building2 },
   { title: "Billing", url: "/platform/billing", icon: CreditCard },
   { title: "Plans", url: "/platform/plans", icon: Settings },
+  { title: "Announcements", url: "/platform/announcements", icon: Megaphone },
+  { title: "Audit Logs", url: "/platform/audit", icon: Shield },
+  { title: "System Health", url: "/platform/health", icon: Activity },
 ];
 
 function PlatformSidebar() {
