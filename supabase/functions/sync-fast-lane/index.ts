@@ -66,14 +66,17 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Parse optional client_id for manual sync
+    // Parse optional filters for manual sync
     let targetClientId: string | null = null;
+    let adAccountIdsFilter: string[] | null = null;
     if (req.method === "POST") {
       try {
         const body = await req.json();
         targetClientId = body.client_id || null;
+        adAccountIdsFilter = body.ad_account_ids || null;
       } catch { /* no body is fine for cron */ }
     }
+    if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
