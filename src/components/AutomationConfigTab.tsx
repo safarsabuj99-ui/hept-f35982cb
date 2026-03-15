@@ -351,6 +351,35 @@ export function AutomationConfigTab({
             </div>
           </div>
 
+          {/* Resume Window Config */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Timer className="h-3.5 w-3.5" /> Resume Window (Hours)
+              </Label>
+              <Input type="number" placeholder="24" value={resumeWindowHours} onChange={(e) => setResumeWindowHours(e.target.value)} min="1" step="1" />
+              <p className="text-xs text-muted-foreground">
+                After this many hours, the resume option expires. Campaigns stay paused permanently.
+              </p>
+            </div>
+            {isSystemPaused && guardPausedAt && (
+              <div className="rounded-lg border p-3 space-y-1">
+                <p className="text-xs text-muted-foreground">Resume Window Status</p>
+                {isWithinResumeWindow ? (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-medium text-amber-600">{remainingText}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Window expired — campaigns locked</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3">
             <Button onClick={handleSave} disabled={saving} className="gap-2" size="sm">
               <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Settings"}
