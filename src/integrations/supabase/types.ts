@@ -623,6 +623,7 @@ export type Database = {
         Row: {
           ad_account_id: string
           campaign_name: string
+          client_id: string | null
           date: string
           exchange_rate_used: number
           final_billable_usd: number
@@ -635,6 +636,7 @@ export type Database = {
         Insert: {
           ad_account_id: string
           campaign_name?: string
+          client_id?: string | null
           date?: string
           exchange_rate_used?: number
           final_billable_usd?: number
@@ -647,6 +649,7 @@ export type Database = {
         Update: {
           ad_account_id?: string
           campaign_name?: string
+          client_id?: string | null
           date?: string
           exchange_rate_used?: number
           final_billable_usd?: number
