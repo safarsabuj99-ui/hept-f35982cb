@@ -102,9 +102,9 @@ Deno.serve(async (req) => {
               .eq("id", c.id);
           }
 
-          // Store paused campaign IDs
+          // Store paused campaign IDs + pause timestamp
           await supabaseAdmin.from("profiles")
-            .update({ system_paused_campaigns: pausedIds })
+            .update({ system_paused_campaigns: pausedIds, guard_paused_at: new Date().toISOString() })
             .eq("user_id", profile.user_id);
 
           // Audit log — use client's user_id so history appears on their profile

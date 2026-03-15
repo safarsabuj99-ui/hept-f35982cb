@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, History, TrendingUp, RefreshCw } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, History, TrendingUp, RefreshCw, Clock, Timer, Info } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -15,6 +15,8 @@ interface Props {
   autoPauseBalanceUsd: number;
   overdraftLimit: number;
   systemPausedCampaigns: string[];
+  guardPausedAt: string | null;
+  guardResumeWindowHours: number;
   onSaved: () => void;
 }
 
@@ -39,10 +41,13 @@ export function AutomationConfigTab({
   autoPauseBalanceUsd,
   overdraftLimit,
   systemPausedCampaigns,
+  guardPausedAt,
+  guardResumeWindowHours,
   onSaved,
 }: Props) {
   const [threshold, setThreshold] = useState(String(autoPauseBalanceUsd));
   const [overdraft, setOverdraft] = useState(String(overdraftLimit));
+  const [resumeWindowHours, setResumeWindowHours] = useState(String(guardResumeWindowHours));
   const [saving, setSaving] = useState(false);
   const [runningGuard, setRunningGuard] = useState(false);
   const [campaignDetails, setCampaignDetails] = useState<CampaignDetail[]>([]);
@@ -50,9 +55,43 @@ export function AutomationConfigTab({
   const [balance, setBalance] = useState<number | null>(null);
   const [guardHistory, setGuardHistory] = useState<GuardEvent[]>([]);
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
   const autoResumeThreshold = useMemo(() => (parseFloat(threshold) || 5) * 2, [threshold]);
+
+  // Compute resume window status
+  const windowHoursNum = parseInt(resumeWindowHours) || 24;
+  const isWithinResumeWindow = useMemo(() => {
+    if (!guardPausedAt || !isSystemPaused) return false;
+    const pausedTime = new Date(guardPausedAt).getTime();
+    const windowMs = windowHoursNum * 3600000;
+    return now - pausedTime < windowMs;
+  }, [guardPausedAt, isSystemPaused, windowHoursNum, now]);
+
+  const remainingMs = useMemo(() => {
+    if (!guardPausedAt || !isSystemPaused) return 0;
+    const pausedTime = new Date(guardPausedAt).getTime();
+    const windowMs = windowHoursNum * 3600000;
+    return Math.max(0, windowMs - (now - pausedTime));
+  }, [guardPausedAt, isSystemPaused, windowHoursNum, now]);
+
+  const remainingText = useMemo(() => {
+    if (remainingMs <= 0) return "";
+    const hrs = Math.floor(remainingMs / 3600000);
+    const mins = Math.floor((remainingMs % 3600000) / 60000);
+    return hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+  }, [remainingMs]);
+
+  // Update countdown every minute
+  useEffect(() => {
+    if (!isSystemPaused || !guardPausedAt) return;
+    const interval = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(interval);
+  }, [isSystemPaused, guardPausedAt]);
+
+  // Show paused campaigns only within resume window
+  const showPausedCampaigns = isSystemPaused && isWithinResumeWindow;
 
   // Fetch campaign details, balance, and guard history
   useEffect(() => {
@@ -156,11 +195,18 @@ export function AutomationConfigTab({
       setSaving(false);
       return;
     }
+    const windowVal = parseInt(resumeWindowHours);
+    if (isNaN(windowVal) || windowVal < 1) {
+      toast({ title: "Invalid window", description: "Resume window must be at least 1 hour.", variant: "destructive" });
+      setSaving(false);
+      return;
+    }
     const { error } = await supabase
       .from("profiles")
       .update({
         auto_pause_balance_usd: thresholdVal,
         overdraft_limit_usd: overdraft ? parseFloat(overdraft) : 0,
+        guard_resume_window_hours: windowVal,
       } as any)
       .eq("user_id", userId);
     setSaving(false);
@@ -260,10 +306,15 @@ export function AutomationConfigTab({
             <div className="rounded-lg border p-3 space-y-1">
               <p className="text-xs text-muted-foreground">System Status</p>
               <div className="flex items-center gap-2">
-                <Badge variant={isSystemPaused ? "destructive" : "default"} className="gap-1">
-                  {isSystemPaused ? <><AlertTriangle className="h-3 w-3" /> Paused</> : <><Zap className="h-3 w-3" /> Active</>}
+              <Badge variant={isSystemPaused ? "destructive" : "default"} className="gap-1">
+                  {isSystemPaused 
+                    ? isWithinResumeWindow 
+                      ? <><AlertTriangle className="h-3 w-3" /> Paused</>
+                      : <><AlertTriangle className="h-3 w-3" /> Locked</>
+                    : <><Zap className="h-3 w-3" /> Active</>}
                 </Badge>
-                {isSystemPaused && <span className="text-xs text-muted-foreground">{systemPausedCampaigns.length} campaign(s)</span>}
+                {isSystemPaused && isWithinResumeWindow && <span className="text-xs text-muted-foreground">{systemPausedCampaigns.length} campaign(s)</span>}
+                {isSystemPaused && !isWithinResumeWindow && <span className="text-xs text-muted-foreground">Window expired</span>}
               </div>
             </div>
             <div className="rounded-lg border p-3 space-y-1">
@@ -305,6 +356,35 @@ export function AutomationConfigTab({
             </div>
           </div>
 
+          {/* Resume Window Config */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Timer className="h-3.5 w-3.5" /> Resume Window (Hours)
+              </Label>
+              <Input type="number" placeholder="24" value={resumeWindowHours} onChange={(e) => setResumeWindowHours(e.target.value)} min="1" step="1" />
+              <p className="text-xs text-muted-foreground">
+                After this many hours, the resume option expires. Campaigns stay paused permanently.
+              </p>
+            </div>
+            {isSystemPaused && guardPausedAt && (
+              <div className="rounded-lg border p-3 space-y-1">
+                <p className="text-xs text-muted-foreground">Resume Window Status</p>
+                {isWithinResumeWindow ? (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-medium text-amber-600">{remainingText}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Window expired — campaigns locked</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3">
             <Button onClick={handleSave} disabled={saving} className="gap-2" size="sm">
               <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Settings"}
@@ -317,12 +397,17 @@ export function AutomationConfigTab({
       </Card>
 
       {/* Paused Campaigns Table */}
-      {isSystemPaused && (
+      {showPausedCampaigns && (
         <Card className="border-destructive/30">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base text-destructive">
                 <AlertTriangle className="h-4 w-4" /> Paused Campaigns ({systemPausedCampaigns.length})
+                {remainingText && (
+                  <Badge variant="outline" className="ml-2 text-[10px] font-normal gap-1">
+                    <Clock className="h-3 w-3" /> {remainingText}
+                  </Badge>
+                )}
               </CardTitle>
               <Button size="sm" variant="destructive" onClick={handleResumeAll} disabled={saving} className="gap-1.5">
                 <RefreshCw className="h-3.5 w-3.5" /> Resume All
@@ -374,6 +459,16 @@ export function AutomationConfigTab({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Window expired note */}
+      {isSystemPaused && !isWithinResumeWindow && (
+        <div className="flex items-start gap-2 rounded-lg border border-muted p-3">
+          <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            The resume window has expired. Campaigns remain paused and must be reactivated manually from Campaign Mappings.
+          </p>
+        </div>
       )}
 
       {/* Guard History */}
