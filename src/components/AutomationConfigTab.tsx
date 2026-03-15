@@ -41,10 +41,13 @@ export function AutomationConfigTab({
   autoPauseBalanceUsd,
   overdraftLimit,
   systemPausedCampaigns,
+  guardPausedAt,
+  guardResumeWindowHours,
   onSaved,
 }: Props) {
   const [threshold, setThreshold] = useState(String(autoPauseBalanceUsd));
   const [overdraft, setOverdraft] = useState(String(overdraftLimit));
+  const [resumeWindowHours, setResumeWindowHours] = useState(String(guardResumeWindowHours));
   const [saving, setSaving] = useState(false);
   const [runningGuard, setRunningGuard] = useState(false);
   const [campaignDetails, setCampaignDetails] = useState<CampaignDetail[]>([]);
@@ -52,9 +55,43 @@ export function AutomationConfigTab({
   const [balance, setBalance] = useState<number | null>(null);
   const [guardHistory, setGuardHistory] = useState<GuardEvent[]>([]);
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
   const autoResumeThreshold = useMemo(() => (parseFloat(threshold) || 5) * 2, [threshold]);
+
+  // Compute resume window status
+  const windowHoursNum = parseInt(resumeWindowHours) || 24;
+  const isWithinResumeWindow = useMemo(() => {
+    if (!guardPausedAt || !isSystemPaused) return false;
+    const pausedTime = new Date(guardPausedAt).getTime();
+    const windowMs = windowHoursNum * 3600000;
+    return now - pausedTime < windowMs;
+  }, [guardPausedAt, isSystemPaused, windowHoursNum, now]);
+
+  const remainingMs = useMemo(() => {
+    if (!guardPausedAt || !isSystemPaused) return 0;
+    const pausedTime = new Date(guardPausedAt).getTime();
+    const windowMs = windowHoursNum * 3600000;
+    return Math.max(0, windowMs - (now - pausedTime));
+  }, [guardPausedAt, isSystemPaused, windowHoursNum, now]);
+
+  const remainingText = useMemo(() => {
+    if (remainingMs <= 0) return "";
+    const hrs = Math.floor(remainingMs / 3600000);
+    const mins = Math.floor((remainingMs % 3600000) / 60000);
+    return hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+  }, [remainingMs]);
+
+  // Update countdown every minute
+  useEffect(() => {
+    if (!isSystemPaused || !guardPausedAt) return;
+    const interval = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(interval);
+  }, [isSystemPaused, guardPausedAt]);
+
+  // Show paused campaigns only within resume window
+  const showPausedCampaigns = isSystemPaused && isWithinResumeWindow;
 
   // Fetch campaign details, balance, and guard history
   useEffect(() => {
