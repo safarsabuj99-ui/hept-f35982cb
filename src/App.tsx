@@ -85,6 +85,9 @@ const App = () => (
                 }
               >
                 <Route path="/platform" element={<PlatformDashboard />} />
+                <Route path="/platform/lifecycle" element={<TenantLifecycle />} />
+                <Route path="/platform/revenue" element={<PlatformRevenue />} />
+                <Route path="/platform/usage" element={<TenantUsageMetering />} />
                 <Route path="/platform/agencies" element={<AgencyList />} />
                 <Route path="/platform/agencies/new" element={<CreateAgency />} />
                 <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
