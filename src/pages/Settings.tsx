@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe } from "lucide-react";
+import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -32,6 +33,9 @@ export default function Settings() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
   const [savingProxy, setSavingProxy] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<{ id: string; account_name: string; ad_account_id: string; platform_name: string }[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [syncingAccount, setSyncingAccount] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -59,6 +63,15 @@ export default function Settings() {
         setLoading(false);
       });
     fetchLastSynced();
+    // Load ad accounts for per-account sync
+    supabase
+      .from("ad_accounts")
+      .select("id, account_name, ad_account_id, platform_name")
+      .eq("is_active", true)
+      .order("account_name")
+      .then(({ data }) => {
+        setAdAccounts(data ?? []);
+      });
   }, []);
 
   const handleSaveMargin = async (e: React.FormEvent) => {
@@ -199,6 +212,50 @@ export default function Settings() {
                   </Button>
                 );
               })}
+            </div>
+          </div>
+          {/* Per-account Deep Dive sync */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Deep Dive by Account</p>
+            <div className="flex gap-2">
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select ad account..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {adAccounts.map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.account_name || acc.ad_account_id} ({acc.platform_name})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!selectedAccountId || syncingAccount || Object.values(syncing).some(Boolean)}
+                onClick={async () => {
+                  setSyncingAccount(true);
+                  const { data, error } = await supabase.functions.invoke("sync-deep-dive", {
+                    body: { ad_account_ids: [selectedAccountId] },
+                  });
+                  setSyncingAccount(false);
+                  if (error) {
+                    toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+                  } else {
+                    const acct = adAccounts.find(a => a.id === selectedAccountId);
+                    toast({ title: "Sync Complete", description: `Deep Dive synced for ${acct?.account_name || "account"}.` });
+                    if (data?.errors?.length) {
+                      for (const err of data.errors) {
+                        toast({ title: "Warning", description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
+                      }
+                    }
+                    fetchLastSynced();
+                  }
+                }}
+              >
+                {syncingAccount ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Target className="h-3.5 w-3.5" />}
+              </Button>
             </div>
           </div>
           <Button

@@ -66,11 +66,13 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Parse optional platform filter from request body
+    // Parse optional filters from request body
     let body: any = {};
     try { body = await req.json(); } catch {}
     const platformFilter: string | null = body?.platform || null;
+    const adAccountIdsFilter: string[] | null = body?.ad_account_ids || null;
     if (platformFilter) console.log(`Platform filter active: ${platformFilter}`);
+    if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
@@ -100,10 +102,13 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountsQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
+    if (adAccountIdsFilter && adAccountIdsFilter.length > 0) {
+      accountsQuery = accountsQuery.in("id", adAccountIdsFilter);
+    }
     if (platformFilter) {
       accountsQuery = accountsQuery.eq("platform_name", platformFilter);
     }

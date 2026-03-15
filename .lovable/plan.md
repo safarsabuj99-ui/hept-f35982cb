@@ -1,52 +1,34 @@
 
 
-## Problem: HEPT 8 Has No Campaign/Metric Data
+# Fix: Platform Transfers Inflating Today's Collections
 
-### Root Cause
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-The `sync-deep-dive` edge function times out ("CPU Time exceeded") before it reaches the HEPT 8 account. Here's the evidence:
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-1. **`daily_ad_spend` has data** for HEPT 8 (written by `sync-fast-lane` which is lighter) -- campaigns like `Musa/AlHaya/Sifata2/S+` with spend data from Jan-March 2026
-2. **`campaigns` table has 0 rows** for HEPT 8 -- `sync-deep-dive` never creates them
-3. **`daily_metrics` table has 0 rows** for HEPT 8 -- same reason
-4. **`campaign_mappings` has 0 rows** for HEPT 8 -- `sync-deep-dive` creates these too
-5. **Edge function logs confirm**: `sync-deep-dive` logs show it processes HEPT 15 (7596228808101986320) with 1424 rows, then Meta accounts with hundreds of rows, then hits "CPU Time exceeded" before reaching HEPT 8 (7590477811299975175)
+## Technical Change
 
-The function already supports `platform` filtering (e.g., sync only TikTok), but even with that, it processes ALL TikTok accounts sequentially and HEPT 15 alone takes 1424 rows of processing, exhausting the CPU budget.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-### Solution: Add Per-Account Sync Support
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-**1. Update `sync-deep-dive` edge function**
-- Accept optional `ad_account_ids` array in request body to filter to specific accounts
-- This allows the admin UI to trigger sync for a single account (or small batch)
-- Keep existing `platform` filter working alongside it
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
-**2. Update `sync-fast-lane` edge function**
-- Same `ad_account_ids` parameter support for consistency
-
-**3. Add "Sync This Account" button to Ad Account Detail page**
-- Calls `sync-deep-dive` with `{ ad_account_ids: [accountId] }` 
-- Provides targeted sync without timing out
-
-**4. Add per-account sync to Settings page**
-- In the existing Sync card, add a dropdown or button to sync individual accounts
-- Particularly useful for accounts that consistently get skipped due to ordering
-
-**5. Optimize the processing order** (secondary fix)
-- Sort accounts by data volume (ascending) so smaller accounts get processed first
-- HEPT 8 with ~86 rows should be processed before HEPT 15 with 1424 rows
-
-### Changes
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
 
 | File | Change |
 |------|--------|
-| `supabase/functions/sync-deep-dive/index.ts` | Add `ad_account_ids` filter parameter, optimize account ordering |
-| `supabase/functions/sync-fast-lane/index.ts` | Add `ad_account_ids` filter parameter for consistency |
-| `src/pages/AdAccountDetail.tsx` | Add "Sync Deep Dive" button that targets this specific account |
-| `src/pages/Settings.tsx` | Add per-account sync option in the Sync card |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
-### Implementation Order
-1. Update both edge functions with `ad_account_ids` filter
-2. Add sync button to Ad Account Detail page
-3. Add per-account sync to Settings
-
+No database or edge function changes needed.
