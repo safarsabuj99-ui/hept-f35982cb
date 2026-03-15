@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLayout } from "@/components/AdminLayout";
 import { ManagerLayout } from "@/components/ManagerLayout";
 import { ClientLayout } from "@/components/ClientLayout";
+import { PlatformLayout } from "@/components/PlatformLayout";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AddFunds from "@/pages/AddFunds";
@@ -39,6 +40,12 @@ import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 import AttentionRequired from "@/pages/AttentionRequired";
 import UnassignedSpendRisks from "@/pages/UnassignedSpendRisks";
+import PlatformDashboard from "@/pages/PlatformDashboard";
+import AgencyList from "@/pages/AgencyList";
+import CreateAgency from "@/pages/CreateAgency";
+import AgencyDetail from "@/pages/AgencyDetail";
+import PlatformBilling from "@/pages/PlatformBilling";
+import PlatformPlans from "@/pages/PlatformPlans";
 
 import NotFound from "@/pages/NotFound";
 
@@ -62,6 +69,22 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
+
+              {/* Platform Owner routes */}
+              <Route
+                element={
+                  <ProtectedRoute requiredRole="platform_owner">
+                    <PlatformLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/platform" element={<PlatformDashboard />} />
+                <Route path="/platform/agencies" element={<AgencyList />} />
+                <Route path="/platform/agencies/new" element={<CreateAgency />} />
+                <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
+                <Route path="/platform/billing" element={<PlatformBilling />} />
+                <Route path="/platform/plans" element={<PlatformPlans />} />
+              </Route>
 
               {/* Super Admin routes */}
               <Route
