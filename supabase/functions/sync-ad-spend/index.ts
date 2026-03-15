@@ -567,19 +567,27 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        ok: true,
         success: true,
         records_upserted: totalRecords,
         exchange_rate_used: exchangeRate,
         mapped_campaigns: autoMapped,
         skipped_no_keyword_match: skipped,
         errors: errors.length > 0 ? errors : undefined,
+        error_code: errors.length > 0 ? "partial_errors" : undefined,
+        rows_synced: totalRecords,
         date_range: { from: sinceStr, to: untilStr },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
     console.error("Sync error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const errMsg = error.message || String(error);
+    let errorCode = "api_error";
+    if (errMsg.includes("CPU") || errMsg.includes("timeout")) errorCode = "cpu_timeout";
+    else if (errMsg.includes("190") || errMsg.includes("token")) errorCode = "token_expired";
+    else if (errMsg.includes("41000")) errorCode = "geo_blocked";
+    return new Response(JSON.stringify({ ok: false, error: errMsg, error_code: errorCode }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
