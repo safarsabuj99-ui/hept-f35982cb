@@ -306,10 +306,15 @@ export function AutomationConfigTab({
             <div className="rounded-lg border p-3 space-y-1">
               <p className="text-xs text-muted-foreground">System Status</p>
               <div className="flex items-center gap-2">
-                <Badge variant={isSystemPaused ? "destructive" : "default"} className="gap-1">
-                  {isSystemPaused ? <><AlertTriangle className="h-3 w-3" /> Paused</> : <><Zap className="h-3 w-3" /> Active</>}
+              <Badge variant={isSystemPaused ? "destructive" : "default"} className="gap-1">
+                  {isSystemPaused 
+                    ? isWithinResumeWindow 
+                      ? <><AlertTriangle className="h-3 w-3" /> Paused</>
+                      : <><AlertTriangle className="h-3 w-3" /> Locked</>
+                    : <><Zap className="h-3 w-3" /> Active</>}
                 </Badge>
-                {isSystemPaused && <span className="text-xs text-muted-foreground">{systemPausedCampaigns.length} campaign(s)</span>}
+                {isSystemPaused && isWithinResumeWindow && <span className="text-xs text-muted-foreground">{systemPausedCampaigns.length} campaign(s)</span>}
+                {isSystemPaused && !isWithinResumeWindow && <span className="text-xs text-muted-foreground">Window expired</span>}
               </div>
             </div>
             <div className="rounded-lg border p-3 space-y-1">
