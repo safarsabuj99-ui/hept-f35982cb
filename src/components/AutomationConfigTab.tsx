@@ -11,6 +11,7 @@ import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, History, TrendingUp
 
 interface Props {
   userId: string;
+  clientName: string;
   autoPauseBalanceUsd: number;
   overdraftLimit: number;
   systemPausedCampaigns: string[];
