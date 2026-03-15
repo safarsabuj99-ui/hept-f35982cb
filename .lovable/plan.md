@@ -1,35 +1,34 @@
 
 
-## Plan: Enhanced Ad Guard Tab with Campaign Details and Pro Features
+# Fix: Platform Transfers Inflating Today's Collections
 
-**Problem:** The Ad Guard tab currently shows raw campaign IDs (UUIDs) for paused campaigns. It should show campaign names, which ad account they belong to, and add smart pro features.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### Changes
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-**File: `src/components/AutomationConfigTab.tsx`** — Major rewrite
+## Technical Change
 
-1. **Fetch campaign details on mount**: Query `campaign_mappings` joined with `ad_accounts` using the stored `campaign_id` strings from `systemPausedCampaigns` to get campaign names and ad account names.
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-2. **Rich paused campaigns table** (replaces raw ID badges):
-   - Columns: Campaign Name, Ad Account, Platform icon, Paused At timestamp
-   - Grouped by ad account for clarity
-   - Individual "Resume" button per campaign (removes from `system_paused_campaigns` array and sets `is_active = true`)
-
-3. **Pro features to add:**
-   - **Guard History Log**: Fetch recent `audit_logs` entries with `action_type = 'ad_guard_pause'` for this client and display as a timeline showing when campaigns were paused/resumed with balance snapshots
-   - **Current Balance Display**: Calculate and show the client's live balance alongside the threshold so admins can see how close the client is to triggering the guard
-   - **Selective Resume**: Instead of only "Resume All", allow resuming individual campaigns from the paused list
-   - **Auto-Resume Indicator**: Show the auto-resume threshold (2x pause threshold) so admins know exactly what deposit amount will trigger automatic reactivation
-
-### Data Flow
-
-```text
-systemPausedCampaigns (campaign_id strings)
-  → query campaign_mappings WHERE campaign_id IN (...)
-  → join ad_accounts for account name/platform
-  → display rich table with names
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
 ```
 
-### Files to change
-- `src/components/AutomationConfigTab.tsx` — Enhanced UI with campaign details, balance display, guard history, selective resume
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
 
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
+| File | Change |
+|------|--------|
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+
+No database or edge function changes needed.

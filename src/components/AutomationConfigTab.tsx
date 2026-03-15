@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Shield, Save, Zap, AlertTriangle, DollarSign } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, History, TrendingUp, RefreshCw } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -14,6 +15,21 @@ interface Props {
   overdraftLimit: number;
   systemPausedCampaigns: string[];
   onSaved: () => void;
+}
+
+interface CampaignDetail {
+  campaign_id: string;
+  campaign_name: string;
+  platform: string;
+  ad_account_name: string;
+  ad_account_id: string;
+}
+
+interface GuardEvent {
+  id: string;
+  action_type: string;
+  description: string;
+  created_at: string;
 }
 
 export function AutomationConfigTab({
@@ -27,8 +43,76 @@ export function AutomationConfigTab({
   const [overdraft, setOverdraft] = useState(String(overdraftLimit));
   const [saving, setSaving] = useState(false);
   const [runningGuard, setRunningGuard] = useState(false);
+  const [campaignDetails, setCampaignDetails] = useState<CampaignDetail[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [guardHistory, setGuardHistory] = useState<GuardEvent[]>([]);
+  const [resumingId, setResumingId] = useState<string | null>(null);
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
+  const autoResumeThreshold = useMemo(() => (parseFloat(threshold) || 5) * 2, [threshold]);
+
+  // Fetch campaign details, balance, and guard history
+  useEffect(() => {
+    async function fetchData() {
+      // Fetch balance
+      const { data: txns } = await supabase
+        .from("transactions")
+        .select("type, amount, status")
+        .eq("client_id", userId)
+        .eq("status", "completed");
+
+      if (txns) {
+        const credits = txns.filter(t => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
+        const debits = txns.filter(t => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
+        setBalance(credits - debits);
+      }
+
+      // Fetch guard history
+      const { data: logs } = await supabase
+        .from("audit_logs")
+        .select("id, action_type, description, created_at")
+        .eq("user_id", userId)
+        .in("action_type", ["ad_guard_pause", "ad_guard_resume"])
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (logs) setGuardHistory(logs);
+
+      // Fetch campaign details if there are paused campaigns
+      if (systemPausedCampaigns.length > 0) {
+        setLoadingDetails(true);
+        const { data: mappings } = await supabase
+          .from("campaign_mappings")
+          .select("campaign_id, campaign_name, platform, ad_account_id")
+          .in("campaign_id", systemPausedCampaigns);
+
+        if (mappings && mappings.length > 0) {
+          const accountIds = [...new Set(mappings.map(m => m.ad_account_id).filter(Boolean))];
+          const { data: accounts } = await supabase
+            .from("ad_accounts")
+            .select("id, account_name")
+            .in("id", accountIds as string[]);
+
+          const accountMap = new Map((accounts || []).map(a => [a.id, a.account_name]));
+
+          setCampaignDetails(
+            mappings.map(m => ({
+              campaign_id: m.campaign_id,
+              campaign_name: m.campaign_name,
+              platform: m.platform,
+              ad_account_id: m.ad_account_id || "",
+              ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
+            }))
+          );
+        }
+        setLoadingDetails(false);
+      } else {
+        setCampaignDetails([]);
+      }
+    }
+    fetchData();
+  }, [userId, systemPausedCampaigns]);
 
   async function handleSave() {
     setSaving(true);
@@ -54,26 +138,43 @@ export function AutomationConfigTab({
     }
   }
 
-  async function handleManualResume() {
-    setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ system_paused_campaigns: [] })
-      .eq("user_id", userId);
+  async function handleResumeSingle(campaignId: string) {
+    setResumingId(campaignId);
+    const updatedList = systemPausedCampaigns.filter(id => id !== campaignId);
 
-    // Re-activate campaigns
-    for (const campaignId of systemPausedCampaigns) {
-      await supabase
+    const [profileRes, campaignRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .update({ system_paused_campaigns: updatedList })
+        .eq("user_id", userId),
+      supabase
         .from("campaign_mappings")
         .update({ is_active: true })
-        .eq("campaign_id", campaignId);
-    }
+        .eq("campaign_id", campaignId),
+    ]);
 
-    setSaving(false);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    setResumingId(null);
+    if (profileRes.error || campaignRes.error) {
+      toast({ title: "Error", description: (profileRes.error || campaignRes.error)?.message, variant: "destructive" });
     } else {
-      toast({ title: "Campaigns Resumed", description: "All system-paused campaigns have been re-activated." });
+      toast({ title: "Campaign Resumed", description: `Campaign has been re-activated.` });
+      onSaved();
+    }
+  }
+
+  async function handleResumeAll() {
+    setSaving(true);
+    const [profileRes] = await Promise.all([
+      supabase.from("profiles").update({ system_paused_campaigns: [] }).eq("user_id", userId),
+      ...systemPausedCampaigns.map(id =>
+        supabase.from("campaign_mappings").update({ is_active: true }).eq("campaign_id", id)
+      ),
+    ]);
+    setSaving(false);
+    if (profileRes.error) {
+      toast({ title: "Error", description: profileRes.error.message, variant: "destructive" });
+    } else {
+      toast({ title: "All Campaigns Resumed", description: "All system-paused campaigns have been re-activated." });
       onSaved();
     }
   }
@@ -98,115 +199,175 @@ export function AutomationConfigTab({
     setRunningGuard(false);
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Shield className="h-4 w-4" /> Ad Guard Configuration
-        </CardTitle>
-        <CardDescription>
-          Automatically pause all campaigns when the client's balance drops to or below the threshold amount.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Status Indicator */}
-        <div className="flex items-center gap-3 rounded-lg border p-4">
-          <div className="flex-1">
-            <p className="text-sm font-medium">System Status</p>
-            <p className="text-xs text-muted-foreground">
-              {isSystemPaused
-                ? `${systemPausedCampaigns.length} campaign(s) auto-paused by Ad Guard`
-                : "All campaigns running normally"}
-            </p>
-          </div>
-          <Badge
-            variant={isSystemPaused ? "destructive" : "default"}
-            className="gap-1"
-          >
-            {isSystemPaused ? (
-              <>
-                <AlertTriangle className="h-3 w-3" /> System Paused
-              </>
-            ) : (
-              <>
-                <Zap className="h-3 w-3" /> Active
-              </>
-            )}
-          </Badge>
-        </div>
+  const platformIcon = (platform: string) => {
+    const colors: Record<string, string> = { meta: "bg-blue-500", tiktok: "bg-pink-500", google: "bg-yellow-500" };
+    return (
+      <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white ${colors[platform] || "bg-muted"}`}>
+        {platform?.[0]?.toUpperCase()}
+      </span>
+    );
+  };
 
-        {isSystemPaused && (
-          <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-4 space-y-3">
-            <p className="text-sm font-medium text-destructive">Paused Campaigns</p>
-            <div className="flex flex-wrap gap-1.5">
-              {systemPausedCampaigns.map((id) => (
-                <Badge key={id} variant="outline" className="text-xs font-mono">
-                  {id}
+  return (
+    <div className="space-y-4">
+      {/* Status + Balance Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4" /> Ad Guard Configuration
+          </CardTitle>
+          <CardDescription>
+            Automatically pause all campaigns when the client's balance drops to or below the threshold amount.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Status + Balance Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">System Status</p>
+              <div className="flex items-center gap-2">
+                <Badge variant={isSystemPaused ? "destructive" : "default"} className="gap-1">
+                  {isSystemPaused ? <><AlertTriangle className="h-3 w-3" /> Paused</> : <><Zap className="h-3 w-3" /> Active</>}
                 </Badge>
-              ))}
+                {isSystemPaused && <span className="text-xs text-muted-foreground">{systemPausedCampaigns.length} campaign(s)</span>}
+              </div>
             </div>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={handleManualResume}
-              disabled={saving}
-            >
-              Manual Override: Resume All
+            <div className="rounded-lg border p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Current Balance</p>
+              <p className={`text-lg font-semibold ${balance !== null && balance <= autoPauseBalanceUsd ? "text-destructive" : "text-foreground"}`}>
+                {balance !== null ? `$${balance.toFixed(2)}` : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border p-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Auto-Resume At</p>
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-lg font-semibold">${autoResumeThreshold.toFixed(2)}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground">2× pause threshold</p>
+            </div>
+          </div>
+
+          {/* Settings */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5" /> Pause Threshold
+              </Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                <Input type="number" placeholder="5.00" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="pl-7" min="0" step="1" />
+              </div>
+              <p className="text-xs text-muted-foreground">Pause when balance ≤ this amount.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Overdraft Limit (USD)</Label>
+              <Input type="number" placeholder="0.00" value={overdraft} onChange={(e) => setOverdraft(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Allow spending beyond balance up to this amount.</p>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button onClick={handleSave} disabled={saving} className="gap-2" size="sm">
+              <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Settings"}
+            </Button>
+            <Button variant="outline" onClick={handleRunGuard} disabled={runningGuard} className="gap-2" size="sm">
+              <Shield className="h-4 w-4" /> {runningGuard ? "Scanning…" : "Run Ad Guard Now"}
             </Button>
           </div>
-        )}
+        </CardContent>
+      </Card>
 
-        {/* Dollar Threshold Input */}
-        <div className="space-y-2">
-          <Label className="flex items-center gap-1.5">
-            <DollarSign className="h-3.5 w-3.5" /> Pause When Balance Drops To
-          </Label>
-          <div className="relative max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-            <Input
-              type="number"
-              placeholder="5.00"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              className="pl-7 max-w-xs"
-              min="0"
-              step="1"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            All campaigns will auto-pause when remaining balance ≤ this amount. Set $0 to only pause at zero/negative balance.
-          </p>
-        </div>
+      {/* Paused Campaigns Table */}
+      {isSystemPaused && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base text-destructive">
+                <AlertTriangle className="h-4 w-4" /> Paused Campaigns ({systemPausedCampaigns.length})
+              </CardTitle>
+              <Button size="sm" variant="destructive" onClick={handleResumeAll} disabled={saving} className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Resume All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingDetails ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Loading campaign details…</p>
+            ) : campaignDetails.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campaign</TableHead>
+                      <TableHead>Ad Account</TableHead>
+                      <TableHead className="w-[80px]">Platform</TableHead>
+                      <TableHead className="w-[90px] text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {campaignDetails.map((c) => (
+                      <TableRow key={c.campaign_id}>
+                        <TableCell className="font-medium text-sm">{c.campaign_name || c.campaign_id}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{c.ad_account_name}</TableCell>
+                        <TableCell>{platformIcon(c.platform)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 gap-1 text-xs"
+                            disabled={resumingId === c.campaign_id}
+                            onClick={() => handleResumeSingle(c.campaign_id)}
+                          >
+                            <Play className="h-3 w-3" /> {resumingId === c.campaign_id ? "…" : "Resume"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 py-2">
+                {systemPausedCampaigns.map((id) => (
+                  <Badge key={id} variant="outline" className="text-xs font-mono">{id}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Overdraft Limit */}
-        <div className="space-y-2">
-          <Label>Overdraft Limit (USD)</Label>
-          <Input
-            type="number"
-            placeholder="0.00"
-            value={overdraft}
-            onChange={(e) => setOverdraft(e.target.value)}
-            className="max-w-xs"
-          />
-          <p className="text-xs text-muted-foreground">
-            Allow spending beyond balance up to this amount (VIP clients). Set 0 to disable.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button onClick={handleSave} disabled={saving} className="gap-2">
-            <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Settings"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleRunGuard}
-            disabled={runningGuard}
-            className="gap-2"
-          >
-            <Shield className="h-4 w-4" /> {runningGuard ? "Scanning…" : "Run Ad Guard Now"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Guard History */}
+      {guardHistory.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4" /> Guard History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {guardHistory.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 text-sm border-l-2 pl-3 py-1 border-muted">
+                  <Badge
+                    variant={event.action_type === "ad_guard_pause" ? "destructive" : "default"}
+                    className="text-[10px] shrink-0 mt-0.5"
+                  >
+                    {event.action_type === "ad_guard_pause" ? "PAUSED" : "RESUMED"}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground truncate">{event.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(event.created_at).toLocaleDateString()} {new Date(event.created_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
