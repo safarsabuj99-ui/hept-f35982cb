@@ -919,6 +919,33 @@ export type Database = {
         }
         Relationships: []
       }
+      usd_inventory_snapshots: {
+        Row: {
+          balance_usd: number
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          snapshot_date: string
+        }
+        Insert: {
+          balance_usd?: number
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          snapshot_date: string
+        }
+        Update: {
+          balance_usd?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          snapshot_date?: string
+        }
+        Relationships: []
+      }
       usd_purchases: {
         Row: {
           bdt_amount_paid: number
