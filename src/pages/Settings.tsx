@@ -37,6 +37,9 @@ export default function Settings() {
   const [adAccounts, setAdAccounts] = useState<{ id: string; account_name: string; ad_account_id: string; platform_name: string }[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [syncingAccount, setSyncingAccount] = useState(false);
+  const [syncHealth, setSyncHealth] = useState<any[]>([]);
+  const [loadingSyncHealth, setLoadingSyncHealth] = useState(true);
+  const [retryingAccount, setRetryingAccount] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
 
