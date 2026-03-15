@@ -89,8 +89,7 @@ export function DepositFundsDialog({
       platform,
     };
 
-    // Include payment_date only for admin
-    if (isAdmin && paymentDate) {
+    if (paymentDate) {
       insertPayload.payment_date = format(paymentDate, "yyyy-MM-dd");
     }
 
