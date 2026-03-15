@@ -553,10 +553,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        ok: true,
         message: `Fast lane sync complete`,
         synced: syncedCount,
         skipped_no_keyword_match: skipped,
         errors: errors.length > 0 ? errors : undefined,
+        error_code: errors.length > 0 ? "partial_errors" : undefined,
+        rows_synced: syncedCount,
         date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
@@ -564,8 +567,13 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("sync-fast-lane error:", error);
+    const errMsg = error.message || String(error);
+    let errorCode = "api_error";
+    if (errMsg.includes("CPU") || errMsg.includes("timeout")) errorCode = "cpu_timeout";
+    else if (errMsg.includes("190") || errMsg.includes("token")) errorCode = "token_expired";
+    else if (errMsg.includes("41000")) errorCode = "geo_blocked";
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ ok: false, error: errMsg, error_code: errorCode }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
