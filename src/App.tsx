@@ -52,6 +52,13 @@ import PlatformHealth from "@/pages/PlatformHealth";
 import TenantLifecycle from "@/pages/TenantLifecycle";
 import PlatformRevenue from "@/pages/PlatformRevenue";
 import TenantUsageMetering from "@/pages/TenantUsageMetering";
+import PlatformCohorts from "@/pages/PlatformCohorts";
+import PlatformChurnPrediction from "@/pages/PlatformChurnPrediction";
+import PlatformFeatureAdoption from "@/pages/PlatformFeatureAdoption";
+import PlatformForecasting from "@/pages/PlatformForecasting";
+import PlatformCostAnalytics from "@/pages/PlatformCostAnalytics";
+import PlatformHealthScores from "@/pages/PlatformHealthScores";
+import PlatformBenchmarks from "@/pages/PlatformBenchmarks";
 
 import NotFound from "@/pages/NotFound";
 
@@ -96,6 +103,13 @@ const App = () => (
                 <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
                 <Route path="/platform/audit" element={<PlatformAudit />} />
                 <Route path="/platform/health" element={<PlatformHealth />} />
+                <Route path="/platform/cohorts" element={<PlatformCohorts />} />
+                <Route path="/platform/churn" element={<PlatformChurnPrediction />} />
+                <Route path="/platform/adoption" element={<PlatformFeatureAdoption />} />
+                <Route path="/platform/forecasting" element={<PlatformForecasting />} />
+                <Route path="/platform/costs" element={<PlatformCostAnalytics />} />
+                <Route path="/platform/health-scores" element={<PlatformHealthScores />} />
+                <Route path="/platform/benchmarks" element={<PlatformBenchmarks />} />
               </Route>
 
               {/* Super Admin routes */}

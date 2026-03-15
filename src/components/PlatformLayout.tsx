@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity, GitBranch, TrendingUp, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity, GitBranch, TrendingUp, BarChart3, Users, AlertTriangle, Grid3X3, LineChart, Calculator, HeartPulse, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
@@ -28,6 +28,16 @@ const navItems = [
   { title: "Announcements", url: "/platform/announcements", icon: Megaphone },
   { title: "Audit Logs", url: "/platform/audit", icon: Shield },
   { title: "System Health", url: "/platform/health", icon: Activity },
+];
+
+const intelligenceItems = [
+  { title: "Cohorts", url: "/platform/cohorts", icon: Users },
+  { title: "Churn Risk", url: "/platform/churn", icon: AlertTriangle },
+  { title: "Adoption", url: "/platform/adoption", icon: Grid3X3 },
+  { title: "Forecasting", url: "/platform/forecasting", icon: LineChart },
+  { title: "Costs", url: "/platform/costs", icon: Calculator },
+  { title: "Health Scores", url: "/platform/health-scores", icon: HeartPulse },
+  { title: "Benchmarks", url: "/platform/benchmarks", icon: Trophy },
 ];
 
 function PlatformSidebar() {
@@ -64,6 +74,24 @@ function PlatformSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end={item.url === "/platform"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Intelligence</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {intelligenceItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>

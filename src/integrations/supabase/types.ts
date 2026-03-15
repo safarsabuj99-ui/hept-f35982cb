@@ -772,6 +772,44 @@ export type Database = {
           },
         ]
       }
+      feature_usage_events: {
+        Row: {
+          created_at: string
+          event_count: number
+          feature_key: string
+          id: string
+          last_used_at: string | null
+          org_id: string
+          period: string
+        }
+        Insert: {
+          created_at?: string
+          event_count?: number
+          feature_key: string
+          id?: string
+          last_used_at?: string | null
+          org_id: string
+          period?: string
+        }
+        Update: {
+          created_at?: string
+          event_count?: number
+          feature_key?: string
+          id?: string
+          last_used_at?: string | null
+          org_id?: string
+          period?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_usage_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_transfers: {
         Row: {
           amount_bdt: number
@@ -1111,6 +1149,44 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_costs: {
+        Row: {
+          amount_bdt: number
+          category: string
+          created_at: string
+          id: string
+          notes: string | null
+          org_id: string | null
+          period: string
+        }
+        Insert: {
+          amount_bdt?: number
+          category?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+          period: string
+        }
+        Update: {
+          amount_bdt?: number
+          category?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+          period?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_costs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_invoices: {
         Row: {
           amount_bdt: number
@@ -1385,6 +1461,44 @@ export type Database = {
             columns: ["ad_account_id"]
             isOneToOne: false
             referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_health_scores: {
+        Row: {
+          activity_score: number
+          computed_at: string
+          id: string
+          org_id: string
+          payment_score: number
+          score: number
+          usage_score: number
+        }
+        Insert: {
+          activity_score?: number
+          computed_at?: string
+          id?: string
+          org_id: string
+          payment_score?: number
+          score?: number
+          usage_score?: number
+        }
+        Update: {
+          activity_score?: number
+          computed_at?: string
+          id?: string
+          org_id?: string
+          payment_score?: number
+          score?: number
+          usage_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_health_scores_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
