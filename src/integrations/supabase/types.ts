@@ -1291,6 +1291,56 @@ export type Database = {
           },
         ]
       }
+      sync_logs: {
+        Row: {
+          ad_account_id: string
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          function_name: string
+          id: string
+          retry_count: number | null
+          rows_synced: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          ad_account_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          function_name: string
+          id?: string
+          retry_count?: number | null
+          rows_synced?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          ad_account_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          function_name?: string
+          id?: string
+          retry_count?: number | null
+          rows_synced?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_logs_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
