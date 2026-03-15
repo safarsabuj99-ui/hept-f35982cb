@@ -52,6 +52,13 @@ import PlatformHealth from "@/pages/PlatformHealth";
 import TenantLifecycle from "@/pages/TenantLifecycle";
 import PlatformRevenue from "@/pages/PlatformRevenue";
 import TenantUsageMetering from "@/pages/TenantUsageMetering";
+import PlatformCohorts from "@/pages/PlatformCohorts";
+import PlatformChurnPrediction from "@/pages/PlatformChurnPrediction";
+import PlatformFeatureAdoption from "@/pages/PlatformFeatureAdoption";
+import PlatformForecasting from "@/pages/PlatformForecasting";
+import PlatformCostAnalytics from "@/pages/PlatformCostAnalytics";
+import PlatformHealthScores from "@/pages/PlatformHealthScores";
+import PlatformBenchmarks from "@/pages/PlatformBenchmarks";
 
 import NotFound from "@/pages/NotFound";
 
