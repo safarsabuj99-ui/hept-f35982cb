@@ -184,7 +184,6 @@ export function DepositFundsDialog({
                 </PopoverContent>
               </Popover>
             </div>
-          )}
           <div className="space-y-2">
             <Label>Transaction ID / Note (optional)</Label>
             <Input
