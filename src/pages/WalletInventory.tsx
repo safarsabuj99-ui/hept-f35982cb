@@ -10,11 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2 } from "lucide-react";
+import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+
+interface UsdOverview {
+  totalPurchased: number;
+  totalSpent: number;
+  availableBalance: number;
+  dailyBurn: number;
+  runwayDays: number;
+  clientObligations: number;
+  usdNeeded: number;
+  loading: boolean;
+}
 
 interface UsdPurchase {
   id: string;
@@ -42,6 +53,10 @@ export default function WalletInventory() {
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [overview, setOverview] = useState<UsdOverview>({
+    totalPurchased: 0, totalSpent: 0, availableBalance: 0,
+    dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0, loading: true,
+  });
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -56,8 +71,51 @@ export default function WalletInventory() {
     setLoading(false);
   }, []);
 
+  const fetchOverview = useCallback(async () => {
+    setOverview(prev => ({ ...prev, loading: true }));
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
+
+    const [purchasesRes, spendRes, burn7Res, txnRes] = await Promise.all([
+      // All-time total USD purchased
+      supabase.from("usd_purchases").select("usd_received"),
+      // All-time total spend from daily_metrics
+      supabase.from("daily_metrics").select("spend"),
+      // Last 7 days spend for burn rate
+      supabase.from("daily_metrics").select("spend").gte("data_date", sevenDaysAgoStr),
+      // All completed transactions for client obligations
+      supabase.from("transactions").select("type, amount, client_id").eq("status", "completed"),
+    ]);
+
+    const totalPurchased = (purchasesRes.data ?? []).reduce((s: number, r: any) => s + Number(r.usd_received), 0);
+    const totalSpent = (spendRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const last7Spend = (burn7Res.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const dailyBurn = last7Spend / 7;
+    const availableBalance = totalPurchased - totalSpent;
+    const runwayDays = dailyBurn > 0 ? availableBalance / dailyBurn : availableBalance > 0 ? 999 : 0;
+
+    // Client obligations: sum net positive balances per client
+    const clientBalances: Record<string, number> = {};
+    for (const t of (txnRes.data ?? []) as any[]) {
+      const cid = t.client_id;
+      if (!clientBalances[cid]) clientBalances[cid] = 0;
+      clientBalances[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
+    }
+    const clientObligations = Object.values(clientBalances).filter(b => b > 0).reduce((s, b) => s + b, 0);
+    const usdNeeded = Math.max(0, clientObligations - availableBalance);
+
+    setOverview({
+      totalPurchased, totalSpent, availableBalance, dailyBurn,
+      runwayDays: Math.max(0, Math.floor(runwayDays)),
+      clientObligations, usdNeeded, loading: false,
+    });
+  }, []);
+
   useEffect(() => {
     fetchPurchases(dateRange);
+    fetchOverview();
     supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
   }, []);
 
@@ -203,6 +261,90 @@ export default function WalletInventory() {
       </div>
 
       <DateRangeFilter onRangeChange={handleRangeChange} />
+
+      {/* USD Inventory Overview — all-time, independent of date filter */}
+      <Card className={`border-2 ${
+        overview.loading ? "border-border" :
+        overview.availableBalance < 0 || overview.runwayDays < 3 ? "border-destructive/50 bg-destructive/5" :
+        overview.runwayDays <= 7 ? "border-yellow-500/50 bg-yellow-500/5" :
+        "border-emerald-500/50 bg-emerald-500/5"
+      }`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            USD Inventory Overview
+            <Badge variant="outline" className="ml-auto text-[10px] font-normal">All-Time</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+            {/* Available Balance */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Available USD</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                  overview.availableBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+                }`}>
+                  ${overview.availableBalance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Total Purchased */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Total Purchased</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.totalPurchased.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Total Spent */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Total Spent</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.totalSpent.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Daily Burn Rate */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Daily Burn</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.dailyBurn.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  <span className="text-sm font-normal text-muted-foreground">/day</span>
+                </p>
+              )}
+            </div>
+
+            {/* Runway & USD Needed */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Runway</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <div>
+                  <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                    overview.runwayDays < 3 ? "text-destructive" :
+                    overview.runwayDays <= 7 ? "text-yellow-600 dark:text-yellow-400" :
+                    "text-emerald-600 dark:text-emerald-400"
+                  }`}>
+                    {overview.runwayDays >= 999 ? "∞" : `${overview.runwayDays}d`}
+                  </p>
+                  {overview.usdNeeded > 0 && (
+                    <p className="text-xs text-destructive flex items-center gap-1 mt-0.5">
+                      <AlertTriangle className="h-3 w-3" />
+                      Need ${overview.usdNeeded.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
