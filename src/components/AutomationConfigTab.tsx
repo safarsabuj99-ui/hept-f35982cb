@@ -369,35 +369,89 @@ export function AutomationConfigTab({
       )}
 
       {/* Guard History */}
-      {guardHistory.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <History className="h-4 w-4" /> Guard History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {guardHistory.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 text-sm border-l-2 pl-3 py-1 border-muted">
-                  <Badge
-                    variant={event.action_type === "ad_guard_pause" ? "destructive" : "default"}
-                    className="text-[10px] shrink-0 mt-0.5"
-                  >
-                    {event.action_type === "ad_guard_pause" ? "PAUSED" : "RESUMED"}
-                  </Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground truncate">{event.description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(event.created_at).toLocaleDateString()} {new Date(event.created_at).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-4 w-4" /> Guard History
+          </CardTitle>
+          <CardDescription>Pause & resume events for this client</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Times Paused</p>
+              <p className="text-2xl font-bold text-destructive">{pauseCount}</p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Times Resumed</p>
+              <p className="text-2xl font-bold text-green-600">{resumeCount}</p>
+            </div>
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Last Event</p>
+              {lastEvent ? (
+                <>
+                  <Badge variant={lastEvent.action_type === "ad_guard_pause" ? "destructive" : "default"} className="text-[10px]">
+                    {lastEvent.action_type === "ad_guard_pause" ? "PAUSED" : "RESUMED"}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">{relativeTime(lastEvent.created_at)}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No events</p>
+              )}
+            </div>
+          </div>
+
+          {/* History Table */}
+          {guardHistory.length > 0 ? (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[90px]">Event</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead className="w-[140px] text-right">Date & Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {guardHistory.map((event) => {
+                    const parsed = parseDescription(event.description);
+                    const isPause = event.action_type === "ad_guard_pause";
+                    return (
+                      <TableRow key={event.id} className={isPause ? "bg-destructive/5" : "bg-green-500/5"}>
+                        <TableCell>
+                          <Badge variant={isPause ? "destructive" : "default"} className="text-[10px]">
+                            {isPause ? "PAUSED" : "RESUMED"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="space-y-0.5">
+                            {parsed.campaigns && (
+                              <span className="font-medium">{parsed.campaigns} campaign(s)</span>
+                            )}
+                            {parsed.balance && (
+                              <span className="text-muted-foreground ml-2">Balance: ${parsed.balance}</span>
+                            )}
+                            {!parsed.campaigns && !parsed.balance && (
+                              <span className="text-muted-foreground truncate block max-w-[300px]">{event.description}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          <div>{new Date(event.created_at).toLocaleDateString()}</div>
+                          <div>{relativeTime(event.created_at)}</div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No guard events recorded yet.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
