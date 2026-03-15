@@ -403,6 +403,11 @@ export function AutomationConfigTab({
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base text-destructive">
                 <AlertTriangle className="h-4 w-4" /> Paused Campaigns ({systemPausedCampaigns.length})
+                {remainingText && (
+                  <Badge variant="outline" className="ml-2 text-[10px] font-normal gap-1">
+                    <Clock className="h-3 w-3" /> {remainingText}
+                  </Badge>
+                )}
               </CardTitle>
               <Button size="sm" variant="destructive" onClick={handleResumeAll} disabled={saving} className="gap-1.5">
                 <RefreshCw className="h-3.5 w-3.5" /> Resume All
