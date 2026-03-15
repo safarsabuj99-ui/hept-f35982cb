@@ -49,6 +49,9 @@ import PlatformPlans from "@/pages/PlatformPlans";
 import PlatformAnnouncements from "@/pages/PlatformAnnouncements";
 import PlatformAudit from "@/pages/PlatformAudit";
 import PlatformHealth from "@/pages/PlatformHealth";
+import TenantLifecycle from "@/pages/TenantLifecycle";
+import PlatformRevenue from "@/pages/PlatformRevenue";
+import TenantUsageMetering from "@/pages/TenantUsageMetering";
 
 import NotFound from "@/pages/NotFound";
 
