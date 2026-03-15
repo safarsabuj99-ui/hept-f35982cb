@@ -784,6 +784,8 @@ export type Database = {
           data_fetch_start_date: string | null
           email: string
           full_name: string
+          guard_paused_at: string | null
+          guard_resume_window_hours: number
           id: string
           is_active: boolean
           is_super_admin: boolean
@@ -808,6 +810,8 @@ export type Database = {
           data_fetch_start_date?: string | null
           email: string
           full_name: string
+          guard_paused_at?: string | null
+          guard_resume_window_hours?: number
           id?: string
           is_active?: boolean
           is_super_admin?: boolean
@@ -832,6 +836,8 @@ export type Database = {
           data_fetch_start_date?: string | null
           email?: string
           full_name?: string
+          guard_paused_at?: string | null
+          guard_resume_window_hours?: number
           id?: string
           is_active?: boolean
           is_super_admin?: boolean
