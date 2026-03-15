@@ -137,10 +137,14 @@ export function AutomationConfigTab({
     const campaignMatch = desc.match(/(\d+)\s*campaign/i);
     const balanceMatch = desc.match(/Balance:\s*\$([0-9.,]+)/i);
     const thresholdMatch = desc.match(/threshold:\s*\$([0-9.,]+)/i);
+    // Extract campaign names from "[Name1, Name2]" pattern
+    const namesMatch = desc.match(/:\s*\[([^\]]+)\]\./);
+    const campaignNames = namesMatch ? namesMatch[1].split(",").map(n => n.trim()) : [];
     return {
       campaigns: campaignMatch ? campaignMatch[1] : null,
       balance: balanceMatch ? balanceMatch[1] : null,
       threshold: thresholdMatch ? thresholdMatch[1] : null,
+      campaignNames,
     };
   }
 
