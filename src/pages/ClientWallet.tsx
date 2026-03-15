@@ -103,7 +103,7 @@ export default function ClientWallet() {
   const totalNegativeBdt = useMemo(() => {
     if (balance >= 0) return 0;
     return platformBalances.reduce((sum, pb) => {
-      if (pb.balance < 0) return sum + Math.abs(pb.balance) * getPlatformRate(pb.platform);
+      if (pb.balance < 0) return sum + Math.abs(pb.balance) * getRate(pb.platform);
       return sum;
     }, 0);
   }, [platformBalances, balance, pricingConfig]);
