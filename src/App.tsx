@@ -87,6 +87,9 @@ const App = () => (
                 <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
                 <Route path="/platform/billing" element={<PlatformBilling />} />
                 <Route path="/platform/plans" element={<PlatformPlans />} />
+                <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
+                <Route path="/platform/audit" element={<PlatformAudit />} />
+                <Route path="/platform/health" element={<PlatformHealth />} />
               </Route>
 
               {/* Super Admin routes */}
