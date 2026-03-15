@@ -33,6 +33,9 @@ export default function Settings() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
   const [savingProxy, setSavingProxy] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<{ id: string; account_name: string; ad_account_id: string; platform_name: string }[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [syncingAccount, setSyncingAccount] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
