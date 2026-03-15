@@ -89,8 +89,7 @@ export function DepositFundsDialog({
       platform,
     };
 
-    // Include payment_date only for admin
-    if (isAdmin && paymentDate) {
+    if (paymentDate) {
       insertPayload.payment_date = format(paymentDate, "yyyy-MM-dd");
     }
 
@@ -158,9 +157,8 @@ export function DepositFundsDialog({
               </SelectContent>
             </Select>
           </div>
-          {isAdmin && (
-            <div className="space-y-2">
-              <Label>Payment Date</Label>
+          <div className="space-y-2">
+            <Label>Payment Date</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -186,7 +184,6 @@ export function DepositFundsDialog({
                 </PopoverContent>
               </Popover>
             </div>
-          )}
           <div className="space-y-2">
             <Label>Transaction ID / Note (optional)</Label>
             <Input

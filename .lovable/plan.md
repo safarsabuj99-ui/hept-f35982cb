@@ -1,24 +1,34 @@
 
 
-## Plan: Unify Client-Side Deposit Dialog with Admin Client Detail Page
+# Fix: Platform Transfers Inflating Today's Collections
 
-### Problem
-The client-side deposit dialog (ClientWallet, ClientDashboard) is missing the **Payment Date** picker that the admin's client detail page deposit dialog has. The user wants both sides to show the same form.
+## Problem
+When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
 
-### What's Different
-The `DepositFundsDialog` component already supports the Payment Date field — it's controlled by the `isAdmin` prop. When `isAdmin={true}` (client detail page), the date picker shows. When not passed (client-side), it's hidden.
+## Solution
+Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
 
-### Fix
+## Technical Change
 
-**File: `src/components/DepositFundsDialog.tsx`**
-- Remove the `isAdmin` condition around the Payment Date field — always show it
-- Always include `payment_date` in the insert payload (not just when `isAdmin` is true)
-- Keep the `isAdmin` prop for any other admin-specific behavior if needed
+**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
 
-This is a ~5 line change in one file. All consumer pages (ClientWallet, ClientDashboard, ClientDetail, AdminDashboard, ClientList) automatically get the unified form.
+Current code:
+```
+const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
+```
 
-### Files to Change
+Updated code -- exclude transfer credits:
+```
+const todayTxns = transactions.filter((t: any) =>
+  t.date === today && t.type === "credit" && t.status === "completed"
+  && !(t.description && t.description.startsWith("Platform transfer:"))
+);
+```
+
+Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+
 | File | Change |
 |------|--------|
-| `src/components/DepositFundsDialog.tsx` | Remove `isAdmin` guard on Payment Date field; always include `payment_date` in payload |
+| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
 
+No database or edge function changes needed.
