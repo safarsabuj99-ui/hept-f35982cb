@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
           client: profile.full_name,
           balance: Math.round(balance * 100) / 100,
           threshold: pauseThreshold,
-          action: balance <= pauseThreshold ? "ALREADY_PAUSED" : "OK",
+          action: balance <= effectiveThreshold ? "ALREADY_PAUSED" : "OK",
           campaigns_paused: 0,
         });
       }

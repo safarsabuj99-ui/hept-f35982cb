@@ -433,12 +433,21 @@ export function AutomationConfigTab({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          <div className="space-y-0.5">
-                            {parsed.campaigns && (
-                              <span className="font-medium">{parsed.campaigns} campaign(s)</span>
-                            )}
-                            {parsed.balance && (
-                              <span className="text-muted-foreground ml-2">Balance: ${parsed.balance}</span>
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {parsed.campaigns && (
+                                <span className="font-medium">{parsed.campaigns} campaign(s)</span>
+                              )}
+                              {parsed.balance && (
+                                <span className="text-muted-foreground">Balance: ${parsed.balance}</span>
+                              )}
+                            </div>
+                            {parsed.campaignNames.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {parsed.campaignNames.map((name, i) => (
+                                  <Badge key={i} variant="outline" className="text-[10px] font-normal">{name}</Badge>
+                                ))}
+                              </div>
                             )}
                             {!parsed.campaigns && !parsed.balance && (
                               <span className="text-muted-foreground truncate block max-w-[300px]">{event.description}</span>
