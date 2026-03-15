@@ -114,7 +114,35 @@ export function AutomationConfigTab({
       }
     }
     fetchData();
-  }, [userId, systemPausedCampaigns]);
+  }, [userId, clientName, systemPausedCampaigns]);
+
+  // Computed history stats
+  const pauseCount = guardHistory.filter(e => e.action_type === "ad_guard_pause").length;
+  const resumeCount = guardHistory.filter(e => e.action_type === "ad_guard_resume").length;
+  const lastEvent = guardHistory.length > 0 ? guardHistory[0] : null;
+
+  function relativeTime(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  }
+
+  function parseDescription(desc: string) {
+    const campaignMatch = desc.match(/(\d+)\s*campaign/i);
+    const balanceMatch = desc.match(/Balance:\s*\$([0-9.,]+)/i);
+    const thresholdMatch = desc.match(/threshold:\s*\$([0-9.,]+)/i);
+    return {
+      campaigns: campaignMatch ? campaignMatch[1] : null,
+      balance: balanceMatch ? balanceMatch[1] : null,
+      threshold: thresholdMatch ? thresholdMatch[1] : null,
+    };
+  }
 
   async function handleSave() {
     setSaving(true);
