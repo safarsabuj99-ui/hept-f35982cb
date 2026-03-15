@@ -195,11 +195,18 @@ export function AutomationConfigTab({
       setSaving(false);
       return;
     }
+    const windowVal = parseInt(resumeWindowHours);
+    if (isNaN(windowVal) || windowVal < 1) {
+      toast({ title: "Invalid window", description: "Resume window must be at least 1 hour.", variant: "destructive" });
+      setSaving(false);
+      return;
+    }
     const { error } = await supabase
       .from("profiles")
       .update({
         auto_pause_balance_usd: thresholdVal,
         overdraft_limit_usd: overdraft ? parseFloat(overdraft) : 0,
+        guard_resume_window_hours: windowVal,
       } as any)
       .eq("user_id", userId);
     setSaving(false);
