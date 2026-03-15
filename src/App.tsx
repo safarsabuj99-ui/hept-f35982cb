@@ -70,6 +70,22 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
 
+              {/* Platform Owner routes */}
+              <Route
+                element={
+                  <ProtectedRoute requiredRole="platform_owner">
+                    <PlatformLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/platform" element={<PlatformDashboard />} />
+                <Route path="/platform/agencies" element={<AgencyList />} />
+                <Route path="/platform/agencies/new" element={<CreateAgency />} />
+                <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
+                <Route path="/platform/billing" element={<PlatformBilling />} />
+                <Route path="/platform/plans" element={<PlatformPlans />} />
+              </Route>
+
               {/* Super Admin routes */}
               <Route
                 element={
