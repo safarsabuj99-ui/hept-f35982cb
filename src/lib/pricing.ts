@@ -7,6 +7,7 @@ export interface PlatformRates {
   meta: number;
   tiktok: number;
   google: number;
+  [key: string]: number;
 }
 
 const DEFAULT_RATES: PlatformRates = { meta: 120, tiktok: 120, google: 120 };
