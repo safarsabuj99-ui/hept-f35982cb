@@ -10,20 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame } from "lucide-react";
+import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame, CalendarCheck, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 
 interface UsdOverview {
-  totalPurchased: number;
-  totalSpent: number;
+  carryForward: number;
+  boughtSince: number;
+  spentSince: number;
   availableBalance: number;
   dailyBurn: number;
   runwayDays: number;
   clientObligations: number;
   usdNeeded: number;
+  snapshotDate: string | null;
   loading: boolean;
 }
 
@@ -42,6 +44,11 @@ export default function WalletInventory() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [openingBalanceDialogOpen, setOpeningBalanceDialogOpen] = useState(false);
+  const [closePeriodDialogOpen, setClosePeriodDialogOpen] = useState(false);
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [openingNotes, setOpeningNotes] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
   const [bdtPaid, setBdtPaid] = useState("");
   const [usdReceived, setUsdReceived] = useState("");
   const [chargePercent, setChargePercent] = useState("");
@@ -54,8 +61,9 @@ export default function WalletInventory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [overview, setOverview] = useState<UsdOverview>({
-    totalPurchased: 0, totalSpent: 0, availableBalance: 0,
-    dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0, loading: true,
+    carryForward: 0, boughtSince: 0, spentSince: 0, availableBalance: 0,
+    dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0,
+    snapshotDate: null, loading: true,
   });
   const { user } = useAuth();
   const { toast } = useToast();
@@ -74,29 +82,38 @@ export default function WalletInventory() {
   const fetchOverview = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
 
+    // 1. Get latest snapshot
+    const { data: snapshots } = await supabase
+      .from("usd_inventory_snapshots" as any)
+      .select("*")
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+
+    const snapshot = (snapshots as any[])?.[0] ?? null;
+    const carryForward = snapshot ? Number(snapshot.balance_usd) : 0;
+    const sinceDate = snapshot?.snapshot_date ?? "2020-01-01";
+    const snapshotDate = snapshot?.snapshot_date ?? null;
+
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
 
+    // 2. Only query data AFTER snapshot date
     const [purchasesRes, spendRes, burn7Res, txnRes] = await Promise.all([
-      // All-time total USD purchased
-      supabase.from("usd_purchases").select("usd_received"),
-      // All-time total spend from daily_metrics
-      supabase.from("daily_metrics").select("spend"),
-      // Last 7 days spend for burn rate
+      supabase.from("usd_purchases").select("usd_received").gt("date", sinceDate),
+      supabase.from("daily_metrics").select("spend").gt("data_date", sinceDate),
       supabase.from("daily_metrics").select("spend").gte("data_date", sevenDaysAgoStr),
-      // All completed transactions for client obligations
       supabase.from("transactions").select("type, amount, client_id").eq("status", "completed"),
     ]);
 
-    const totalPurchased = (purchasesRes.data ?? []).reduce((s: number, r: any) => s + Number(r.usd_received), 0);
-    const totalSpent = (spendRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
+    const boughtSince = (purchasesRes.data ?? []).reduce((s: number, r: any) => s + Number(r.usd_received), 0);
+    const spentSince = (spendRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
     const last7Spend = (burn7Res.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
     const dailyBurn = last7Spend / 7;
-    const availableBalance = totalPurchased - totalSpent;
+    const availableBalance = carryForward + boughtSince - spentSince;
     const runwayDays = dailyBurn > 0 ? availableBalance / dailyBurn : availableBalance > 0 ? 999 : 0;
 
-    // Client obligations: sum net positive balances per client
+    // Client obligations
     const clientBalances: Record<string, number> = {};
     for (const t of (txnRes.data ?? []) as any[]) {
       const cid = t.client_id;
@@ -107,9 +124,9 @@ export default function WalletInventory() {
     const usdNeeded = Math.max(0, clientObligations - availableBalance);
 
     setOverview({
-      totalPurchased, totalSpent, availableBalance, dailyBurn,
+      carryForward, boughtSince, spentSince, availableBalance, dailyBurn,
       runwayDays: Math.max(0, Math.floor(runwayDays)),
-      clientObligations, usdNeeded, loading: false,
+      clientObligations, usdNeeded, snapshotDate, loading: false,
     });
   }, []);
 
@@ -189,12 +206,57 @@ export default function WalletInventory() {
       setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
+      fetchOverview();
+    }
+  };
+
+  const handleSetOpeningBalance = async () => {
+    if (!openingBalance || Number(openingBalance) < 0) {
+      toast({ title: "Error", description: "Please enter a valid balance", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).insert({
+      snapshot_date: getDhakaDateString(),
+      balance_usd: Number(openingBalance),
+      notes: openingNotes || "Opening balance",
+      created_by: user?.id,
+    } as any);
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Opening balance set. Inventory tracking starts now." });
+      setOpeningBalance(""); setOpeningNotes("");
+      setOpeningBalanceDialogOpen(false);
+      fetchOverview();
+    }
+  };
+
+  const handleClosePeriod = async () => {
+    setSubmitting(true);
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).insert({
+      snapshot_date: getDhakaDateString(),
+      balance_usd: overview.availableBalance,
+      notes: closeNotes || `Period close — Balance: $${overview.availableBalance.toLocaleString()}`,
+      created_by: user?.id,
+    } as any);
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Period Closed", description: `Snapshot saved with $${overview.availableBalance.toLocaleString()} balance.` });
+      setCloseNotes("");
+      setClosePeriodDialogOpen(false);
+      fetchOverview();
     }
   };
 
   const previewRate = bdtPaid && effectiveUsd > 0
     ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
     : "—";
+
+  const hasSnapshot = overview.snapshotDate !== null;
 
   return (
     <div className="space-y-6">
@@ -262,87 +324,175 @@ export default function WalletInventory() {
 
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
-      {/* USD Inventory Overview — all-time, independent of date filter */}
+      {/* USD Inventory Overview — snapshot-based */}
       <Card className={`border-2 ${
         overview.loading ? "border-border" :
+        !hasSnapshot ? "border-primary/50 bg-primary/5" :
         overview.availableBalance < 0 || overview.runwayDays < 3 ? "border-destructive/50 bg-destructive/5" :
         overview.runwayDays <= 7 ? "border-yellow-500/50 bg-yellow-500/5" :
         "border-emerald-500/50 bg-emerald-500/5"
       }`}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            USD Inventory Overview
-            <Badge variant="outline" className="ml-auto text-[10px] font-normal">All-Time</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
-            {/* Available Balance */}
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Available USD</p>
-              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                <p className={`text-xl sm:text-2xl font-bold font-mono ${
-                  overview.availableBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
-                }`}>
-                  ${overview.availableBalance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              USD Inventory
+              {overview.snapshotDate && (
+                <Badge variant="outline" className="ml-1 text-[10px] font-normal">
+                  Since {overview.snapshotDate}
+                </Badge>
               )}
-            </div>
-
-            {/* Total Purchased */}
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Total Purchased</p>
-              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                <p className="text-xl sm:text-2xl font-bold font-mono">
-                  ${overview.totalPurchased.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
-              )}
-            </div>
-
-            {/* Total Spent */}
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Total Spent</p>
-              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                <p className="text-xl sm:text-2xl font-bold font-mono">
-                  ${overview.totalSpent.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
-              )}
-            </div>
-
-            {/* Daily Burn Rate */}
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Daily Burn</p>
-              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                <p className="text-xl sm:text-2xl font-bold font-mono">
-                  ${overview.dailyBurn.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  <span className="text-sm font-normal text-muted-foreground">/day</span>
-                </p>
-              )}
-            </div>
-
-            {/* Runway & USD Needed */}
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Runway</p>
-              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                <div>
-                  <p className={`text-xl sm:text-2xl font-bold font-mono ${
-                    overview.runwayDays < 3 ? "text-destructive" :
-                    overview.runwayDays <= 7 ? "text-yellow-600 dark:text-yellow-400" :
-                    "text-emerald-600 dark:text-emerald-400"
-                  }`}>
-                    {overview.runwayDays >= 999 ? "∞" : `${overview.runwayDays}d`}
-                  </p>
-                  {overview.usdNeeded > 0 && (
-                    <p className="text-xs text-destructive flex items-center gap-1 mt-0.5">
-                      <AlertTriangle className="h-3 w-3" />
-                      Need ${overview.usdNeeded.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {!overview.loading && !hasSnapshot && (
+                <Dialog open={openingBalanceDialogOpen} onOpenChange={setOpeningBalanceDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="default">
+                      <CalendarCheck className="mr-1 h-3.5 w-3.5" /> Set Opening Balance
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Set Opening USD Balance</DialogTitle></DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                      Enter the USD you currently have in hand. This becomes the starting point for inventory tracking — no need to import old purchase history.
                     </p>
-                  )}
-                </div>
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <Label>Current USD Balance</Label>
+                        <Input type="number" placeholder="e.g. 500" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
+                      </div>
+                      <div>
+                        <Label>Notes (optional)</Label>
+                        <Textarea value={openingNotes} onChange={e => setOpeningNotes(e.target.value)} placeholder="e.g. Starting inventory count" />
+                      </div>
+                      <Button className="w-full" onClick={handleSetOpeningBalance} disabled={submitting}>
+                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Opening Balance
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {!overview.loading && hasSnapshot && (
+                <Dialog open={closePeriodDialogOpen} onOpenChange={setClosePeriodDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <RotateCcw className="mr-1 h-3.5 w-3.5" /> Close Period
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Close Period & Reset</DialogTitle></DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                      This saves your current balance (<span className="font-mono font-medium">${overview.availableBalance.toLocaleString()}</span>) as a new snapshot. Future calculations will start from today.
+                    </p>
+                    <div className="space-y-4 pt-2">
+                      <div className="rounded-lg bg-muted p-4 text-center">
+                        <p className="text-xs text-muted-foreground">Current Balance to Carry Forward</p>
+                        <p className="text-3xl font-bold font-mono">${overview.availableBalance.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <Label>Notes (optional)</Label>
+                        <Textarea value={closeNotes} onChange={e => setCloseNotes(e.target.value)} placeholder="e.g. Q1 2026 close" />
+                      </div>
+                      <Button className="w-full" onClick={handleClosePeriod} disabled={submitting}>
+                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Close Period
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           </div>
+        </CardHeader>
+        <CardContent>
+          {!hasSnapshot && !overview.loading ? (
+            <div className="text-center py-6">
+              <p className="text-muted-foreground text-sm">
+                No opening balance set. Click <strong>"Set Opening Balance"</strong> to start tracking your USD inventory.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+                {/* Available Balance */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Available USD</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                      overview.availableBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+                    }`}>
+                      ${overview.availableBalance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Carry Forward */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Carry Forward</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <p className="text-xl sm:text-2xl font-bold font-mono">
+                      ${overview.carryForward.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Bought Since */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Bought (Since)</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <p className="text-xl sm:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      +${overview.boughtSince.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Spent Since */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Spent (Since)</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <p className="text-xl sm:text-2xl font-bold font-mono text-destructive">
+                      -${overview.spentSince.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Burn / Runway */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Burn / Runway</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <div>
+                      <p className="text-sm font-mono text-muted-foreground">
+                        ${overview.dailyBurn.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/d
+                      </p>
+                      <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                        overview.runwayDays < 3 ? "text-destructive" :
+                        overview.runwayDays <= 7 ? "text-yellow-600 dark:text-yellow-400" :
+                        "text-emerald-600 dark:text-emerald-400"
+                      }`}>
+                        {overview.runwayDays >= 999 ? "∞" : `${overview.runwayDays}d`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom row: obligations & needed */}
+              {!overview.loading && (
+                <div className="mt-3 pt-3 border-t flex flex-wrap items-center gap-4 text-sm">
+                  <span className="text-muted-foreground">
+                    Client Obligations: <span className="font-mono font-medium text-foreground">${overview.clientObligations.toLocaleString()}</span>
+                  </span>
+                  {overview.usdNeeded > 0 ? (
+                    <span className="text-destructive flex items-center gap-1">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      USD Needed: <span className="font-mono font-medium">${overview.usdNeeded.toLocaleString()}</span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">USD Needed: $0 ✓</span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -364,7 +514,7 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="hidden sm:block rounded-lg bg-success/10 p-2"><DollarSign className="h-5 w-5 text-success" /></div>
+              <div className="hidden sm:block rounded-lg bg-emerald-500/10 p-2"><DollarSign className="h-5 w-5 text-emerald-600" /></div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground truncate">USD Purchased ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-24" /> : (
@@ -377,7 +527,7 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Wallet className="h-5 w-5 text-warning" /></div>
+              <div className="hidden sm:block rounded-lg bg-yellow-500/10 p-2"><Wallet className="h-5 w-5 text-yellow-600" /></div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground truncate">BDT Invested ({periodLabel})</p>
                 {loading ? <Skeleton className="h-7 w-24" /> : (
