@@ -1,34 +1,44 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Full Data Reset (Preserve Structure)
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+### What Gets CLEARED (all rows deleted)
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+| Table | Reason |
+|-------|--------|
+| `daily_metrics` | Time-series spend/performance data |
+| `campaign_performance` | Campaign performance records |
+| `daily_ad_spend` | Daily ad spend records |
+| `campaigns` | Campaign identity records (will be re-imported) |
+| `transactions` | All credits/debits including auto_spend |
+| `campaign_mappings` | Campaign-to-client mappings |
+| `usd_purchases` | USD purchase history |
+| `usd_inventory_snapshots` | Snapshot ledger records |
+| `billing_notifications` | Billing alerts |
+| `audit_logs` | Activity logs |
+| `payment_requests` | Payment request records |
+| `campaign_requests` | Campaign order requests |
+| `agency_expenses` | Agency expense records |
+| `fund_transfers` | Fund transfer records |
 
-## Technical Change
+### What Gets KEPT (untouched)
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+| Table | Reason |
+|-------|--------|
+| `api_integrations` | API tokens & connections |
+| `ad_accounts` | Ad account structures |
+| `ad_account_clients` | Account-to-client assignments |
+| `profiles` | Client/manager profiles |
+| `user_roles` | Role assignments |
+| `manager_permissions` | Manager permissions |
+| `settings` | Global settings |
+| `agency_accounts` | Bank/agency accounts |
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### Execution
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+One SQL statement per table using the data insert tool (DELETE operations). Order matters — child tables first to avoid FK issues. The API sync functions will re-populate `campaigns`, `daily_metrics`, `campaign_performance`, and `daily_ad_spend` on the next scheduled run.
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+### No Code Changes Needed
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+The frontend and edge functions will work as-is — they'll just show empty/zero states until new data syncs in. The snapshot system will start fresh (no snapshot = calculates from scratch until you set an opening balance).
 
-No database or edge function changes needed.
