@@ -30,6 +30,16 @@ const navItems = [
   { title: "System Health", url: "/platform/health", icon: Activity },
 ];
 
+const intelligenceItems = [
+  { title: "Cohorts", url: "/platform/cohorts", icon: Users },
+  { title: "Churn Risk", url: "/platform/churn", icon: AlertTriangle },
+  { title: "Adoption", url: "/platform/adoption", icon: Grid3X3 },
+  { title: "Forecasting", url: "/platform/forecasting", icon: LineChart },
+  { title: "Costs", url: "/platform/costs", icon: Calculator },
+  { title: "Health Scores", url: "/platform/health-scores", icon: HeartPulse },
+  { title: "Benchmarks", url: "/platform/benchmarks", icon: Trophy },
+];
+
 function PlatformSidebar() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
