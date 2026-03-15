@@ -151,9 +151,8 @@ export default function ClientDashboard() {
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // Calculate BDT negative balance using per-platform rates
-  const totalNegativeBdt = useMemo(() => {
-    if (balance >= 0) return 0;
+  // Calculate BDT balance using per-platform rates (works for both negative and positive)
+  const balanceBdt = useMemo(() => {
     const flatRates = getPlatformRates(pricingConfig);
     const platforms = ["meta", "tiktok", "google"] as const;
     let totalBdt = 0;
@@ -161,13 +160,20 @@ export default function ClientDashboard() {
       const pCredits = transactions.filter(t => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
       const pDebits = transactions.filter(t => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
       const pBalance = pCredits - pDebits;
-      if (pBalance < 0) {
-        const rate = Number(flatRates[p]) || 120;
-        totalBdt += Math.abs(pBalance) * rate;
-      }
+      const rate = Number(flatRates[p]) || 120;
+      totalBdt += pBalance * rate;
+    }
+    // Include untagged transactions with average rate
+    const taggedPlatforms = transactions.filter(t => t.platform && ["meta", "tiktok", "google"].includes(t.platform));
+    const untaggedCredits = transactions.filter(t => t.type === "credit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
+    const untaggedDebits = transactions.filter(t => t.type === "debit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
+    const untaggedBalance = untaggedCredits - untaggedDebits;
+    if (untaggedBalance !== 0) {
+      const avgRate = (flatRates.meta + flatRates.tiktok + flatRates.google) / 3;
+      totalBdt += untaggedBalance * avgRate;
     }
     return totalBdt;
-  }, [balance, transactions, pricingConfig]);
+  }, [transactions, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
@@ -265,13 +271,24 @@ export default function ClientDashboard() {
               <p className="text-[10px] md:text-xs font-medium text-primary-foreground/60 uppercase tracking-wider mb-0.5">
                 Available Balance
               </p>
-              <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
-                {fmt(balance)}
-              </p>
-              {balance < 0 && totalNegativeBdt > 0 && (
-                <p className="text-sm font-mono text-red-300 mt-0.5">
-                  ৳{totalNegativeBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
+              {balance < 0 ? (
+                <>
+                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                    ৳{Math.abs(balanceBdt).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-sm font-mono text-red-300 mt-0.5">
+                    {fmt(balance)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                    {fmt(balance)}
+                  </p>
+                  <p className="text-sm font-mono text-primary-foreground/70 mt-0.5">
+                    ৳{balanceBdt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </>
               )}
             </div>
             <Button
