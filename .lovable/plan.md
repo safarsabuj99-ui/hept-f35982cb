@@ -1,34 +1,34 @@
 
 
-# Fix: Platform Transfers Inflating Today's Collections
+## Plan: Fix Ad Guard Issues — Paused Campaign Names in Logs, Overdraft-Aware Logic
 
-## Problem
-When you do a platform transfer (e.g., Google to TikTok), the system creates a credit transaction on the destination platform with today's date. The "Today's Collections" KPI on the Admin Dashboard counts ALL credit transactions from today, so the transfer amount gets incorrectly added to collections -- even though no new money was received.
+### Problems Identified
 
-## Solution
-Filter out platform transfer transactions from the "Today's Collections" calculation. Transfer transactions already have a description starting with `"Platform transfer:"`, so we can exclude them easily.
+1. **Paused campaign names not stored in audit logs**: The `ad-guard-check` edge function only logs "Auto-paused 3 campaigns" — it does not include the actual campaign names. After a few hours, when you look at the guard history, you see counts but no campaign names.
 
-## Technical Change
+2. **System status doesn't persist visually**: The paused campaigns table in the UI only shows when `systemPausedCampaigns` has entries. If the data refreshes and the array is empty (e.g., after auto-resume), the history doesn't show which campaigns were paused. The audit log description is the only record, and it lacks names.
 
-**File: `src/pages/AdminDashboard.tsx` (line 126-127)**
+3. **Overdraft logic is wrong**: Currently, Ad Guard pauses campaigns when `balance <= threshold` regardless of overdraft. If a client has NO overdraft limit (0), the guard should only pause when balance goes negative or hits threshold. But if a client has a POSITIVE balance and no overdraft, there's no reason to pause — the current logic pauses even when balance is positive if it's below threshold (e.g., balance $3, threshold $5 → pauses even though client has money).
 
-Current code:
-```
-const todayTxns = transactions.filter((t: any) => t.date === today && t.type === "credit" && t.status === "completed");
-```
+### Changes
 
-Updated code -- exclude transfer credits:
-```
-const todayTxns = transactions.filter((t: any) =>
-  t.date === today && t.type === "credit" && t.status === "completed"
-  && !(t.description && t.description.startsWith("Platform transfer:"))
-);
-```
+**File: `supabase/functions/ad-guard-check/index.ts`**
 
-Same filter applied to the 7-day collections sparkline (lines 131-134) so the trend chart is also accurate.
+1. **Include campaign names in audit log description**: When pausing, collect `campaign_name` from each campaign and include in the log message. Change from:
+   - `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Balance: $${balance.toFixed(2)}`
+   - To: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}: [Campaign A, Campaign B]. Balance: $${balance.toFixed(2)} (threshold: $${pauseThreshold}).`
 
-| File | Change |
-|------|--------|
-| `src/pages/AdminDashboard.tsx` | Exclude "Platform transfer:" transactions from collections KPI and sparkline |
+2. **Overdraft-aware pause logic**: Change the pause condition:
+   - Current: `balance <= pauseThreshold`
+   - New: If `overdraft_limit_usd > 0`, pause when `balance <= pauseThreshold` (existing behavior — they have credit, so threshold matters). If `overdraft_limit_usd === 0`, only pause when `balance <= 0` (no overdraft = don't pause until money runs out, ignore threshold). This way clients without overdraft run until balance hits zero, while clients with overdraft get the threshold protection.
 
-No database or edge function changes needed.
+**File: `src/components/AutomationConfigTab.tsx`**
+
+3. **Parse and display campaign names from history**: Update `parseDescription()` to also extract campaign names from the log description (the part between `campaigns for ClientName:` and `. Balance:`). Show the extracted names in the history table rows.
+
+4. **Update UI labels**: When overdraft is 0, show a note next to the threshold field: "No overdraft — guard activates only when balance reaches $0" to make the behavior clear.
+
+### Files to Change
+- `supabase/functions/ad-guard-check/index.ts` — Add campaign names to audit logs + overdraft-aware pause logic
+- `src/components/AutomationConfigTab.tsx` — Parse campaign names from history descriptions + overdraft UX hint
+
