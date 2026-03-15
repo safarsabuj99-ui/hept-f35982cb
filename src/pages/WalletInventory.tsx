@@ -10,11 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2 } from "lucide-react";
+import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+
+interface UsdOverview {
+  totalPurchased: number;
+  totalSpent: number;
+  availableBalance: number;
+  dailyBurn: number;
+  runwayDays: number;
+  clientObligations: number;
+  usdNeeded: number;
+  loading: boolean;
+}
 
 interface UsdPurchase {
   id: string;
