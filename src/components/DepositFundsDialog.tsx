@@ -157,9 +157,8 @@ export function DepositFundsDialog({
               </SelectContent>
             </Select>
           </div>
-          {isAdmin && (
-            <div className="space-y-2">
-              <Label>Payment Date</Label>
+          <div className="space-y-2">
+            <Label>Payment Date</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
