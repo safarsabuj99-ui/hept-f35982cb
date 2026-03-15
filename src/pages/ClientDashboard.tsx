@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { getPlatformRates } from "@/lib/pricing";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -153,7 +154,7 @@ export default function ClientDashboard() {
   // Calculate BDT negative balance using per-platform rates
   const totalNegativeBdt = useMemo(() => {
     if (balance >= 0) return 0;
-    const flatRates = (pricingConfig as any)?.flat_rates || {};
+    const flatRates = getPlatformRates(pricingConfig);
     const platforms = ["meta", "tiktok", "google"] as const;
     let totalBdt = 0;
     for (const p of platforms) {

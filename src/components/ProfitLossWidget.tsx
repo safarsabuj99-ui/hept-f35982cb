@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -139,7 +140,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         const profile = profileMap[cid];
         if (!profile) continue;
         const pricingConfig = profile.pricing_config as any;
-        const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+        const rates = getPlatformRates(pricingConfig);
 
         for (const [platform, spendUsd] of Object.entries(platformSpends)) {
           const rate = Number(rates[platform] || 120);

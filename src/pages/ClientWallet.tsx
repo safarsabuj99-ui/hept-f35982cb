@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { getPlatformRate } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
@@ -80,7 +81,7 @@ export default function ClientWallet() {
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtBdt = (n: number) => `৳${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const getPlatformRate = (platform: string) => pricingConfig?.flat_rates?.[platform] || pricingConfig?.platform_rates?.[platform] || 120;
+  const getRate = (platform: string) => getPlatformRate(pricingConfig, platform);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
@@ -102,7 +103,7 @@ export default function ClientWallet() {
   const totalNegativeBdt = useMemo(() => {
     if (balance >= 0) return 0;
     return platformBalances.reduce((sum, pb) => {
-      if (pb.balance < 0) return sum + Math.abs(pb.balance) * getPlatformRate(pb.platform);
+      if (pb.balance < 0) return sum + Math.abs(pb.balance) * getRate(pb.platform);
       return sum;
     }, 0);
   }, [platformBalances, balance, pricingConfig]);
@@ -142,7 +143,7 @@ export default function ClientWallet() {
         <div className="sm:col-span-2 md:col-span-1">
           <div className="grid grid-cols-3 gap-3 h-full">
             {platformBalances.map((pb) => {
-              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
+              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getRate(pb.platform) : 0;
               return (
                 <div key={pb.platform} className="glass-card glow-border p-3 md:p-4 flex flex-col items-center justify-center text-center">
                   <span className="h-2.5 w-2.5 rounded-full mb-1.5" style={{ background: pb.color }} />

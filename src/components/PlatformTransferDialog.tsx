@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { getPlatformRates } from "@/lib/pricing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,8 +56,8 @@ export function PlatformTransferDialog({ open, onOpenChange, clientId, onSuccess
 
     // Get rates
     const pc = profileRes.data?.pricing_config as any;
-    const r = pc?.flat_rates || pc?.platform_rates || {};
-    setRates(r);
+    const r = getPlatformRates(pc);
+    setRates(r as Record<string, number>);
   }
 
   const sourceRate = rates[from] || 0;

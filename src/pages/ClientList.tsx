@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,7 +106,7 @@ export default function ClientList() {
         const profile = profileMap[cid];
         if (!profile) continue;
         const pricingConfig = profile.pricing_config as any;
-        const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+        const rates = getPlatformRates(pricingConfig);
 
         let revenueBdt = 0, cogsBdt = 0;
         for (const [platform, spendUsd] of Object.entries(platformSpends)) {
@@ -144,7 +145,7 @@ export default function ClientList() {
         if (totalBal >= 0) continue;
         const profile = profileMap[cid];
         const pConfig = profile?.pricing_config as any;
-        const rates = pConfig?.flat_rates || pConfig?.platform_rates || { meta: 120, tiktok: 120, google: 120 };
+        const rates = getPlatformRates(pConfig);
         const platBals = platformBalMap[cid] || {};
         let bdtTotal = 0;
         // Only iterate known platforms, same as Client Dashboard
