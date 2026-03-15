@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.tiktok-exchange-token]
 verify_jwt = false
+
+[functions.sync-orchestrator]
+verify_jwt = false
