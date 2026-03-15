@@ -461,6 +461,16 @@ export function AutomationConfigTab({
         </Card>
       )}
 
+      {/* Window expired note */}
+      {isSystemPaused && !isWithinResumeWindow && (
+        <div className="flex items-start gap-2 rounded-lg border border-muted p-3">
+          <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            The resume window has expired. Campaigns remain paused and must be reactivated manually from Campaign Mappings.
+          </p>
+        </div>
+      )}
+
       {/* Guard History */}
       <Card>
         <CardHeader className="pb-3">
