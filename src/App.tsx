@@ -39,7 +39,7 @@ import ClientReports from "@/pages/ClientReports";
 import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 import AttentionRequired from "@/pages/AttentionRequired";
-import UnassignedSpendRisks from "@/pages/UnassignedSpendRisks";
+
 import PlatformDashboard from "@/pages/PlatformDashboard";
 import AgencyList from "@/pages/AgencyList";
 import CreateAgency from "@/pages/CreateAgency";
@@ -102,7 +102,7 @@ const App = () => (
               >
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/attention" element={<AttentionRequired />} />
-                <Route path="/admin/unassigned-spend" element={<UnassignedSpendRisks />} />
+                
                 
                 <Route path="/admin/clients" element={<ClientList />} />
                 <Route path="/admin/clients/new" element={<NewClient />} />
