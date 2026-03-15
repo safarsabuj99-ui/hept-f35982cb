@@ -57,7 +57,7 @@ export function PlatformTransferDialog({ open, onOpenChange, clientId, onSuccess
     // Get rates
     const pc = profileRes.data?.pricing_config as any;
     const r = getPlatformRates(pc);
-    setRates(r);
+    setRates(r as Record<string, number>);
   }
 
   const sourceRate = rates[from] || 0;

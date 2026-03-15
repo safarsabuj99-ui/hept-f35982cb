@@ -143,7 +143,7 @@ export default function ClientWallet() {
         <div className="sm:col-span-2 md:col-span-1">
           <div className="grid grid-cols-3 gap-3 h-full">
             {platformBalances.map((pb) => {
-              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getPlatformRate(pb.platform) : 0;
+              const bdtAmount = pb.balance < 0 ? Math.abs(pb.balance) * getRate(pb.platform) : 0;
               return (
                 <div key={pb.platform} className="glass-card glow-border p-3 md:p-4 flex flex-col items-center justify-center text-center">
                   <span className="h-2.5 w-2.5 rounded-full mb-1.5" style={{ background: pb.color }} />
