@@ -11,6 +11,7 @@ import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, History, TrendingUp
 
 interface Props {
   userId: string;
+  clientName: string;
   autoPauseBalanceUsd: number;
   overdraftLimit: number;
   systemPausedCampaigns: string[];
@@ -34,6 +35,7 @@ interface GuardEvent {
 
 export function AutomationConfigTab({
   userId,
+  clientName,
   autoPauseBalanceUsd,
   overdraftLimit,
   systemPausedCampaigns,
@@ -68,14 +70,14 @@ export function AutomationConfigTab({
         setBalance(credits - debits);
       }
 
-      // Fetch guard history
+      // Fetch guard history — search by client user_id OR description containing client name
       const { data: logs } = await supabase
         .from("audit_logs")
         .select("id, action_type, description, created_at")
-        .eq("user_id", userId)
         .in("action_type", ["ad_guard_pause", "ad_guard_resume"])
+        .or(`user_id.eq.${userId},description.ilike.%${clientName}%`)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (logs) setGuardHistory(logs);
 
@@ -112,7 +114,35 @@ export function AutomationConfigTab({
       }
     }
     fetchData();
-  }, [userId, systemPausedCampaigns]);
+  }, [userId, clientName, systemPausedCampaigns]);
+
+  // Computed history stats
+  const pauseCount = guardHistory.filter(e => e.action_type === "ad_guard_pause").length;
+  const resumeCount = guardHistory.filter(e => e.action_type === "ad_guard_resume").length;
+  const lastEvent = guardHistory.length > 0 ? guardHistory[0] : null;
+
+  function relativeTime(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  }
+
+  function parseDescription(desc: string) {
+    const campaignMatch = desc.match(/(\d+)\s*campaign/i);
+    const balanceMatch = desc.match(/Balance:\s*\$([0-9.,]+)/i);
+    const thresholdMatch = desc.match(/threshold:\s*\$([0-9.,]+)/i);
+    return {
+      campaigns: campaignMatch ? campaignMatch[1] : null,
+      balance: balanceMatch ? balanceMatch[1] : null,
+      threshold: thresholdMatch ? thresholdMatch[1] : null,
+    };
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -339,35 +369,89 @@ export function AutomationConfigTab({
       )}
 
       {/* Guard History */}
-      {guardHistory.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <History className="h-4 w-4" /> Guard History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {guardHistory.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 text-sm border-l-2 pl-3 py-1 border-muted">
-                  <Badge
-                    variant={event.action_type === "ad_guard_pause" ? "destructive" : "default"}
-                    className="text-[10px] shrink-0 mt-0.5"
-                  >
-                    {event.action_type === "ad_guard_pause" ? "PAUSED" : "RESUMED"}
-                  </Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground truncate">{event.description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(event.created_at).toLocaleDateString()} {new Date(event.created_at).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-4 w-4" /> Guard History
+          </CardTitle>
+          <CardDescription>Pause & resume events for this client</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Times Paused</p>
+              <p className="text-2xl font-bold text-destructive">{pauseCount}</p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Times Resumed</p>
+              <p className="text-2xl font-bold text-green-600">{resumeCount}</p>
+            </div>
+            <div className="rounded-lg border p-3 space-y-0.5">
+              <p className="text-xs text-muted-foreground">Last Event</p>
+              {lastEvent ? (
+                <>
+                  <Badge variant={lastEvent.action_type === "ad_guard_pause" ? "destructive" : "default"} className="text-[10px]">
+                    {lastEvent.action_type === "ad_guard_pause" ? "PAUSED" : "RESUMED"}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">{relativeTime(lastEvent.created_at)}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No events</p>
+              )}
+            </div>
+          </div>
+
+          {/* History Table */}
+          {guardHistory.length > 0 ? (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[90px]">Event</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead className="w-[140px] text-right">Date & Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {guardHistory.map((event) => {
+                    const parsed = parseDescription(event.description);
+                    const isPause = event.action_type === "ad_guard_pause";
+                    return (
+                      <TableRow key={event.id} className={isPause ? "bg-destructive/5" : "bg-green-500/5"}>
+                        <TableCell>
+                          <Badge variant={isPause ? "destructive" : "default"} className="text-[10px]">
+                            {isPause ? "PAUSED" : "RESUMED"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="space-y-0.5">
+                            {parsed.campaigns && (
+                              <span className="font-medium">{parsed.campaigns} campaign(s)</span>
+                            )}
+                            {parsed.balance && (
+                              <span className="text-muted-foreground ml-2">Balance: ${parsed.balance}</span>
+                            )}
+                            {!parsed.campaigns && !parsed.balance && (
+                              <span className="text-muted-foreground truncate block max-w-[300px]">{event.description}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          <div>{new Date(event.created_at).toLocaleDateString()}</div>
+                          <div>{relativeTime(event.created_at)}</div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No guard events recorded yet.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

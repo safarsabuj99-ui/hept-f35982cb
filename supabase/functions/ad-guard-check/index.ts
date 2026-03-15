@@ -100,11 +100,11 @@ Deno.serve(async (req) => {
             .update({ system_paused_campaigns: pausedIds })
             .eq("user_id", profile.user_id);
 
-          // Audit log
+          // Audit log — use client's user_id so history appears on their profile
           await supabaseAdmin.from("audit_logs").insert({
-            user_id: caller.id,
+            user_id: profile.user_id,
             action_type: "ad_guard_pause",
-            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Balance: $${balance.toFixed(2)} (threshold: $${pauseThreshold})`,
+            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Balance: $${balance.toFixed(2)} (threshold: $${pauseThreshold}). Triggered by admin scan.`,
           });
 
           totalPaused += pausedIds.length;
