@@ -364,13 +364,18 @@ export function AutomationConfigTab({
               </Label>
               <Input type="number" placeholder="24" value={resumeWindowHours} onChange={(e) => setResumeWindowHours(e.target.value)} min="1" step="1" />
               <p className="text-xs text-muted-foreground">
-                After this many hours, the resume option expires. Campaigns stay paused permanently.
+                After this many hours, the resume option expires. Campaigns stay paused permanently unless the client deposits.
               </p>
             </div>
             {isSystemPaused && guardPausedAt && (
               <div className="rounded-lg border p-3 space-y-1">
                 <p className="text-xs text-muted-foreground">Resume Window Status</p>
-                {isWithinResumeWindow ? (
+                {balance !== null && balance > autoResumeThreshold ? (
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-green-500" />
+                    <span className="text-sm font-medium text-green-600">Balance recovered — status will clear on next deposit</span>
+                  </div>
+                ) : isWithinResumeWindow ? (
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-amber-500" />
                     <span className="text-sm font-medium text-amber-600">{remainingText}</span>
@@ -378,7 +383,7 @@ export function AutomationConfigTab({
                 ) : (
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Window expired — campaigns locked</span>
+                    <span className="text-sm text-muted-foreground">Window expired — deposit funds to auto-resume</span>
                   </div>
                 )}
               </div>
