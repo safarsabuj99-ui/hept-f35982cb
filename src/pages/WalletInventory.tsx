@@ -262,6 +262,90 @@ export default function WalletInventory() {
 
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
+      {/* USD Inventory Overview — all-time, independent of date filter */}
+      <Card className={`border-2 ${
+        overview.loading ? "border-border" :
+        overview.availableBalance < 0 || overview.runwayDays < 3 ? "border-destructive/50 bg-destructive/5" :
+        overview.runwayDays <= 7 ? "border-yellow-500/50 bg-yellow-500/5" :
+        "border-emerald-500/50 bg-emerald-500/5"
+      }`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            USD Inventory Overview
+            <Badge variant="outline" className="ml-auto text-[10px] font-normal">All-Time</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+            {/* Available Balance */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Available USD</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                  overview.availableBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+                }`}>
+                  ${overview.availableBalance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Total Purchased */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Total Purchased</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.totalPurchased.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Total Spent */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Total Spent</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.totalSpent.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+            </div>
+
+            {/* Daily Burn Rate */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Flame className="h-3 w-3" /> Daily Burn</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <p className="text-xl sm:text-2xl font-bold font-mono">
+                  ${overview.dailyBurn.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  <span className="text-sm font-normal text-muted-foreground">/day</span>
+                </p>
+              )}
+            </div>
+
+            {/* Runway & USD Needed */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Runway</p>
+              {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                <div>
+                  <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                    overview.runwayDays < 3 ? "text-destructive" :
+                    overview.runwayDays <= 7 ? "text-yellow-600 dark:text-yellow-400" :
+                    "text-emerald-600 dark:text-emerald-400"
+                  }`}>
+                    {overview.runwayDays >= 999 ? "∞" : `${overview.runwayDays}d`}
+                  </p>
+                  {overview.usdNeeded > 0 && (
+                    <p className="text-xs text-destructive flex items-center gap-1 mt-0.5">
+                      <AlertTriangle className="h-3 w-3" />
+                      Need ${overview.usdNeeded.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* KPI Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
