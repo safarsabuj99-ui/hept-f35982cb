@@ -57,7 +57,8 @@ export default function ClientReports() {
       const { data: campaigns } = await supabase
         .from("campaigns")
         .select("id, name, platform, status, ad_account_id")
-        .in("ad_account_id", accIds);
+        .in("ad_account_id", accIds)
+        .eq("client_id", effectiveClientId);
 
       setCampaigns(campaigns ?? []);
 

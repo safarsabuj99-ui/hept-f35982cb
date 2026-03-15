@@ -178,7 +178,8 @@ export default function ClientDetail() {
     const { data: campaignsData } = await supabase
       .from("campaigns")
       .select("id, name, platform, status, ad_account_id")
-      .in("ad_account_id", accountIds);
+      .in("ad_account_id", accountIds)
+      .eq("client_id", userId);
 
     setSpendCampaigns(campaignsData ?? []);
 
