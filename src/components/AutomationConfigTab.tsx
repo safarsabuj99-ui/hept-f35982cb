@@ -137,10 +137,14 @@ export function AutomationConfigTab({
     const campaignMatch = desc.match(/(\d+)\s*campaign/i);
     const balanceMatch = desc.match(/Balance:\s*\$([0-9.,]+)/i);
     const thresholdMatch = desc.match(/threshold:\s*\$([0-9.,]+)/i);
+    // Extract campaign names from "[Name1, Name2]" pattern
+    const namesMatch = desc.match(/:\s*\[([^\]]+)\]\./);
+    const campaignNames = namesMatch ? namesMatch[1].split(",").map(n => n.trim()) : [];
     return {
       campaigns: campaignMatch ? campaignMatch[1] : null,
       balance: balanceMatch ? balanceMatch[1] : null,
       threshold: thresholdMatch ? thresholdMatch[1] : null,
+      campaignNames,
     };
   }
 
@@ -288,7 +292,11 @@ export function AutomationConfigTab({
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                 <Input type="number" placeholder="5.00" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="pl-7" min="0" step="1" />
               </div>
-              <p className="text-xs text-muted-foreground">Pause when balance ≤ this amount.</p>
+              <p className="text-xs text-muted-foreground">
+                {parseFloat(overdraft) > 0 
+                  ? "Pause when balance ≤ this amount." 
+                  : "No overdraft — guard activates only when balance reaches $0."}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Overdraft Limit (USD)</Label>
@@ -425,12 +433,21 @@ export function AutomationConfigTab({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          <div className="space-y-0.5">
-                            {parsed.campaigns && (
-                              <span className="font-medium">{parsed.campaigns} campaign(s)</span>
-                            )}
-                            {parsed.balance && (
-                              <span className="text-muted-foreground ml-2">Balance: ${parsed.balance}</span>
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {parsed.campaigns && (
+                                <span className="font-medium">{parsed.campaigns} campaign(s)</span>
+                              )}
+                              {parsed.balance && (
+                                <span className="text-muted-foreground">Balance: ${parsed.balance}</span>
+                              )}
+                            </div>
+                            {parsed.campaignNames.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {parsed.campaignNames.map((name, i) => (
+                                  <Badge key={i} variant="outline" className="text-[10px] font-normal">{name}</Badge>
+                                ))}
+                              </div>
                             )}
                             {!parsed.campaigns && !parsed.balance && (
                               <span className="text-muted-foreground truncate block max-w-[300px]">{event.description}</span>

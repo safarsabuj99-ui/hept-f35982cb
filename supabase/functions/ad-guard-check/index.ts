@@ -74,12 +74,18 @@ Deno.serve(async (req) => {
 
       const balance = totalDeposits - totalDebits;
       const pauseThreshold = Number(profile.auto_pause_balance_usd ?? 5);
+      const clientOverdraft = Number(profile.overdraft_limit_usd ?? 0);
+
+      // Overdraft-aware pause logic:
+      // - If client has overdraft (> 0): pause when balance <= threshold
+      // - If client has NO overdraft (0): only pause when balance <= 0
+      const effectiveThreshold = clientOverdraft > 0 ? pauseThreshold : 0;
 
       const alreadyPaused = Array.isArray(profile.system_paused_campaigns)
         ? profile.system_paused_campaigns
         : [];
 
-      if (balance <= pauseThreshold && alreadyPaused.length === 0) {
+      if (balance <= effectiveThreshold && alreadyPaused.length === 0) {
         // Find active campaigns for this client
         const clientCampaigns = (allCampaigns ?? []).filter(
           (c: any) => c.client_id === profile.user_id
@@ -87,6 +93,7 @@ Deno.serve(async (req) => {
 
         if (clientCampaigns.length > 0) {
           const pausedIds = clientCampaigns.map((c: any) => c.campaign_id);
+          const pausedNames = clientCampaigns.map((c: any) => c.campaign_name || c.campaign_id);
 
           // Mark campaigns as inactive (simulated pause)
           for (const c of clientCampaigns) {
@@ -101,17 +108,18 @@ Deno.serve(async (req) => {
             .eq("user_id", profile.user_id);
 
           // Audit log — use client's user_id so history appears on their profile
+          // Include campaign names so history persists even after resume
           await supabaseAdmin.from("audit_logs").insert({
             user_id: profile.user_id,
             action_type: "ad_guard_pause",
-            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}. Balance: $${balance.toFixed(2)} (threshold: $${pauseThreshold}). Triggered by admin scan.`,
+            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). Triggered by admin scan.`,
           });
 
           totalPaused += pausedIds.length;
           results.push({
             client: profile.full_name,
             balance: Math.round(balance * 100) / 100,
-            threshold: pauseThreshold,
+            threshold: effectiveThreshold,
             action: "PAUSED",
             campaigns_paused: pausedIds.length,
           });
@@ -121,7 +129,7 @@ Deno.serve(async (req) => {
           client: profile.full_name,
           balance: Math.round(balance * 100) / 100,
           threshold: pauseThreshold,
-          action: balance <= pauseThreshold ? "ALREADY_PAUSED" : "OK",
+          action: balance <= effectiveThreshold ? "ALREADY_PAUSED" : "OK",
           campaigns_paused: 0,
         });
       }
