@@ -391,6 +391,35 @@ export default function AdAccountDetail() {
           </div>
           <p className="text-sm text-muted-foreground font-mono mt-1">{account.ad_account_id}</p>
         </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={syncingDeepDive}
+            onClick={async () => {
+              setSyncingDeepDive(true);
+              try {
+                const { data, error } = await supabase.functions.invoke("sync-deep-dive", {
+                  body: { ad_account_ids: [accountId] },
+                });
+                if (error) throw error;
+                if (data?.errors?.length) {
+                  toast({ title: "Sync Warning", description: data.errors[0], variant: "destructive" });
+                } else {
+                  toast({ title: "Deep Dive Synced", description: data?.message || "Campaign & metrics data synced for this account." });
+                }
+                await loadAll();
+                await loadSpendTab();
+              } catch (err: any) {
+                toast({ title: "Sync Failed", description: err.message, variant: "destructive" });
+              }
+              setSyncingDeepDive(false);
+            }}
+          >
+            {syncingDeepDive ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Sync Deep Dive
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="details" className="space-y-4">
