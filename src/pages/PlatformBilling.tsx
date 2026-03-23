@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, CheckCircle, Download, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, CheckCircle, Download, Clock, AlertTriangle, DollarSign } from "lucide-react";
+import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
