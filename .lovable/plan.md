@@ -1,76 +1,57 @@
 
-# Fully Automated Self-Healing Data Collection System — IMPLEMENTED
 
-## What Was Built
+## Plan: Upgrade Platform Owner SaaS Management UI/UX to Match Admin Premium Design
 
-### 1. `sync_logs` Table (NEW)
-Tracks every sync attempt per account with status, error codes, retry counts, and row counts. RLS: admin full access, platform_owner read.
+### Current Gap
 
-### 2. `sync-orchestrator` Edge Function (NEW)
-The brain of the system:
-- Accepts `{ function: "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" }`
-- Queries all mapped accounts, sorts by data volume (smallest first)
-- Calls target function **one account at a time** with `{ ad_account_ids: [id] }`
-- Auto-retries failed accounts up to 3 times with exponential backoff
-- Classifies errors: `token_expired`, `geo_blocked`, `rate_limited`, `cpu_timeout`, `api_error`
-- Logs every attempt to `sync_logs`
-- Alerts via `billing_notifications` for token expiry (7-day warning) and persistent failures (5+)
-- Auto-cleans logs older than 30 days
+The **Admin dashboard** uses a premium "Bold & Dynamic" design system with glassmorphic sidebar, gradient logo orb, animated icon bubbles, frosted glass nav pills, count-up KPI animations, sparkline charts, perspective tilt cards, section labels, and page-enter transitions.
 
-### 3. Updated Sync Functions
-All three (`sync-deep-dive`, `sync-fast-lane`, `sync-ad-spend`) now return structured `{ ok, error_code, rows_synced }` responses for orchestrator classification.
+The **Platform dashboard** uses plain `<Card>` components, a basic sidebar with no premium styling, no animations, no glassmorphic effects, and a flat header. The quality gap is significant.
 
-### 4. Cron Jobs (pg_cron)
-| Job | Schedule | Target |
-|-----|----------|--------|
-| `orchestrator-fast-lane` | Every 15 min | sync-orchestrator → sync-fast-lane |
-| `orchestrator-deep-dive` | Every hour | sync-orchestrator → sync-deep-dive |
-| `orchestrator-ad-spend` | Every 30 min | sync-orchestrator → sync-ad-spend |
+### Changes
 
-### 5. Sync Health Dashboard (Settings Page)
-- Per-account sync status with green/red indicators
-- Last sync time per function per account
-- Error codes displayed for failed syncs
-- "Force Retry" button for failed accounts
-- Auto-refreshing UI
+#### 1. Platform Sidebar — Premium Redesign (`PlatformLayout.tsx`)
+- Apply `sidebar-premium` class and match AdminLayout structure exactly
+- Add gradient `sidebar-logo-orb` with Crown icon (replacing plain box)
+- Add `sidebar-header-premium` header with animated brand text + version tag
+- Replace plain nav links with the same icon-bubble + glassmorphic active pill pattern (`sidebar-nav-active`, `sidebar-icon-bubble`)
+- Add `sidebar-section-divider` between Navigation and Intelligence groups
+- Add `sidebar-footer-premium` with ThemeToggle + SignOut icon layout
+- Remove the basic "Platform Management" top header bar — replace with AdminLayout-style sticky header with `SidebarTrigger` + mobile logo
 
----
+#### 2. Platform Dashboard — Premium Redesign (`PlatformDashboard.tsx`)
+- Add `DashboardHeader`-style greeting section with time-of-day greeting, date, and animated stat pills (agencies count, MRR, overdue count)
+- Replace plain KPI cards with the existing `KpiCard` component (glassmorphic, count-up animation, sparkline support, perspective tilt)
+- Add section labels (`<p className="section-label">`) between dashboard zones
+- Add `animate-slide-up-fade` and stagger animations on card groups
+- Wrap charts in `glass-card glow-border` styled cards
+- Add `page-enter` animation wrapper
+- Add `PullToRefresh` wrapper for mobile
 
-# Tier 1 — Platform Owner SaaS Management — IMPLEMENTED
+#### 3. Sub-pages Polish (6 Intelligence + 4 Core pages)
+- Wrap each page's card grids in `animate-slide-up-fade` with stagger delays
+- Replace plain `<Card>` usage with `glass-card glow-border` where appropriate
+- Use `KpiCard` for all KPI displays (Revenue, Lifecycle, Usage, Billing pages)
+- Add `section-label` typography for zone separation
+- Add `page-enter` wrapper to each page
 
-### Tenant Lifecycle Manager (`/platform/lifecycle`)
-Kanban board: Trial → Active → Suspended → Cancelled with status transitions and grace period tracking.
+### Files Changed
 
-### MRR/ARR Revenue Dashboard (`/platform/revenue`)
-Real-time MRR, ARR, growth charts, plan breakdown, churned revenue table.
+| File | Change |
+|------|--------|
+| `src/components/PlatformLayout.tsx` | Full sidebar + header redesign to match AdminLayout premium pattern |
+| `src/pages/PlatformDashboard.tsx` | Greeting header, KpiCard usage, glass-card charts, animations, PullToRefresh |
+| `src/pages/TenantLifecycle.tsx` | Glass-card Kanban columns, KpiCard stats, animations |
+| `src/pages/PlatformRevenue.tsx` | KpiCard row, glass-card charts, section labels |
+| `src/pages/TenantUsageMetering.tsx` | KpiCard alerts, glass-card table, animations |
+| `src/pages/PlatformBilling.tsx` | KpiCard aging buckets, glass-card sections |
+| `src/pages/PlatformCohorts.tsx` | Glass-card heatmap, animations |
+| `src/pages/PlatformChurnPrediction.tsx` | KpiCard risk summary, glass-card table |
+| `src/pages/PlatformFeatureAdoption.tsx` | Glass-card heatmap, animations |
+| `src/pages/PlatformForecasting.tsx` | KpiCard projections, glass-card charts |
+| `src/pages/PlatformCostAnalytics.tsx` | KpiCard unit economics, glass-card forms |
+| `src/pages/PlatformHealthScores.tsx` | KpiCard averages, glass-card table |
+| `src/pages/PlatformBenchmarks.tsx` | Glass-card comparison panels, animations |
 
-### Tenant Usage Metering (`/platform/usage`)
-Cross-agency resource consumption vs plan limits with color-coded progress bars.
+No database or backend changes needed — this is a pure UI/UX upgrade.
 
-### Payment Collection Tracker (`/platform/billing`)
-Aging invoice buckets (30/60/90+ days), billed vs collected charts, agency health table.
-
----
-
-# Tier 2 — Intelligence & Analytics — IMPLEMENTED
-
-### Feature 9: Cohort Analysis (`/platform/cohorts`)
-Signup month cohorts with retention heatmap and revenue per cohort.
-
-### Feature 10: Churn Prediction (`/platform/churn`)
-AI-powered risk scoring via `churn-predict` edge function using Lovable AI.
-
-### Feature 11: Feature Adoption (`/platform/adoption`)
-Heatmap grid showing per-agency feature usage intensity.
-
-### Feature 12: Revenue Forecasting (`/platform/forecasting`)
-AI-powered MRR projections via `revenue-forecast` edge function with confidence bands.
-
-### Feature 13: Cost Analytics (`/platform/costs`)
-Manual cost entry, unit economics (cost/tenant, gross margin), revenue vs cost charts.
-
-### Feature 14: Customer Health Scores (`/platform/health-scores`)
-Composite 0-100 scores: Activity (25%) + Payment (35%) + Usage (40%) with recalculate.
-
-### Feature 15: Benchmark Reports (`/platform/benchmarks`)
-Anonymous cross-agency comparisons with percentile distributions.
