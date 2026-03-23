@@ -2,86 +2,40 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { KpiCard } from "@/components/dashboard/KpiCard";
+import { Grid3X3 } from "lucide-react";
 import { useMemo } from "react";
 
 const FEATURES = ["clients", "ad_accounts", "campaigns", "finance", "integrations"] as const;
 
 export default function PlatformFeatureAdoption() {
-  const { data: orgs = [] } = useQuery({
-    queryKey: ["adoption-orgs"],
-    queryFn: async () => {
-      const { data } = await supabase.from("organizations").select("id, name, status");
-      return data || [];
-    },
-  });
+  const { data: orgs = [] } = useQuery({ queryKey: ["adoption-orgs"], queryFn: async () => { const { data } = await supabase.from("organizations").select("id, name, status"); return data || []; } });
+  const { data: profiles = [] } = useQuery({ queryKey: ["adoption-profiles"], queryFn: async () => { const { data } = await supabase.from("profiles").select("org_id"); return data || []; } });
+  const { data: adAccounts = [] } = useQuery({ queryKey: ["adoption-accounts"], queryFn: async () => { const { data } = await supabase.from("ad_accounts").select("org_id"); return data || []; } });
+  const { data: campaigns = [] } = useQuery({ queryKey: ["adoption-campaigns"], queryFn: async () => { const { data } = await supabase.from("campaigns").select("org_id"); return data || []; } });
+  const { data: transactions = [] } = useQuery({ queryKey: ["adoption-transactions"], queryFn: async () => { const { data } = await supabase.from("transactions").select("org_id"); return data || []; } });
+  const { data: integrations = [] } = useQuery({ queryKey: ["adoption-integrations"], queryFn: async () => { const { data } = await supabase.from("api_integrations").select("org_id"); return data || []; } });
 
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["adoption-profiles"],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("org_id");
-      return data || [];
+  const heatmapData = useMemo(() => orgs.map((org) => ({
+    org,
+    counts: {
+      clients: profiles.filter((p) => p.org_id === org.id).length,
+      ad_accounts: adAccounts.filter((a) => a.org_id === org.id).length,
+      campaigns: campaigns.filter((c) => c.org_id === org.id).length,
+      finance: transactions.filter((t) => t.org_id === org.id).length,
+      integrations: integrations.filter((i) => i.org_id === org.id).length,
     },
-  });
-
-  const { data: adAccounts = [] } = useQuery({
-    queryKey: ["adoption-accounts"],
-    queryFn: async () => {
-      const { data } = await supabase.from("ad_accounts").select("org_id");
-      return data || [];
-    },
-  });
-
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ["adoption-campaigns"],
-    queryFn: async () => {
-      const { data } = await supabase.from("campaigns").select("org_id");
-      return data || [];
-    },
-  });
-
-  const { data: transactions = [] } = useQuery({
-    queryKey: ["adoption-transactions"],
-    queryFn: async () => {
-      const { data } = await supabase.from("transactions").select("org_id");
-      return data || [];
-    },
-  });
-
-  const { data: integrations = [] } = useQuery({
-    queryKey: ["adoption-integrations"],
-    queryFn: async () => {
-      const { data } = await supabase.from("api_integrations").select("org_id");
-      return data || [];
-    },
-  });
-
-  const heatmapData = useMemo(() => {
-    return orgs.map((org) => {
-      const counts: Record<string, number> = {
-        clients: profiles.filter((p) => p.org_id === org.id).length,
-        ad_accounts: adAccounts.filter((a) => a.org_id === org.id).length,
-        campaigns: campaigns.filter((c) => c.org_id === org.id).length,
-        finance: transactions.filter((t) => t.org_id === org.id).length,
-        integrations: integrations.filter((i) => i.org_id === org.id).length,
-      };
-      return { org, counts };
-    });
-  }, [orgs, profiles, adAccounts, campaigns, transactions, integrations]);
+  })), [orgs, profiles, adAccounts, campaigns, transactions, integrations]);
 
   const maxCounts = useMemo(() => {
     const maxes: Record<string, number> = {};
-    FEATURES.forEach((f) => {
-      maxes[f] = Math.max(1, ...heatmapData.map((d) => d.counts[f]));
-    });
+    FEATURES.forEach((f) => { maxes[f] = Math.max(1, ...heatmapData.map((d) => d.counts[f])); });
     return maxes;
   }, [heatmapData]);
 
   const adoptionPct = useMemo(() => {
     const pcts: Record<string, number> = {};
-    FEATURES.forEach((f) => {
-      const using = heatmapData.filter((d) => d.counts[f] > 0).length;
-      pcts[f] = orgs.length > 0 ? Math.round((using / orgs.length) * 100) : 0;
-    });
+    FEATURES.forEach((f) => { const using = heatmapData.filter((d) => d.counts[f] > 0).length; pcts[f] = orgs.length > 0 ? Math.round((using / orgs.length) * 100) : 0; });
     return pcts;
   }, [heatmapData, orgs.length]);
 
@@ -95,59 +49,52 @@ export default function PlatformFeatureAdoption() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
         <h1 className="text-2xl font-bold text-foreground">Feature Adoption</h1>
         <p className="text-muted-foreground">Track which features each agency uses</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {FEATURES.map((f) => (
-          <Card key={f}>
-            <CardContent className="pt-6 text-center">
-              <p className="text-sm text-muted-foreground capitalize">{f.replace("_", " ")}</p>
-              <p className="text-2xl font-bold">{adoptionPct[f]}%</p>
-              <p className="text-xs text-muted-foreground">adoption</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div>
+        <p className="section-label mb-3">Adoption Rates</p>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {FEATURES.map((f, i) => (
+            <KpiCard key={f} title={f.replace("_", " ")} value={`${adoptionPct[f]}%`} subtitle="adoption" icon={Grid3X3} staggerIndex={i} />
+          ))}
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usage Heatmap</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {heatmapData.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">No agencies found</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Agency</TableHead>
-                  {FEATURES.map((f) => (
-                    <TableHead key={f} className="text-center capitalize">{f.replace("_", " ")}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {heatmapData.map((d) => (
-                  <TableRow key={d.org.id}>
-                    <TableCell className="font-medium">{d.org.name}</TableCell>
-                    {FEATURES.map((f) => (
-                      <TableCell key={f} className="text-center">
-                        <span className={`inline-flex items-center justify-center w-10 h-8 rounded text-xs font-mono ${getIntensityClass(d.counts[f], maxCounts[f])}`}>
-                          {d.counts[f]}
-                        </span>
-                      </TableCell>
-                    ))}
+      <div className="glass-card glow-border animate-slide-up-fade" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardHeader><CardTitle>Usage Heatmap</CardTitle></CardHeader>
+          <CardContent>
+            {heatmapData.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No agencies found</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Agency</TableHead>
+                    {FEATURES.map((f) => <TableHead key={f} className="text-center capitalize">{f.replace("_", " ")}</TableHead>)}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {heatmapData.map((d) => (
+                    <TableRow key={d.org.id}>
+                      <TableCell className="font-medium">{d.org.name}</TableCell>
+                      {FEATURES.map((f) => (
+                        <TableCell key={f} className="text-center">
+                          <span className={`inline-flex items-center justify-center w-10 h-8 rounded text-xs font-mono ${getIntensityClass(d.counts[f], maxCounts[f])}`}>{d.counts[f]}</span>
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

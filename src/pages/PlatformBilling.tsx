@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, CheckCircle, Download, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, CheckCircle, Download, Clock, AlertTriangle, DollarSign } from "lucide-react";
+import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -193,8 +194,8 @@ export default function PlatformBilling() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Revenue & Invoicing</h1>
           <p className="text-sm text-muted-foreground">Manage platform billing, payments, and collection health</p>
@@ -206,16 +207,13 @@ export default function PlatformBilling() {
       </div>
 
       {/* Revenue Summary */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Collected</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold text-emerald-500">৳{totalCollected.toLocaleString()}</p></CardContent>
-        </Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Outstanding</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold text-amber-500">৳{totalOutstanding.toLocaleString()}</p></CardContent>
-        </Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Overdue</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold text-destructive">{overdueCount}</p></CardContent>
-        </Card>
+      <div>
+        <p className="section-label mb-3">Revenue Summary</p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <KpiCard title="Collected" value={`৳${totalCollected.toLocaleString()}`} icon={CheckCircle} accentColor="hsl(var(--success))" staggerIndex={0} />
+          <KpiCard title="Outstanding" value={`৳${totalOutstanding.toLocaleString()}`} icon={Clock} accentColor="hsl(var(--warning))" staggerIndex={1} />
+          <KpiCard title="Overdue" value={String(overdueCount)} icon={AlertTriangle} accentColor="hsl(var(--destructive))" staggerIndex={2} />
+        </div>
       </div>
 
       {/* Aging Buckets */}
