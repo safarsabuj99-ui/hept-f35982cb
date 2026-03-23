@@ -1,57 +1,49 @@
 
 
-## Plan: Upgrade Platform Owner SaaS Management UI/UX to Match Admin Premium Design
+## Plan: Full Data Reset + Delete Niloy & Musa Test Users
 
-### Current Gap
+### What Gets Deleted
 
-The **Admin dashboard** uses a premium "Bold & Dynamic" design system with glassmorphic sidebar, gradient logo orb, animated icon bubbles, frosted glass nav pills, count-up KPI animations, sparkline charts, perspective tilt cards, section labels, and page-enter transitions.
+**Time-series & financial data (all clients):**
+- `daily_metrics` (808 rows)
+- `campaign_performance` (808 rows)
+- `daily_ad_spend` (1,309 rows)
+- `transactions` (335 rows)
+- `campaigns` (68 rows)
+- `campaign_mappings` (1,245 rows)
+- `payment_requests` (10 rows)
+- `billing_notifications` (48 rows)
+- `audit_logs` (40 rows)
 
-The **Platform dashboard** uses plain `<Card>` components, a basic sidebar with no premium styling, no animations, no glassmorphic effects, and a flat header. The quality gap is significant.
+**Users to delete (Niloy + Musa Test):**
+- Niloy (`03aa08dd-3a25-40cc-996e-65753849d8b7`) — profile, role, ad_account_clients entries, auth user
+- Musa Test (`11f34fbc-6cea-44c4-b7ed-996b7b6f6a0d`) — profile, role, ad_account_clients entries, auth user
 
-### Changes
+### What Gets Preserved
+- All **ad accounts** (structure intact)
+- All **API integrations** (tokens intact)
+- Admin user (MD SABUJ MIAH), Platform Owner, OPU client
+- Organization, platform plans, settings, agency accounts
+- OPU's `ad_account_clients` entries (if any)
 
-#### 1. Platform Sidebar — Premium Redesign (`PlatformLayout.tsx`)
-- Apply `sidebar-premium` class and match AdminLayout structure exactly
-- Add gradient `sidebar-logo-orb` with Crown icon (replacing plain box)
-- Add `sidebar-header-premium` header with animated brand text + version tag
-- Replace plain nav links with the same icon-bubble + glassmorphic active pill pattern (`sidebar-nav-active`, `sidebar-icon-bubble`)
-- Add `sidebar-section-divider` between Navigation and Intelligence groups
-- Add `sidebar-footer-premium` with ThemeToggle + SignOut icon layout
-- Remove the basic "Platform Management" top header bar — replace with AdminLayout-style sticky header with `SidebarTrigger` + mobile logo
+### Execution Order (single migration)
 
-#### 2. Platform Dashboard — Premium Redesign (`PlatformDashboard.tsx`)
-- Add `DashboardHeader`-style greeting section with time-of-day greeting, date, and animated stat pills (agencies count, MRR, overdue count)
-- Replace plain KPI cards with the existing `KpiCard` component (glassmorphic, count-up animation, sparkline support, perspective tilt)
-- Add section labels (`<p className="section-label">`) between dashboard zones
-- Add `animate-slide-up-fade` and stagger animations on card groups
-- Wrap charts in `glass-card glow-border` styled cards
-- Add `page-enter` animation wrapper
-- Add `PullToRefresh` wrapper for mobile
+1. Delete `daily_metrics` (depends on campaigns)
+2. Delete `campaign_performance`
+3. Delete `daily_ad_spend`
+4. Delete `transactions`
+5. Delete `campaign_mappings`
+6. Delete `campaigns`
+7. Delete `payment_requests`
+8. Delete `billing_notifications`
+9. Delete `audit_logs`
+10. Delete `ad_account_clients` for Niloy + Musa only
+11. Delete `user_roles` for Niloy + Musa
+12. Delete `profiles` for Niloy + Musa
+13. Delete auth users for Niloy + Musa (via edge function)
 
-#### 3. Sub-pages Polish (6 Intelligence + 4 Core pages)
-- Wrap each page's card grids in `animate-slide-up-fade` with stagger delays
-- Replace plain `<Card>` usage with `glass-card glow-border` where appropriate
-- Use `KpiCard` for all KPI displays (Revenue, Lifecycle, Usage, Billing pages)
-- Add `section-label` typography for zone separation
-- Add `page-enter` wrapper to each page
+Steps 1-12 use the data insert tool. Step 13 uses the existing `create-client` pattern (admin API call to delete auth users).
 
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `src/components/PlatformLayout.tsx` | Full sidebar + header redesign to match AdminLayout premium pattern |
-| `src/pages/PlatformDashboard.tsx` | Greeting header, KpiCard usage, glass-card charts, animations, PullToRefresh |
-| `src/pages/TenantLifecycle.tsx` | Glass-card Kanban columns, KpiCard stats, animations |
-| `src/pages/PlatformRevenue.tsx` | KpiCard row, glass-card charts, section labels |
-| `src/pages/TenantUsageMetering.tsx` | KpiCard alerts, glass-card table, animations |
-| `src/pages/PlatformBilling.tsx` | KpiCard aging buckets, glass-card sections |
-| `src/pages/PlatformCohorts.tsx` | Glass-card heatmap, animations |
-| `src/pages/PlatformChurnPrediction.tsx` | KpiCard risk summary, glass-card table |
-| `src/pages/PlatformFeatureAdoption.tsx` | Glass-card heatmap, animations |
-| `src/pages/PlatformForecasting.tsx` | KpiCard projections, glass-card charts |
-| `src/pages/PlatformCostAnalytics.tsx` | KpiCard unit economics, glass-card forms |
-| `src/pages/PlatformHealthScores.tsx` | KpiCard averages, glass-card table |
-| `src/pages/PlatformBenchmarks.tsx` | Glass-card comparison panels, animations |
-
-No database or backend changes needed — this is a pure UI/UX upgrade.
+### No Code Changes Needed
+Ad accounts and integrations stay intact. The system will re-populate data on next sync.
 
