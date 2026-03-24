@@ -8,6 +8,8 @@ const corsHeaders = {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 5000, 10000]; // exponential backoff
+const THROTTLE_MS = 200; // delay between accounts to prevent rate limiting
+const CIRCUIT_BREAKER_THRESHOLD = 3; // stop after N consecutive same-error failures
 
 /** Classify error codes from sync function responses */
 function classifyError(errorMsg: string, errorCode?: string): string {
