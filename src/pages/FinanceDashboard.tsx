@@ -86,29 +86,18 @@ export default function FinanceDashboard() {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    const { data: adAccountClients } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
-    const accToClients: Record<string, string[]> = {};
-    for (const aac of (adAccountClients ?? []) as any[]) {
-      if (!accToClients[aac.ad_account_id]) accToClients[aac.ad_account_id] = [];
-      accToClients[aac.ad_account_id].push(aac.client_id);
-    }
-
-    const { data: adAccounts } = await supabase.from("ad_accounts").select("id, platform_name");
-    const accToPlatform: Record<string, string> = {};
-    for (const a of adAccounts ?? []) accToPlatform[a.id] = a.platform_name;
-
-    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform");
+    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform, client_id");
 
     if (!allCampaigns?.length) {
       setLoading(false);
       return;
     }
 
-    const campaignToAccount: Record<string, string> = {};
     const campaignToPlatform: Record<string, string> = {};
+    const campaignToClient: Record<string, string> = {};
     for (const c of allCampaigns) {
-      campaignToAccount[c.id] = c.ad_account_id;
       campaignToPlatform[c.id] = c.platform;
+      if (c.client_id) campaignToClient[c.id] = c.client_id;
     }
 
     let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
