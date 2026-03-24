@@ -991,6 +991,7 @@ export function DeepDiveTable({
               <SelectItem value="messages">Messages</SelectItem>
               <SelectItem value="sales">Sales</SelectItem>
               <SelectItem value="performance">Performance</SelectItem>
+              <SelectItem value="tiktok_messages">TikTok Messages</SelectItem>
             </SelectContent>
           </Select>
           {onSetDefaultPreset && (
