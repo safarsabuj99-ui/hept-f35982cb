@@ -15,12 +15,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" | "billing-radar";
+type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "billing-radar";
 
 const SYNC_FUNCTIONS: { key: SyncFunction; label: string; icon: React.ReactNode; description: string }[] = [
-  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Quick campaign metrics" },
+  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Spend + billing cycle sync" },
   { key: "sync-deep-dive", label: "Deep Dive", icon: <BarChart3 className="h-4 w-4" />, description: "Detailed performance data" },
-  { key: "sync-ad-spend", label: "Ad Spend", icon: <DollarSign className="h-4 w-4" />, description: "Daily spend records" },
   { key: "billing-radar", label: "Billing", icon: <Bell className="h-4 w-4" />, description: "Threshold alerts" },
 ];
 
