@@ -553,6 +553,72 @@ export function DeepDiveTable({
       );
     }
 
+    // TikTok Messages preset columns
+    if (showColumns.tiktok_messages) {
+      cols.push(
+        columnHelper.display({
+          id: "budget",
+          header: "Budget",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(info.row.original.budget ?? 0)}</span>,
+        }),
+        columnHelper.accessor("clicks", {
+          header: "Clicks (Dest)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(info.getValue())}</span>,
+        }),
+        columnHelper.display({
+          id: "cpc_dest",
+          header: "CPC (Dest)",
+          cell: (info) => {
+            const row = info.row.original;
+            const cpc = row.clicks > 0 ? row.spend / row.clicks : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpc)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "conversations_tiktok_dm",
+          header: "Conv. (TikTok DM)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.conversations_tiktok_dm ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_conv_tiktok_dm",
+          header: "Cost/Conv (DM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.conversations_tiktok_dm ?? 0) > 0 ? row.spend / row.conversations_tiktok_dm! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "leads_tiktok_dm",
+          header: "Leads (TikTok DM)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.leads_tiktok_dm ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_lead_tiktok_dm",
+          header: "Cost/Lead (DM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.leads_tiktok_dm ?? 0) > 0 ? row.spend / row.leads_tiktok_dm! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "conversations_instant_msg",
+          header: "Conv. (Instant Msg)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.conversations_instant_msg ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_conv_instant_msg",
+          header: "Cost/Conv (IM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.conversations_instant_msg ?? 0) > 0 ? row.spend / row.conversations_instant_msg! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+      );
+    }
+
     // Generic results column (always show)
     cols.push(
       columnHelper.accessor("results", {
