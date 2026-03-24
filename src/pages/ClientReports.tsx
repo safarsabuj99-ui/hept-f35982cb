@@ -140,6 +140,10 @@ export default function ClientReports() {
       map[key].spend += Number(row.spend);
       map[key].results += Number(row.results ?? 0);
       map[key].conversion_value += Number(row.conversion_value ?? 0);
+      if (row.budget) map[key].budget = (map[key].budget ?? 0) + Number(row.budget);
+      if (row.conversations_tiktok_dm) map[key].conversations_tiktok_dm = (map[key].conversations_tiktok_dm ?? 0) + Number(row.conversations_tiktok_dm);
+      if (row.leads_tiktok_dm) map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(row.leads_tiktok_dm);
+      if (row.conversations_instant_msg) map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(row.conversations_instant_msg);
     }
     // Inject active campaigns that have no metrics for the selected date range
     for (const c of campaigns) {

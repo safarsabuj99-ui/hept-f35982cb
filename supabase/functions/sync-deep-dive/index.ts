@@ -296,6 +296,10 @@ Deno.serve(async (req) => {
             reach?: number;
             new_messaging_contacts?: number;
             create_order?: number;
+            budget?: number;
+            conversations_tiktok_dm?: number;
+            leads_tiktok_dm?: number;
+            conversations_instant_msg?: number;
           }
         ) => {
           const { error } = await supabase
@@ -323,6 +327,10 @@ Deno.serve(async (req) => {
                 reach: metrics.reach ?? 0,
                 new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
                 create_order: metrics.create_order ?? 0,
+                budget: metrics.budget ?? 0,
+                conversations_tiktok_dm: metrics.conversations_tiktok_dm ?? 0,
+                leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
+                conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
@@ -648,14 +656,14 @@ Deno.serve(async (req) => {
               let usedBc = false;
 
               if (bcId) {
-                const bcParams = new URLSearchParams({
+          const bcParams = new URLSearchParams({
                   bc_id: bcId,
                   advertiser_ids: JSON.stringify([account.ad_account_id]),
                   service_type: "AUCTION",
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_site_conversation_msg_count","onsite_form"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -677,12 +685,12 @@ Deno.serve(async (req) => {
               }
 
               if (!cJson) {
-                const params = new URLSearchParams({
+              const params = new URLSearchParams({
                   advertiser_id: account.ad_account_id,
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_site_conversation_msg_count","onsite_form"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -717,8 +725,9 @@ Deno.serve(async (req) => {
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };
 
-          // Fetch real campaign statuses from TikTok
+          // Fetch real campaign statuses AND budgets from TikTok
           const tiktokStatusMap: Record<string, string> = {};
+          const tiktokBudgetMap: Record<string, number> = {};
           let tiktokStatusFetchFailed = false;
           try {
             const statusParams = new URLSearchParams({
@@ -736,6 +745,10 @@ Deno.serve(async (req) => {
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
                 console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
+                // Extract budget (TikTok returns budget in currency units)
+                if (c.budget !== undefined && c.budget !== null) {
+                  tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
+                }
 
                 const activeStatuses = [
                   "CAMPAIGN_STATUS_ENABLE",
@@ -784,6 +797,9 @@ Deno.serve(async (req) => {
             const cpc = parseFloat(row.metrics?.cpc || "0");
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
+            const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
+            const tiktokConvDm = parseInt(row.metrics?.onsite_on_site_conversation_msg_count || "0", 10);
+            const tiktokLeadsDm = parseInt(row.metrics?.onsite_form || "0", 10);
             const rawCampaignId = row.dimensions?.campaign_id;
             const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
@@ -817,10 +833,19 @@ Deno.serve(async (req) => {
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const tiktokBudget = tiktokBudgetMap[rawCampaignId] ?? 0;
+            const tiktokBudgetUsd = convertSpend(tiktokBudget);
+            const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
 
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results: conversions,
               conversion_value: 0, ctr, cpc: cpcUsd, roas,
+              reach: tiktokReach,
+              cpm: Math.round(cpmValue * 100) / 100,
+              budget: tiktokBudgetUsd,
+              conversations_tiktok_dm: tiktokConvDm,
+              leads_tiktok_dm: tiktokLeadsDm,
+              conversations_instant_msg: 0,
             });
 
             // Legacy write

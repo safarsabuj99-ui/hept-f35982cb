@@ -60,9 +60,13 @@ export interface CampaignRow {
   reach?: number;
   new_messaging_contacts?: number;
   create_order?: number;
+  budget?: number;
+  conversations_tiktok_dm?: number;
+  leads_tiktok_dm?: number;
+  conversations_instant_msg?: number;
 }
 
-export type PresetType = "auto" | "messages" | "sales" | "performance";
+export type PresetType = "auto" | "messages" | "sales" | "performance" | "tiktok_messages";
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
   meta: { label: "Meta", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
@@ -281,10 +285,11 @@ export function DeepDiveTable({
   }, [data]);
 
   const showColumns = useMemo(() => {
-    if (selectedPreset === "sales") return { sales: true, messages: false, performance: false };
-    if (selectedPreset === "messages") return { sales: false, messages: true, performance: false };
-    if (selectedPreset === "performance") return { sales: false, messages: false, performance: true };
-    return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false };
+    if (selectedPreset === "sales") return { sales: true, messages: false, performance: false, tiktok_messages: false };
+    if (selectedPreset === "messages") return { sales: false, messages: true, performance: false, tiktok_messages: false };
+    if (selectedPreset === "performance") return { sales: false, messages: false, performance: true, tiktok_messages: false };
+    if (selectedPreset === "tiktok_messages") return { sales: false, messages: false, performance: false, tiktok_messages: true };
+    return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false, tiktok_messages: false };
   }, [selectedPreset, hasObjectiveData]);
 
   const columns = useMemo(() => {
@@ -548,6 +553,72 @@ export function DeepDiveTable({
       );
     }
 
+    // TikTok Messages preset columns
+    if (showColumns.tiktok_messages) {
+      cols.push(
+        columnHelper.display({
+          id: "budget",
+          header: "Budget",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(info.row.original.budget ?? 0)}</span>,
+        }),
+        columnHelper.accessor("clicks", {
+          header: "Clicks (Dest)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmtNum(info.getValue())}</span>,
+        }),
+        columnHelper.display({
+          id: "cpc_dest",
+          header: "CPC (Dest)",
+          cell: (info) => {
+            const row = info.row.original;
+            const cpc = row.clicks > 0 ? row.spend / row.clicks : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpc)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "conversations_tiktok_dm",
+          header: "Conv. (TikTok DM)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.conversations_tiktok_dm ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_conv_tiktok_dm",
+          header: "Cost/Conv (DM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.conversations_tiktok_dm ?? 0) > 0 ? row.spend / row.conversations_tiktok_dm! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "leads_tiktok_dm",
+          header: "Leads (TikTok DM)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.leads_tiktok_dm ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_lead_tiktok_dm",
+          header: "Cost/Lead (DM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.leads_tiktok_dm ?? 0) > 0 ? row.spend / row.leads_tiktok_dm! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+        columnHelper.display({
+          id: "conversations_instant_msg",
+          header: "Conv. (Instant Msg)",
+          cell: (info) => <span className="font-mono text-[13px] text-foreground/80 font-semibold tabular-nums">{fmtNum(info.row.original.conversations_instant_msg ?? 0)}</span>,
+        }),
+        columnHelper.display({
+          id: "cost_per_conv_instant_msg",
+          header: "Cost/Conv (IM)",
+          cell: (info) => {
+            const row = info.row.original;
+            const val = (row.conversations_instant_msg ?? 0) > 0 ? row.spend / row.conversations_instant_msg! : 0;
+            return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(val)}</span>;
+          },
+        }),
+      );
+    }
+
     // Generic results column (always show)
     cols.push(
       columnHelper.accessor("results", {
@@ -728,6 +799,7 @@ export function DeepDiveTable({
     const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
+    const showMobileTiktokMessages = selectedPreset === "tiktok_messages";
 
     return (
       <div className={cn(
@@ -867,6 +939,51 @@ export function DeepDiveTable({
             </>
           )}
 
+          {showMobileTiktokMessages && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Budget</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.budget ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPM</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks (Dest)</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPC (Dest)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (TikTok DM)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_tiktok_dm ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (DM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_tiktok_dm ?? 0) > 0 ? row.spend / row.conversations_tiktok_dm! : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Leads (TikTok DM)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.leads_tiktok_dm ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Lead (DM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.leads_tiktok_dm ?? 0) > 0 ? row.spend / row.leads_tiktok_dm! : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (Instant Msg)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_instant_msg ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (IM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_instant_msg ?? 0) > 0 ? row.spend / row.conversations_instant_msg! : 0)}</span>
+              </div>
+            </>
+          )}
+
           <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">ROAS</span>
             <Badge variant="outline" className={`text-[10px] font-mono h-5 rounded-md ${roasClass}`}>{roas.toFixed(2)}x</Badge>
@@ -920,6 +1037,7 @@ export function DeepDiveTable({
               <SelectItem value="messages">Messages</SelectItem>
               <SelectItem value="sales">Sales</SelectItem>
               <SelectItem value="performance">Performance</SelectItem>
+              <SelectItem value="tiktok_messages">TikTok Messages</SelectItem>
             </SelectContent>
           </Select>
           {onSetDefaultPreset && (
