@@ -736,6 +736,10 @@ Deno.serve(async (req) => {
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
                 console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
+                // Extract budget (TikTok returns budget in currency units)
+                if (c.budget !== undefined && c.budget !== null) {
+                  tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
+                }
 
                 const activeStatuses = [
                   "CAMPAIGN_STATUS_ENABLE",
