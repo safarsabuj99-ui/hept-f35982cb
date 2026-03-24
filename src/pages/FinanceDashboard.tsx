@@ -108,14 +108,11 @@ export default function FinanceDashboard() {
 
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsData ?? []) as any[]) {
-      const accountId = campaignToAccount[m.campaign_id];
-      if (!accountId) continue;
+      const clientId = campaignToClient[m.campaign_id];
+      if (!clientId) continue;
       const platform = campaignToPlatform[m.campaign_id] || "meta";
-      const clientIdsForAccount = accToClients[accountId] || [];
-      for (const cid of clientIdsForAccount) {
-        if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
-        clientPlatformSpend[cid][platform] = (clientPlatformSpend[cid][platform] || 0) + Number(m.spend);
-      }
+      if (!clientPlatformSpend[clientId]) clientPlatformSpend[clientId] = {};
+      clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(m.spend);
     }
 
     let aggRevenue = 0, aggCogs = 0;
