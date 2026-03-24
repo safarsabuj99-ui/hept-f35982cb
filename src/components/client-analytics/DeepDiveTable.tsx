@@ -939,6 +939,51 @@ export function DeepDiveTable({
             </>
           )}
 
+          {showMobileTiktokMessages && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Budget</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.budget ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPM</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks (Dest)</span>
+                <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPC (Dest)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (TikTok DM)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_tiktok_dm ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (DM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_tiktok_dm ?? 0) > 0 ? row.spend / row.conversations_tiktok_dm! : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Leads (TikTok DM)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.leads_tiktok_dm ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Lead (DM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.leads_tiktok_dm ?? 0) > 0 ? row.spend / row.leads_tiktok_dm! : 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (Instant Msg)</span>
+                <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_instant_msg ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (IM)</span>
+                <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_instant_msg ?? 0) > 0 ? row.spend / row.conversations_instant_msg! : 0)}</span>
+              </div>
+            </>
+          )}
+
           <div className="flex justify-between">
             <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">ROAS</span>
             <Badge variant="outline" className={`text-[10px] font-mono h-5 rounded-md ${roasClass}`}>{roas.toFixed(2)}x</Badge>
