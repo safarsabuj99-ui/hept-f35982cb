@@ -799,6 +799,7 @@ export function DeepDiveTable({
     const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
     const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
     const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
+    const showMobileTiktokMessages = selectedPreset === "tiktok_messages";
 
     return (
       <div className={cn(
