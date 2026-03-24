@@ -147,6 +147,10 @@ export default function CampaignMapping() {
       map[key].reach = (map[key].reach ?? 0) + Number(m.reach ?? 0);
       map[key].new_messaging_contacts = (map[key].new_messaging_contacts ?? 0) + Number(m.new_messaging_contacts ?? 0);
       map[key].create_order = (map[key].create_order ?? 0) + Number(m.create_order ?? 0);
+      map[key].budget = (map[key].budget ?? 0) + Number(m.budget ?? 0);
+      map[key].conversations_tiktok_dm = (map[key].conversations_tiktok_dm ?? 0) + Number(m.conversations_tiktok_dm ?? 0);
+      map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(m.leads_tiktok_dm ?? 0);
+      map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(m.conversations_instant_msg ?? 0);
     }
 
     // Recalculate cost_per_purchase and cost_per_message from aggregated totals
