@@ -679,8 +679,11 @@ export type Database = {
       daily_metrics: {
         Row: {
           add_to_cart: number
+          budget: number
           campaign_id: string
           clicks: number
+          conversations_instant_msg: number
+          conversations_tiktok_dm: number
           conversion_value: number
           cost_per_message: number
           cost_per_purchase: number
@@ -692,6 +695,7 @@ export type Database = {
           id: string
           impressions: number
           initiate_checkout: number
+          leads_tiktok_dm: number
           messaging_conversations: number
           new_messaging_contacts: number
           org_id: string | null
@@ -705,8 +709,11 @@ export type Database = {
         }
         Insert: {
           add_to_cart?: number
+          budget?: number
           campaign_id: string
           clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
           conversion_value?: number
           cost_per_message?: number
           cost_per_purchase?: number
@@ -718,6 +725,7 @@ export type Database = {
           id?: string
           impressions?: number
           initiate_checkout?: number
+          leads_tiktok_dm?: number
           messaging_conversations?: number
           new_messaging_contacts?: number
           org_id?: string | null
@@ -731,8 +739,11 @@ export type Database = {
         }
         Update: {
           add_to_cart?: number
+          budget?: number
           campaign_id?: string
           clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
           conversion_value?: number
           cost_per_message?: number
           cost_per_purchase?: number
@@ -744,6 +755,7 @@ export type Database = {
           id?: string
           impressions?: number
           initiate_checkout?: number
+          leads_tiktok_dm?: number
           messaging_conversations?: number
           new_messaging_contacts?: number
           org_id?: string | null
