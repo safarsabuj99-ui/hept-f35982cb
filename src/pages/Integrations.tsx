@@ -180,9 +180,7 @@ export default function Integrations() {
     setSyncing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke("sync-ad-spend", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
+      const res = await supabase.functions.invoke("sync-fast-lane");
       if (res.error) throw res.error;
       const body = res.data;
       toast({

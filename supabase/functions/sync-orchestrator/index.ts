@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch {}
 
     const targetFunction: string = body?.function || "sync-fast-lane";
-    const validFunctions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+    const validFunctions = ["sync-fast-lane", "sync-deep-dive"];
     if (!validFunctions.includes(targetFunction)) {
       return new Response(
         JSON.stringify({ error: `Invalid function: ${targetFunction}` }),

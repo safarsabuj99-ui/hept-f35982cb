@@ -508,7 +508,7 @@ export default function Settings() {
           ) : (
             <div className="space-y-3">
               {syncHealth.map((acc: any) => {
-                const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+                const functions = ["sync-fast-lane", "sync-deep-dive"];
                 const hasAnyFailure = functions.some(fn => acc.functionStatus[fn]?.latest?.status === "failed");
                 const allSuccess = functions.every(fn => {
                   const s = acc.functionStatus[fn];
