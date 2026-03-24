@@ -117,7 +117,7 @@ export default function ClientDashboard() {
     if (accIds.length > 0) {
       const { data: accounts } = await supabase.from("ad_accounts").select("*").in("id", accIds);
       setAdAccounts(accounts ?? []);
-      const { data: campaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform").in("ad_account_id", accIds);
+      const { data: campaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform").in("ad_account_id", accIds).eq("client_id", effectiveClientId);
       const campIds = campaigns?.map((c: any) => c.id) ?? [];
       if (campIds.length > 0) {
         const { data: metrics } = await supabase.from("daily_metrics").select("*").in("campaign_id", campIds).order("data_date", { ascending: false });

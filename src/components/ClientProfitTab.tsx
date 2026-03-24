@@ -60,7 +60,7 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
       supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
       supabase.from("profiles").select("pricing_config").eq("user_id", clientId).single(),
       supabase.from("ad_account_clients").select("ad_account_id").eq("client_id", clientId),
-      supabase.from("campaigns").select("id, ad_account_id, platform"),
+      supabase.from("campaigns").select("id, ad_account_id, platform").eq("client_id", clientId),
     ]);
 
     // WAC with cascading fallback

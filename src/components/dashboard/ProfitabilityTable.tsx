@@ -75,7 +75,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     // Get campaigns from mapped accounts only
     const { data: mappedCampaigns } = await supabase
       .from("campaigns")
-      .select("id, ad_account_id, platform")
+      .select("id, ad_account_id, platform, client_id")
       .in("ad_account_id", mappedAccountIds);
 
     const campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
@@ -129,15 +129,9 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     }
 
     // Mappings
-    const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
+    const campaignMap: Record<string, { ad_account_id: string; platform: string; client_id: string | null }> = {};
     for (const c of (mappedCampaigns ?? []) as any[]) {
-      campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
-    }
-
-    const accToClients: Record<string, string[]> = {};
-    for (const ac of (mappedAssignments ?? []) as any[]) {
-      if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
-      accToClients[ac.ad_account_id].push(ac.client_id);
+      campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform, client_id: c.client_id };
     }
 
     const clientIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
@@ -146,17 +140,14 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    // Aggregate spend per client per platform
+    // Aggregate spend per client per platform using campaign's client_id (not ad-account-level)
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsRes.data ?? []) as any[]) {
       const camp = campaignMap[m.campaign_id];
-      if (!camp) continue;
-      const clients = accToClients[camp.ad_account_id] || [];
-      for (const cid of clients) {
-        if (!clientIds.has(cid)) continue;
-        if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
-        clientPlatformSpend[cid][camp.platform] = (clientPlatformSpend[cid][camp.platform] || 0) + Number(m.spend);
-      }
+      if (!camp || !camp.client_id) continue;
+      if (!clientIds.has(camp.client_id)) continue;
+      if (!clientPlatformSpend[camp.client_id]) clientPlatformSpend[camp.client_id] = {};
+      clientPlatformSpend[camp.client_id][camp.platform] = (clientPlatformSpend[camp.client_id][camp.platform] || 0) + Number(m.spend);
     }
 
     // Build rows
