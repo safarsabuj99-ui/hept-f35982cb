@@ -663,7 +663,7 @@ Deno.serve(async (req) => {
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_site_conversation_msg_count","onsite_form"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -690,7 +690,7 @@ Deno.serve(async (req) => {
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_site_conversation_msg_count","onsite_form"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -798,7 +798,7 @@ Deno.serve(async (req) => {
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
             const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
-            const tiktokConvDm = parseInt(row.metrics?.onsite_on_site_conversation_msg_count || "0", 10);
+            const tiktokConvDm = conversions; // Use optimization conversion as messaging proxy
             const tiktokLeadsDm = parseInt(row.metrics?.onsite_form || "0", 10);
             const rawCampaignId = row.dimensions?.campaign_id;
             const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
