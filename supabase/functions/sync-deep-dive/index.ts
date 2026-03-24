@@ -824,10 +824,19 @@ Deno.serve(async (req) => {
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const tiktokBudget = tiktokBudgetMap[rawCampaignId] ?? 0;
+            const tiktokBudgetUsd = convertSpend(tiktokBudget);
+            const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
 
             await upsertMetrics(campaignDbId, dataDate, {
               spend: spendUsd, impressions, clicks, results: conversions,
               conversion_value: 0, ctr, cpc: cpcUsd, roas,
+              reach: tiktokReach,
+              cpm: Math.round(cpmValue * 100) / 100,
+              budget: tiktokBudgetUsd,
+              conversations_tiktok_dm: tiktokConvDm,
+              leads_tiktok_dm: tiktokLeadsDm,
+              conversations_instant_msg: 0,
             });
 
             // Legacy write
