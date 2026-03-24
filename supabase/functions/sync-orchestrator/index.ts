@@ -146,12 +146,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Process each account individually
+    // Process each account individually with throttling + circuit breaker
     const results: { account_id: string; account_name: string; status: string; error?: string; rows_synced?: number }[] = [];
     let successCount = 0;
     let failCount = 0;
+    let consecutiveSameError = 0;
+    let lastErrorCode = "";
 
-    for (const account of accounts) {
+    for (let accountIdx = 0; accountIdx < accounts.length; accountIdx++) {
+      const account = accounts[accountIdx];
+
+      // Throttle: wait between accounts (skip first)
+      if (accountIdx > 0) {
+        await new Promise(r => setTimeout(r, THROTTLE_MS));
+      }
       let lastError = "";
       let lastErrorCode = "";
       let rowsSynced = 0;
