@@ -1,27 +1,16 @@
 import { useState, useEffect } from "react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Zap, RefreshCw, BarChart3, DollarSign, Bell, Globe, Target, Activity, CheckCircle2, XCircle, AlertTriangle, Clock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Loader2, Percent, CalendarIcon, Globe } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "billing-radar";
-
-const SYNC_FUNCTIONS: { key: SyncFunction; label: string; icon: React.ReactNode; description: string }[] = [
-  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Spend + billing cycle sync" },
-  { key: "sync-deep-dive", label: "Deep Dive", icon: <BarChart3 className="h-4 w-4" />, description: "Detailed performance data" },
-  { key: "billing-radar", label: "Billing", icon: <Bell className="h-4 w-4" />, description: "Threshold alerts" },
-];
 
 export default function Settings() {
   const [serviceMargin, setServiceMargin] = useState("");
@@ -29,88 +18,10 @@ export default function Settings() {
   const [savingSyncDate, setSavingSyncDate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingMargin, setSavingMargin] = useState(false);
-  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
   const [savingProxy, setSavingProxy] = useState(false);
-  const [adAccounts, setAdAccounts] = useState<{ id: string; account_name: string; ad_account_id: string; platform_name: string }[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [syncingAccount, setSyncingAccount] = useState(false);
-  const [syncHealth, setSyncHealth] = useState<any[]>([]);
-  const [loadingSyncHealth, setLoadingSyncHealth] = useState(true);
-  const [retryingAccount, setRetryingAccount] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
-
-  const fetchLastSynced = async () => {
-    const { data } = await supabase
-      .from("api_integrations")
-      .select("last_synced_at")
-      .order("last_synced_at", { ascending: false })
-      .limit(1)
-      .single();
-    if (data?.last_synced_at) setLastSyncedAt(data.last_synced_at);
-  };
-
-  const fetchSyncHealth = async () => {
-    setLoadingSyncHealth(true);
-    try {
-      // Get all ad accounts
-      const { data: accounts } = await supabase
-        .from("ad_accounts")
-        .select("id, account_name, ad_account_id, platform_name")
-        .eq("is_active", true)
-        .order("account_name");
-
-      if (!accounts?.length) { setSyncHealth([]); setLoadingSyncHealth(false); return; }
-
-      // Get latest sync_log per account per function
-      const { data: logs } = await supabase
-        .from("sync_logs" as any)
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      // Get token expiry info
-      const { data: integrations } = await supabase
-        .from("api_integrations")
-        .select("id, token_expiry_date, platform");
-
-      const integrationMap: Record<string, any> = {};
-      for (const i of integrations ?? []) integrationMap[i.id] = i;
-
-      // Build health data per account
-      const healthData = accounts.map((acc: any) => {
-        const accountLogs = (logs ?? []).filter((l: any) => l.ad_account_id === acc.id);
-        const functions = ["sync-fast-lane", "sync-deep-dive"];
-        const functionStatus: Record<string, any> = {};
-
-        for (const fn of functions) {
-          const fnLogs = accountLogs.filter((l: any) => l.function_name === fn);
-          const latest = fnLogs[0];
-          const lastSuccess = fnLogs.find((l: any) => l.status === "success");
-          const recentFailures = fnLogs.filter((l: any) => l.status === "failed").length;
-
-          functionStatus[fn] = {
-            latest,
-            lastSuccess,
-            recentFailures,
-          };
-        }
-
-        return {
-          ...acc,
-          functionStatus,
-          totalLogs: accountLogs.length,
-        };
-      });
-
-      setSyncHealth(healthData);
-    } catch (err) {
-      console.error("Failed to load sync health:", err);
-    }
-    setLoadingSyncHealth(false);
-  };
 
   useEffect(() => {
     supabase
@@ -124,17 +35,6 @@ export default function Settings() {
           if (row.key === "tiktok_proxy_url") setTiktokProxyUrl(row.value || "");
         }
         setLoading(false);
-      });
-    fetchLastSynced();
-    fetchSyncHealth();
-    // Load ad accounts for per-account sync
-    supabase
-      .from("ad_accounts")
-      .select("id, account_name, ad_account_id, platform_name")
-      .eq("is_active", true)
-      .order("account_name")
-      .then(({ data }) => {
-        setAdAccounts(data ?? []);
       });
   }, []);
 
@@ -177,69 +77,8 @@ export default function Settings() {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Saved", description: tiktokProxyUrl.trim() ? "TikTok proxy URL configured. Next sync will use it." : "TikTok proxy removed. Direct API calls will be used." });
+      toast({ title: "Saved", description: tiktokProxyUrl.trim() ? "TikTok proxy URL configured." : "TikTok proxy removed." });
     }
-  };
-
-  const handleManualSync = async (fn: SyncFunction, platform?: string) => {
-    const syncKey = platform ? `${fn}:${platform}` : fn;
-    setSyncing((prev) => ({ ...prev, [syncKey]: true }));
-    const body = platform ? { platform } : undefined;
-    const { data, error } = await supabase.functions.invoke(fn, { body });
-    setSyncing((prev) => ({ ...prev, [syncKey]: false }));
-    if (error) {
-      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
-    } else {
-      const label = platform ? `${fn} (${platform})` : fn;
-      toast({ title: "Sync Complete", description: data?.message || `${label} finished successfully.` });
-      if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
-        for (const err of data.errors) {
-          toast({ title: "Sync Warning", description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
-        }
-      }
-      fetchLastSynced();
-    }
-  };
-
-  const handleSyncAll = async () => {
-    setSyncing((prev) => ({ ...prev, all: true }));
-    for (const fn of SYNC_FUNCTIONS) {
-      setSyncing((prev) => ({ ...prev, [fn.key]: true }));
-      const { data, error } = await supabase.functions.invoke(fn.key);
-      setSyncing((prev) => ({ ...prev, [fn.key]: false }));
-      if (error) {
-        toast({ title: `${fn.label} Failed`, description: error.message, variant: "destructive" });
-      } else if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
-        for (const err of data.errors) {
-          toast({ title: `${fn.label} Warning`, description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
-        }
-      }
-    }
-    setSyncing((prev) => ({ ...prev, all: false }));
-    toast({ title: "All Syncs Complete", description: "All API data has been refreshed." });
-    fetchLastSynced();
-  };
-
-  const handleForceRetry = async (accountId: string, accountName: string) => {
-    setRetryingAccount(accountId);
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-orchestrator", {
-        body: { function: "sync-deep-dive" },
-      });
-      // The orchestrator syncs all accounts; for a targeted retry we use the direct function
-      const { data: retryData, error: retryErr } = await supabase.functions.invoke("sync-deep-dive", {
-        body: { ad_account_ids: [accountId] },
-      });
-      if (retryErr) {
-        toast({ title: "Retry Failed", description: retryErr.message, variant: "destructive" });
-      } else {
-        toast({ title: "Retry Complete", description: `Sync retried for ${accountName}` });
-        fetchSyncHealth();
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-    setRetryingAccount(null);
   };
 
   return (
@@ -248,117 +87,6 @@ export default function Settings() {
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Global configuration</p>
       </div>
-
-      {/* Manual API Sync Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <RefreshCw className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle>Manual API Sync</CardTitle>
-              <CardDescription>Trigger data collection instantly</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            {SYNC_FUNCTIONS.map((fn) => (
-              <Button
-                key={fn.key}
-                variant="outline"
-                className="justify-start gap-2"
-                disabled={syncing[fn.key] || syncing.all}
-                onClick={() => handleManualSync(fn.key)}
-              >
-                {syncing[fn.key] ? <Loader2 className="h-4 w-4 animate-spin" /> : fn.icon}
-                {fn.label}
-              </Button>
-            ))}
-          </div>
-          {/* Per-platform Deep Dive sync */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Deep Dive by Platform</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(["meta", "google", "tiktok"] as const).map((platform) => {
-                const syncKey = `sync-deep-dive:${platform}`;
-                const anySyncing = Object.values(syncing).some(Boolean);
-                return (
-                  <Button
-                    key={platform}
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 capitalize"
-                    disabled={syncing[syncKey] || anySyncing}
-                    onClick={() => handleManualSync("sync-deep-dive", platform)}
-                  >
-                    {syncing[syncKey] ? <Loader2 className="h-3 w-3 animate-spin" /> : <BarChart3 className="h-3 w-3" />}
-                    {platform === "meta" ? "Meta" : platform === "google" ? "Google" : "TikTok"}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-          {/* Per-account Deep Dive sync */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Deep Dive by Account</p>
-            <div className="flex gap-2">
-              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Select ad account..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {adAccounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.account_name || acc.ad_account_id} ({acc.platform_name})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!selectedAccountId || syncingAccount || Object.values(syncing).some(Boolean)}
-                onClick={async () => {
-                  setSyncingAccount(true);
-                  const { data, error } = await supabase.functions.invoke("sync-deep-dive", {
-                    body: { ad_account_ids: [selectedAccountId] },
-                  });
-                  setSyncingAccount(false);
-                  if (error) {
-                    toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
-                  } else {
-                    const acct = adAccounts.find(a => a.id === selectedAccountId);
-                    toast({ title: "Sync Complete", description: `Deep Dive synced for ${acct?.account_name || "account"}.` });
-                    if (data?.errors?.length) {
-                      for (const err of data.errors) {
-                        toast({ title: "Warning", description: typeof err === "string" ? err : JSON.stringify(err), variant: "destructive" });
-                      }
-                    }
-                    fetchLastSynced();
-                  }
-                }}
-              >
-                {syncingAccount ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Target className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          </div>
-          <Button
-            className="w-full"
-            disabled={syncing.all || Object.values(syncing).some(Boolean)}
-            onClick={handleSyncAll}
-          >
-            {syncing.all ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Sync All
-          </Button>
-          {lastSyncedAt && (
-            <p className="text-xs text-muted-foreground text-center">
-              Last synced: {formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -444,6 +172,7 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -477,136 +206,6 @@ export default function Settings() {
                 {savingProxy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save Proxy URL
               </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Sync Health Dashboard */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <Activity className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle>Sync Health</CardTitle>
-                <CardDescription>Per-account sync status and error tracking</CardDescription>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" onClick={fetchSyncHealth} disabled={loadingSyncHealth}>
-              <RefreshCw className={cn("h-4 w-4", loadingSyncHealth && "animate-spin")} />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingSyncHealth ? (
-            <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : syncHealth.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No sync data yet. Syncs will start automatically.</p>
-          ) : (
-            <div className="space-y-3">
-              {syncHealth.map((acc: any) => {
-                const functions = ["sync-fast-lane", "sync-deep-dive"];
-                const hasAnyFailure = functions.some(fn => acc.functionStatus[fn]?.latest?.status === "failed");
-                const allSuccess = functions.every(fn => {
-                  const s = acc.functionStatus[fn];
-                  return !s?.latest || s.latest.status === "success";
-                });
-
-                return (
-                  <div key={acc.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {allSuccess ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : hasAnyFailure ? (
-                          <XCircle className="h-4 w-4 text-destructive" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="font-medium text-sm">{acc.account_name || acc.ad_account_id}</span>
-                        <Badge variant="outline" className="text-[10px] capitalize">{acc.platform_name}</Badge>
-                      </div>
-                      {hasAnyFailure && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs gap-1"
-                          disabled={retryingAccount === acc.id}
-                          onClick={() => handleForceRetry(acc.id, acc.account_name)}
-                        >
-                          {retryingAccount === acc.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3 w-3" />
-                          )}
-                          Retry
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {functions.map(fn => {
-                        const s = acc.functionStatus[fn];
-                        const latest = s?.latest;
-                        const lastSuccess = s?.lastSuccess;
-                        const label = fn.replace("sync-", "").replace("-", " ");
-
-                        if (!latest) {
-                          return (
-                            <div key={fn} className="rounded bg-muted/50 px-2 py-1.5">
-                              <p className="text-[10px] font-medium text-muted-foreground capitalize">{label}</p>
-                              <p className="text-[10px] text-muted-foreground">No data</p>
-                            </div>
-                          );
-                        }
-
-                        const isSuccess = latest.status === "success";
-                        const isFailed = latest.status === "failed";
-
-                        return (
-                          <div key={fn} className={cn(
-                            "rounded px-2 py-1.5",
-                            isSuccess && "bg-green-500/10",
-                            isFailed && "bg-destructive/10",
-                            !isSuccess && !isFailed && "bg-muted/50"
-                          )}>
-                            <p className="text-[10px] font-medium capitalize">{label}</p>
-                            <div className="flex items-center gap-1">
-                              {isSuccess ? (
-                                <CheckCircle2 className="h-3 w-3 text-green-500" />
-                              ) : isFailed ? (
-                                <XCircle className="h-3 w-3 text-destructive" />
-                              ) : (
-                                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                              )}
-                              <span className="text-[10px] text-muted-foreground">
-                                {latest.completed_at
-                                  ? formatDistanceToNow(new Date(latest.completed_at), { addSuffix: true })
-                                  : "running..."}
-                              </span>
-                            </div>
-                            {isFailed && latest.error_code && (
-                              <Badge variant="destructive" className="text-[8px] mt-0.5 h-4 px-1">
-                                {latest.error_code}
-                              </Badge>
-                            )}
-                            {isFailed && lastSuccess && (
-                              <p className="text-[9px] text-muted-foreground mt-0.5">
-                                Last OK: {formatDistanceToNow(new Date(lastSuccess.completed_at), { addSuffix: true })}
-                              </p>
-                            )}
-                            {isSuccess && latest.rows_synced > 0 && (
-                              <p className="text-[9px] text-muted-foreground">{latest.rows_synced} rows</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           )}
         </CardContent>
