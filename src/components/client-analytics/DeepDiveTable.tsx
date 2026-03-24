@@ -285,10 +285,11 @@ export function DeepDiveTable({
   }, [data]);
 
   const showColumns = useMemo(() => {
-    if (selectedPreset === "sales") return { sales: true, messages: false, performance: false };
-    if (selectedPreset === "messages") return { sales: false, messages: true, performance: false };
-    if (selectedPreset === "performance") return { sales: false, messages: false, performance: true };
-    return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false };
+    if (selectedPreset === "sales") return { sales: true, messages: false, performance: false, tiktok_messages: false };
+    if (selectedPreset === "messages") return { sales: false, messages: true, performance: false, tiktok_messages: false };
+    if (selectedPreset === "performance") return { sales: false, messages: false, performance: true, tiktok_messages: false };
+    if (selectedPreset === "tiktok_messages") return { sales: false, messages: false, performance: false, tiktok_messages: true };
+    return { sales: hasObjectiveData.sales, messages: hasObjectiveData.messages, performance: false, tiktok_messages: false };
   }, [selectedPreset, hasObjectiveData]);
 
   const columns = useMemo(() => {
