@@ -8,6 +8,8 @@ const corsHeaders = {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 5000, 10000]; // exponential backoff
+const THROTTLE_MS = 200; // delay between accounts to prevent rate limiting
+const CIRCUIT_BREAKER_THRESHOLD = 3; // stop after N consecutive same-error failures
 
 /** Classify error codes from sync function responses */
 function classifyError(errorMsg: string, errorCode?: string): string {
@@ -144,14 +146,30 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Process each account individually
+    // Process each account individually with throttling + circuit breaker
     const results: { account_id: string; account_name: string; status: string; error?: string; rows_synced?: number }[] = [];
     let successCount = 0;
     let failCount = 0;
+    let consecutiveSameError = 0;
+    let lastErrorCode = "";
 
-    for (const account of accounts) {
-      let lastError = "";
-      let lastErrorCode = "";
+    for (let accountIdx = 0; accountIdx < accounts.length; accountIdx++) {
+      const account = accounts[accountIdx];
+
+      // Throttle: wait between accounts (skip first)
+      if (accountIdx > 0) {
+        await new Promise(r => setTimeout(r, THROTTLE_MS));
+      }
+      // Circuit breaker: stop if N consecutive accounts fail with same error
+      if (consecutiveSameError >= CIRCUIT_BREAKER_THRESHOLD) {
+        console.error(`⚡ Circuit breaker triggered: ${consecutiveSameError} consecutive "${lastErrorCode}" errors. Stopping.`);
+        results.push({ account_id: account.id, account_name: account.account_name, status: "skipped", error: `Circuit breaker: ${lastErrorCode}` });
+        failCount++;
+        continue;
+      }
+
+      let accountError = "";
+      let accountErrorCode = "";
       let rowsSynced = 0;
       let succeeded = false;
 
@@ -189,21 +207,21 @@ Deno.serve(async (req) => {
           const responseData = await response.json();
 
           if (!response.ok || responseData.error) {
-            lastError = responseData.error || `HTTP ${response.status}`;
-            lastErrorCode = classifyError(lastError, responseData.error_code);
+            accountError = responseData.error || `HTTP ${response.status}`;
+            accountErrorCode = classifyError(accountError, responseData.error_code);
 
             // Update sync_log as failed
             if (logEntry) {
               await supabase.from("sync_logs").update({
                 status: "failed",
-                error_message: lastError,
-                error_code: lastErrorCode,
+                error_message: accountError,
+                error_code: accountErrorCode,
                 completed_at: new Date().toISOString(),
               }).eq("id", logEntry.id);
             }
 
             // Don't retry token_expired errors
-            if (lastErrorCode === "token_expired") {
+            if (accountErrorCode === "token_expired") {
               console.error(`Token expired for ${account.account_name}, not retrying`);
               break;
             }
@@ -225,14 +243,14 @@ Deno.serve(async (req) => {
 
           break; // exit retry loop
         } catch (err: any) {
-          lastError = err.message || "Unknown error";
-          lastErrorCode = classifyError(lastError);
+          accountError = err.message || "Unknown error";
+          accountErrorCode = classifyError(accountError);
 
           if (logEntry) {
             await supabase.from("sync_logs").update({
               status: "failed",
-              error_message: lastError,
-              error_code: lastErrorCode,
+              error_message: accountError,
+              error_code: accountErrorCode,
               completed_at: new Date().toISOString(),
             }).eq("id", logEntry.id);
           }
@@ -241,12 +259,21 @@ Deno.serve(async (req) => {
 
       if (succeeded) {
         successCount++;
+        consecutiveSameError = 0; // reset circuit breaker
+        lastErrorCode = "";
         results.push({ account_id: account.id, account_name: account.account_name, status: "success", rows_synced: rowsSynced });
         console.log(`✅ ${account.account_name}: ${rowsSynced} rows`);
       } else {
         failCount++;
-        results.push({ account_id: account.id, account_name: account.account_name, status: "failed", error: lastError });
-        console.error(`❌ ${account.account_name}: ${lastErrorCode} - ${lastError}`);
+        // Track circuit breaker
+        if (accountErrorCode === lastErrorCode && lastErrorCode !== "") {
+          consecutiveSameError++;
+        } else {
+          consecutiveSameError = 1;
+          lastErrorCode = accountErrorCode;
+        }
+        results.push({ account_id: account.id, account_name: account.account_name, status: "failed", error: accountError });
+        console.error(`❌ ${account.account_name}: ${accountErrorCode} - ${accountError} (consecutive: ${consecutiveSameError})`);
 
         // Check for consecutive failures (5+) to auto-alert
         const { data: recentFailures } = await supabase
@@ -267,7 +294,6 @@ Deno.serve(async (req) => {
             .single();
 
           if (clientLink) {
-            // Check if similar alert exists in last 24h
             const { data: existingAlert } = await supabase
               .from("billing_notifications")
               .select("id")
@@ -282,7 +308,7 @@ Deno.serve(async (req) => {
                 client_id: clientLink.client_id,
                 alert_type: "sync_persistent_failure",
                 priority: "critical",
-                message: `${account.account_name} has failed ${targetFunction} sync 5+ times consecutively. Last error: ${lastErrorCode}. Manual intervention required.`,
+                message: `${account.account_name} has failed ${targetFunction} sync 5+ times consecutively. Last error: ${accountErrorCode}. Manual intervention required.`,
               });
             }
           }
