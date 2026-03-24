@@ -648,14 +648,14 @@ Deno.serve(async (req) => {
               let usedBc = false;
 
               if (bcId) {
-                const bcParams = new URLSearchParams({
+          const bcParams = new URLSearchParams({
                   bc_id: bcId,
                   advertiser_ids: JSON.stringify([account.ad_account_id]),
                   service_type: "AUCTION",
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_site_conversation_msg_count","onsite_form"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
