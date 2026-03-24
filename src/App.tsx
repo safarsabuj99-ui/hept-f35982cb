@@ -132,6 +132,7 @@ const App = () => (
                 <Route path="/admin/pending" element={<Navigate to="/admin/payment-requests" replace />} />
                 <Route path="/admin/profile" element={<AdminProfile />} />
                 <Route path="/admin/settings" element={<Settings />} />
+                <Route path="/admin/sync-health" element={<SyncHealth />} />
                 <Route path="/admin/logs" element={<AuditLogs />} />
                 
                 <Route path="/admin/team" element={<TeamManagement />} />
