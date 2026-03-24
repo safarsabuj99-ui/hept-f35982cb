@@ -82,7 +82,7 @@ export default function Settings() {
       // Build health data per account
       const healthData = accounts.map((acc: any) => {
         const accountLogs = (logs ?? []).filter((l: any) => l.ad_account_id === acc.id);
-        const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+        const functions = ["sync-fast-lane", "sync-deep-dive"];
         const functionStatus: Record<string, any> = {};
 
         for (const fn of functions) {
