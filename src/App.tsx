@@ -22,6 +22,7 @@ import ManagerDashboard from "@/pages/ManagerDashboard";
 import Settings from "@/pages/Settings";
 import AdminProfile from "@/pages/AdminProfile";
 import AuditLogs from "@/pages/AuditLogs";
+import SyncHealth from "@/pages/SyncHealth";
 
 import TeamManagement from "@/pages/TeamManagement";
 import TeamMemberDetail from "@/pages/TeamMemberDetail";
