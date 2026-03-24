@@ -160,8 +160,16 @@ Deno.serve(async (req) => {
       if (accountIdx > 0) {
         await new Promise(r => setTimeout(r, THROTTLE_MS));
       }
-      let lastError = "";
-      let lastErrorCode = "";
+      // Circuit breaker: stop if N consecutive accounts fail with same error
+      if (consecutiveSameError >= CIRCUIT_BREAKER_THRESHOLD) {
+        console.error(`⚡ Circuit breaker triggered: ${consecutiveSameError} consecutive "${lastErrorCode}" errors. Stopping.`);
+        results.push({ account_id: account.id, account_name: account.account_name, status: "skipped", error: `Circuit breaker: ${lastErrorCode}` });
+        failCount++;
+        continue;
+      }
+
+      let accountError = "";
+      let accountErrorCode = "";
       let rowsSynced = 0;
       let succeeded = false;
 
