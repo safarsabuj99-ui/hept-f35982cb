@@ -717,8 +717,9 @@ Deno.serve(async (req) => {
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };
 
-          // Fetch real campaign statuses from TikTok
+          // Fetch real campaign statuses AND budgets from TikTok
           const tiktokStatusMap: Record<string, string> = {};
+          const tiktokBudgetMap: Record<string, number> = {};
           let tiktokStatusFetchFailed = false;
           try {
             const statusParams = new URLSearchParams({
