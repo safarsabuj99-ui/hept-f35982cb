@@ -140,17 +140,14 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    // Aggregate spend per client per platform
+    // Aggregate spend per client per platform using campaign's client_id (not ad-account-level)
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsRes.data ?? []) as any[]) {
       const camp = campaignMap[m.campaign_id];
-      if (!camp) continue;
-      const clients = accToClients[camp.ad_account_id] || [];
-      for (const cid of clients) {
-        if (!clientIds.has(cid)) continue;
-        if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
-        clientPlatformSpend[cid][camp.platform] = (clientPlatformSpend[cid][camp.platform] || 0) + Number(m.spend);
-      }
+      if (!camp || !camp.client_id) continue;
+      if (!clientIds.has(camp.client_id)) continue;
+      if (!clientPlatformSpend[camp.client_id]) clientPlatformSpend[camp.client_id] = {};
+      clientPlatformSpend[camp.client_id][camp.platform] = (clientPlatformSpend[camp.client_id][camp.platform] || 0) + Number(m.spend);
     }
 
     // Build rows
