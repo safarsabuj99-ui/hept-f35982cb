@@ -296,6 +296,10 @@ Deno.serve(async (req) => {
             reach?: number;
             new_messaging_contacts?: number;
             create_order?: number;
+            budget?: number;
+            conversations_tiktok_dm?: number;
+            leads_tiktok_dm?: number;
+            conversations_instant_msg?: number;
           }
         ) => {
           const { error } = await supabase
@@ -323,6 +327,10 @@ Deno.serve(async (req) => {
                 reach: metrics.reach ?? 0,
                 new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
                 create_order: metrics.create_order ?? 0,
+                budget: metrics.budget ?? 0,
+                conversations_tiktok_dm: metrics.conversations_tiktok_dm ?? 0,
+                leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
+                conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
                 synced_at: new Date().toISOString(),
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }

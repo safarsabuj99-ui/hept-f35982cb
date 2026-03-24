@@ -60,9 +60,13 @@ export interface CampaignRow {
   reach?: number;
   new_messaging_contacts?: number;
   create_order?: number;
+  budget?: number;
+  conversations_tiktok_dm?: number;
+  leads_tiktok_dm?: number;
+  conversations_instant_msg?: number;
 }
 
-export type PresetType = "auto" | "messages" | "sales" | "performance";
+export type PresetType = "auto" | "messages" | "sales" | "performance" | "tiktok_messages";
 
 const PLATFORM_BADGE: Record<string, { label: string; className: string }> = {
   meta: { label: "Meta", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },

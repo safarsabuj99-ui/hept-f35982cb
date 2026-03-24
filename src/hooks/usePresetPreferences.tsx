@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 
-type PresetType = "auto" | "messages" | "sales" | "performance";
+type PresetType = "auto" | "messages" | "sales" | "performance" | "tiktok_messages";
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
 interface PresetPreferences {
