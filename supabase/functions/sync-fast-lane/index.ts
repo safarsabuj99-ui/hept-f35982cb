@@ -259,6 +259,7 @@ Deno.serve(async (req) => {
               raw_currency: currency,
               exchange_rate_used: isBDT ? accountRate : 1,
               final_billable_usd: finalUsd,
+              client_id: matchedClientId,
               synced_at: new Date().toISOString(),
             });
           }
@@ -355,6 +356,7 @@ Deno.serve(async (req) => {
               raw_currency: currency,
               exchange_rate_used: 1,
               final_billable_usd: spend,
+              client_id: matchedClientId,
               synced_at: new Date().toISOString(),
             });
           }
@@ -510,6 +512,7 @@ Deno.serve(async (req) => {
               raw_currency: currency,
               exchange_rate_used: 1,
               final_billable_usd: spend,
+              client_id: matchedClientId,
               synced_at: new Date().toISOString(),
             });
           }
@@ -537,6 +540,45 @@ Deno.serve(async (req) => {
         syncedCount++;
       } catch (err: any) {
         errors.push(`${platform} ${account.ad_account_id}: ${err.message}`);
+      }
+    }
+
+    // ===== Refresh billing cycle data for Meta accounts =====
+    const metaAccounts = accounts.filter((a: any) => a.platform_name === "meta");
+    for (const account of metaAccounts) {
+      const integration = (account as any).api_integrations;
+      if (!integration?.api_token) continue;
+      try {
+        const bcUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${integration.api_token}`;
+        const bcRes = await fetch(bcUrl);
+        if (!bcRes.ok) continue;
+        const bcJson = await bcRes.json();
+        const cycle = bcJson.data?.[0];
+        if (!cycle) continue;
+
+        const updateFields: Record<string, any> = {};
+        if (cycle.threshold_amount) {
+          updateFields.threshold_limit = Number(cycle.threshold_amount) / 100;
+          updateFields.billing_type = "threshold_postpaid";
+        }
+        if (cycle.amount_spent !== undefined) {
+          updateFields.current_threshold_spend = Number(cycle.amount_spent) / 100;
+        }
+        if (cycle.end_time) {
+          const d = typeof cycle.end_time === "number"
+            ? new Date(cycle.end_time * 1000)
+            : new Date(cycle.end_time);
+          if (!isNaN(d.getTime())) {
+            updateFields.next_billing_date = d.toISOString().split("T")[0];
+          }
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+          await supabase.from("ad_accounts").update(updateFields).eq("id", account.id);
+          console.log(`Updated billing data for ${account.ad_account_id}: ${JSON.stringify(updateFields)}`);
+        }
+      } catch (err: any) {
+        console.warn(`Failed to fetch billing cycle for ${account.ad_account_id}: ${err.message}`);
       }
     }
 

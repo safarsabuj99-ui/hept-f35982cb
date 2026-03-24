@@ -15,12 +15,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "sync-ad-spend" | "billing-radar";
+type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "billing-radar";
 
 const SYNC_FUNCTIONS: { key: SyncFunction; label: string; icon: React.ReactNode; description: string }[] = [
-  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Quick campaign metrics" },
+  { key: "sync-fast-lane", label: "Fast Lane", icon: <Zap className="h-4 w-4" />, description: "Spend + billing cycle sync" },
   { key: "sync-deep-dive", label: "Deep Dive", icon: <BarChart3 className="h-4 w-4" />, description: "Detailed performance data" },
-  { key: "sync-ad-spend", label: "Ad Spend", icon: <DollarSign className="h-4 w-4" />, description: "Daily spend records" },
   { key: "billing-radar", label: "Billing", icon: <Bell className="h-4 w-4" />, description: "Threshold alerts" },
 ];
 
@@ -83,7 +82,7 @@ export default function Settings() {
       // Build health data per account
       const healthData = accounts.map((acc: any) => {
         const accountLogs = (logs ?? []).filter((l: any) => l.ad_account_id === acc.id);
-        const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+        const functions = ["sync-fast-lane", "sync-deep-dive"];
         const functionStatus: Record<string, any> = {};
 
         for (const fn of functions) {
@@ -509,7 +508,7 @@ export default function Settings() {
           ) : (
             <div className="space-y-3">
               {syncHealth.map((acc: any) => {
-                const functions = ["sync-fast-lane", "sync-deep-dive", "sync-ad-spend"];
+                const functions = ["sync-fast-lane", "sync-deep-dive"];
                 const hasAnyFailure = functions.some(fn => acc.functionStatus[fn]?.latest?.status === "failed");
                 const allSuccess = functions.every(fn => {
                   const s = acc.functionStatus[fn];

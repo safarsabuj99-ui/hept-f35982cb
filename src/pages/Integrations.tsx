@@ -179,15 +179,12 @@ export default function Integrations() {
   const simulateSync = async () => {
     setSyncing(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke("sync-ad-spend", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
+      const res = await supabase.functions.invoke("sync-fast-lane");
       if (res.error) throw res.error;
       const body = res.data;
       toast({
         title: "Sync Complete",
-        description: `${body.records_created} records | ${body.auto_mapped} auto-mapped | ${body.unmapped} unmapped (rate: ${body.exchange_rate_used})`,
+        description: `Synced ${body.synced || 0} accounts | Skipped ${body.skipped_no_keyword_match || 0} unmatched`,
       });
       fetchData();
     } catch (err: any) {
