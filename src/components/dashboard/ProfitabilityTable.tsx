@@ -129,15 +129,9 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     }
 
     // Mappings
-    const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
+    const campaignMap: Record<string, { ad_account_id: string; platform: string; client_id: string | null }> = {};
     for (const c of (mappedCampaigns ?? []) as any[]) {
-      campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
-    }
-
-    const accToClients: Record<string, string[]> = {};
-    for (const ac of (mappedAssignments ?? []) as any[]) {
-      if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
-      accToClients[ac.ad_account_id].push(ac.client_id);
+      campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform, client_id: c.client_id };
     }
 
     const clientIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
