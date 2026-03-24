@@ -512,6 +512,7 @@ Deno.serve(async (req) => {
               raw_currency: currency,
               exchange_rate_used: 1,
               final_billable_usd: spend,
+              client_id: matchedClientId,
               synced_at: new Date().toISOString(),
             });
           }
