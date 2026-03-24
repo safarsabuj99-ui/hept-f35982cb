@@ -75,7 +75,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     // Get campaigns from mapped accounts only
     const { data: mappedCampaigns } = await supabase
       .from("campaigns")
-      .select("id, ad_account_id, platform")
+      .select("id, ad_account_id, platform, client_id")
       .in("ad_account_id", mappedAccountIds);
 
     const campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
