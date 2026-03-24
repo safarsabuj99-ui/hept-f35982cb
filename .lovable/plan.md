@@ -1,62 +1,58 @@
 
 
-## Plan: TikTok Messages Preset for Campaign Analytics
+## Plan: Fix Invalid TikTok Metric Error in sync-deep-dive
 
-### What You'll See
+### Problem
+The TikTok API rejects `onsite_on_site_conversation_msg_count` as an invalid metric field (error code 40002), causing the entire TikTok deep-dive sync to fail and return no data.
 
-A new **"TikTok Messages"** preset in the campaign analytics preset selector, showing these 13 columns:
+### Root Cause
+`onsite_on_site_conversation_msg_count` is not a valid TikTok Reporting API v1.3 metric. The TikTok API documentation does not list this field. Messaging conversation metrics are not available as standalone reporting fields in the integrated report endpoint.
 
-| # | Column | Status |
-|---|--------|--------|
-| 1 | Budget | **New** — needs new DB column + TikTok API fetch |
-| 2 | Cost (Spend) | Already exists |
-| 3 | Impressions | Already exists |
-| 4 | Reach | Exists in DB, **not fetched by TikTok sync yet** |
-| 5 | CPM | Computed (spend/impressions × 1000) |
-| 6 | Clicks (destination) | Already exists |
-| 7 | CPC (destination) | Computed (spend/clicks) |
-| 8 | Conversations (TikTok DM) | **New** DB column + API metric |
-| 9 | Cost per conversation (TikTok DM) | Computed |
-| 10 | Leads (TikTok DM) | **New** DB column + API metric |
-| 11 | Cost per lead (TikTok DM) | Computed |
-| 12 | Conversations (Instant messaging) | **New** DB column + API metric |
-| 13 | Cost per conversation (Instant messaging) | Computed |
+### Solution: Two-Phase Fetch with Graceful Fallback
+
+Instead of cramming all metrics (including potentially unsupported ones) into a single request, implement a **safe core request + optional extended request** pattern:
+
+**Phase 1 — Core metrics request (always succeeds):**
+Remove `onsite_on_site_conversation_msg_count` from the metrics list. Keep only validated metrics:
+```
+campaign_name, spend, impressions, clicks, ctr, cpc, conversion, 
+conversion_cost, complete_payment_roas, reach, onsite_form
+```
+
+**Phase 2 — Optional messaging metrics request (try/catch, no-fail):**
+Attempt a second lightweight request with messaging-specific metrics. If TikTok supports them for the account, merge the data. If it fails, gracefully default to 0 and log a warning — never block the sync.
+
+The candidate messaging metrics to try:
+- `onsite_initiate_checkout_count` or similar onsite conversation fields
+- Since the official API docs don't expose a direct "DM conversation count" metric, map the `conversion` field (which already represents the optimization event result) as the messaging proxy when the campaign objective is messaging.
 
 ### Implementation
 
-**Step 1 — Database Migration**
-Add 4 new columns to `daily_metrics`:
-- `budget` (numeric, default 0)
-- `conversations_tiktok_dm` (integer, default 0)
-- `leads_tiktok_dm` (integer, default 0)
-- `conversations_instant_msg` (integer, default 0)
+**File: `supabase/functions/sync-deep-dive/index.ts`**
 
-**Step 2 — Update TikTok Sync (`sync-deep-dive/index.ts`)**
-- Add `reach`, `onsite_on_site_form_v2` (leads), and messaging metrics to the TikTok reporting API `metrics` parameter
-- Fetch campaign budget from the existing `/campaign/get/` call (already fetched for status — just extract `budget` field)
-- Map TikTok messaging metrics to the new DB columns during upsert
+1. Remove `onsite_on_site_conversation_msg_count` from both BC and direct metrics strings (lines 666 and 693)
+2. Replace with only validated metrics: `campaign_name,spend,impressions,clicks,ctr,cpc,conversion,conversion_cost,complete_payment_roas,reach,onsite_form`
+3. Use `conversion` (the campaign's optimization event result) to populate `conversations_tiktok_dm` — this naturally maps to messaging conversations when the campaign objective is messaging/lead gen
+4. Keep `onsite_form` for `leads_tiktok_dm` (Instant Form leads — this is a valid metric)
+5. Update the data mapping section (line 801) to use `conversion` instead of the invalid metric
 
-**Step 3 — Add "tiktok_messages" Preset to DeepDiveTable**
-- Add `"tiktok_messages"` to `PresetType`
-- New preset option in selector: "TikTok Messages"
-- When selected, show exactly the 13 columns above (Budget, Cost, Impressions, Reach, CPM, Clicks, CPC, then the 6 messaging-specific columns)
-- Add column definitions for Budget, Conversations (TikTok DM), Leads (TikTok DM), Cost/Lead (TikTok DM), Conversations (Instant Msg), Cost/Conv (Instant Msg)
+### Technical Detail
 
-**Step 4 — Update CampaignRow & Aggregation**
-- Add `budget`, `conversations_tiktok_dm`, `leads_tiktok_dm`, `conversations_instant_msg` to `CampaignRow` interface
-- Update aggregation in `CampaignMapping.tsx` and `ClientReports.tsx` to sum new fields
+```text
+BEFORE (broken):
+  metrics: [..., "onsite_on_site_conversation_msg_count", "onsite_form"]
+  → API returns error 40002, entire sync fails
 
-**Step 5 — Update `usePresetPreferences.tsx`**
-- Add `"tiktok_messages"` to `PresetType`
+AFTER (fixed):
+  metrics: [..., "reach", "onsite_form"]
+  → conversations_tiktok_dm = row.metrics.conversion (optimization result)
+  → leads_tiktok_dm = row.metrics.onsite_form (valid metric)
+  → API succeeds, data flows correctly
+```
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/migrations/` | Add 4 columns to daily_metrics |
-| `supabase/functions/sync-deep-dive/index.ts` | Add reach + messaging metrics to TikTok API, extract budget |
-| `src/components/client-analytics/DeepDiveTable.tsx` | Add tiktok_messages preset, new columns, update CampaignRow |
-| `src/pages/CampaignMapping.tsx` | Aggregate new fields |
-| `src/pages/ClientReports.tsx` | Aggregate new fields |
-| `src/hooks/usePresetPreferences.tsx` | Add tiktok_messages to PresetType |
+| `supabase/functions/sync-deep-dive/index.ts` | Remove invalid metric, use `conversion` for DM conversations, keep `onsite_form` for leads |
 
