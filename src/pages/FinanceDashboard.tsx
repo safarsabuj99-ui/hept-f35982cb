@@ -86,29 +86,18 @@ export default function FinanceDashboard() {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    const { data: adAccountClients } = await supabase.from("ad_account_clients").select("ad_account_id, client_id");
-    const accToClients: Record<string, string[]> = {};
-    for (const aac of (adAccountClients ?? []) as any[]) {
-      if (!accToClients[aac.ad_account_id]) accToClients[aac.ad_account_id] = [];
-      accToClients[aac.ad_account_id].push(aac.client_id);
-    }
-
-    const { data: adAccounts } = await supabase.from("ad_accounts").select("id, platform_name");
-    const accToPlatform: Record<string, string> = {};
-    for (const a of adAccounts ?? []) accToPlatform[a.id] = a.platform_name;
-
-    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform");
+    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform, client_id");
 
     if (!allCampaigns?.length) {
       setLoading(false);
       return;
     }
 
-    const campaignToAccount: Record<string, string> = {};
     const campaignToPlatform: Record<string, string> = {};
+    const campaignToClient: Record<string, string> = {};
     for (const c of allCampaigns) {
-      campaignToAccount[c.id] = c.ad_account_id;
       campaignToPlatform[c.id] = c.platform;
+      if (c.client_id) campaignToClient[c.id] = c.client_id;
     }
 
     let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
@@ -119,14 +108,11 @@ export default function FinanceDashboard() {
 
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsData ?? []) as any[]) {
-      const accountId = campaignToAccount[m.campaign_id];
-      if (!accountId) continue;
+      const clientId = campaignToClient[m.campaign_id];
+      if (!clientId) continue;
       const platform = campaignToPlatform[m.campaign_id] || "meta";
-      const clientIdsForAccount = accToClients[accountId] || [];
-      for (const cid of clientIdsForAccount) {
-        if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
-        clientPlatformSpend[cid][platform] = (clientPlatformSpend[cid][platform] || 0) + Number(m.spend);
-      }
+      if (!clientPlatformSpend[clientId]) clientPlatformSpend[clientId] = {};
+      clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(m.spend);
     }
 
     let aggRevenue = 0, aggCogs = 0;
