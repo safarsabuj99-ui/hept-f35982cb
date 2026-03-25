@@ -1,97 +1,84 @@
 
 
-## Problem Diagnosis
+## Root Cause Found
 
-The Ad Guard system has **3 critical failures** causing it to not work:
+The Ad Guard system **correctly marks campaigns as `guard_paused` in the database**, but **never actually pauses them on the ad platforms** (Meta/TikTok/Google). Here's why:
 
-### Root Causes
+### The Bug
 
-1. **No automatic execution** — Ad Guard only runs when admin manually clicks "Run Guard Scan." There is no cron job or trigger that automatically checks balances. So if a client's balance goes negative at 2 AM, campaigns keep running until someone manually scans.
+`ad-guard-check` calls `pause-campaign` with `Authorization: Bearer ${serviceRoleKey}` (line 114). But `pause-campaign` validates this token as a **user JWT** via `supabase.auth.getUser(token)` (line 90). The service role key is NOT a user JWT — so `getUser()` returns an error, and `pause-campaign` returns **401 Unauthorized**.
 
-2. **Simulated pause only** — The `ad-guard-check` function only sets `campaign_mappings.is_active = false` (a local metadata flag). It does **NOT** call the actual platform APIs (Meta/TikTok/Google) to pause campaigns. Campaigns continue running and spending money on the ad platforms.
+Back in `ad-guard-check`, the error is caught silently (line 126-128), and the code continues to mark campaigns as `guard_paused` locally — but **no platform API call was ever made**. The campaigns keep running on Meta/TikTok/Google.
 
-3. **`campaigns.status` not updated** — Even locally, the `campaigns` table (which the UI reads) never gets updated to "paused", so campaigns appear active everywhere.
+This is confirmed by the edge function logs: `ad-guard-check` boots but `pause-campaign` has **zero logs** — it's rejecting at the auth gate before logging anything useful.
 
-### Additionally
-- The `check_auto_resume` trigger exists for auto-resuming on deposits, but there is no corresponding **auto-pause trigger** when debits make balance go negative.
-- The `auto_debit_on_spend` trigger fires on every `daily_metrics` insert (creating debit transactions), but nothing checks the resulting balance afterward.
+### Fix
 
----
+Update `pause-campaign` to recognize the **service role key** as a valid server-to-server caller, bypassing user auth and permission checks when called internally by `ad-guard-check`.
 
-## Plan: Bulletproof Ad Guard
+### Implementation
 
-### Step 1: Create auto-pause database trigger
-Add a trigger on `transactions` table that fires AFTER INSERT on every **debit** transaction. It will:
-- Calculate the client's current balance
-- If balance <= 0, find all active campaigns for that client (from `campaigns` table where `status` in active statuses)
-- Store campaign IDs in `profiles.system_paused_campaigns`
-- Set `profiles.guard_paused_at` to now
-- Update `campaigns.status` to `'guard_paused'` for all affected campaigns
-- Insert audit log with `ad_guard_pause` action type
-- This ensures the **instant** a debit pushes balance to 0 or below, campaigns are flagged
+**File: `supabase/functions/pause-campaign/index.ts`** — Lines 89-155
 
-**File**: New database migration
+Replace the auth block to add service role key detection:
 
-### Step 2: Rewrite `ad-guard-check` edge function to call real platform APIs
-Instead of just toggling `campaign_mappings.is_active`, the function will:
-- For each campaign that needs pausing, call the existing `pause-campaign` logic (Meta/TikTok/Google API calls) to actually stop the campaign on the platform
-- Update `campaigns.status` to `'guard_paused'`
-- Keep the audit logging and profile updates
-- Handle API failures gracefully (log but continue to next campaign)
-- Support being called both manually (by admin) and automatically (by cron)
-- Remove the admin-only auth check when called by cron (use a secret header instead)
+```typescript
+const token = authHeader.replace("Bearer ", "");
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+let user: any = null;
+let isServiceCall = false;
 
-**File**: `supabase/functions/ad-guard-check/index.ts`
-
-### Step 3: Set up cron job for automatic execution
-Create a `pg_cron` scheduled job that calls `ad-guard-check` every **5 minutes**. This acts as a safety net in case the trigger missed something or a manual debit was entered.
-
-**Action**: SQL insert via insert tool (pg_cron + pg_net)
-
-### Step 4: Update `isActiveStatus` helper and UI
-Add `'guard_paused'` as a recognized paused status so:
-- Campaign analytics panels show guard-paused campaigns with a distinct badge
-- The toggle switch shows them as OFF
-- The AutomationConfigTab resume function updates `campaigns.status` back to `'active'`
-
-**Files**: `src/lib/campaignStatus.ts`, `src/components/AutomationConfigTab.tsx`, `src/components/client-analytics/DeepDiveTable.tsx`
-
-### Step 5: Update auto-resume logic
-Modify the `check_auto_resume` trigger to also update `campaigns.status` from `'guard_paused'` back to `'active'` when a deposit brings balance above the threshold. Also invoke the `pause-campaign` function with `action: "enable"` for each resumed campaign.
-
-**File**: Database migration (update `check_auto_resume` function)
-
-### Technical Details
-
-**New trigger (`auto_pause_on_debit`)**:
-```text
-AFTER INSERT ON transactions
-FOR EACH ROW WHEN (NEW.type = 'debit' AND NEW.status = 'completed')
-→ Calculate balance
-→ If balance <= 0: update campaigns.status = 'guard_paused', set profiles.system_paused_campaigns
+if (token === serviceRoleKey) {
+  // Internal server-to-server call (from ad-guard-check, cron, etc.)
+  isServiceCall = true;
+} else {
+  const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !caller) {
+    return new Response(JSON.stringify({ error: "Invalid token" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  user = caller;
+}
 ```
 
-**Cron schedule**: Every 5 minutes, call `ad-guard-check` via `net.http_post`
+Then update the permission checks to skip when `isServiceCall` is true:
 
-**Guard pause flow**:
-```text
-Debit inserted → Trigger checks balance → Balance ≤ 0?
-  YES → Mark campaigns as guard_paused locally
-      → Cron picks up within 5 min → Calls platform APIs to pause
-  NO  → Do nothing
+```typescript
+// Permission check — skip for service calls (ad-guard, cron)
+if (!isServiceCall) {
+  const { data: roleData } = await supabase
+    .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
+  const isAdmin = !!roleData;
+
+  if (isEnableAction && !isAdmin) { /* ... reject ... */ }
+  if (!isAdmin) { /* ... ownership check ... */ }
+}
 ```
 
-The trigger handles instant local flagging. The cron handles actual platform API calls (which can't be done from a PL/pgSQL trigger).
+Also skip the "already paused" check for `guard_paused` status — when ad-guard calls pause, the DB trigger may have already set `guard_paused`, but the platform API still needs to be called:
+
+```typescript
+// Don't reject guard_paused campaigns when service is trying to pause on platform
+if (!isEnableAction && normalizedStatus === "paused" && !isServiceCall) {
+  return new Response(JSON.stringify({ error: "Campaign is already paused." }), ...);
+}
+```
+
+And treat `guard_paused` as needing a platform pause (not already paused):
+
+```typescript
+const normalizedStatus = campaign.status.toLowerCase() === "enable" ? "active"
+  : campaign.status.toLowerCase() === "disable" ? "paused"
+  : campaign.status.toLowerCase() === "guard_paused" ? "active" // Still needs platform pause
+  : campaign.status;
+```
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| New migration | `auto_pause_on_debit` trigger function |
-| New migration | Update `check_auto_resume` to handle `guard_paused` status |
-| `supabase/functions/ad-guard-check/index.ts` | Rewrite to call real platform APIs, support cron auth |
-| `src/lib/campaignStatus.ts` | Add `guard_paused` to status helpers |
-| `src/components/AutomationConfigTab.tsx` | Resume updates `campaigns.status`, shows guard_paused badge |
-| `src/components/client-analytics/DeepDiveTable.tsx` | Show guard_paused status distinctly |
-| SQL insert (pg_cron) | Schedule ad-guard-check every 5 minutes |
+| `supabase/functions/pause-campaign/index.ts` | Add service role key auth bypass, skip permission checks for internal calls, treat `guard_paused` as needing platform pause |
+
+This is a single-file fix. No database changes needed.
 
