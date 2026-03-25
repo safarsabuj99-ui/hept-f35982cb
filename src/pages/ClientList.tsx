@@ -225,17 +225,17 @@ export default function ClientList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Client List</h1>
           <p className="text-sm text-muted-foreground">Manage client configurations, pricing, and history</p>
         </div>
-        <Badge variant="secondary" className="gap-1">
+        <Badge variant="secondary" className="gap-1 self-start">
           <Users className="h-3 w-3" /> {clients.length} clients
         </Badge>
       </div>
 
-      <div className="relative max-w-sm">
+      <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by name, business, or email…"
@@ -258,13 +258,70 @@ export default function ClientList() {
             </p>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Mobile card view */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {paginatedData.map((c) => {
+                  const bal = balances[c.user_id] ?? 0;
+                  const isPositive = bal >= 0;
+                  return (
+                    <div key={c.user_id} className="rounded-xl border bg-card p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <Link to={`/admin/clients/${c.user_id}`} className="font-medium text-primary hover:underline">
+                            {c.full_name}
+                          </Link>
+                          {c.business_name && <p className="text-xs text-muted-foreground">{c.business_name}</p>}
+                        </div>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {getPricingLabel(c.pricing_config)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Balance</span>
+                        {isPositive ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20">
+                            ${bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold font-mono bg-destructive/10 text-destructive dark:bg-destructive/20">
+                            -৳{(bdtBalances[c.user_id] ?? Math.abs(bal) * 120).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                      {canViewProfit && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Margin</span>
+                          <MarginIndicator clientId={c.user_id} />
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 gap-1 text-xs"
+                          onClick={() => { setDepositClientId(c.user_id); setDepositOpen(true); }}
+                        >
+                          <Plus className="h-3 w-3" /> Add Funds
+                        </Button>
+                        <Button size="sm" variant="default" className="flex-1 gap-1 text-xs" asChild>
+                          <Link to={`/admin/clients/${c.user_id}`}>
+                            View <ChevronRight className="h-3 w-3" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead className="hidden sm:table-cell">Business</TableHead>
-                      <TableHead className="hidden md:table-cell">Email</TableHead>
+                      <TableHead>Business</TableHead>
+                      <TableHead>Email</TableHead>
                       <TableHead>Pricing</TableHead>
                       {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
                       <TableHead className="text-right">Balance</TableHead>
@@ -279,10 +336,10 @@ export default function ClientList() {
                             {c.full_name}
                           </Link>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-muted-foreground">
+                        <TableCell className="text-muted-foreground">
                           {c.business_name || "—"}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                        <TableCell className="text-muted-foreground text-sm">
                           {c.email}
                         </TableCell>
                         <TableCell>

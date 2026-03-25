@@ -176,7 +176,7 @@ export default function AuditLogs() {
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4 text-muted-foreground" />
         <Select value={filterType} onValueChange={(v) => { setFilterType(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="Filter by action" />
           </SelectTrigger>
           <SelectContent>
@@ -201,7 +201,35 @@ export default function AuditLogs() {
             <p className="py-8 text-center text-muted-foreground">No logs found</p>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Mobile card view */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {logs.map((log) => {
+                  const severity = getSeverity(log.action_type);
+                  const config = SEVERITY_CONFIG[severity];
+                  return (
+                    <div key={log.id} className="rounded-xl border bg-card p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block h-2.5 w-2.5 rounded-full ${config.dot}`} />
+                          <span className="font-medium text-sm">{log.user_name}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString("en-US", {
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ACTION_COLORS[log.action_type] || "bg-muted text-muted-foreground"}`}>
+                        {log.action_type.replace(/_/g, " ")}
+                      </span>
+                      <p className="text-sm text-muted-foreground">{log.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -209,7 +237,7 @@ export default function AuditLogs() {
                       <TableHead>Timestamp</TableHead>
                       <TableHead>User</TableHead>
                       <TableHead>Action</TableHead>
-                      <TableHead className="hidden md:table-cell">Description</TableHead>
+                      <TableHead>Description</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -232,7 +260,7 @@ export default function AuditLogs() {
                               {log.action_type.replace(/_/g, " ")}
                             </span>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground max-w-[400px] truncate">{log.description}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[400px] truncate">{log.description}</TableCell>
                         </TableRow>
                       );
                     })}
