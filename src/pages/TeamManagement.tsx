@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { Users, PlusCircle, Shield, Loader2, Search, Power, AlertTriangle } from "lucide-react";
 import {
   ALL_PERMISSION_KEYS,
