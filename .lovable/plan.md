@@ -1,43 +1,85 @@
 
 
-## Plan: Fix Duplicate Spend Attribution in Finance Dashboard
+## Plan: Full Admin Mobile Optimization
 
-### Problem
-The Finance Dashboard attributes **total ad account spend to every client** mapped to that account. When 3 clients share one TikTok ad account with $22.93 total spend, each client incorrectly shows $22.93 instead of their individual campaign spend. This inflates revenue, COGS, profit, and the net profit KPI by 3x.
+### Current State
+Some pages already have mobile card views (PaymentRequests deposits tab, AdAccounts). However, many critical admin pages still render desktop-only tables that overflow or become unusable on mobile.
 
-### Root Cause
-In `FinanceDashboard.tsx` (lines 120-129), the spend aggregation loop looks up the ad account for each campaign metric, then distributes that metric's spend to **all clients mapped to the ad account** via `accToClients[accountId]`. It ignores the campaign's own `client_id` field, which already contains the correct attribution.
+### Pages Requiring Mobile Optimization
 
-### Fix
+**Priority 1 — High-use action pages (need mobile card views replacing tables)**
 
-**File: `src/pages/FinanceDashboard.tsx`**
+| Page | Issue |
+|------|-------|
+| **ClientList** | Desktop table only, no mobile card view. Columns overflow on small screens. |
+| **TeamManagement** | Desktop table only. Search bar fixed at `w-64` (breaks on mobile). No card alternative. |
+| **OrderManagement** | Desktop table only for campaign requests. No mobile card view. |
+| **AuditLogs** | Desktop table only. Description column hidden but still cramped. |
+| **ClientOverviewTable** (Dashboard widget) | Desktop table only. Action buttons use hover-opacity pattern. |
 
-1. **Fetch `client_id` from campaigns**: Change the campaigns query from selecting `id, ad_account_id, platform` to also include `client_id`.
+**Priority 2 — Layout & header fixes**
 
-2. **Build a campaign-to-client map**: Create `campaignToClient` mapping each campaign ID to its assigned `client_id`.
+| Component | Issue |
+|-----------|-------|
+| **AdminLayout header** | Mobile header is minimal but functional. Add page title display on mobile. |
+| **AdminDashboard** | KPI grid and section labels are decent but Quick Actions strip could use better mobile spacing. |
+| **Dashboard headers** (various pages) | `flex items-center justify-between` patterns break when title + button don't fit in one row. |
 
-3. **Replace the spend attribution loop**: Instead of iterating over all clients for the ad account, use the campaign's `client_id` directly:
+### Implementation Plan
 
+**Step 1: ClientList mobile card view**
+- Add `md:hidden` card list showing: name, business, pricing badge, balance, and action buttons (Add Funds + View)
+- Hide desktop table on mobile with `hidden md:block`
+- Make search input full-width on mobile
+
+**Step 2: TeamManagement mobile card view**
+- Add mobile cards with: name, email, role preset badge, client count, active/inactive toggle, permissions button
+- Fix search bar: change `w-64` to `w-full sm:w-64`
+- Stack header title + "New Manager" button vertically on mobile
+
+**Step 3: OrderManagement mobile card view**
+- Add `md:hidden` card list for campaign requests showing: client name, platform badge, budget, status badge, and action buttons
+- Keep existing tab counts grid (already `grid-cols-2`)
+
+**Step 4: AuditLogs mobile card view**
+- Add `md:hidden` timeline-style card list with: severity dot, timestamp, user, action badge, description (shown in full instead of truncated)
+- Make filter select full-width on mobile
+
+**Step 5: ClientOverviewTable mobile card view**
+- Add compact mobile cards showing: name, balance badge, today's spend, action buttons (always visible)
+- Hide desktop table with `hidden md:block`
+
+**Step 6: Page header responsiveness**
+- Fix all admin page headers to stack vertically on mobile using `flex-col sm:flex-row` pattern
+- Ensure action buttons go full-width on small screens
+
+### Pattern to Follow
+Each mobile card view follows the existing pattern from PaymentRequests:
 ```text
-BEFORE (broken):
-  For each metric row:
-    → Find ad account → Find ALL clients on that account
-    → Give FULL spend to EACH client  ← DUPLICATES
+<!-- Mobile cards -->
+<div className="flex flex-col gap-3 md:hidden">
+  {items.map(item => (
+    <div className="rounded-xl border bg-card p-4 space-y-3">
+      <!-- Key info rows -->
+      <!-- Full-width action buttons -->
+    </div>
+  ))}
+</div>
 
-AFTER (fixed):
-  For each metric row:
-    → Find campaign's client_id directly
-    → Give spend ONLY to that client  ← CORRECT
+<!-- Desktop table -->
+<div className="hidden md:block overflow-x-auto">
+  <Table>...</Table>
+</div>
 ```
-
-4. **Remove `accToClients` lookup**: The `ad_account_clients` query and `accToClients` map are no longer needed for spend attribution (can be removed entirely to simplify the code).
-
-### Result
-Each client will show only their actual campaign spend, and revenue/COGS/profit/margin will be calculated correctly per client. The Net Profit KPI will reflect the true agency-wide figure.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/FinanceDashboard.tsx` | Use campaign `client_id` for spend attribution instead of ad account client list |
+| `src/pages/ClientList.tsx` | Add mobile card view, fix search width |
+| `src/pages/TeamManagement.tsx` | Add mobile card view, fix search width, stack header |
+| `src/pages/OrderManagement.tsx` | Add mobile card view |
+| `src/pages/AuditLogs.tsx` | Add mobile card view, fix filter width |
+| `src/components/dashboard/ClientOverviewTable.tsx` | Add mobile card view |
+| `src/pages/AdminDashboard.tsx` | Minor spacing fixes for mobile |
 
