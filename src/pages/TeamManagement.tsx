@@ -243,59 +243,103 @@ export default function TeamManagement() {
             </p>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role Preset</TableHead>
-                    <TableHead>Clients</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedManagers.map((m) => (
-                    <TableRow key={m.user_id} className={!m.is_active ? "opacity-50" : ""}>
-                      <TableCell className="font-medium">
-                        <Link to={`/admin/team/${m.user_id}`} className="hover:underline text-primary">
+              {/* Mobile card view */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {paginatedManagers.map((m) => (
+                  <div key={m.user_id} className={cn("rounded-xl border bg-card p-4 space-y-3", !m.is_active && "opacity-50")}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <Link to={`/admin/team/${m.user_id}`} className="font-medium text-primary hover:underline">
                           {m.full_name}
                         </Link>
-                      </TableCell>
-                      <TableCell>{m.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {getPresetLabel(m.permissions)}
-                        </Badge>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {enabledCount(m.permissions)}/{ALL_PERMISSION_KEYS.length}
+                        <p className="text-xs text-muted-foreground">{m.email}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {getPresetLabel(m.permissions)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">{m.client_count} clients</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {enabledCount(m.permissions)}/{ALL_PERMISSION_KEYS.length} perms
                         </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{m.client_count}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={m.is_active}
-                            onCheckedChange={() => toggleActive(m)}
-                            disabled={togglingStatus === m.user_id}
-                          />
-                          <Badge variant={m.is_active ? "default" : "destructive"} className="text-xs">
-                            {m.is_active ? "Active" : "Inactive"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(m)}>
-                          <Shield className="mr-1.5 h-3.5 w-3.5" />
-                          Permissions
-                        </Button>
-                      </TableCell>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={m.is_active}
+                          onCheckedChange={() => toggleActive(m)}
+                          disabled={togglingStatus === m.user_id}
+                        />
+                        <Badge variant={m.is_active ? "default" : "destructive"} className="text-xs">
+                          {m.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => openEdit(m)}>
+                      <Shield className="mr-1.5 h-3.5 w-3.5" />
+                      Permissions
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role Preset</TableHead>
+                      <TableHead>Clients</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedManagers.map((m) => (
+                      <TableRow key={m.user_id} className={!m.is_active ? "opacity-50" : ""}>
+                        <TableCell className="font-medium">
+                          <Link to={`/admin/team/${m.user_id}`} className="hover:underline text-primary">
+                            {m.full_name}
+                          </Link>
+                        </TableCell>
+                        <TableCell>{m.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {getPresetLabel(m.permissions)}
+                          </Badge>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {enabledCount(m.permissions)}/{ALL_PERMISSION_KEYS.length}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{m.client_count}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={m.is_active}
+                              onCheckedChange={() => toggleActive(m)}
+                              disabled={togglingStatus === m.user_id}
+                            />
+                            <Badge variant={m.is_active ? "default" : "destructive"} className="text-xs">
+                              {m.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => openEdit(m)}>
+                            <Shield className="mr-1.5 h-3.5 w-3.5" />
+                            Permissions
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               <TablePagination
                 totalItems={filteredManagers.length}
                 pageSize={pageSize}

@@ -147,7 +147,57 @@ export default function OrderManagement() {
                 <p className="py-8 text-center text-muted-foreground">No requests in this category</p>
               ) : (
                 <>
-                <div className="overflow-x-auto">
+                {/* Mobile card view */}
+                <div className="flex flex-col gap-3 md:hidden">
+                  {paginatedFiltered.map((r: any) => {
+                    const client = profiles[r.client_id];
+                    const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
+                    return (
+                      <div key={r.id} className="rounded-xl border bg-card p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
+                            {client?.business_name && <p className="text-xs text-muted-foreground">{client.business_name}</p>}
+                          </div>
+                          <Badge variant="outline" className={cn("text-xs shrink-0", badge.className)}>{badge.label}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="secondary">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
+                          <span className="text-xs text-muted-foreground">{r.objective}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <span className="font-mono font-semibold text-sm">${Number(r.budget_usd).toFixed(2)}</span>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Details
+                          </Button>
+                          {canManageCampaigns && r.status === "pending" && (
+                            <>
+                              <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "processing")}>
+                                {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start
+                              </Button>
+                              <Button size="sm" variant="destructive" className="text-xs" onClick={() => { setRejectId(r.id); setRejectOpen(true); }}>
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
+                          {canManageCampaigns && r.status === "processing" && (
+                            <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "completed")}>
+                              {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Complete
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -156,7 +206,7 @@ export default function OrderManagement() {
                         <TableHead>Objective</TableHead>
                         <TableHead className="text-right">Budget</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="hidden md:table-cell">Date</TableHead>
+                        <TableHead>Date</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -176,7 +226,7 @@ export default function OrderManagement() {
                             <TableCell className="text-sm">{r.objective}</TableCell>
                             <TableCell className="text-right font-mono">${Number(r.budget_usd).toFixed(2)}</TableCell>
                             <TableCell><Badge variant="outline" className={badge.className}>{badge.label}</Badge></TableCell>
-                            <TableCell className="hidden md:table-cell whitespace-nowrap text-sm text-muted-foreground">
+                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                               {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                             </TableCell>
                             <TableCell className="text-right">
