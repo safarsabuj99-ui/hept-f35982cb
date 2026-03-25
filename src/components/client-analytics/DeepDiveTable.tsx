@@ -363,8 +363,11 @@ export function DeepDiveTable({
           if (dimStatuses.includes(status)) dotClass = "bg-muted-foreground/20";
           if (status.startsWith("active -")) dotClass = "bg-amber-500";
 
-          const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable";
+          const guardPaused = isGuardPaused(status);
+          const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable" || guardPaused;
           const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
+
+          if (guardPaused) dotClass = "bg-orange-500";
 
           return (
             <div className="flex items-center gap-2.5">
