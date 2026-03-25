@@ -176,7 +176,7 @@ export default function AuditLogs() {
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4 text-muted-foreground" />
         <Select value={filterType} onValueChange={(v) => { setFilterType(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue placeholder="Filter by action" />
           </SelectTrigger>
           <SelectContent>
