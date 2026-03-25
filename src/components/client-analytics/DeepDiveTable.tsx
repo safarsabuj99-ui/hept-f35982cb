@@ -96,6 +96,7 @@ const normalizeStatus = (status: string) => {
   const s = status.toLowerCase();
   if (s === "enable") return "active";
   if (s === "disable") return "paused";
+  if (s === "guard_paused") return "guard paused";
   return status;
 };
 
