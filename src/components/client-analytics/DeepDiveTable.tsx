@@ -90,6 +90,8 @@ const isActiveStatus = (status: string) => {
   return s === "active" || s.startsWith("active -") || s === "enable";
 };
 
+const isGuardPaused = (status: string) => status.toLowerCase() === "guard_paused";
+
 const normalizeStatus = (status: string) => {
   const s = status.toLowerCase();
   if (s === "enable") return "active";
