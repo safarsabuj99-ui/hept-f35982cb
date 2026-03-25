@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
         : `${isEnableAction ? "Enabled" : "Paused"} campaign "${campaign.name}" (${platform}) via dashboard`;
 
     await supabase.from("audit_logs").insert({
-      user_id: user.id,
+      user_id: user?.id || "00000000-0000-0000-0000-000000000000",
       action_type: isEnableAction ? "campaign_enabled" : "campaign_paused",
       description: auditDesc,
     });
