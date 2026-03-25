@@ -87,11 +87,20 @@ Deno.serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    let user: any = null;
+    let isServiceCall = false;
+
+    if (token === svcKey) {
+      isServiceCall = true;
+    } else {
+      const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(token);
+      if (authErr || !caller) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      user = caller;
     }
 
     const { campaign_id, action = "pause" } = await req.json();
@@ -118,42 +127,45 @@ Deno.serve(async (req) => {
     // Normalize legacy raw statuses for guard checks
     const normalizedStatus = campaign.status.toLowerCase() === "enable" ? "active"
       : campaign.status.toLowerCase() === "disable" ? "paused"
+      : campaign.status.toLowerCase() === "guard_paused" ? "active" // Still needs platform pause
       : campaign.status;
 
-    // Check if already in desired state
-    if (!isEnableAction && normalizedStatus === "paused") {
+    // Check if already in desired state (skip for service calls — DB trigger may have set guard_paused)
+    if (!isEnableAction && normalizedStatus === "paused" && !isServiceCall) {
       return new Response(JSON.stringify({ error: "Campaign is already paused." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (isEnableAction && normalizedStatus === "active") {
+    if (isEnableAction && normalizedStatus === "active" && !isServiceCall) {
       return new Response(JSON.stringify({ error: "Campaign is already active." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Permission check — only admins can enable campaigns
-    const { data: roleData } = await supabase
-      .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
-    const isAdmin = !!roleData;
+    // Permission check — skip for service calls (ad-guard, cron)
+    let isAdmin = isServiceCall;
+    if (!isServiceCall) {
+      const { data: roleData } = await supabase
+        .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
+      isAdmin = !!roleData;
 
-    if (isEnableAction && !isAdmin) {
-      return new Response(JSON.stringify({ error: "Only admins can enable campaigns" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (!isAdmin) {
-      const { data: ownership } = await supabase
-        .from("ad_account_clients").select("id")
-        .eq("ad_account_id", campaign.ad_account_id).eq("client_id", user.id).maybeSingle();
-      if (!ownership) {
-        return new Response(JSON.stringify({ error: "You don't have permission for this campaign" }), {
+      if (isEnableAction && !isAdmin) {
+        return new Response(JSON.stringify({ error: "Only admins can enable campaigns" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-    }
 
+      if (!isAdmin) {
+        const { data: ownership } = await supabase
+          .from("ad_account_clients").select("id")
+          .eq("ad_account_id", campaign.ad_account_id).eq("client_id", user.id).maybeSingle();
+        if (!ownership) {
+          return new Response(JSON.stringify({ error: "You don't have permission for this campaign" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
     // Get API credentials
     const { data: adAccount } = await supabase
       .from("ad_accounts").select("api_integration_id, ad_account_id, platform_name")
