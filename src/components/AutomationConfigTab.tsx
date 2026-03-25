@@ -222,41 +222,56 @@ export function AutomationConfigTab({
     setResumingId(campaignId);
     const updatedList = systemPausedCampaigns.filter(id => id !== campaignId);
 
-    const [profileRes, campaignRes] = await Promise.all([
-      supabase
+    try {
+      // Call pause-campaign with enable action to re-enable on platform
+      const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
+        body: { campaign_id: campaignId, action: "enable" },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+
+      // Update profile
+      await supabase
         .from("profiles")
         .update({ system_paused_campaigns: updatedList })
-        .eq("user_id", userId),
-      supabase
-        .from("campaign_mappings")
-        .update({ is_active: true })
-        .eq("campaign_id", campaignId),
-    ]);
+        .eq("user_id", userId);
 
-    setResumingId(null);
-    if (profileRes.error || campaignRes.error) {
-      toast({ title: "Error", description: (profileRes.error || campaignRes.error)?.message, variant: "destructive" });
-    } else {
-      toast({ title: "Campaign Resumed", description: `Campaign has been re-activated.` });
+      toast({ title: "Campaign Resumed", description: result?.message || "Campaign has been re-activated." });
       onSaved();
+    } catch (err: any) {
+      toast({ title: "Resume Failed", description: err.message, variant: "destructive" });
     }
+    setResumingId(null);
   }
 
   async function handleResumeAll() {
     setSaving(true);
-    const [profileRes] = await Promise.all([
-      supabase.from("profiles").update({ system_paused_campaigns: [] }).eq("user_id", userId),
-      ...systemPausedCampaigns.map(id =>
-        supabase.from("campaign_mappings").update({ is_active: true }).eq("campaign_id", id)
-      ),
-    ]);
-    setSaving(false);
-    if (profileRes.error) {
-      toast({ title: "Error", description: profileRes.error.message, variant: "destructive" });
-    } else {
-      toast({ title: "All Campaigns Resumed", description: "All system-paused campaigns have been re-activated." });
-      onSaved();
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of systemPausedCampaigns) {
+      try {
+        const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
+          body: { campaign_id: id, action: "enable" },
+        });
+        if (error) throw error;
+        if (result?.error) throw new Error(result.error);
+        successCount++;
+      } catch {
+        failCount++;
+      }
     }
+
+    // Clear profile state
+    await supabase.from("profiles").update({ system_paused_campaigns: [], guard_paused_at: null } as any).eq("user_id", userId);
+
+    setSaving(false);
+    if (failCount === 0) {
+      toast({ title: "All Campaigns Resumed", description: `${successCount} campaigns re-activated on platform.` });
+    } else {
+      toast({ title: "Partial Resume", description: `${successCount} resumed, ${failCount} failed.`, variant: "destructive" });
+    }
+    onSaved();
   }
 
   async function handleRunGuard() {
