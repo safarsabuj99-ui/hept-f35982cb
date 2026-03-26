@@ -160,6 +160,7 @@ export default function CashFlowManagement() {
       .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "fund_transfers" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_entries" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
