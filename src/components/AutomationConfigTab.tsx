@@ -58,7 +58,7 @@ export function AutomationConfigTab({
   const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
-  const autoResumeThreshold = useMemo(() => (parseFloat(threshold) || 5) * 2, [threshold]);
+  const effectiveThreshold = useMemo(() => (parseFloat(threshold) || 5) - (parseFloat(overdraft) || 0), [threshold, overdraft]);
 
   // Compute resume window status
   const windowHoursNum = parseInt(resumeWindowHours) || 24;
@@ -123,13 +123,13 @@ export function AutomationConfigTab({
       // Fetch campaign details if there are paused campaigns
       if (systemPausedCampaigns.length > 0) {
         setLoadingDetails(true);
-        const { data: mappings } = await supabase
-          .from("campaign_mappings")
-          .select("campaign_id, campaign_name, platform, ad_account_id")
-          .in("campaign_id", systemPausedCampaigns);
+        const { data: campaigns } = await supabase
+          .from("campaigns")
+          .select("id, name, platform, ad_account_id")
+          .in("id", systemPausedCampaigns);
 
-        if (mappings && mappings.length > 0) {
-          const accountIds = [...new Set(mappings.map(m => m.ad_account_id).filter(Boolean))];
+        if (campaigns && campaigns.length > 0) {
+          const accountIds = [...new Set(campaigns.map(m => m.ad_account_id).filter(Boolean))];
           const { data: accounts } = await supabase
             .from("ad_accounts")
             .select("id, account_name")
@@ -138,9 +138,9 @@ export function AutomationConfigTab({
           const accountMap = new Map((accounts || []).map(a => [a.id, a.account_name]));
 
           setCampaignDetails(
-            mappings.map(m => ({
-              campaign_id: m.campaign_id,
-              campaign_name: m.campaign_name,
+            campaigns.map(m => ({
+              campaign_id: m.id,
+              campaign_name: m.name,
               platform: m.platform,
               ad_account_id: m.ad_account_id || "",
               ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
@@ -339,12 +339,12 @@ export function AutomationConfigTab({
               </p>
             </div>
             <div className="rounded-lg border p-3 space-y-1">
-              <p className="text-xs text-muted-foreground">Auto-Resume At</p>
+              <p className="text-xs text-muted-foreground">Effective Threshold</p>
               <div className="flex items-center gap-1.5">
                 <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-lg font-semibold">${autoResumeThreshold.toFixed(2)}</p>
+                <p className="text-lg font-semibold">${effectiveThreshold.toFixed(2)}</p>
               </div>
-              <p className="text-[10px] text-muted-foreground">2× pause threshold</p>
+              <p className="text-[10px] text-muted-foreground">Pause at this balance (threshold − overdraft)</p>
             </div>
           </div>
 
@@ -359,9 +359,7 @@ export function AutomationConfigTab({
                 <Input type="number" placeholder="5.00" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="pl-7" min="0" step="1" />
               </div>
               <p className="text-xs text-muted-foreground">
-                {parseFloat(overdraft) > 0 
-                  ? "Pause when balance ≤ this amount." 
-                  : "No overdraft — guard activates only when balance reaches $0."}
+                Pause when balance ≤ ${effectiveThreshold.toFixed(2)} (threshold{parseFloat(overdraft) > 0 ? ` minus $${parseFloat(overdraft)} overdraft` : ""}).
               </p>
             </div>
             <div className="space-y-2">
@@ -385,7 +383,7 @@ export function AutomationConfigTab({
             {isSystemPaused && guardPausedAt && (
               <div className="rounded-lg border p-3 space-y-1">
                 <p className="text-xs text-muted-foreground">Resume Window Status</p>
-                {balance !== null && balance > autoResumeThreshold ? (
+                {balance !== null && balance > effectiveThreshold ? (
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-green-500" />
                     <span className="text-sm font-medium text-green-600">Balance recovered — status will clear on next deposit</span>
