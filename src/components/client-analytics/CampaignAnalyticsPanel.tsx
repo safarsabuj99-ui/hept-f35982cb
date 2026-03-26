@@ -22,19 +22,16 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    const t = { spend: 0, results: 0, createOrder: 0, leads: 0, messages: 0 };
     for (const r of campaignRows) {
       t.spend += r.spend;
-      t.impressions += r.impressions;
-      t.clicks += r.clicks;
       t.results += r.results;
-      t.convValue += r.conversion_value;
+      t.createOrder += r.create_order ?? 0;
+      t.leads += r.leads_tiktok_dm ?? 0;
+      t.messages += (r.messaging_conversations ?? 0) + (r.conversations_tiktok_dm ?? 0) + (r.conversations_instant_msg ?? 0);
     }
     return t;
   }, [campaignRows]);
-
-  const avgRoas = safeDivide(totals.convValue, totals.spend);
-  const avgCpo = safeDivide(totals.spend, totals.results);
 
   const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
   const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
