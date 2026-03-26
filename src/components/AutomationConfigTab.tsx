@@ -103,16 +103,6 @@ export function AutomationConfigTab({
         setBalance(credits - debits);
       }
 
-      // Fetch guard history — search by client user_id OR description containing client name
-      const { data: logs } = await supabase
-        .from("audit_logs")
-        .select("id, action_type, description, created_at")
-        .in("action_type", ["ad_guard_pause", "ad_guard_resume"])
-        .or(`user_id.eq.${userId},description.ilike.%${clientName}%`)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (logs) setGuardHistory(logs);
 
       // Fetch campaign details if there are paused campaigns
       if (systemPausedCampaigns.length > 0) {
