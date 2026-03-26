@@ -14,30 +14,24 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Auth: support both admin bearer token and cron (anon key in Authorization)
+    // Auth: accept service role key, anon key (cron), or admin JWT
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
-    let isCron = false;
 
-    // Try to verify as user
-    const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authError || !caller) {
-      // If auth fails, check if it's the anon key (cron call)
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-      if (token === anonKey) {
-        isCron = true;
-      } else {
+    if (token === serviceRoleKey || token === anonKey) {
+      // Trusted caller — proceed
+    } else {
+      // Verify as user JWT
+      const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (authError || !caller) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-    }
-
-    // If not cron, verify admin role
-    if (!isCron && caller) {
+      // Verify admin role
       const { data: roleCheck } = await supabaseAdmin
         .from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").single();
       if (!roleCheck) {
@@ -47,54 +41,118 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get all client profiles
+    const results: any[] = [];
+    let totalPaused = 0;
+    let totalApiSuccess = 0;
+    let totalApiFailed = 0;
+
+    // ===== PHASE 1: Process all guard_paused campaigns via platform APIs =====
+    const { data: guardPausedCampaigns } = await supabaseAdmin
+      .from("campaigns")
+      .select("id, name, platform, platform_id, ad_account_id, client_id, status")
+      .eq("status", "guard_paused");
+
+    if (guardPausedCampaigns && guardPausedCampaigns.length > 0) {
+      console.log(`Phase 1: ${guardPausedCampaigns.length} guard_paused campaigns to sync with platform APIs`);
+
+      for (const campaign of guardPausedCampaigns) {
+        try {
+          const pauseRes = await fetch(`${supabaseUrl}/functions/v1/pause-campaign`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify({ campaign_id: campaign.id, action: "pause" }),
+          });
+
+          const pauseText = await pauseRes.text();
+
+          if (pauseRes.ok) {
+            totalApiSuccess++;
+            console.log(`✓ API pause succeeded for "${campaign.name}" (${campaign.platform})`);
+          } else {
+            totalApiFailed++;
+            console.error(`✗ API pause failed for "${campaign.name}": ${pauseRes.status} ${pauseText}`);
+
+            // Log individual failure
+            await supabaseAdmin.from("audit_logs").insert({
+              user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+              action_type: "ad_guard_api_error",
+              description: `Failed to pause "${campaign.name}" (${campaign.platform}) on platform API: ${pauseRes.status} ${pauseText.substring(0, 200)}`,
+            });
+          }
+        } catch (err) {
+          totalApiFailed++;
+          console.error(`✗ API call error for "${campaign.name}":`, err);
+        }
+      }
+    }
+
+    // ===== PHASE 2: Scan all clients for active campaigns that should be paused =====
     const { data: clientRoles } = await supabaseAdmin
       .from("user_roles").select("user_id").eq("role", "client");
     const clientIds = (clientRoles ?? []).map((r: any) => r.user_id);
 
     if (clientIds.length === 0) {
-      return new Response(JSON.stringify({ checked: 0, paused: 0, message: "No clients found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({
+        checked: 0, paused: 0,
+        api_success: totalApiSuccess, api_failed: totalApiFailed,
+        message: "No clients found",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: profiles } = await supabaseAdmin
-      .from("profiles")
-      .select("user_id, full_name, auto_pause_balance_usd, overdraft_limit_usd, system_paused_campaigns")
-      .in("user_id", clientIds);
+    for (const clientId of clientIds) {
+      // Get balance via SQL SUM — no row limit issue
+      const { data: balanceData } = await supabaseAdmin.rpc("get_client_balance_v2", { _client_id: clientId }).maybeSingle();
 
-    const { data: allTxns } = await supabaseAdmin
-      .from("transactions").select("client_id, type, amount, status");
+      // Fallback: calculate manually if RPC doesn't exist
+      let balance: number;
+      if (balanceData !== null && balanceData !== undefined) {
+        balance = Number(balanceData);
+      } else {
+        // Manual calculation with pagination guard
+        const { data: creditSum } = await supabaseAdmin
+          .from("transactions")
+          .select("amount")
+          .eq("client_id", clientId)
+          .eq("type", "credit")
+          .eq("status", "completed");
+        const { data: debitSum } = await supabaseAdmin
+          .from("transactions")
+          .select("amount")
+          .eq("client_id", clientId)
+          .eq("type", "debit")
+          .eq("status", "completed");
 
-    const results: any[] = [];
-    let totalPaused = 0;
+        const credits = (creditSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const debits = (debitSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        balance = credits - debits;
+      }
 
-    for (const profile of profiles ?? []) {
-      const clientTxns = (allTxns ?? []).filter(
-        (t: any) => t.client_id === profile.user_id && t.status === "completed"
-      );
-      const totalDeposits = clientTxns
-        .filter((t: any) => t.type === "credit")
-        .reduce((s: number, t: any) => s + Number(t.amount), 0);
-      const totalDebits = clientTxns
-        .filter((t: any) => t.type === "debit")
-        .reduce((s: number, t: any) => s + Number(t.amount), 0);
+      // Get profile settings
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, auto_pause_balance_usd, overdraft_limit_usd, system_paused_campaigns")
+        .eq("user_id", clientId)
+        .single();
 
-      const balance = totalDeposits - totalDebits;
-      const pauseThreshold = Number(profile.auto_pause_balance_usd ?? 5);
-      const clientOverdraft = Number(profile.overdraft_limit_usd ?? 0);
-      const effectiveThreshold = clientOverdraft > 0 ? pauseThreshold : 0;
+      if (!profile) continue;
+
+      const threshold = Number(profile.auto_pause_balance_usd ?? 5);
+      const overdraft = Number(profile.overdraft_limit_usd ?? 0);
+      const effectiveThreshold = threshold - overdraft;
 
       const alreadyPaused = Array.isArray(profile.system_paused_campaigns)
         ? profile.system_paused_campaigns
         : [];
 
-      if (balance <= effectiveThreshold && alreadyPaused.length === 0) {
-        // Find active campaigns for this client from campaigns table
+      if (balance <= effectiveThreshold) {
+        // Find active campaigns that haven't been caught by the trigger
         const { data: activeCampaigns } = await supabaseAdmin
           .from("campaigns")
-          .select("id, name, platform, platform_id, ad_account_id, status")
-          .eq("client_id", profile.user_id)
+          .select("id, name, platform, platform_id, ad_account_id")
+          .eq("client_id", clientId)
           .in("status", ["active", "enable", "Active"]);
 
         if (activeCampaigns && activeCampaigns.length > 0) {
@@ -102,54 +160,52 @@ Deno.serve(async (req) => {
           const pausedNames: string[] = [];
 
           for (const campaign of activeCampaigns) {
-            // Call pause-campaign edge function to actually pause on platform
-            try {
-              const pauseRes = await fetch(
-                `${supabaseUrl}/functions/v1/pause-campaign`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${serviceRoleKey}`,
-                  },
-                  body: JSON.stringify({
-                    campaign_id: campaign.id,
-                    action: "pause",
-                  }),
-                }
-              );
-              const pauseResult = await pauseRes.text();
-              console.log(`Pause result for ${campaign.name}: ${pauseRes.status} ${pauseResult}`);
-              
-              // Even if API call fails, mark locally as guard_paused
-              // The pause-campaign function may return 400 if already paused
-            } catch (err) {
-              console.error(`Failed to call pause-campaign for ${campaign.name}:`, err);
-            }
-
-            // Update campaign status to guard_paused
+            // Mark as guard_paused in DB
             await supabaseAdmin
               .from("campaigns")
               .update({ status: "guard_paused", updated_at: new Date().toISOString() })
               .eq("id", campaign.id);
 
+            // Call platform API
+            try {
+              const pauseRes = await fetch(`${supabaseUrl}/functions/v1/pause-campaign`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${serviceRoleKey}`,
+                },
+                body: JSON.stringify({ campaign_id: campaign.id, action: "pause" }),
+              });
+
+              if (pauseRes.ok) {
+                totalApiSuccess++;
+              } else {
+                totalApiFailed++;
+                const errText = await pauseRes.text();
+                console.error(`Phase 2: API pause failed for "${campaign.name}": ${errText}`);
+              }
+            } catch (err) {
+              totalApiFailed++;
+              console.error(`Phase 2: API error for "${campaign.name}":`, err);
+            }
+
             pausedIds.push(campaign.id);
             pausedNames.push(campaign.name || campaign.platform_id);
           }
 
-          // Store paused campaign IDs + pause timestamp
-          await supabaseAdmin.from("profiles")
-            .update({
-              system_paused_campaigns: pausedIds,
-              guard_paused_at: new Date().toISOString(),
-            })
-            .eq("user_id", profile.user_id);
+          // Merge with existing paused list
+          const allPausedIds = [...new Set([...alreadyPaused, ...pausedIds])];
+
+          await supabaseAdmin.from("profiles").update({
+            system_paused_campaigns: allPausedIds,
+            guard_paused_at: new Date().toISOString(),
+          }).eq("user_id", clientId);
 
           // Audit log
           await supabaseAdmin.from("audit_logs").insert({
-            user_id: profile.user_id,
+            user_id: clientId,
             action_type: "ad_guard_pause",
-            description: `Auto-paused ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). Triggered by ${isCron ? "scheduled scan" : "admin scan"}.`,
+            description: `Ad Guard paused ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}).`,
           });
 
           totalPaused += pausedIds.length;
@@ -160,53 +216,28 @@ Deno.serve(async (req) => {
             action: "PAUSED",
             campaigns_paused: pausedIds.length,
           });
+        } else if (alreadyPaused.length > 0) {
+          results.push({
+            client: profile.full_name,
+            balance: Math.round(balance * 100) / 100,
+            threshold: effectiveThreshold,
+            action: "ALREADY_PAUSED",
+            campaigns_paused: 0,
+          });
+        } else {
+          results.push({
+            client: profile.full_name,
+            balance: Math.round(balance * 100) / 100,
+            threshold: effectiveThreshold,
+            action: "OK_NO_CAMPAIGNS",
+            campaigns_paused: 0,
+          });
         }
-      } else if (balance <= effectiveThreshold && alreadyPaused.length > 0) {
-        // Already paused — but check if campaigns.status was updated
-        // Safety net: ensure guard_paused campaigns that somehow got set back to active are re-paused
-        for (const campaignId of alreadyPaused) {
-          const { data: camp } = await supabaseAdmin
-            .from("campaigns")
-            .select("id, status")
-            .eq("id", campaignId)
-            .single();
-
-          if (camp && (camp.status === "active" || camp.status === "enable" || camp.status === "Active")) {
-            // Campaign somehow became active again while balance is still low — re-pause
-            try {
-              await fetch(`${supabaseUrl}/functions/v1/pause-campaign`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${serviceRoleKey}`,
-                },
-                body: JSON.stringify({ campaign_id: campaignId, action: "pause" }),
-              });
-            } catch (err) {
-              console.error(`Re-pause failed for ${campaignId}:`, err);
-            }
-
-            await supabaseAdmin
-              .from("campaigns")
-              .update({ status: "guard_paused", updated_at: new Date().toISOString() })
-              .eq("id", campaignId);
-
-            totalPaused++;
-          }
-        }
-
-        results.push({
-          client: profile.full_name,
-          balance: Math.round(balance * 100) / 100,
-          threshold: effectiveThreshold,
-          action: "ALREADY_PAUSED",
-          campaigns_paused: 0,
-        });
       } else {
         results.push({
           client: profile.full_name,
           balance: Math.round(balance * 100) / 100,
-          threshold: pauseThreshold,
+          threshold: effectiveThreshold,
           action: "OK",
           campaigns_paused: 0,
         });
@@ -216,13 +247,17 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        checked: profiles?.length ?? 0,
+        checked: clientIds.length,
         total_campaigns_paused: totalPaused,
+        api_success: totalApiSuccess,
+        api_failed: totalApiFailed,
+        guard_paused_synced: guardPausedCampaigns?.length ?? 0,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error("ad-guard-check critical error:", error);
     try {
       const supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL")!,
