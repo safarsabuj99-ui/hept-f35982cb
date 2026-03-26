@@ -284,6 +284,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
     </Card>

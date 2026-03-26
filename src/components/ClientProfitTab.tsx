@@ -290,6 +290,7 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
                   </TableRow>
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </>

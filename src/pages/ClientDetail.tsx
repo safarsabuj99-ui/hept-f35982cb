@@ -478,15 +478,15 @@ export default function ClientDetail() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-8">
-          <TabsTrigger value="profile" className="gap-1"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
-          <TabsTrigger value="pricing" className="gap-1"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
-          <TabsTrigger value="automation" className="gap-1"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
-          <TabsTrigger value="adaccounts" className="gap-1"><MonitorSmartphone className="h-3.5 w-3.5 hidden sm:inline" /> Ad Accounts</TabsTrigger>
-          <TabsTrigger value="spend" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
-          <TabsTrigger value="profit" className="gap-1"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Profit</TabsTrigger>
-          <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
-          <TabsTrigger value="transactions" className="gap-1"><Receipt className="h-3.5 w-3.5 hidden sm:inline" /> Transactions</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide flex-nowrap h-auto p-1">
+          <TabsTrigger value="profile" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
+          <TabsTrigger value="pricing" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
+          <TabsTrigger value="automation" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
+          <TabsTrigger value="adaccounts" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><MonitorSmartphone className="h-3.5 w-3.5 hidden sm:inline" /> Accounts</TabsTrigger>
+          <TabsTrigger value="spend" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Spend</TabsTrigger>
+          <TabsTrigger value="profit" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><TrendingUp className="h-3.5 w-3.5 hidden sm:inline" /> Profit</TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Payments</TabsTrigger>
+          <TabsTrigger value="transactions" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><Receipt className="h-3.5 w-3.5 hidden sm:inline" /> Transactions</TabsTrigger>
         </TabsList>
 
         {/* PROFILE TAB */}
