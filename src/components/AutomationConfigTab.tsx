@@ -385,7 +385,7 @@ export function AutomationConfigTab({
             {isSystemPaused && guardPausedAt && (
               <div className="rounded-lg border p-3 space-y-1">
                 <p className="text-xs text-muted-foreground">Resume Window Status</p>
-                {balance !== null && balance > autoResumeThreshold ? (
+                {balance !== null && balance > effectiveThreshold ? (
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-green-500" />
                     <span className="text-sm font-medium text-green-600">Balance recovered — status will clear on next deposit</span>
