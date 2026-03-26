@@ -108,7 +108,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
         <CardContent className="relative p-3 sm:p-5">
           <div className="flex items-start justify-between">
             <div className="space-y-1.5 min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">{title}</p>
+              <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">{title}</p>
               {loading ? (
                 <Skeleton className="h-8 w-28" />
               ) : (
