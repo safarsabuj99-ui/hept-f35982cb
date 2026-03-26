@@ -252,6 +252,39 @@ export default function CashFlowManagement() {
     fetchData();
   };
 
+  const handleAddFund = async () => {
+    const amt = Number(fundAmount);
+    if (!fundAccId || amt <= 0) {
+      toast({ title: "Error", description: "Select an account and enter a valid amount", variant: "destructive" });
+      return;
+    }
+    setFundSubmitting(true);
+    const targetAcc = accounts.find(a => a.id === fundAccId);
+    const { error: insertErr } = await supabase.from("liquid_fund_entries" as any).insert({
+      account_id: fundAccId,
+      amount_bdt: amt,
+      type: "inflow",
+      source: fundSource,
+      date: fundDate,
+      note: fundNote || null,
+      created_by: user?.id,
+    } as any);
+    if (insertErr) {
+      setFundSubmitting(false);
+      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
+      return;
+    }
+    await supabase.from("agency_accounts" as any)
+      .update({ current_balance_bdt: Number(targetAcc!.current_balance_bdt) + amt } as any)
+      .eq("id", fundAccId);
+    setFundSubmitting(false);
+    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${targetAcc?.name}` });
+    setFundAmount(""); setFundNote(""); setFundAccId(""); setFundSource("Personal Fund");
+    setFundDate(new Date().toISOString().slice(0, 10));
+    setFundOpen(false);
+    fetchData();
+  };
+
   const handleToggleActive = async (acc: AgencyAccount) => {
     await supabase.from("agency_accounts" as any).update({ is_active: !acc.is_active } as any).eq("id", acc.id);
     fetchData();
