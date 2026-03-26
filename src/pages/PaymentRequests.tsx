@@ -399,7 +399,7 @@ export default function PaymentRequests() {
                     </Table>
                   </div>
                   <TablePagination
-                    totalItems={requests.length}
+                    totalItems={filteredRequests.length}
                     pageSize={pageSize}
                     currentPage={currentPage}
                     onPageChange={setCurrentPage}
