@@ -146,6 +146,17 @@ export default function CashFlowManagement() {
       });
     }
 
+    for (const lf of (liquidRes.data as any[]) ?? []) {
+      activity.push({
+        id: `lf-${lf.id}`,
+        type: lf.type === "inflow" ? "in" as const : "out" as const,
+        description: `Liquid Fund: ${lf.source}${lf.note ? ` — ${lf.note}` : ""}`,
+        amount_bdt: Number(lf.amount_bdt),
+        date: lf.created_at,
+        account_name: lf.account_id ? accMap[lf.account_id] : undefined,
+      });
+    }
+
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setRecentActivity(activity.slice(0, 20));
     setLoading(false);
