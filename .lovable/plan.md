@@ -1,21 +1,27 @@
 
 
-## Make KPI Cards 2x2 Grid on Mobile
+## Two Changes: Smaller KPI Cards on Mobile + Top 5 Profitability
 
-### Problem
-The 4 KPI cards (Today Spend, Collection, Payment Due, Total Balance) currently stack in a single column on screens below 480px (`xs` breakpoint). At 390px (typical mobile), users see 4 stacked cards taking too much vertical space.
+### 1. KPI Card — Smaller text on mobile
 
-### Fix
-**File: `src/pages/AdminDashboard.tsx` — Line 279**
+**File: `src/components/dashboard/KpiCard.tsx`**
 
-Change the grid class from:
-```
-grid-cols-1 xs:grid-cols-2 lg:grid-cols-4
-```
-To:
-```
-grid-cols-2 lg:grid-cols-4
-```
+Reduce padding, font sizes, and icon size on small screens:
 
-This makes the KPIs always display as a 2×2 grid on mobile (2 on top, 2 on bottom), expanding to 4 columns on large screens. One line change.
+- **Line 108** — Card padding: `p-5` → `p-3 sm:p-5`
+- **Line 111** — Title: `text-[11px]` → `text-[9px] sm:text-[11px]`
+- **Line 115** — Value: `text-2xl` → `text-lg sm:text-2xl`
+- **Line 127** — Icon container: `h-10 w-10` → `h-8 w-8 sm:h-10 sm:w-10`
+- **Line 130** — Icon: `h-5 w-5` → `h-4 w-4 sm:h-5 sm:w-5`
+
+### 2. Profitability Table — Show only top 5 by spend
+
+**File: `src/components/dashboard/ProfitabilityTable.tsx`**
+
+- **Line 200** — Change sort to by `spendUsd` descending and slice to 5:
+  ```
+  setRows(result.sort((a, b) => b.spendUsd - a.spendUsd).slice(0, 5));
+  ```
+
+Two files, minimal changes.
 
