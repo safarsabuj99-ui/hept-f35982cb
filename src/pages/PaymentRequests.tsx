@@ -506,7 +506,7 @@ export default function PaymentRequests() {
                     </Table>
                   </div>
                   <TablePagination
-                    totalItems={deposits.length}
+                    totalItems={filteredDeposits.length}
                     pageSize={depositPageSize}
                     currentPage={depositPage}
                     onPageChange={setDepositPage}
