@@ -220,71 +220,138 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No spend data available</p>
         ) : (
-          <div className="overflow-x-auto -mx-4 px-4">
-          <Table className="min-w-[600px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8"></TableHead>
-                <TableHead className="whitespace-nowrap">Client</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Spend (USD)</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Revenue (BDT)</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Cost (BDT)</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Profit (BDT)</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Margin</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            {/* Mobile card view */}
+            <div className="space-y-3 md:hidden">
               {rows.map((r, i) => (
-                <>
-                  <TableRow
-                    key={`client-${i}`}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => toggleExpand(i)}
-                  >
-                    <TableCell className="w-8 px-2">
+                <div
+                  key={`mobile-${i}`}
+                  className="rounded-xl border bg-card p-4 space-y-3 cursor-pointer"
+                  onClick={() => toggleExpand(i)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       {expanded[i] ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
-                    </TableCell>
-                    <TableCell className="font-medium">{r.clientName}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">৳{r.revenueBdt.toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">৳{r.cogsBdt.toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
-                        {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                  {expanded[i] && r.platforms.map((p) => (
-                    <TableRow key={`${i}-${p.platform}`} className="bg-muted/30">
-                      <TableCell></TableCell>
-                      <TableCell className="pl-6">
-                        <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
-                          {PLATFORM_LABELS[p.platform] || p.platform}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">${p.spendUsd.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">৳{Math.round(p.spendUsd * p.billingRate).toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                        <span className="text-[10px]">Rate: ৳{p.billingRate} | Gap: ৳{p.gap}</span>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs">৳{p.profitBdt.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px]">
-                          {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </>
+                      <span className="font-medium text-sm">{r.clientName}</span>
+                    </div>
+                    <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
+                      {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Spend</p>
+                      <p className="font-mono font-medium">${r.spendUsd.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Revenue</p>
+                      <p className="font-mono font-medium">৳{r.revenueBdt.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Cost</p>
+                      <p className="font-mono font-medium">৳{r.cogsBdt.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Profit</p>
+                      <p className="font-mono font-medium">৳{r.profitBdt.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  {expanded[i] && (
+                    <div className="space-y-2 pt-2 border-t">
+                      {r.platforms.map((p) => (
+                        <div key={p.platform} className="flex items-center justify-between text-xs">
+                          <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
+                            {PLATFORM_LABELS[p.platform] || p.platform}
+                          </Badge>
+                          <div className="flex items-center gap-3">
+                            <span className="text-muted-foreground font-mono">${p.spendUsd.toLocaleString()}</span>
+                            <span className="font-mono">৳{p.profitBdt.toLocaleString()}</span>
+                            <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px]">
+                              {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-muted-foreground pt-1">
+                        {r.platforms.map(p => `${PLATFORM_LABELS[p.platform] || p.platform}: ৳${p.billingRate} (gap ৳${p.gap})`).join(" · ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
               ))}
-            </TableBody>
-          </Table>
-          </div>
+            </div>
+
+            {/* Desktop table view */}
+            <div className="hidden md:block overflow-x-auto -mx-4 px-4">
+              <Table className="min-w-[600px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="whitespace-nowrap">Client</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Spend (USD)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Revenue (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Cost (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Profit (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Margin</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r, i) => (
+                    <>
+                      <TableRow
+                        key={`client-${i}`}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => toggleExpand(i)}
+                      >
+                        <TableCell className="w-8 px-2">
+                          {expanded[i] ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{r.clientName}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">৳{r.revenueBdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">৳{r.cogsBdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">৳{r.profitBdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
+                            {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                      {expanded[i] && r.platforms.map((p) => (
+                        <TableRow key={`${i}-${p.platform}`} className="bg-muted/30">
+                          <TableCell></TableCell>
+                          <TableCell className="pl-6">
+                            <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
+                              {PLATFORM_LABELS[p.platform] || p.platform}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">${p.spendUsd.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">৳{Math.round(p.spendUsd * p.billingRate).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                            <span className="text-[10px]">Rate: ৳{p.billingRate} | Gap: ৳{p.gap}</span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs">৳{p.profitBdt.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px]">
+                              {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
