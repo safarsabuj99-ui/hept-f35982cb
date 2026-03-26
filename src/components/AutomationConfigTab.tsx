@@ -123,10 +123,10 @@ export function AutomationConfigTab({
       // Fetch campaign details if there are paused campaigns
       if (systemPausedCampaigns.length > 0) {
         setLoadingDetails(true);
-        const { data: mappings } = await supabase
-          .from("campaign_mappings")
-          .select("campaign_id, campaign_name, platform, ad_account_id")
-          .in("campaign_id", systemPausedCampaigns);
+        const { data: campaigns } = await supabase
+          .from("campaigns")
+          .select("id, name, platform, ad_account_id")
+          .in("id", systemPausedCampaigns);
 
         if (mappings && mappings.length > 0) {
           const accountIds = [...new Set(mappings.map(m => m.ad_account_id).filter(Boolean))];
