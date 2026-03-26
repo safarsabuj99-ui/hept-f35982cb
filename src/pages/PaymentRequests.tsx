@@ -416,7 +416,7 @@ export default function PaymentRequests() {
             <CardContent className="pt-6">
               {depositsLoading ? (
                 <TableSkeleton rows={4} columns={6} />
-              ) : deposits.length === 0 ? (
+              ) : filteredDeposits.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No pending fund deposits</p>
               ) : (
                 <>
