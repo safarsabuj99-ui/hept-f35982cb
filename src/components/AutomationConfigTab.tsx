@@ -47,7 +47,7 @@ export function AutomationConfigTab({
   const [campaignDetails, setCampaignDetails] = useState<CampaignDetail[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
-  const [guardHistory, setGuardHistory] = useState<GuardEvent[]>([]);
+  
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
