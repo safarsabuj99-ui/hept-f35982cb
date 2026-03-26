@@ -8,7 +8,7 @@ import { DollarSign, ShoppingCart, Package, Users, MessageCircle } from "lucide-
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
+
 
 interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
