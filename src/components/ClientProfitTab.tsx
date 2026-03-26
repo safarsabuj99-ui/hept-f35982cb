@@ -244,15 +244,16 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="overflow-x-auto -mx-4 px-4">
+              <Table className="min-w-[500px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Platform</TableHead>
-                    <TableHead className="text-right">Spend (USD)</TableHead>
-                    <TableHead className="text-right">Rate (BDT)</TableHead>
-                    <TableHead className="text-right">Gap (BDT)</TableHead>
-                    <TableHead className="text-right">Profit (BDT)</TableHead>
-                    <TableHead className="text-right">Margin</TableHead>
+                    <TableHead className="whitespace-nowrap">Platform</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Spend (USD)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Rate (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Gap (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Profit (BDT)</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Margin</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -289,6 +290,7 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
                   </TableRow>
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </>
