@@ -58,7 +58,7 @@ export function AutomationConfigTab({
   const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
-  const autoResumeThreshold = useMemo(() => (parseFloat(threshold) || 5) * 2, [threshold]);
+  const effectiveThreshold = useMemo(() => (parseFloat(threshold) || 5) - (parseFloat(overdraft) || 0), [threshold, overdraft]);
 
   // Compute resume window status
   const windowHoursNum = parseInt(resumeWindowHours) || 24;
