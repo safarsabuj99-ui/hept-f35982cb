@@ -226,9 +226,38 @@ export default function PaymentRequests() {
 
   const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const paginatedRequests = requests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const pendingDeposits = deposits.filter(d => true);
-  const paginatedDeposits = pendingDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [datePreset, setDatePreset] = useState<DatePreset>("all_time");
+
+  const handleDateChange = (range: DateRange | null, preset: DatePreset) => {
+    setDateRange(range);
+    setDatePreset(preset);
+    setCurrentPage(1);
+    setDepositPage(1);
+  };
+
+  const filteredRequests = useMemo(() => {
+    if (!dateRange) return requests;
+    const fromStr = format(dateRange.from, "yyyy-MM-dd");
+    const toStr = format(dateRange.to, "yyyy-MM-dd");
+    return requests.filter((r) => {
+      const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
+      return d >= fromStr && d <= toStr;
+    });
+  }, [requests, dateRange]);
+
+  const filteredDeposits = useMemo(() => {
+    if (!dateRange) return deposits;
+    const fromStr = format(dateRange.from, "yyyy-MM-dd");
+    const toStr = format(dateRange.to, "yyyy-MM-dd");
+    return deposits.filter((d) => {
+      const dt = d.date?.substring(0, 10);
+      return dt >= fromStr && dt <= toStr;
+    });
+  }, [deposits, dateRange]);
+
+  const paginatedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const paginatedDeposits = filteredDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
 
   return (
     <div className="space-y-6">
