@@ -295,7 +295,7 @@ export default function PaymentRequests() {
             <CardContent className="pt-6">
               {loading ? (
                 <TableSkeleton rows={5} columns={9} />
-              ) : requests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <p className="py-8 text-center text-muted-foreground">No payment requests yet</p>
               ) : (
                 <>
