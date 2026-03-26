@@ -52,34 +52,41 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
   return (
     <div className="space-y-6">
       {/* Premium KPI Cards */}
-      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-5">
         <KpiCard
           title="Total Spend"
           value={fmt(totals.spend)}
           icon={DollarSign}
-          accentColor="hsl(var(--primary))"
+          accentColor="#22c55e"
           staggerIndex={0}
         />
         <KpiCard
           title="Total Results"
           value={totals.results.toLocaleString()}
           icon={ShoppingCart}
-          accentColor="#22c55e"
+          accentColor="#3b82f6"
           staggerIndex={1}
         />
         <KpiCard
-          title="Avg ROAS"
-          value={`${avgRoas.toFixed(2)}x`}
-          icon={TrendingUp}
-          accentColor="#3b82f6"
+          title="Create Order"
+          value={totals.createOrder.toLocaleString()}
+          icon={Package}
+          accentColor="#a855f7"
           staggerIndex={2}
         />
         <KpiCard
-          title="Avg CPO"
-          value={fmt(avgCpo)}
-          icon={Target}
+          title="Total Leads"
+          value={totals.leads.toLocaleString()}
+          icon={Users}
           accentColor="#f97316"
           staggerIndex={3}
+        />
+        <KpiCard
+          title="Total Messages"
+          value={totals.messages.toLocaleString()}
+          icon={MessageCircle}
+          accentColor="#ec4899"
+          staggerIndex={4}
         />
       </div>
 
