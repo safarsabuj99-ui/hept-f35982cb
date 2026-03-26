@@ -74,6 +74,15 @@ export default function CashFlowManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  // Liquid Fund state
+  const [fundOpen, setFundOpen] = useState(false);
+  const [fundAccId, setFundAccId] = useState("");
+  const [fundAmount, setFundAmount] = useState("");
+  const [fundSource, setFundSource] = useState("Personal Fund");
+  const [fundDate, setFundDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fundNote, setFundNote] = useState("");
+  const [fundSubmitting, setFundSubmitting] = useState(false);
+
   const { user } = useAuth();
   const { toast } = useToast();
 
