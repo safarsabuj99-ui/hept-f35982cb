@@ -268,6 +268,8 @@ export default function PaymentRequests() {
         <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
       </div>
 
+      <DateRangeFilter onRangeChange={handleDateChange} />
+
       <Tabs defaultValue="payments" className="space-y-4">
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
           <TabsTrigger value="payments" className="gap-2 flex-shrink-0">
