@@ -877,6 +877,60 @@ export type Database = {
           },
         ]
       }
+      liquid_fund_entries: {
+        Row: {
+          account_id: string
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          note: string | null
+          org_id: string | null
+          source: string
+          type: string
+        }
+        Insert: {
+          account_id: string
+          amount_bdt: number
+          created_at?: string
+          created_by: string
+          date?: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          source?: string
+          type?: string
+        }
+        Update: {
+          account_id?: string
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          source?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "liquid_fund_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "liquid_fund_entries_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manager_permissions: {
         Row: {
           can_add_funds: boolean
