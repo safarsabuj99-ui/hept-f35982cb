@@ -339,12 +339,12 @@ export function AutomationConfigTab({
               </p>
             </div>
             <div className="rounded-lg border p-3 space-y-1">
-              <p className="text-xs text-muted-foreground">Auto-Resume At</p>
+              <p className="text-xs text-muted-foreground">Effective Threshold</p>
               <div className="flex items-center gap-1.5">
                 <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-lg font-semibold">${autoResumeThreshold.toFixed(2)}</p>
+                <p className="text-lg font-semibold">${effectiveThreshold.toFixed(2)}</p>
               </div>
-              <p className="text-[10px] text-muted-foreground">2× pause threshold</p>
+              <p className="text-[10px] text-muted-foreground">Pause at this balance (threshold − overdraft)</p>
             </div>
           </div>
 
