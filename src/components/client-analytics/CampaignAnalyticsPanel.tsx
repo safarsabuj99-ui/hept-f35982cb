@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { DeepDiveTable, CampaignRow, PresetType } from "@/components/client-analytics/DeepDiveTable";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { usePresetPreferences } from "@/hooks/usePresetPreferences";
-import { DollarSign, ShoppingCart, TrendingUp, Target } from "lucide-react";
+import { DollarSign, ShoppingCart, Package, Users, MessageCircle } from "lucide-react";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
