@@ -127,7 +127,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
               className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
               style={{ backgroundColor: `${accentColor}15` }}
             >
-              <Icon className="h-5 w-5 transition-colors duration-300" style={{ color: accentColor }} />
+              <Icon className="h-4 w-4 sm:h-5 sm:w-5 transition-colors duration-300" style={{ color: accentColor }} />
             </div>
           </div>
           {/* Sparkline with draw-in effect */}

@@ -197,7 +197,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       });
     }
 
-    setRows(result.sort((a, b) => b.profitBdt - a.profitBdt));
+    setRows(result.sort((a, b) => b.spendUsd - a.spendUsd).slice(0, 5));
     setLoading(false);
   };
 
