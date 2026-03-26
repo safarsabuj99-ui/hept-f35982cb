@@ -105,7 +105,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
           className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full opacity-[0.07] blur-2xl transition-all duration-500 group-hover:opacity-[0.20] group-hover:blur-3xl group-hover:scale-125"
           style={{ background: accentColor }}
         />
-        <CardContent className="relative p-5">
+        <CardContent className="relative p-3 sm:p-5">
           <div className="flex items-start justify-between">
             <div className="space-y-1.5 min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">{title}</p>
