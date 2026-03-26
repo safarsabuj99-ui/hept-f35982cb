@@ -1,34 +1,70 @@
 
 
-## Fix Ad Guard + Remove Guard History
+## Three Fixes: Date Filter on Payments Page + Impersonation Balance Bug + Wallet Date Filter Bug
 
-### Problem 1: Ad Guard Not Pausing on Actual Ad Platforms
+### 1. Add Date Filter to Payments & Deposits page
 
-**Root Cause (confirmed via logs and code):**
-- The DB trigger `auto_pause_on_debit` correctly marks campaigns as `guard_paused` in the database when balance drops below threshold
-- However, **no cron job is scheduled** to invoke the `ad-guard-check` edge function — the `pg_cron` extension is enabled but `cron.schedule()` was never called
-- Additionally, the database reports **"There are no triggers"** — meaning the triggers (`trg_auto_pause_on_debit`, `trg_check_auto_resume`, `trg_auto_debit_on_spend`) were likely dropped and need to be recreated
-- Result: campaigns show as "guard_paused" in your dashboard but remain running on Meta/TikTok/Google
+**File: `src/pages/PaymentRequests.tsx`**
 
-**Fix:**
-1. **New migration** to:
-   - Recreate all 3 critical triggers (`trg_auto_pause_on_debit`, `trg_check_auto_resume`, `trg_auto_debit_on_spend`) 
-   - Schedule `ad-guard-check` to run every 5 minutes via `pg_cron` + `pg_net` (HTTP call to edge function)
-   - This ensures campaigns are actually paused on platform APIs within 5 minutes of balance dropping
+- Import `DateRangeFilter` and its types
+- Add date range state (default "all_time" since this is an admin page showing history)
+- Filter `requests` and `deposits` by date before rendering
+- For payment requests: filter by `payment_date` field (falling back to `created_at`)
+- For deposits: filter by `date` field
+- Place the filter bar between the page header and the Tabs
 
-2. **Improve `ad-guard-check` edge function** to add retry logging and ensure failed API pauses keep campaigns as `guard_paused` (not marking them `paused` until platform confirms)
+### 2. Fix balance not showing during admin impersonation
 
-### Problem 2: Remove Guard History
+**Root cause:** In `useImpersonation`, `effectiveClientId` depends on `role === "admin"`. But `role` loads asynchronously from the database. On first render, `role` is `null`, so `isImpersonating` is `false` and `effectiveClientId` becomes the admin's own user ID. Data fetches run with the wrong ID and return empty results. When `role` finally resolves, `effectiveClientId` updates but `loading` is already `false`.
 
-**What gets removed:**
-- The entire "Guard History" card (lines 492-584) from `AutomationConfigTab.tsx`
-- Related state: `guardHistory`, `pauseCount`, `resumeCount`, `lastEvent`, `relativeTime`, `parseDescription` 
-- The `History` icon import
-- The audit_log query for guard events
-- **No database changes needed** — we keep the audit_logs table and the `guard_paused_at` / `guard_resume_window_hours` profile columns (they're used by the guard logic itself)
+**Fix in `src/hooks/useImpersonation.tsx`:**
+- Don't depend on `role` to determine impersonation. If `sessionStorage` has `impersonate_client_id`, use it directly regardless of role state. The `ProtectedRoute` already validates admin access.
+
+```typescript
+// Current (broken):
+const isImpersonating = role === "admin" && !!impersonatingClientId;
+
+// Fixed:
+const isImpersonating = !!impersonatingClientId;
+```
+
+This way `effectiveClientId` is correct from the very first render, before `role` even loads.
+
+### 3. Fix wallet date filter not matching transactions/payment requests
+
+**Root cause in `src/pages/ClientWallet.tsx`:** The `filterByDate` function compares `Date` objects. But:
+- `dateRange.from/to` use Dhaka timezone midnight (`new Date("2026-03-26T00:00:00")` = local midnight)
+- Transaction `date` is a plain date string — `new Date("2026-03-26")` parses as UTC midnight, creating timezone mismatch
+- Payment request `created_at` is a full ISO timestamp, comparing against midnight boundaries fails
+
+**Fix:** Use the same string-comparison approach already used in `ClientDashboard.tsx`:
+```typescript
+const filterByDate = useCallback((items: any[], dateField: string) => {
+  if (!dateRange) return items;
+  const fromStr = format(dateRange.from, "yyyy-MM-dd");
+  const toStr = format(dateRange.to, "yyyy-MM-dd");
+  return items.filter((item) => {
+    const d = item[dateField]?.substring(0, 10);
+    return d >= fromStr && d <= toStr;
+  });
+}, [dateRange]);
+```
+
+Also filter payment requests by `payment_date` (the actual payment date) instead of `created_at`, falling back to `created_at` date:
+```typescript
+const filteredPaymentRequests = useMemo(() => {
+  if (!dateRange) return paymentRequests;
+  const fromStr = format(dateRange.from, "yyyy-MM-dd");
+  const toStr = format(dateRange.to, "yyyy-MM-dd");
+  return paymentRequests.filter((pr: any) => {
+    const d = (pr.payment_date || pr.created_at)?.substring(0, 10);
+    return d >= fromStr && d <= toStr;
+  });
+}, [paymentRequests, dateRange]);
+```
 
 ### Files Changed
-- **New migration**: Recreate triggers + schedule cron job
-- **`supabase/functions/ad-guard-check/index.ts`**: Minor improvement — don't mark campaigns as processed if API call fails
-- **`src/components/AutomationConfigTab.tsx`**: Remove Guard History card and related code
+- `src/pages/PaymentRequests.tsx` — add date filter
+- `src/hooks/useImpersonation.tsx` — fix line 34
+- `src/pages/ClientWallet.tsx` — fix `filterByDate` to use string comparison
 
