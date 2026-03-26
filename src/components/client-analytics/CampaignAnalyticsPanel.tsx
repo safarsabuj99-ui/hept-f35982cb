@@ -4,11 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { DeepDiveTable, CampaignRow, PresetType } from "@/components/client-analytics/DeepDiveTable";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { usePresetPreferences } from "@/hooks/usePresetPreferences";
-import { DollarSign, ShoppingCart, TrendingUp, Target } from "lucide-react";
+import { DollarSign, ShoppingCart, Package, Users, MessageCircle } from "lucide-react";
 
 const fmt = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const safeDivide = (a: number, b: number) => (b > 0 ? a / b : 0);
+
 
 interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
@@ -22,19 +22,16 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
 
   const totals = useMemo(() => {
-    const t = { spend: 0, impressions: 0, clicks: 0, results: 0, convValue: 0 };
+    const t = { spend: 0, results: 0, createOrder: 0, leads: 0, messages: 0 };
     for (const r of campaignRows) {
       t.spend += r.spend;
-      t.impressions += r.impressions;
-      t.clicks += r.clicks;
       t.results += r.results;
-      t.convValue += r.conversion_value;
+      t.createOrder += r.create_order ?? 0;
+      t.leads += r.leads_tiktok_dm ?? 0;
+      t.messages += (r.messaging_conversations ?? 0) + (r.conversations_tiktok_dm ?? 0) + (r.conversations_instant_msg ?? 0);
     }
     return t;
   }, [campaignRows]);
-
-  const avgRoas = safeDivide(totals.convValue, totals.spend);
-  const avgCpo = safeDivide(totals.spend, totals.results);
 
   const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
   const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
@@ -55,34 +52,41 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
   return (
     <div className="space-y-6">
       {/* Premium KPI Cards */}
-      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-5">
         <KpiCard
           title="Total Spend"
           value={fmt(totals.spend)}
           icon={DollarSign}
-          accentColor="hsl(var(--primary))"
+          accentColor="#22c55e"
           staggerIndex={0}
         />
         <KpiCard
           title="Total Results"
           value={totals.results.toLocaleString()}
           icon={ShoppingCart}
-          accentColor="#22c55e"
+          accentColor="#3b82f6"
           staggerIndex={1}
         />
         <KpiCard
-          title="Avg ROAS"
-          value={`${avgRoas.toFixed(2)}x`}
-          icon={TrendingUp}
-          accentColor="#3b82f6"
+          title="Create Order"
+          value={totals.createOrder.toLocaleString()}
+          icon={Package}
+          accentColor="#a855f7"
           staggerIndex={2}
         />
         <KpiCard
-          title="Avg CPO"
-          value={fmt(avgCpo)}
-          icon={Target}
+          title="Total Leads"
+          value={totals.leads.toLocaleString()}
+          icon={Users}
           accentColor="#f97316"
           staggerIndex={3}
+        />
+        <KpiCard
+          title="Total Messages"
+          value={totals.messages.toLocaleString()}
+          icon={MessageCircle}
+          accentColor="#ec4899"
+          staggerIndex={4}
         />
       </div>
 
