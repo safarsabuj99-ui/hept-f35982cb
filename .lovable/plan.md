@@ -1,24 +1,21 @@
 
 
-## Fix: Map "Leads (TikTok direct message)" from correct API metric
+## Make KPI Cards 2x2 Grid on Mobile
 
 ### Problem
-The `leads_tiktok_dm` column is always 0 because the sync function was parsing from `onsite_form` (Instant Form submissions), which is a different lead capture method than TikTok DM-based lead generation.
+The 4 KPI cards (Today Spend, Collection, Payment Due, Total Balance) currently stack in a single column on screens below 480px (`xs` breakpoint). At 390px (typical mobile), users see 4 stacked cards taking too much vertical space.
 
-### Investigation
-- First attempted `onsite_on_web_lead` — TikTok API rejected it with error 40002 (invalid metric field).
-- Research confirmed that TikTok's reporting API does not expose a dedicated "Leads (TikTok direct message)" metric.
-- For DM-optimized lead generation campaigns, TikTok counts DM leads under the general `conversion` metric.
+### Fix
+**File: `src/pages/AdminDashboard.tsx` — Line 279**
 
-### Fix Applied
+Change the grid class from:
+```
+grid-cols-1 xs:grid-cols-2 lg:grid-cols-4
+```
+To:
+```
+grid-cols-2 lg:grid-cols-4
+```
 
-**File: `supabase/functions/sync-deep-dive/index.ts`**
+This makes the KPIs always display as a 2×2 grid on mobile (2 on top, 2 on bottom), expanding to 4 columns on large screens. One line change.
 
-1. **Reverted** `onsite_on_web_lead` back to `onsite_form` in both API metric requests (lines 666, 693) to stop the 40002 API error.
-2. **Mapped** `leads_tiktok_dm` from `conversion` (line 802) — for DM-optimized lead gen campaigns, the `conversion` metric IS the DM lead count.
-
-### Backfill
-Trigger a manual Deep Dive sync from the Sync Health page. Historical data will be re-populated with correct `leads_tiktok_dm` values.
-
-### Files Changed
-- `supabase/functions/sync-deep-dive/index.ts` — 3 line changes
