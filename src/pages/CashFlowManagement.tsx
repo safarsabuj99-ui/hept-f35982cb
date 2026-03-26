@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal } from "lucide-react";
+import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 
 interface AgencyAccount {
@@ -74,17 +74,27 @@ export default function CashFlowManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  // Liquid Fund state
+  const [fundOpen, setFundOpen] = useState(false);
+  const [fundAccId, setFundAccId] = useState("");
+  const [fundAmount, setFundAmount] = useState("");
+  const [fundSource, setFundSource] = useState("Personal Fund");
+  const [fundDate, setFundDate] = useState(new Date().toISOString().slice(0, 10));
+  const [fundNote, setFundNote] = useState("");
+  const [fundSubmitting, setFundSubmitting] = useState(false);
+
   const { user } = useAuth();
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes] = await Promise.all([
+    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes] = await Promise.all([
       supabase.from("agency_accounts" as any).select("*").order("type").order("name"),
       supabase.from("fund_transfers" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("payment_requests" as any).select("amount_bdt, payment_method, created_at, status, received_in_account_id").eq("status", "approved").order("created_at", { ascending: false }).limit(10),
       supabase.from("usd_purchases" as any).select("bdt_amount_paid, date, created_at, paid_from_account_id, notes").order("created_at", { ascending: false }).limit(10),
       supabase.from("agency_expenses" as any).select("amount_bdt, category, date, created_at, paid_from_account_id, description").order("created_at", { ascending: false }).limit(10),
+      supabase.from("liquid_fund_entries" as any).select("*").order("created_at", { ascending: false }).limit(20),
     ]);
 
     const accs = (accRes.data as any[]) ?? [];
@@ -136,6 +146,17 @@ export default function CashFlowManagement() {
       });
     }
 
+    for (const lf of (liquidRes.data as any[]) ?? []) {
+      activity.push({
+        id: `lf-${lf.id}`,
+        type: lf.type === "inflow" ? "in" as const : "out" as const,
+        description: `Liquid Fund: ${lf.source}${lf.note ? ` — ${lf.note}` : ""}`,
+        amount_bdt: Number(lf.amount_bdt),
+        date: lf.created_at,
+        account_name: lf.account_id ? accMap[lf.account_id] : undefined,
+      });
+    }
+
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setRecentActivity(activity.slice(0, 20));
     setLoading(false);
@@ -150,6 +171,7 @@ export default function CashFlowManagement() {
       .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "fund_transfers" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_entries" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
@@ -230,6 +252,39 @@ export default function CashFlowManagement() {
     fetchData();
   };
 
+  const handleAddFund = async () => {
+    const amt = Number(fundAmount);
+    if (!fundAccId || amt <= 0) {
+      toast({ title: "Error", description: "Select an account and enter a valid amount", variant: "destructive" });
+      return;
+    }
+    setFundSubmitting(true);
+    const targetAcc = accounts.find(a => a.id === fundAccId);
+    const { error: insertErr } = await supabase.from("liquid_fund_entries" as any).insert({
+      account_id: fundAccId,
+      amount_bdt: amt,
+      type: "inflow",
+      source: fundSource,
+      date: fundDate,
+      note: fundNote || null,
+      created_by: user?.id,
+    } as any);
+    if (insertErr) {
+      setFundSubmitting(false);
+      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
+      return;
+    }
+    await supabase.from("agency_accounts" as any)
+      .update({ current_balance_bdt: Number(targetAcc!.current_balance_bdt) + amt } as any)
+      .eq("id", fundAccId);
+    setFundSubmitting(false);
+    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${targetAcc?.name}` });
+    setFundAmount(""); setFundNote(""); setFundAccId(""); setFundSource("Personal Fund");
+    setFundDate(new Date().toISOString().slice(0, 10));
+    setFundOpen(false);
+    fetchData();
+  };
+
   const handleToggleActive = async (acc: AgencyAccount) => {
     await supabase.from("agency_accounts" as any).update({ is_active: !acc.is_active } as any).eq("id", acc.id);
     fetchData();
@@ -263,6 +318,58 @@ export default function CashFlowManagement() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-end gap-2">
+        <Dialog open={fundOpen} onOpenChange={setFundOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto"><PiggyBank className="mr-2 h-4 w-4" /> Add Fund</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add Liquid Fund</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Deposit To Account</Label>
+                <Select value={fundAccId} onValueChange={setFundAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Amount (BDT)</Label>
+                <Input type="number" placeholder="e.g. 50000" value={fundAmount} onChange={e => setFundAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Source</Label>
+                <Select value={fundSource} onValueChange={setFundSource}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Personal Fund">Personal Fund</SelectItem>
+                    <SelectItem value="Other Business">Other Business</SelectItem>
+                    <SelectItem value="Freelance">Freelance</SelectItem>
+                    <SelectItem value="Loan">Loan</SelectItem>
+                    <SelectItem value="Investment">Investment</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={fundDate} onChange={e => setFundDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={fundNote} onChange={e => setFundNote(e.target.value)} placeholder="e.g. Freelance project payment received" />
+              </div>
+              <Button className="w-full" onClick={handleAddFund} disabled={fundSubmitting}>
+                {fundSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Deposit Fund
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full sm:w-auto"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
