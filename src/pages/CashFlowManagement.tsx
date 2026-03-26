@@ -88,12 +88,13 @@ export default function CashFlowManagement() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes] = await Promise.all([
+    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes] = await Promise.all([
       supabase.from("agency_accounts" as any).select("*").order("type").order("name"),
       supabase.from("fund_transfers" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("payment_requests" as any).select("amount_bdt, payment_method, created_at, status, received_in_account_id").eq("status", "approved").order("created_at", { ascending: false }).limit(10),
       supabase.from("usd_purchases" as any).select("bdt_amount_paid, date, created_at, paid_from_account_id, notes").order("created_at", { ascending: false }).limit(10),
       supabase.from("agency_expenses" as any).select("amount_bdt, category, date, created_at, paid_from_account_id, description").order("created_at", { ascending: false }).limit(10),
+      supabase.from("liquid_fund_entries" as any).select("*").order("created_at", { ascending: false }).limit(20),
     ]);
 
     const accs = (accRes.data as any[]) ?? [];
