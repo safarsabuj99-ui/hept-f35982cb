@@ -318,6 +318,58 @@ export default function CashFlowManagement() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-end gap-2">
+        <Dialog open={fundOpen} onOpenChange={setFundOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto"><PiggyBank className="mr-2 h-4 w-4" /> Add Fund</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add Liquid Fund</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Deposit To Account</Label>
+                <Select value={fundAccId} onValueChange={setFundAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Amount (BDT)</Label>
+                <Input type="number" placeholder="e.g. 50000" value={fundAmount} onChange={e => setFundAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Source</Label>
+                <Select value={fundSource} onValueChange={setFundSource}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Personal Fund">Personal Fund</SelectItem>
+                    <SelectItem value="Other Business">Other Business</SelectItem>
+                    <SelectItem value="Freelance">Freelance</SelectItem>
+                    <SelectItem value="Loan">Loan</SelectItem>
+                    <SelectItem value="Investment">Investment</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={fundDate} onChange={e => setFundDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={fundNote} onChange={e => setFundNote(e.target.value)} placeholder="e.g. Freelance project payment received" />
+              </div>
+              <Button className="w-full" onClick={handleAddFund} disabled={fundSubmitting}>
+                {fundSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Deposit Fund
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full sm:w-auto"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
