@@ -31,7 +31,7 @@ export function useImpersonation() {
     }
   }, [searchParams, role, user, setSearchParams]);
 
-  const isImpersonating = role === "admin" && !!impersonatingClientId;
+  const isImpersonating = !!impersonatingClientId;
 
   const effectiveClientId = isImpersonating ? impersonatingClientId! : user?.id ?? null;
 

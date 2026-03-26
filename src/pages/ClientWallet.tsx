@@ -91,15 +91,25 @@ export default function ClientWallet() {
 
   const filterByDate = useCallback((items: any[], dateField: string) => {
     if (!dateRange) return items;
+    const fromStr = format(dateRange.from, "yyyy-MM-dd");
+    const toStr = format(dateRange.to, "yyyy-MM-dd");
     return items.filter((item) => {
-      const d = new Date(item[dateField]);
-      return d >= dateRange.from && d <= dateRange.to;
+      const d = item[dateField]?.substring(0, 10);
+      return d >= fromStr && d <= toStr;
     });
   }, [dateRange]);
 
   const visibleTransactions = useMemo(() => transactions.filter(t => !t.description?.startsWith("auto_spend:")), [transactions]);
   const filteredTransactions = useMemo(() => filterByDate(visibleTransactions, "date"), [visibleTransactions, filterByDate]);
-  const filteredPaymentRequests = useMemo(() => filterByDate(paymentRequests, "created_at"), [paymentRequests, filterByDate]);
+  const filteredPaymentRequests = useMemo(() => {
+    if (!dateRange) return paymentRequests;
+    const fromStr = format(dateRange.from, "yyyy-MM-dd");
+    const toStr = format(dateRange.to, "yyyy-MM-dd");
+    return paymentRequests.filter((pr: any) => {
+      const d = (pr.payment_date || pr.created_at)?.substring(0, 10);
+      return d >= fromStr && d <= toStr;
+    });
+  }, [paymentRequests, dateRange]);
 
   const totalNegativeBdt = useMemo(() => {
     if (balance >= 0) return 0;
