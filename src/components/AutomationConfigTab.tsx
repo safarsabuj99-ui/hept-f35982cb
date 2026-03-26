@@ -128,8 +128,8 @@ export function AutomationConfigTab({
           .select("id, name, platform, ad_account_id")
           .in("id", systemPausedCampaigns);
 
-        if (mappings && mappings.length > 0) {
-          const accountIds = [...new Set(mappings.map(m => m.ad_account_id).filter(Boolean))];
+        if (campaigns && campaigns.length > 0) {
+          const accountIds = [...new Set(campaigns.map(m => m.ad_account_id).filter(Boolean))];
           const { data: accounts } = await supabase
             .from("ad_accounts")
             .select("id, account_name")
@@ -138,9 +138,9 @@ export function AutomationConfigTab({
           const accountMap = new Map((accounts || []).map(a => [a.id, a.account_name]));
 
           setCampaignDetails(
-            mappings.map(m => ({
-              campaign_id: m.campaign_id,
-              campaign_name: m.campaign_name,
+            campaigns.map(m => ({
+              campaign_id: m.id,
+              campaign_name: m.name,
               platform: m.platform,
               ad_account_id: m.ad_account_id || "",
               ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
