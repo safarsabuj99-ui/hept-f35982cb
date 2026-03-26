@@ -105,14 +105,14 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
           className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full opacity-[0.07] blur-2xl transition-all duration-500 group-hover:opacity-[0.20] group-hover:blur-3xl group-hover:scale-125"
           style={{ background: accentColor }}
         />
-        <CardContent className="relative p-5">
+        <CardContent className="relative p-3 sm:p-5">
           <div className="flex items-start justify-between">
             <div className="space-y-1.5 min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">{title}</p>
+              <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">{title}</p>
               {loading ? (
                 <Skeleton className="h-8 w-28" />
               ) : (
-                <p className="text-2xl font-bold tracking-tight font-mono">{animatedValue}</p>
+                <p className="text-lg sm:text-2xl font-bold tracking-tight font-mono">{animatedValue}</p>
               )}
               {subtitle && !loading && (
                 <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
@@ -124,10 +124,10 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
               )}
             </div>
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
+              className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
               style={{ backgroundColor: `${accentColor}15` }}
             >
-              <Icon className="h-5 w-5 transition-colors duration-300" style={{ color: accentColor }} />
+              <Icon className="h-4 w-4 sm:h-5 sm:w-5 transition-colors duration-300" style={{ color: accentColor }} />
             </div>
           </div>
           {/* Sparkline with draw-in effect */}
