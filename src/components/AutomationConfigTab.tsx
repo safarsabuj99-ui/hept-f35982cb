@@ -28,12 +28,6 @@ interface CampaignDetail {
   ad_account_id: string;
 }
 
-interface GuardEvent {
-  id: string;
-  action_type: string;
-  description: string;
-  created_at: string;
-}
 
 export function AutomationConfigTab({
   userId,
