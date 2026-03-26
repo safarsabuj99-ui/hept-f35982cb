@@ -1,26 +1,31 @@
 
 
-## Financial Intelligence Mobile Responsiveness Fix
+## Update Campaign Analytics KPI Cards
 
-### Problem
-The screenshot shows the ProfitabilityTable on mobile (390px) rendering as a desktop table with columns cut off — Revenue (BDT), Cost, Profit, and Margin columns are clipped. The table needs a mobile card view instead of horizontal scrolling.
+### What Changes
+Replace the current 4 KPI cards (Total Spend, Total Results, **Avg ROAS**, Avg CPO) with 5 new KPIs:
 
-### Solution
-Replace the scrollable table on mobile with touch-friendly card rows (matching the dual-view pattern used throughout the app), while keeping the expandable platform detail.
+1. **Total Spend** (keep)
+2. **Total Results** (keep)  
+3. **Create Order** — sum of `create_order` across all campaigns
+4. **Total Leads** — sum of `leads_tiktok_dm` across all campaigns
+5. **Total Messages** — sum of `messaging_conversations` + `conversations_tiktok_dm` + `conversations_instant_msg` (Meta + TikTok combined)
 
-### Changes
+Remove: **Avg ROAS** and **Avg CPO**
 
-**File: `src/components/dashboard/ProfitabilityTable.tsx`**
-- Add a mobile card view (`md:hidden`) with expandable platform details per client
-- Each card shows: Client name, margin badge, Spend, Revenue, Cost, Profit in a 2-col grid
-- Tapping a card expands platform sub-rows with rate/gap details
-- Keep existing desktop table as `hidden md:block`
+### File: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`
 
-**File: `src/pages/AdminDashboard.tsx`** (line 319)
-- Change Financial Intelligence grid from `grid gap-4 md:grid-cols-2` to stack on mobile: ensure both widgets render full-width on small screens (already does this, no change needed)
+- Update `totals` useMemo to aggregate `create_order`, `leads_tiktok_dm`, `messaging_conversations`, `conversations_tiktok_dm`, `conversations_instant_msg`
+- Remove `avgRoas` and `avgCpo` calculations
+- Replace the 4-card grid with a 5-card grid (`grid-cols-2 lg:grid-cols-5`) using appropriate icons:
+  - Total Spend — DollarSign (green)
+  - Total Results — ShoppingCart (blue)
+  - Create Order — Package (purple)
+  - Total Leads — Users (orange)
+  - Total Messages — MessageCircle (pink)
+- Import new icons from lucide-react (`Package`, `Users`, `MessageCircle`)
 
-### Technical Details
-- Mobile card layout: `rounded-xl border p-4 space-y-3 bg-card` with `cursor-pointer` for expand
-- Platform sub-details shown inline with colored badges and rate/gap info
-- ProfitLossWidget is already responsive (simple flex rows) — no changes needed
+### Layout
+- Mobile: `grid-cols-2` (last card spans full width via `col-span-2 lg:col-span-1`)
+- Desktop: `grid-cols-5` — all cards equal width
 
