@@ -1,31 +1,35 @@
 
 
-## Update Campaign Analytics KPI Cards
+## Fix: Map "Leads (TikTok direct message)" from correct API metric
 
-### What Changes
-Replace the current 4 KPI cards (Total Spend, Total Results, **Avg ROAS**, Avg CPO) with 5 new KPIs:
+### Problem
+The `leads_tiktok_dm` column is always 0 because the sync function requests `onsite_form` from TikTok's API, which tracks **Instant Form submissions** (a completely different lead capture method). Your campaigns use **TikTok DM-based lead generation**, which uses a different API metric.
 
-1. **Total Spend** (keep)
-2. **Total Results** (keep)  
-3. **Create Order** — sum of `create_order` across all campaigns
-4. **Total Leads** — sum of `leads_tiktok_dm` across all campaigns
-5. **Total Messages** — sum of `messaging_conversations` + `conversations_tiktok_dm` + `conversations_instant_msg` (Meta + TikTok combined)
+### Root Cause
+In `supabase/functions/sync-deep-dive/index.ts`:
+- Line 666/693: API requests include `onsite_form` in the metrics list
+- Line 802: `leads_tiktok_dm` is parsed from `row.metrics?.onsite_form` which always returns 0
 
-Remove: **Avg ROAS** and **Avg CPO**
+### Fix
 
-### File: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`
+**File: `supabase/functions/sync-deep-dive/index.ts`**
 
-- Update `totals` useMemo to aggregate `create_order`, `leads_tiktok_dm`, `messaging_conversations`, `conversations_tiktok_dm`, `conversations_instant_msg`
-- Remove `avgRoas` and `avgCpo` calculations
-- Replace the 4-card grid with a 5-card grid (`grid-cols-2 lg:grid-cols-5`) using appropriate icons:
-  - Total Spend — DollarSign (green)
-  - Total Results — ShoppingCart (blue)
-  - Create Order — Package (purple)
-  - Total Leads — Users (orange)
-  - Total Messages — MessageCircle (pink)
-- Import new icons from lucide-react (`Package`, `Users`, `MessageCircle`)
+1. **Replace `onsite_form` with `onsite_on_web_lead` in both API metric requests** (lines 666 and 693)
+   - Change the metrics parameter from:
+     `'["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form"]'`
+   - To:
+     `'["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_on_web_lead"]'`
 
-### Layout
-- Mobile: `grid-cols-2` (last card spans full width via `col-span-2 lg:col-span-1`)
-- Desktop: `grid-cols-5` — all cards equal width
+2. **Update the parsing logic** (line 802)
+   - Change: `const tiktokLeadsDm = parseInt(row.metrics?.onsite_form || "0", 10);`
+   - To: `const tiktokLeadsDm = parseInt(row.metrics?.onsite_on_web_lead || "0", 10);`
+
+### Backfill
+After deploying, trigger a manual Deep Dive sync from the Sync Health page. Since the sync fetches the full date range from `sync_start_date` to today, all historical data will be re-populated with the correct `leads_tiktok_dm` values on the next run.
+
+### Risk Mitigation
+If TikTok's API rejects `onsite_on_web_lead` (error code 40002), the sync will fail gracefully with an error logged. We can then check the edge function logs to identify the correct metric name and adjust. No existing data will be corrupted since the upsert only writes non-zero values.
+
+### Files Changed
+- `supabase/functions/sync-deep-dive/index.ts` — 3 line changes (2 metric request strings + 1 parsing line)
 
