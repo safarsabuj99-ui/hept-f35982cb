@@ -112,7 +112,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
               {loading ? (
                 <Skeleton className="h-8 w-28" />
               ) : (
-                <p className="text-2xl font-bold tracking-tight font-mono">{animatedValue}</p>
+                <p className="text-lg sm:text-2xl font-bold tracking-tight font-mono">{animatedValue}</p>
               )}
               {subtitle && !loading && (
                 <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
