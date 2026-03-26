@@ -276,7 +276,7 @@ export default function AdminDashboard() {
       <QuickActions pendingCount={pendingCount} onAddFunds={() => setDepositOpen(true)} />
 
       {/* Zone 3: Primary KPIs */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 xs:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title={spendLabel}
           value={`$${todaySpend.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
