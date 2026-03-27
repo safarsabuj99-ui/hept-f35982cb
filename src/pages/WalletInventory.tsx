@@ -82,53 +82,41 @@ export default function WalletInventory() {
   const fetchOverview = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
 
-    // 1. Get latest snapshot
+    // Single query — all metrics precomputed by the edge function
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
-    const snapshot = (snapshots as any[])?.[0] ?? null;
-    const carryForward = snapshot ? Number(snapshot.balance_usd) : 0;
-    const sinceDate = snapshot?.snapshot_date ?? "2020-01-01";
-    const snapshotDate = snapshot?.snapshot_date ?? null;
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
-
-    // 2. Only query data AFTER snapshot date
-    const [purchasesRes, spendRes, burn7Res, txnRes] = await Promise.all([
-      supabase.from("usd_purchases").select("usd_received").gt("date", sinceDate),
-      supabase.from("daily_metrics").select("spend").gt("data_date", sinceDate),
-      supabase.from("daily_metrics").select("spend").gte("data_date", sevenDaysAgoStr),
-      supabase.from("transactions").select("type, amount, client_id").eq("status", "completed"),
-    ]);
-
-    const boughtSince = (purchasesRes.data ?? []).reduce((s: number, r: any) => s + Number(r.usd_received), 0);
-    const spentSince = (spendRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
-    const last7Spend = (burn7Res.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
-    const dailyBurn = last7Spend / 7;
-    const availableBalance = carryForward + boughtSince - spentSince;
-    const runwayDays = dailyBurn > 0 ? availableBalance / dailyBurn : availableBalance > 0 ? 999 : 0;
-
-    // Client obligations
-    const clientBalances: Record<string, number> = {};
-    for (const t of (txnRes.data ?? []) as any[]) {
-      const cid = t.client_id;
-      if (!clientBalances[cid]) clientBalances[cid] = 0;
-      clientBalances[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
-    }
-    const clientObligations = Object.values(clientBalances).filter(b => b > 0).reduce((s, b) => s + b, 0);
-    const usdNeeded = Math.max(0, clientObligations - availableBalance);
+    const snap = (snapshots as any[])?.[0] ?? null;
+    const metrics = (snap?.metrics as any) ?? {};
 
     setOverview({
-      carryForward, boughtSince, spentSince, availableBalance, dailyBurn,
-      runwayDays: Math.max(0, Math.floor(runwayDays)),
-      clientObligations, usdNeeded, snapshotDate, loading: false,
+      carryForward: metrics.carry_forward ?? (snap ? Number(snap.balance_usd) : 0),
+      boughtSince: metrics.bought_since ?? 0,
+      spentSince: metrics.spent_since ?? 0,
+      availableBalance: snap ? Number(snap.balance_usd) : 0,
+      dailyBurn: metrics.daily_burn ?? 0,
+      runwayDays: metrics.runway_days ?? 0,
+      clientObligations: metrics.client_obligations ?? 0,
+      usdNeeded: metrics.usd_needed ?? 0,
+      snapshotDate: snap?.snapshot_date ?? null,
+      loading: false,
     });
   }, []);
+
+  const handleRefreshNow = useCallback(async () => {
+    setOverview(prev => ({ ...prev, loading: true }));
+    try {
+      await supabase.functions.invoke("auto-snapshot-usd");
+      await fetchOverview();
+      toast({ title: "Refreshed", description: "USD inventory updated." });
+    } catch {
+      toast({ title: "Error", description: "Failed to refresh", variant: "destructive" });
+      setOverview(prev => ({ ...prev, loading: false }));
+    }
+  }, [fetchOverview, toast]);
 
   useEffect(() => {
     fetchPurchases(dateRange);
@@ -140,9 +128,10 @@ export default function WalletInventory() {
     const channel = supabase
       .channel("wallet-inventory-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPurchases, dateRange]);
+  }, [fetchPurchases, fetchOverview, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -349,6 +338,11 @@ export default function WalletInventory() {
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
+              {!overview.loading && hasSnapshot && (
+                <Button size="sm" variant="ghost" onClick={handleRefreshNow} disabled={overview.loading}>
+                  <RotateCcw className={`mr-1 h-3.5 w-3.5 ${overview.loading ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+              )}
               {!overview.loading && !hasSnapshot && (
                 <Dialog open={openingBalanceDialogOpen} onOpenChange={setOpeningBalanceDialogOpen}>
                   <DialogTrigger asChild>
