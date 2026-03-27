@@ -1,0 +1,1 @@
+ALTER TABLE public.usd_inventory_snapshots ADD COLUMN metrics jsonb DEFAULT '{}'::jsonb;

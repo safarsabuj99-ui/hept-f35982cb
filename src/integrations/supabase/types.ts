@@ -1628,6 +1628,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          metrics: Json | null
           notes: string | null
           org_id: string | null
           snapshot_date: string
@@ -1637,6 +1638,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          metrics?: Json | null
           notes?: string | null
           org_id?: string | null
           snapshot_date: string
@@ -1646,6 +1648,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          metrics?: Json | null
           notes?: string | null
           org_id?: string | null
           snapshot_date?: string
