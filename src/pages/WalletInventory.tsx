@@ -106,6 +106,18 @@ export default function WalletInventory() {
     });
   }, []);
 
+  const handleRefreshNow = useCallback(async () => {
+    setOverview(prev => ({ ...prev, loading: true }));
+    try {
+      await supabase.functions.invoke("auto-snapshot-usd");
+      await fetchOverview();
+      toast({ title: "Refreshed", description: "USD inventory updated." });
+    } catch {
+      toast({ title: "Error", description: "Failed to refresh", variant: "destructive" });
+      setOverview(prev => ({ ...prev, loading: false }));
+    }
+  }, [fetchOverview, toast]);
+
   useEffect(() => {
     fetchPurchases(dateRange);
     fetchOverview();
@@ -116,9 +128,10 @@ export default function WalletInventory() {
     const channel = supabase
       .channel("wallet-inventory-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPurchases, dateRange]);
+  }, [fetchPurchases, fetchOverview, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
