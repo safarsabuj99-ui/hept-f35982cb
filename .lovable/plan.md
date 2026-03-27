@@ -1,76 +1,85 @@
 
 
-## Three Fixes: Mobile Modal, Page Reload Redirect, Theme Persistence
+## Optimize USD Inventory: Server-Side Precomputation
 
-### 1. Optimize Confirm Approval Modal for Mobile
+### Problem
 
-**Problem**: The `DialogContent` in `PaymentRequests.tsx` (line 524) has no height constraint or scroll handling. On mobile (390px viewport), the modal content (client info + rate selection + account selector + note + footer buttons) overflows the screen, pushing "Yes, Approve" and "Cancel" buttons off-screen.
+The frontend `fetchOverview` makes 4 heavy queries on every page load:
+1. Latest snapshot (fast)
+2. All `usd_purchases` since snapshot (moderate)
+3. All `daily_metrics.spend` since snapshot (potentially huge — 10M+ rows table)
+4. **All `transactions` ever** to compute client obligations (worst offender — no date filter, loads entire ledger)
 
-**Fix in `src/pages/PaymentRequests.tsx`**:
-- Add `max-h-[85dvh]` and `overflow-hidden` to `DialogContent`
-- Wrap the modal body (lines 540-649) in a scrollable `div` with `overflow-y-auto` and bottom padding (`pb-24 sm:pb-4`) to ensure content is scrollable above the sticky footer
-- Make `DialogFooter` sticky at the bottom with `sticky bottom-0 bg-background border-t p-4 z-10` so buttons are always visible
+This causes slow loads, especially as data grows.
 
-### 2. Fix Page Reload Redirecting to Dashboard
+### Solution: Move All Computation to the Edge Function
 
-**Problem**: When you reload `/admin/payment-requests`, the auth state is loading (`loading=true`), then resolves. But `ProtectedRoute` works correctly — the issue is in `useAuth.tsx`: `fetchRole` is called via `setTimeout(..., 0)` (line 55), so there's a brief moment where `user` is set but `role` is still `null`. `ProtectedRoute` line 30 sees `role !== requiredRole` (null !== "admin") and redirects to `/login`.
+The `auto-snapshot-usd` function already runs every 5 minutes. Extend it to precompute ALL overview metrics and store them as a JSONB column on the snapshot. The frontend then reads a single row — instant load.
 
-**Fix in `src/hooks/useAuth.tsx`**:
-- Don't set `loading = false` until role has been fetched. Move `setLoading(false)` inside the role fetch completion, not immediately after session resolves.
-- Remove the `setTimeout` wrapper around `fetchRole` — use direct `await` instead, and only set `setLoading(false)` after role is resolved.
+### Changes
 
-```typescript
-async (_event, session) => {
-  setSession(session);
-  setUser(session?.user ?? null);
-  if (session?.user) {
-    await fetchRole(session.user.id);
-  } else {
-    setRole(null);
-  }
-  setLoading(false);
+#### 1. Database Migration
+Add a `metrics` JSONB column to `usd_inventory_snapshots`:
+```sql
+ALTER TABLE usd_inventory_snapshots 
+ADD COLUMN metrics jsonb DEFAULT '{}'::jsonb;
+```
+
+The `metrics` field will store:
+```json
+{
+  "bought_since": 150,
+  "spent_since": 80,
+  "daily_burn": 12.5,
+  "runway_days": 5,
+  "client_obligations": 320,
+  "usd_needed": 50
 }
 ```
 
-### 3. Fix Theme Resetting on Reload
+#### 2. Rewrite `supabase/functions/auto-snapshot-usd/index.ts`
+- Keep existing balance calculation (snapshot + purchases - spend)
+- Add: 7-day burn rate calculation (daily_metrics last 7 days)
+- Add: client obligations calculation (SUM credits - SUM debits per client, filter positive balances)
+- Add: USD needed = max(0, obligations - balance)
+- Store all in `metrics` JSONB on upsert
 
-**Problem**: In `ThemeToggle.tsx`, two `useEffect` hooks run in order. The first (line 13) fires on `dark` state change and writes to localStorage. The second (line 22) reads from localStorage on mount. But the initial `useState` (line 6) reads from the DOM class — and `main.tsx` only adds `dark` class if there's NO localStorage entry. On reload with `theme=dark` in localStorage, the DOM already has `dark` class from `main.tsx`, so initial state is `true` — this works. But for `theme=light`: `main.tsx` doesn't add `dark`, initial state becomes `false`, first effect runs and sets `theme=light` — this also works.
-
-The actual bug: the first `useEffect` runs BEFORE the second one completes. Initial state reads DOM class (`dark` if no localStorage). Then effect 1 writes `dark` to localStorage. Then effect 2 reads localStorage and gets `dark`. So if user set light mode, on reload: `main.tsx` doesn't add dark class → initial state = `false` → effect 1 writes `light` → effect 2 reads `light` → stays light. This should work...
-
-Let me re-check: `main.tsx` line 6: `if (!localStorage.getItem("theme"))` add dark. So if localStorage has "light", no dark class is added. Initial state reads DOM = no dark class = `false`. Effect 1 writes "light". Effect 2 reads "light", sets `false`. Seems fine.
-
-Wait — the real issue is likely that the `useState` initializer checks `document.documentElement.classList.contains("dark")`. On reload, `main.tsx` runs first and adds `dark` only if NO localStorage entry. If localStorage has "dark", `main.tsx` does NOT add the class. So initial state = `false` (no class), effect 1 removes dark and writes "light" — **overwriting the user's "dark" preference!**
-
-**Root cause confirmed**: `main.tsx` only adds `dark` class when there's no localStorage entry. But if localStorage has `"dark"`, `main.tsx` doesn't add the class → `ThemeToggle` initial state reads `false` → effect writes `"light"` → theme resets.
-
-**Fix in `src/main.tsx`**:
+#### 3. Simplify `src/pages/WalletInventory.tsx` — `fetchOverview`
+Replace 4 queries with a single query:
 ```typescript
-const stored = localStorage.getItem("theme");
-if (stored === "light") {
-  document.documentElement.classList.remove("dark");
-} else {
-  document.documentElement.classList.add("dark");
-  if (!stored) localStorage.setItem("theme", "dark");
-}
-```
+const { data } = await supabase
+  .from("usd_inventory_snapshots")
+  .select("*")
+  .order("snapshot_date", { ascending: false })
+  .limit(1);
 
-**Fix in `src/components/ThemeToggle.tsx`**: Simplify to single effect, read from localStorage as source of truth:
-```typescript
-const [dark, setDark] = useState(() => {
-  const stored = localStorage.getItem("theme");
-  return stored !== "light"; // default dark
+const snap = data?.[0];
+const metrics = snap?.metrics ?? {};
+setOverview({
+  carryForward: snap?.balance_usd ?? 0,
+  availableBalance: snap?.balance_usd ?? 0,
+  boughtSince: metrics.bought_since ?? 0,
+  spentSince: metrics.spent_since ?? 0,
+  dailyBurn: metrics.daily_burn ?? 0,
+  runwayDays: metrics.runway_days ?? 0,
+  clientObligations: metrics.client_obligations ?? 0,
+  usdNeeded: metrics.usd_needed ?? 0,
+  snapshotDate: snap?.snapshot_date ?? null,
+  loading: false,
 });
-
-useEffect(() => {
-  document.documentElement.classList.toggle("dark", dark);
-  localStorage.setItem("theme", dark ? "dark" : "light");
-}, [dark]);
 ```
+
+- Add realtime subscription on `usd_inventory_snapshots` so when the cron updates every 5 min, the UI refreshes automatically
+- Keep a manual "Refresh Now" button that invokes the edge function on-demand
+
+### Result
+- Page load: **1 query** instead of 4 heavy ones
+- Data freshness: auto-updated every 5 minutes + manual refresh
+- No client-side aggregation of large tables
+- Realtime updates when snapshot changes
 
 ### Files Changed
-- **`src/pages/PaymentRequests.tsx`** — Scrollable modal body + sticky footer
-- **`src/hooks/useAuth.tsx`** — Await role fetch before setting loading=false
-- **`src/main.tsx`** — Apply stored theme correctly on boot
-- **`src/components/ThemeToggle.tsx`** — Single-effect, localStorage-first approach
+- **Migration**: Add `metrics` column to `usd_inventory_snapshots`
+- **`supabase/functions/auto-snapshot-usd/index.ts`** — Compute and store all metrics
+- **`src/pages/WalletInventory.tsx`** — Single-query overview + realtime subscription
 
