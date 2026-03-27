@@ -35,6 +35,9 @@ export default function Login() {
       setIsLoading(false);
       return;
     }
+    // Success — role useEffect in useAuth will trigger, then Login's useEffect navigates
+    // Reset loading in case navigation takes a moment
+    setIsLoading(false);
   };
 
   const { role, user } = useAuth();
