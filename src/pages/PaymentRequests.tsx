@@ -521,8 +521,8 @@ export default function PaymentRequests() {
 
       {/* Confirmation Modal */}
       <Dialog open={confirmModal.open} onOpenChange={(open) => !open && setConfirmModal({ open: false, request: null, action: "approved" })}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md max-h-[85dvh] overflow-hidden p-0 flex flex-col">
+          <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2">
               {confirmModal.action === "approved" ? (
                 <><CheckCircle className="h-5 w-5 text-emerald-500" /> Confirm Approval</>
@@ -537,6 +537,7 @@ export default function PaymentRequests() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4">
           {confirmModal.request && (
             <div className="space-y-4">
               <div className="rounded-lg bg-muted/50 p-4 space-y-2">
@@ -648,8 +649,9 @@ export default function PaymentRequests() {
               </div>
             </div>
           )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 z-10 border-t bg-background px-4 py-3 sm:px-6">
             <Button variant="outline" onClick={() => setConfirmModal({ open: false, request: null, action: "approved" })}>
               Cancel
             </Button>
