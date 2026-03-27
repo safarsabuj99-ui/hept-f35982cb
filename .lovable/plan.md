@@ -1,70 +1,51 @@
 
 
-## Three Fixes: Date Filter on Payments Page + Impersonation Balance Bug + Wallet Date Filter Bug
+## Fix Ad Guard: Campaigns Not Pausing on TikTok Platform
 
-### 1. Add Date Filter to Payments & Deposits page
+### Root Cause (Confirmed by Testing)
 
-**File: `src/pages/PaymentRequests.tsx`**
+I tested the system end-to-end and found the exact bug:
 
-- Import `DateRangeFilter` and its types
-- Add date range state (default "all_time" since this is an admin page showing history)
-- Filter `requests` and `deposits` by date before rendering
-- For payment requests: filter by `payment_date` field (falling back to `created_at`)
-- For deposits: filter by `date` field
-- Place the filter bar between the page header and the Tabs
+1. **`pause-campaign` works perfectly** — I called it directly for one of Arafat's guard_paused campaigns and TikTok returned `code: 0` (success). The campaign was paused on TikTok within 4 seconds.
 
-### 2. Fix balance not showing during admin impersonation
+2. **`ad-guard-check` times out** — When I called it, it returned `context canceled` (timeout). Edge functions have a ~25 second limit. The function calls `pause-campaign` **sequentially** for every campaign, and each call takes ~4 seconds (network round-trip to TikTok proxy). With 5+ guard_paused campaigns plus scanning all clients in Phase 2, it exceeds the timeout before finishing. The function boots every 5 minutes (confirmed by logs) but silently dies without completing.
 
-**Root cause:** In `useImpersonation`, `effectiveClientId` depends on `role === "admin"`. But `role` loads asynchronously from the database. On first render, `role` is `null`, so `isImpersonating` is `false` and `effectiveClientId` becomes the admin's own user ID. Data fetches run with the wrong ID and return empty results. When `role` finally resolves, `effectiveClientId` updates but `loading` is already `false`.
+3. **Result**: DB trigger correctly sets campaigns to `guard_paused`, but the cron function never finishes calling the platform APIs, so campaigns remain `guard_paused` in DB and **running on TikTok**.
 
-**Fix in `src/hooks/useImpersonation.tsx`:**
-- Don't depend on `role` to determine impersonation. If `sessionStorage` has `impersonate_client_id`, use it directly regardless of role state. The `ProtectedRoute` already validates admin access.
+### Fix
 
-```typescript
-// Current (broken):
-const isImpersonating = role === "admin" && !!impersonatingClientId;
+**Rewrite `ad-guard-check` to call platform APIs directly** instead of going through `pause-campaign` (eliminates function-to-function overhead), and **process campaigns in parallel batches** to fit within the timeout.
 
-// Fixed:
-const isImpersonating = !!impersonatingClientId;
-```
+#### Changes to `supabase/functions/ad-guard-check/index.ts`:
 
-This way `effectiveClientId` is correct from the very first render, before `role` even loads.
+1. **Add inline platform API call logic** — Extract the TikTok/Meta/Google pause logic directly into ad-guard-check. Instead of making a full HTTP request to `pause-campaign` (which itself boots, authenticates, reads DB, calls API), just call the TikTok API directly. This cuts each campaign from ~4s to ~2s.
 
-### 3. Fix wallet date filter not matching transactions/payment requests
+2. **Parallel processing** — Process guard_paused campaigns in parallel batches of 3 (using `Promise.allSettled`), not one-by-one.
 
-**Root cause in `src/pages/ClientWallet.tsx`:** The `filterByDate` function compares `Date` objects. But:
-- `dateRange.from/to` use Dhaka timezone midnight (`new Date("2026-03-26T00:00:00")` = local midnight)
-- Transaction `date` is a plain date string — `new Date("2026-03-26")` parses as UTC midnight, creating timezone mismatch
-- Payment request `created_at` is a full ISO timestamp, comparing against midnight boundaries fails
+3. **Phase 2 optimization** — Only process clients who have active campaigns (join query instead of looping all clients). Skip the manual balance fallback since `get_client_balance_v2` RPC exists.
 
-**Fix:** Use the same string-comparison approach already used in `ClientDashboard.tsx`:
-```typescript
-const filterByDate = useCallback((items: any[], dateField: string) => {
-  if (!dateRange) return items;
-  const fromStr = format(dateRange.from, "yyyy-MM-dd");
-  const toStr = format(dateRange.to, "yyyy-MM-dd");
-  return items.filter((item) => {
-    const d = item[dateField]?.substring(0, 10);
-    return d >= fromStr && d <= toStr;
-  });
-}, [dateRange]);
-```
+4. **Timeout guard** — Track elapsed time and stop processing if approaching the 25s limit, returning partial results.
 
-Also filter payment requests by `payment_date` (the actual payment date) instead of `created_at`, falling back to `created_at` date:
-```typescript
-const filteredPaymentRequests = useMemo(() => {
-  if (!dateRange) return paymentRequests;
-  const fromStr = format(dateRange.from, "yyyy-MM-dd");
-  const toStr = format(dateRange.to, "yyyy-MM-dd");
-  return paymentRequests.filter((pr: any) => {
-    const d = (pr.payment_date || pr.created_at)?.substring(0, 10);
-    return d >= fromStr && d <= toStr;
-  });
-}, [paymentRequests, dateRange]);
+5. **On success, update campaign status to `paused`** directly (currently only `pause-campaign` does this).
+
+6. **On failure, increment a `retry_count`** and after 3 failures, apply local-only pause status to prevent infinite retry loops.
+
+### Key Logic (Simplified)
+
+```text
+Phase 1: guard_paused campaigns
+  ├── Group by platform + ad_account (share API tokens)
+  ├── Fetch API credentials once per group
+  ├── Call platform API directly (TikTok via proxy, Meta via Graph API)
+  │   ├── Success → update status to "paused"
+  │   └── Fail 3x → update status to "paused" + audit log "local-only"
+  └── Process in parallel batches of 3
+
+Phase 2: scan clients (only those with active campaigns)
+  ├── Single query: clients with balance ≤ threshold AND active campaigns
+  └── Set guard_paused + queue for next Phase 1 run
 ```
 
 ### Files Changed
-- `src/pages/PaymentRequests.tsx` — add date filter
-- `src/hooks/useImpersonation.tsx` — fix line 34
-- `src/pages/ClientWallet.tsx` — fix `filterByDate` to use string comparison
+- **`supabase/functions/ad-guard-check/index.ts`** — Major rewrite: inline API calls, parallel processing, timeout guard
 
