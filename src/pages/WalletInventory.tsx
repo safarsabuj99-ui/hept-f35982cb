@@ -338,6 +338,11 @@ export default function WalletInventory() {
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
+              {!overview.loading && hasSnapshot && (
+                <Button size="sm" variant="ghost" onClick={handleRefreshNow} disabled={overview.loading}>
+                  <RotateCcw className={`mr-1 h-3.5 w-3.5 ${overview.loading ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+              )}
               {!overview.loading && !hasSnapshot && (
                 <Dialog open={openingBalanceDialogOpen} onOpenChange={setOpeningBalanceDialogOpen}>
                   <DialogTrigger asChild>
