@@ -4,30 +4,13 @@ import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
   const [dark, setDark] = useState(() => {
-    if (typeof window !== "undefined") {
-      return document.documentElement.classList.contains("dark");
-    }
-    return true;
+    return localStorage.getItem("theme") !== "light";
   });
 
   useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    if (stored === "light") {
-      setDark(false);
-    } else {
-      setDark(true);
-      document.documentElement.classList.add("dark");
-    }
-  }, []);
 
   return (
     <Button variant="ghost" size="icon" onClick={() => setDark(!dark)} className="h-9 w-9">
