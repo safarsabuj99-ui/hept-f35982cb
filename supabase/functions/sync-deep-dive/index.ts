@@ -217,6 +217,24 @@ Deno.serve(async (req) => {
 
         // Helper: upsert campaign into campaigns table (ID locking)
         // statusConfirmed: true = status came directly from platform API; false = fallback "active"
+        // Build a set of guard-locked campaign IDs to prevent sync from overwriting
+        const guardLockedIds = new Set<string>();
+        {
+          const linkedClientIds = accountAssignments.map(a => a.client_id);
+          if (linkedClientIds.length > 0) {
+            const { data: clientProfiles } = await supabase
+              .from("profiles")
+              .select("system_paused_campaigns")
+              .in("user_id", linkedClientIds);
+            for (const p of clientProfiles ?? []) {
+              const paused = p.system_paused_campaigns;
+              if (Array.isArray(paused)) {
+                for (const id of paused) guardLockedIds.add(String(id));
+              }
+            }
+          }
+        }
+
         const upsertCampaign = async (
           platformId: string,
           name: string,
@@ -233,8 +251,18 @@ Deno.serve(async (req) => {
             .maybeSingle();
 
           if (existing) {
-            // If status is NOT confirmed from platform API, preserve the existing DB status
-            const finalStatus = statusConfirmed ? status : existing.status;
+            // GUARD PROTECTION: Never overwrite guard_paused/paused status if campaign is guard-locked
+            const isGuardLocked = guardLockedIds.has(existing.id) || existing.status === "guard_paused";
+            let finalStatus: string;
+            if (isGuardLocked) {
+              // Preserve the guard state — sync must NOT undo Ad Guard
+              finalStatus = existing.status;
+              console.log(`Guard-locked: preserving status "${existing.status}" for campaign ${existing.id} (platform says: ${status})`);
+            } else if (!statusConfirmed) {
+              finalStatus = existing.status;
+            } else {
+              finalStatus = status;
+            }
             const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
             if (objective) updatePayload.objective = objective;
             await supabase
