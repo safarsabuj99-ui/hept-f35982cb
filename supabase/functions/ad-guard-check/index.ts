@@ -288,6 +288,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== PHASE 2: Scan for active campaigns on low-balance clients =====
+    // INSTANT PAUSE: immediately calls platform API (no "next cycle" delay)
     if (timeLeft() > 5000) {
       // Optimized: only get clients who actually have active campaigns
       const { data: activeCampaigns } = await sb
@@ -306,6 +307,20 @@ Deno.serve(async (req) => {
         }
 
         const clientIds = [...clientCampaigns.keys()];
+
+        // Pre-fetch ad accounts + integrations for immediate platform pause
+        const allAdAccountIdsP2 = [...new Set(activeCampaigns.map(c => c.ad_account_id))];
+        const { data: adAccountsP2 } = await sb
+          .from("ad_accounts")
+          .select("id, ad_account_id, platform_name, api_integration_id")
+          .in("id", allAdAccountIdsP2);
+        const integrationIdsP2 = [...new Set((adAccountsP2 || []).map(a => a.api_integration_id).filter(Boolean))];
+        const { data: integrationsP2 } = await sb
+          .from("api_integrations")
+          .select("id, api_token, app_id, platform")
+          .in("id", integrationIdsP2 as string[]);
+        const intMapP2 = new Map((integrationsP2 || []).map(i => [i.id, i]));
+        const accMapP2 = new Map((adAccountsP2 || []).map(a => [a.id, a]));
 
         for (const clientId of clientIds) {
           if (timeLeft() < 3000) {
@@ -353,13 +368,38 @@ Deno.serve(async (req) => {
             if (camps.length > 0) {
               const pausedIds: string[] = [];
               const pausedNames: string[] = [];
+              let apiOk = 0;
+              let apiFail = 0;
 
               for (const campaign of camps) {
+                // Step 1: Mark as guard_paused in DB
                 await sb.from("campaigns")
                   .update({ status: "guard_paused", updated_at: new Date().toISOString() })
                   .eq("id", campaign.id);
                 pausedIds.push(campaign.id);
                 pausedNames.push(campaign.name || campaign.platform_id);
+
+                // Step 2: IMMEDIATELY pause on platform API
+                const acc = accMapP2.get(campaign.ad_account_id);
+                if (acc?.api_integration_id) {
+                  const int = intMapP2.get(acc.api_integration_id);
+                  if (int?.api_token) {
+                    const result = await pauseOnPlatform(
+                      campaign, campaign.platform, int.api_token, int.app_id || "",
+                      acc.ad_account_id, tiktokBase
+                    );
+                    if (result.success) {
+                      await sb.from("campaigns")
+                        .update({ status: "paused", updated_at: new Date().toISOString() })
+                        .eq("id", campaign.id);
+                      apiOk++;
+                      console.log(`✓ Phase2 instant: ${campaign.name} (${campaign.platform}) paused on platform`);
+                    } else {
+                      apiFail++;
+                      console.error(`✗ Phase2 instant: ${campaign.name} (${campaign.platform}): ${result.message}`);
+                    }
+                  }
+                }
               }
 
               const allPausedIds = [...new Set([...alreadyPaused.map(String), ...pausedIds])];
@@ -371,16 +411,20 @@ Deno.serve(async (req) => {
               await sb.from("audit_logs").insert({
                 user_id: clientId,
                 action_type: "ad_guard_pause",
-                description: `Ad Guard flagged ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). Will pause on next cycle.`,
+                description: `Ad Guard paused ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). API: ${apiOk} ok, ${apiFail} failed.`,
               });
 
               totalPaused += pausedIds.length;
+              totalApiSuccess += apiOk;
+              totalApiFailed += apiFail;
               results.push({
                 client: profile.full_name,
                 balance: Math.round(balance * 100) / 100,
                 threshold: effectiveThreshold,
-                action: "GUARD_PAUSED",
+                action: "INSTANT_PAUSED",
                 campaigns_flagged: pausedIds.length,
+                api_success: apiOk,
+                api_failed: apiFail,
               });
             }
           } else {
