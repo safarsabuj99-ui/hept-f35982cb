@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.sync-orchestrator]
 verify_jwt = false
+
+[functions.ad-guard-check]
+verify_jwt = false
+
+[functions.pause-campaign]
+verify_jwt = false
