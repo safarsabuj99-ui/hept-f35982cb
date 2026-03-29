@@ -1,95 +1,65 @@
 
+Goal: make Ad Guard truly instant and reliable so when client balance reaches threshold (0/negative or configured value), all active campaigns are paused on the ad platform immediately, and UI/state stay consistent everywhere.
 
-## Fix: Instant Platform Pause When Ad Guard Triggers
+What I found (root causes)
+1) Guard status is being overwritten later:
+- Campaigns are set to `guard_paused`, but sync jobs can write platform status (`enable/active`) back into `campaigns`, so Spend/Accounts show active again.
 
-### Root Cause
+2) Fallback engine is not healthy:
+- Scheduled Ad Guard calls are returning `401` in backend HTTP response logs, so the 5‑minute safety net is not reliably enforcing platform pause.
 
-The `auto_pause_on_debit` DB trigger instantly sets campaign status to `guard_paused` in the database. But the actual API call to pause on TikTok/Meta/Google only happens when the `ad-guard-check` cron runs every 5 minutes. During that gap, campaigns remain active on the ad platform and keep spending money.
+3) Current guard flow intentionally delays some pauses:
+- In `ad-guard-check`, Phase 2 marks campaigns `guard_paused` and logs “Will pause on next cycle” instead of pausing newly-flagged campaigns immediately.
 
-Your screenshots confirm this: local status shows "Guard Paused" but TikTok Ads Manager shows campaigns still "Active".
+Implementation plan
+1) Harden internal function auth path (so backend-to-backend calls always work)
+- File: `supabase/config.toml`
+- Add explicit function config blocks:
+  - `[functions.ad-guard-check] verify_jwt = false`
+  - `[functions.pause-campaign] verify_jwt = false`
+- Keep strict in-code auth checks (service/admin/internal key validation) so security remains server-side.
 
-### Solution: Instant Platform Pause via `pg_net`
+2) Fix instant trigger reliability for guard-paused updates
+- New migration:
+  - Recreate `public.instant_guard_pause()` with stronger safeguards:
+    - validate required secrets exist before posting
+    - keep idempotent trigger condition (`old.status IS DISTINCT FROM 'guard_paused'`)
+    - post exact payload contract used by `pause-campaign` (`campaign_id`, `action: "pause"`)
+  - Drop/recreate `trg_instant_guard_pause` idempotently.
+- Keep this trigger as instant path (1–3s).
 
-Use PostgreSQL's `pg_net` extension (available in the backend) to fire an HTTP request to the `pause-campaign` edge function immediately when a campaign is set to `guard_paused`. This eliminates the 5-minute delay entirely.
+3) Remove “next-cycle” delay inside Ad Guard engine
+- File: `supabase/functions/ad-guard-check/index.ts`
+- Change Phase 2 behavior:
+  - when low-balance campaigns are newly flagged, immediately execute platform pause logic in the same run (reuse existing `pauseOnPlatform` helpers), not “next cycle”.
+- Add optional `client_id` request filter for targeted instant enforcement when needed.
+- Improve auth acceptance for trusted internal tokens and add explicit rejection logging reason.
 
-### Changes
+4) Prevent sync jobs from undoing guard pauses
+- File: `supabase/functions/sync-deep-dive/index.ts`
+- Build a set of guard-locked campaign IDs from `profiles.system_paused_campaigns`.
+- In campaign upsert/update logic:
+  - if campaign is guard-locked, preserve DB status (`guard_paused` / guarded paused state) and do not overwrite with platform “enable/active” status.
+- This keeps Ad Guard state authoritative until manual/auto resume clears lock.
 
-#### 1. Database Migration — Enable `pg_net` + Create Trigger
+5) Keep resume behavior intact
+- Ensure existing resume paths still work:
+  - manual resume (single/all) and auto-resume after deposit
+  - when resumed, campaign is removed from `system_paused_campaigns`, then sync is allowed to reflect platform active state again.
 
-Create a trigger on the `campaigns` table that fires when `status` changes to `guard_paused`. It uses `net.http_post` to call the existing `pause-campaign` edge function with the service role key, so the platform pause happens within seconds.
+6) Verification (end-to-end, no guesswork)
+- Trigger low-balance condition on a test client with active campaigns.
+- Confirm within seconds:
+  - `campaigns.status` moves from active/enable → guard_paused/paused
+  - platform campaign status becomes paused
+  - Client Ad Guard tab + Spend tab + Ad Account view all agree
+- Confirm backend logs:
+  - no 401 for internal Ad Guard/pause calls
+  - successful pause audit entries
+  - no later sync overwrite back to active while guard lock is present.
 
-```sql
--- Enable pg_net extension
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
--- Trigger function: instantly call pause-campaign API
-CREATE OR REPLACE FUNCTION public.instant_guard_pause()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  _supabase_url text;
-  _service_key text;
-BEGIN
-  -- Only fire when status changes TO guard_paused
-  IF NEW.status <> 'guard_paused' THEN RETURN NEW; END IF;
-  IF OLD.status = 'guard_paused' THEN RETURN NEW; END IF;
-
-  SELECT decrypted_secret INTO _supabase_url FROM vault.decrypted_secrets WHERE name = 'SUPABASE_URL' LIMIT 1;
-  SELECT decrypted_secret INTO _service_key FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1;
-
-  -- Fire-and-forget HTTP call to pause-campaign
-  PERFORM net.http_post(
-    url := _supabase_url || '/functions/v1/pause-campaign',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || _service_key
-    ),
-    body := jsonb_build_object(
-      'campaign_id', NEW.id,
-      'action', 'pause'
-    )
-  );
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trg_instant_guard_pause
-  AFTER UPDATE OF status ON public.campaigns
-  FOR EACH ROW
-  WHEN (NEW.status = 'guard_paused' AND OLD.status IS DISTINCT FROM 'guard_paused')
-  EXECUTE FUNCTION public.instant_guard_pause();
-```
-
-#### 2. Update `pause-campaign` Edge Function
-
-Minor fix: when called with a `guard_paused` campaign via service role, it should:
-- Call the platform API to pause
-- Update status from `guard_paused` → `paused` (confirming platform sync)
-- This already works — the existing code handles `guard_paused` as needing a pause (line 130: `normalizedStatus = "active"`)
-
-No code changes needed in the edge function — it already handles this correctly.
-
-#### 3. Keep `ad-guard-check` Cron as Safety Net
-
-The 5-minute cron remains as a fallback for any campaigns where the instant trigger fails (network timeout, edge function cold start, etc.). No changes needed — it already picks up `guard_paused` campaigns in Phase 1.
-
-### Flow After Fix
-
-```text
-Debit transaction inserted
-  → auto_pause_on_debit trigger fires
-    → Sets campaigns to "guard_paused" in DB
-      → trg_instant_guard_pause fires (pg_net)
-        → Calls pause-campaign edge function
-          → Pauses on TikTok/Meta/Google API
-          → Updates DB: guard_paused → paused
-```
-
-Total delay: ~1-3 seconds instead of up to 5 minutes.
-
-### Files Changed
-- **Database migration** — `pg_net` extension + `instant_guard_pause` trigger function + trigger
-- No edge function or frontend changes needed
-
+Files to change
+- `supabase/config.toml`
+- `supabase/migrations/<new>_ad_guard_instant_hardening.sql`
+- `supabase/functions/ad-guard-check/index.ts`
+- `supabase/functions/sync-deep-dive/index.ts`
