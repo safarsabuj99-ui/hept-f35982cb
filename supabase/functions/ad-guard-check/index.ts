@@ -328,26 +328,16 @@ Deno.serve(async (req) => {
             break;
           }
 
-          // Get balance via RPC
-          const { data: balanceData } = await sb
-            .rpc("get_client_balance_v2", { _client_id: clientId })
-            .maybeSingle();
-
-          let balance: number;
-          if (balanceData !== null && balanceData !== undefined) {
-            balance = Number(balanceData);
-          } else {
-            // Fallback: manual SUM
-            const { data: creditSum } = await sb
-              .from("transactions").select("amount")
-              .eq("client_id", clientId).eq("type", "credit").eq("status", "completed");
-            const { data: debitSum } = await sb
-              .from("transactions").select("amount")
-              .eq("client_id", clientId).eq("type", "debit").eq("status", "completed");
-            const credits = (creditSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
-            const debits = (debitSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
-            balance = credits - debits;
-          }
+          // Calculate balance via SUM
+          const { data: creditSum } = await sb
+            .from("transactions").select("amount")
+            .eq("client_id", clientId).eq("type", "credit").eq("status", "completed");
+          const { data: debitSum } = await sb
+            .from("transactions").select("amount")
+            .eq("client_id", clientId).eq("type", "debit").eq("status", "completed");
+          const credits = (creditSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
+          const debits = (debitSum ?? []).reduce((s: number, t: any) => s + Number(t.amount), 0);
+          const balance = credits - debits;
 
           const { data: profile } = await sb
             .from("profiles")
@@ -384,8 +374,9 @@ Deno.serve(async (req) => {
                 if (acc?.api_integration_id) {
                   const int = intMapP2.get(acc.api_integration_id);
                   if (int?.api_token) {
+                    const pauseTarget = { id: campaign.id, name: campaign.name, platformId: campaign.platform_id };
                     const result = await pauseOnPlatform(
-                      campaign, campaign.platform, int.api_token, int.app_id || "",
+                      pauseTarget, campaign.platform, int.api_token, int.app_id || "",
                       acc.ad_account_id, tiktokBase
                     );
                     if (result.success) {
