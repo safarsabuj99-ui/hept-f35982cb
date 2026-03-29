@@ -374,8 +374,9 @@ Deno.serve(async (req) => {
                 if (acc?.api_integration_id) {
                   const int = intMapP2.get(acc.api_integration_id);
                   if (int?.api_token) {
+                    const pauseTarget = { id: campaign.id, name: campaign.name, platformId: campaign.platform_id };
                     const result = await pauseOnPlatform(
-                      campaign, campaign.platform, int.api_token, int.app_id || "",
+                      pauseTarget, campaign.platform, int.api_token, int.app_id || "",
                       acc.ad_account_id, tiktokBase
                     );
                     if (result.success) {
