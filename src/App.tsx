@@ -40,6 +40,7 @@ import ClientReports from "@/pages/ClientReports";
 import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 import AttentionRequired from "@/pages/AttentionRequired";
+import ClientNotices from "@/pages/ClientNotices";
 
 import PlatformDashboard from "@/pages/PlatformDashboard";
 import AgencyList from "@/pages/AgencyList";
@@ -148,6 +149,7 @@ const App = () => (
                 <Route path="/admin/cash-flow" element={<Navigate to="/admin/finance?tab=cash-flow" replace />} />
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
+                <Route path="/admin/client-notices" element={<ClientNotices />} />
               </Route>
 
               {/* Manager routes */}

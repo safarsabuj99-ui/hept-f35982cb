@@ -17,6 +17,7 @@ import {
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ClientNoticeBanner } from "@/components/ClientNoticeBanner";
 
 const PLATFORM_COLORS: Record<string, string> = {
   meta: "hsl(var(--chart-meta))",
@@ -246,6 +247,9 @@ export default function ClientDashboard() {
 
   return (
     <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto animate-fade-in">
+      {/* Urgent Notices */}
+      <ClientNoticeBanner clientId={effectiveClientId!} balance={balance} />
+
       {/* Hero Section */}
       <div className="client-hero-card p-5 md:p-8 rounded-2xl">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

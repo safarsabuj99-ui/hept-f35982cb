@@ -634,6 +634,59 @@ export type Database = {
           },
         ]
       }
+      client_notices: {
+        Row: {
+          created_at: string
+          created_by: string
+          ends_at: string | null
+          id: string
+          is_active: boolean
+          message: string
+          org_id: string | null
+          starts_at: string
+          target_ids: string[] | null
+          target_type: string
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          message: string
+          org_id?: string | null
+          starts_at?: string
+          target_ids?: string[] | null
+          target_type?: string
+          title: string
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          message?: string
+          org_id?: string | null
+          starts_at?: string
+          target_ids?: string[] | null
+          target_type?: string
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_notices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_ad_spend: {
         Row: {
           ad_account_id: string

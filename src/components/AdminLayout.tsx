@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity,
+  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity, Bell,
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,7 @@ const allSections: NavSection[] = [
     items: [
       { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
       { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
+      { to: "/admin/client-notices", icon: Bell, label: "Notices", permKey: "can_manage_clients" },
       { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
     ],
   },
