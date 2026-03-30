@@ -274,6 +274,9 @@ export default function ClientWallet() {
                     <p className="text-[10px] text-muted-foreground mt-1">
                       {new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </p>
+                    {pr.transaction_id && (
+                      <p className="text-[10px] font-mono text-muted-foreground">TrxID: <span className="text-foreground">{pr.transaction_id}</span></p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-mono text-sm font-medium">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
