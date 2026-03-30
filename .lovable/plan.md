@@ -1,24 +1,23 @@
 
 
-## Plan: Compact Mobile Payment Cards + Fix Date Filter
+## Plan: Show TrxID in Mobile/Tablet Views + Client Side
 
-### Problem 1: Date filter shows "Today" but doesn't filter
-The `DateRangeFilter` component defaults its UI to "Today" (line 67) but never calls `onRangeChange` on mount. Meanwhile `PaymentRequests` initializes `dateRange` as `null` (no filter), so all data shows despite "Today" appearing selected.
+### Changes
 
-**Fix** — `src/components/DateRangeFilter.tsx`: Add a `useEffect` on mount that calls `onRangeChange` with today's range, syncing the parent state to match the UI.
+**1. Admin Payment Requests — Mobile cards** (`src/pages/PaymentRequests.tsx`, lines 305-357)
+- Add TrxID to the mobile card view between the metrics grid and the footer
+- Show as a small row: `TrxID: ABC123` in `text-[11px] font-mono text-muted-foreground`, only if `transaction_id` exists
 
-### Problem 2: Mobile payment cards too large
-Each card uses a spacious layout with `p-4`, 2×2 grid, full-width buttons, and separate proof image row.
+**2. Admin Payment Requests — Desktop table** (`src/pages/PaymentRequests.tsx`, line 386)
+- The TrxID column already exists but is hidden on medium screens (`hidden md:table-cell`). Remove the `hidden md:` prefix so it shows on tablet too.
 
-**Fix** — `src/pages/PaymentRequests.tsx` (lines 305–351): Redesign mobile cards to a compact layout:
-- Reduce padding to `p-3`, gap to `gap-2`
-- Row 1: Client name + status badge (same line)
-- Row 2: Amount, Method, Date, Platform — inline with smaller text (`text-xs`), use a tight `grid-cols-4` instead of `grid-cols-2`
-- USD Credited stays as a small footer line
-- Proof image thumbnail shrinks to `h-10`
-- Approve/Reject buttons side by side in one row instead of stacked
+**3. Client Wallet — Payment Requests mobile cards** (`src/pages/ClientWallet.tsx`, lines 264-283)
+- Add TrxID display below the date line: `TrxID: ABC123` in `text-[10px] font-mono`, only if `pr.transaction_id` exists
+
+**4. Client Wallet — Payment Requests desktop table** (`src/pages/ClientWallet.tsx`, lines 286-315)
+- Add a new `TrxID` column to the table header and body showing `pr.transaction_id || "—"`
 
 ### Files Changed
-1. `src/components/DateRangeFilter.tsx` — add mount-time `useEffect`
-2. `src/pages/PaymentRequests.tsx` — compact mobile card layout
+1. `src/pages/PaymentRequests.tsx` — add TrxID to mobile cards, unhide on tablet
+2. `src/pages/ClientWallet.tsx` — add TrxID to both mobile cards and desktop table
 
