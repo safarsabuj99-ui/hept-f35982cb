@@ -7,34 +7,18 @@ const corsHeaders = {
 };
 
 const START_TIME = Date.now();
-const TIMEOUT_MS = 22_000; // Stop at 22s to leave margin for response
+const TIMEOUT_MS = 22_000;
 const BATCH_SIZE = 5;
+const MAX_ATTEMPTS = 10;
 
 function timeLeft(): number {
   return TIMEOUT_MS - (Date.now() - START_TIME);
 }
 
-// ===== Inline platform pause helpers =====
-
-interface PausableGroup {
-  platform: string;
-  apiToken: string;
-  appId: string;
-  tiktokBase: string;
-  adAccountRawId: string;
-  campaigns: Array<{
-    id: string;
-    name: string;
-    platformId: string;
-    clientId: string | null;
-  }>;
-}
+// ===== Platform pause helpers =====
 
 async function pauseTikTokCampaign(
-  advertiserId: string,
-  rawCampaignId: string,
-  token: string,
-  tiktokBase: string
+  advertiserId: string, rawCampaignId: string, token: string, tiktokBase: string
 ): Promise<{ success: boolean; message: string; localOnly?: boolean }> {
   try {
     const res = await fetch(`${tiktokBase}/open_api/v1.3/campaign/status/update/`, {
@@ -49,14 +33,10 @@ async function pauseTikTokCampaign(
     const text = await res.text();
     let json: any;
     try { json = JSON.parse(text); } catch { json = { code: -1, message: text }; }
-
     if (json.code === 0) return { success: true, message: "OK" };
-
-    // Geo-restriction fallback
     if (json.code === 41000 || json.message?.includes("banned Country")) {
       return { success: true, message: "Geo-restricted, local-only", localOnly: true };
     }
-
     return { success: false, message: json.message || `TikTok error ${json.code}` };
   } catch (err: any) {
     return { success: false, message: err.message || "Network error" };
@@ -64,8 +44,7 @@ async function pauseTikTokCampaign(
 }
 
 async function pauseMetaCampaign(
-  rawCampaignId: string,
-  token: string
+  rawCampaignId: string, token: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetch(
@@ -85,10 +64,7 @@ async function pauseMetaCampaign(
 }
 
 async function pauseGoogleCampaign(
-  customerId: string,
-  rawCampaignId: string,
-  token: string,
-  devToken: string
+  customerId: string, rawCampaignId: string, token: string, devToken: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetch(
@@ -117,27 +93,6 @@ async function pauseGoogleCampaign(
   } catch (err: any) {
     return { success: false, message: err.message || "Network error" };
   }
-}
-
-async function pauseOnPlatform(
-  campaign: { id: string; name: string; platformId: string },
-  platform: string,
-  apiToken: string,
-  appId: string,
-  adAccountRawId: string,
-  tiktokBase: string
-): Promise<{ success: boolean; message: string; localOnly?: boolean }> {
-  const rawId = campaign.platformId.replace(/^(meta_|google_|tiktok_)/, "");
-
-  if (platform === "tiktok") {
-    return pauseTikTokCampaign(adAccountRawId, rawId, apiToken, tiktokBase);
-  } else if (platform === "meta") {
-    return pauseMetaCampaign(rawId, apiToken);
-  } else if (platform === "google") {
-    const customerId = adAccountRawId.replace(/-/g, "");
-    return pauseGoogleCampaign(customerId, rawId, apiToken, appId);
-  }
-  return { success: false, message: `Unsupported platform: ${platform}` };
 }
 
 // ===== Main handler =====
@@ -173,124 +128,201 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get TikTok proxy URL once
+    // Get TikTok proxy URL
     const { data: proxySetting } = await sb
       .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
     const tiktokBase = proxySetting?.value?.replace(/\/+$/, "") || "https://business-api.tiktok.com";
 
-    let totalPaused = 0;
-    let totalApiSuccess = 0;
-    let totalApiFailed = 0;
+    let totalConfirmed = 0;
+    let totalFailed = 0;
+    let totalNewlyQueued = 0;
     let timedOut = false;
     const results: any[] = [];
 
-    // ===== PHASE 1: Process guard_paused campaigns directly via platform APIs =====
-    const { data: guardPaused } = await sb
-      .from("campaigns")
-      .select("id, name, platform, platform_id, ad_account_id, client_id, status")
-      .eq("status", "guard_paused");
+    // ===== PHASE 1: Process queued jobs (the AUTHORITATIVE retry worker) =====
+    // This is the core fix: process all pending jobs from guard_pause_jobs
+    const { data: pendingJobs } = await sb
+      .from("guard_pause_jobs")
+      .select("id, campaign_id, attempts, status")
+      .eq("status", "pending")
+      .lte("available_at", new Date().toISOString())
+      .order("created_at", { ascending: true })
+      .limit(50);
 
-    if (guardPaused && guardPaused.length > 0) {
-      console.log(`Phase 1: ${guardPaused.length} guard_paused campaigns`);
+    if (pendingJobs && pendingJobs.length > 0) {
+      console.log(`Phase 1: ${pendingJobs.length} pending pause jobs to process`);
 
-      // Group by ad_account_id to share API credentials
-      const groups = new Map<string, PausableGroup>();
-      const adAccountIds = [...new Set(guardPaused.map(c => c.ad_account_id))];
+      // Fetch all campaign details for these jobs
+      const campaignIds = pendingJobs.map(j => j.campaign_id);
+      const { data: campaigns } = await sb
+        .from("campaigns")
+        .select("id, name, platform, platform_id, ad_account_id, client_id, status, pause_required")
+        .in("id", campaignIds);
 
-      // Fetch all ad accounts + integrations in one go
-      const { data: adAccounts } = await sb
-        .from("ad_accounts")
-        .select("id, ad_account_id, platform_name, api_integration_id")
-        .in("id", adAccountIds);
+      if (campaigns && campaigns.length > 0) {
+        // Pre-fetch ad accounts + integrations
+        const adAccountIds = [...new Set(campaigns.map(c => c.ad_account_id))];
+        const { data: adAccounts } = await sb
+          .from("ad_accounts")
+          .select("id, ad_account_id, platform_name, api_integration_id")
+          .in("id", adAccountIds);
 
-      const integrationIds = [...new Set((adAccounts || []).map(a => a.api_integration_id).filter(Boolean))];
-      const { data: integrations } = await sb
-        .from("api_integrations")
-        .select("id, api_token, app_id, platform")
-        .in("id", integrationIds as string[]);
+        const integrationIds = [...new Set((adAccounts || []).map(a => a.api_integration_id).filter(Boolean))];
+        const { data: integrations } = await sb
+          .from("api_integrations")
+          .select("id, api_token, app_id, platform")
+          .in("id", integrationIds as string[]);
 
-      const intMap = new Map((integrations || []).map(i => [i.id, i]));
-      const accMap = new Map((adAccounts || []).map(a => [a.id, a]));
+        const intMap = new Map((integrations || []).map(i => [i.id, i]));
+        const accMap = new Map((adAccounts || []).map(a => [a.id, a]));
+        const campMap = new Map(campaigns.map(c => [c.id, c]));
 
-      for (const camp of guardPaused) {
-        const acc = accMap.get(camp.ad_account_id);
-        if (!acc?.api_integration_id) continue;
-        const int = intMap.get(acc.api_integration_id);
-        if (!int?.api_token) continue;
+        // Process in batches
+        for (let i = 0; i < pendingJobs.length; i += BATCH_SIZE) {
+          if (timeLeft() < 3000) {
+            console.log(`⏱ Timeout approaching at job ${i}/${pendingJobs.length}`);
+            timedOut = true;
+            break;
+          }
 
-        const key = camp.ad_account_id;
-        if (!groups.has(key)) {
-          groups.set(key, {
-            platform: camp.platform,
-            apiToken: int.api_token,
-            appId: int.app_id || "",
-            tiktokBase,
-            adAccountRawId: acc.ad_account_id,
-            campaigns: [],
-          });
+          const batch = pendingJobs.slice(i, i + BATCH_SIZE);
+          await Promise.allSettled(
+            batch.map(async (job) => {
+              const campaign = campMap.get(job.campaign_id);
+              if (!campaign) {
+                // Campaign deleted, remove job
+                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                return;
+              }
+
+              // If pause_required is false (resumed by deposit), remove job
+              if (!campaign.pause_required) {
+                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                return;
+              }
+
+              // If already confirmed paused, clean up
+              if (campaign.status === "paused") {
+                await sb.from("campaigns").update({
+                  pause_confirmed_at: new Date().toISOString(),
+                  pause_required: false,
+                }).eq("id", campaign.id);
+                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                totalConfirmed++;
+                return;
+              }
+
+              const acc = accMap.get(campaign.ad_account_id);
+              if (!acc?.api_integration_id) {
+                await sb.from("guard_pause_jobs").update({
+                  last_error: "No API integration configured",
+                  attempts: job.attempts + 1,
+                  available_at: new Date(Date.now() + 120000).toISOString(), // retry in 2 min
+                }).eq("id", job.id);
+                await sb.from("campaigns").update({
+                  pause_error: "No API integration configured",
+                  pause_attempt_count: (campaign as any).pause_attempt_count + 1,
+                }).eq("id", campaign.id);
+                totalFailed++;
+                return;
+              }
+
+              const int = intMap.get(acc.api_integration_id);
+              if (!int?.api_token) {
+                await sb.from("guard_pause_jobs").update({
+                  last_error: "No API token available",
+                  attempts: job.attempts + 1,
+                  available_at: new Date(Date.now() + 120000).toISOString(),
+                }).eq("id", job.id);
+                await sb.from("campaigns").update({
+                  pause_error: "No API token available",
+                  pause_attempt_count: (campaign as any).pause_attempt_count + 1,
+                }).eq("id", campaign.id);
+                totalFailed++;
+                return;
+              }
+
+              // Call platform API
+              const rawId = campaign.platform_id.replace(/^(meta_|google_|tiktok_)/, "");
+              let result: { success: boolean; message: string; localOnly?: boolean };
+
+              if (campaign.platform === "tiktok") {
+                result = await pauseTikTokCampaign(acc.ad_account_id, rawId, int.api_token, tiktokBase);
+              } else if (campaign.platform === "meta") {
+                result = await pauseMetaCampaign(rawId, int.api_token);
+              } else if (campaign.platform === "google") {
+                const customerId = acc.ad_account_id.replace(/-/g, "");
+                result = await pauseGoogleCampaign(customerId, rawId, int.api_token, int.app_id || "");
+              } else {
+                result = { success: false, message: `Unsupported platform: ${campaign.platform}` };
+              }
+
+              if (result.success) {
+                // ✅ CONFIRMED paused on platform — update everything
+                await sb.from("campaigns").update({
+                  status: "paused",
+                  pause_required: false,
+                  pause_confirmed_at: new Date().toISOString(),
+                  pause_error: null,
+                  pause_attempt_count: job.attempts + 1,
+                  updated_at: new Date().toISOString(),
+                }).eq("id", campaign.id);
+
+                // Remove from queue
+                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+
+                totalConfirmed++;
+                console.log(`✓ CONFIRMED: ${campaign.name} (${campaign.platform}) paused on platform${result.localOnly ? " [local-only]" : ""}`);
+
+                // Audit success
+                await sb.from("audit_logs").insert({
+                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+                  action_type: "ad_guard_platform_confirmed",
+                  description: `Platform CONFIRMED pause for "${campaign.name}" (${campaign.platform}). Attempt #${job.attempts + 1}.${result.localOnly ? " [geo-restricted, local-only]" : ""}`,
+                });
+              } else {
+                // ❌ Failed — update error state, schedule retry
+                const newAttempts = job.attempts + 1;
+                const backoffMs = Math.min(newAttempts * 60000, 600000); // 1min, 2min, ... max 10min
+
+                if (newAttempts >= MAX_ATTEMPTS) {
+                  // Max retries exceeded — mark as failed
+                  await sb.from("guard_pause_jobs").update({
+                    status: "failed",
+                    last_error: result.message,
+                    attempts: newAttempts,
+                  }).eq("id", job.id);
+                } else {
+                  await sb.from("guard_pause_jobs").update({
+                    last_error: result.message,
+                    attempts: newAttempts,
+                    available_at: new Date(Date.now() + backoffMs).toISOString(),
+                  }).eq("id", job.id);
+                }
+
+                await sb.from("campaigns").update({
+                  pause_error: result.message.substring(0, 500),
+                  pause_attempt_count: newAttempts,
+                }).eq("id", campaign.id);
+
+                totalFailed++;
+                console.error(`✗ FAILED (attempt ${newAttempts}): ${campaign.name} (${campaign.platform}): ${result.message}`);
+
+                await sb.from("audit_logs").insert({
+                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+                  action_type: "ad_guard_api_error",
+                  description: `Platform pause FAILED for "${campaign.name}" (${campaign.platform}), attempt #${newAttempts}: ${result.message.substring(0, 200)}`,
+                });
+              }
+            })
+          );
         }
-        groups.get(key)!.campaigns.push({
-          id: camp.id,
-          name: camp.name,
-          platformId: camp.platform_id,
-          clientId: camp.client_id,
-        });
-      }
-
-      // Process all campaigns in parallel batches
-      const allCampaigns: Array<{
-        campaign: { id: string; name: string; platformId: string; clientId: string | null };
-        group: PausableGroup;
-      }> = [];
-
-      for (const group of groups.values()) {
-        for (const c of group.campaigns) {
-          allCampaigns.push({ campaign: c, group });
-        }
-      }
-
-      for (let i = 0; i < allCampaigns.length; i += BATCH_SIZE) {
-        if (timeLeft() < 3000) {
-          console.log(`⏱ Timeout approaching, processed ${i}/${allCampaigns.length} campaigns`);
-          timedOut = true;
-          break;
-        }
-
-        const batch = allCampaigns.slice(i, i + BATCH_SIZE);
-        const batchResults = await Promise.allSettled(
-          batch.map(async ({ campaign, group }) => {
-            const result = await pauseOnPlatform(
-              campaign, group.platform, group.apiToken, group.appId,
-              group.adAccountRawId, group.tiktokBase
-            );
-
-            if (result.success) {
-              // Update DB: guard_paused → paused (confirmed on platform)
-              await sb.from("campaigns")
-                .update({ status: "paused", updated_at: new Date().toISOString() })
-                .eq("id", campaign.id);
-              totalApiSuccess++;
-              console.log(`✓ ${campaign.name} (${group.platform}) paused on platform${result.localOnly ? " [local-only]" : ""}`);
-            } else {
-              totalApiFailed++;
-              console.error(`✗ ${campaign.name} (${group.platform}): ${result.message}`);
-              // Log failure
-              await sb.from("audit_logs").insert({
-                user_id: campaign.clientId || "00000000-0000-0000-0000-000000000000",
-                action_type: "ad_guard_api_error",
-                description: `Ad Guard API fail for "${campaign.name}" (${group.platform}): ${result.message.substring(0, 200)}`,
-              });
-            }
-            return result;
-          })
-        );
       }
     }
 
     // ===== PHASE 2: Scan for active campaigns on low-balance clients =====
-    // INSTANT PAUSE: immediately calls platform API (no "next cycle" delay)
+    // Catches any campaigns that slipped through without a trigger (safety net)
     if (timeLeft() > 5000) {
-      // Optimized: only get clients who actually have active campaigns
       const { data: activeCampaigns } = await sb
         .from("campaigns")
         .select("id, name, platform, platform_id, ad_account_id, client_id")
@@ -298,7 +330,6 @@ Deno.serve(async (req) => {
         .not("client_id", "is", null);
 
       if (activeCampaigns && activeCampaigns.length > 0) {
-        // Group by client_id
         const clientCampaigns = new Map<string, typeof activeCampaigns>();
         for (const c of activeCampaigns) {
           if (!c.client_id) continue;
@@ -308,27 +339,9 @@ Deno.serve(async (req) => {
 
         const clientIds = [...clientCampaigns.keys()];
 
-        // Pre-fetch ad accounts + integrations for immediate platform pause
-        const allAdAccountIdsP2 = [...new Set(activeCampaigns.map(c => c.ad_account_id))];
-        const { data: adAccountsP2 } = await sb
-          .from("ad_accounts")
-          .select("id, ad_account_id, platform_name, api_integration_id")
-          .in("id", allAdAccountIdsP2);
-        const integrationIdsP2 = [...new Set((adAccountsP2 || []).map(a => a.api_integration_id).filter(Boolean))];
-        const { data: integrationsP2 } = await sb
-          .from("api_integrations")
-          .select("id, api_token, app_id, platform")
-          .in("id", integrationIdsP2 as string[]);
-        const intMapP2 = new Map((integrationsP2 || []).map(i => [i.id, i]));
-        const accMapP2 = new Map((adAccountsP2 || []).map(a => [a.id, a]));
-
         for (const clientId of clientIds) {
-          if (timeLeft() < 3000) {
-            timedOut = true;
-            break;
-          }
+          if (timeLeft() < 3000) { timedOut = true; break; }
 
-          // Calculate balance via SUM
           const { data: creditSum } = await sb
             .from("transactions").select("amount")
             .eq("client_id", clientId).eq("type", "credit").eq("status", "completed");
@@ -358,39 +371,30 @@ Deno.serve(async (req) => {
             if (camps.length > 0) {
               const pausedIds: string[] = [];
               const pausedNames: string[] = [];
-              let apiOk = 0;
-              let apiFail = 0;
 
               for (const campaign of camps) {
-                // Step 1: Mark as guard_paused in DB
-                await sb.from("campaigns")
-                  .update({ status: "guard_paused", updated_at: new Date().toISOString() })
-                  .eq("id", campaign.id);
+                // Mark as guard_paused + pause_required + queue job
+                await sb.from("campaigns").update({
+                  status: "guard_paused",
+                  pause_required: true,
+                  pause_requested_at: new Date().toISOString(),
+                  pause_confirmed_at: null,
+                  pause_attempt_count: 0,
+                  pause_error: null,
+                  updated_at: new Date().toISOString(),
+                }).eq("id", campaign.id);
+
+                // Insert into durable queue
+                await sb.from("guard_pause_jobs").upsert({
+                  campaign_id: campaign.id,
+                  status: "pending",
+                  available_at: new Date().toISOString(),
+                  last_error: null,
+                  attempts: 0,
+                }, { onConflict: "campaign_id" });
+
                 pausedIds.push(campaign.id);
                 pausedNames.push(campaign.name || campaign.platform_id);
-
-                // Step 2: IMMEDIATELY pause on platform API
-                const acc = accMapP2.get(campaign.ad_account_id);
-                if (acc?.api_integration_id) {
-                  const int = intMapP2.get(acc.api_integration_id);
-                  if (int?.api_token) {
-                    const pauseTarget = { id: campaign.id, name: campaign.name, platformId: campaign.platform_id };
-                    const result = await pauseOnPlatform(
-                      pauseTarget, campaign.platform, int.api_token, int.app_id || "",
-                      acc.ad_account_id, tiktokBase
-                    );
-                    if (result.success) {
-                      await sb.from("campaigns")
-                        .update({ status: "paused", updated_at: new Date().toISOString() })
-                        .eq("id", campaign.id);
-                      apiOk++;
-                      console.log(`✓ Phase2 instant: ${campaign.name} (${campaign.platform}) paused on platform`);
-                    } else {
-                      apiFail++;
-                      console.error(`✗ Phase2 instant: ${campaign.name} (${campaign.platform}): ${result.message}`);
-                    }
-                  }
-                }
               }
 
               const allPausedIds = [...new Set([...alreadyPaused.map(String), ...pausedIds])];
@@ -402,20 +406,16 @@ Deno.serve(async (req) => {
               await sb.from("audit_logs").insert({
                 user_id: clientId,
                 action_type: "ad_guard_pause",
-                description: `Ad Guard paused ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). API: ${apiOk} ok, ${apiFail} failed.`,
+                description: `Ad Guard queued ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). Queued for platform pause.`,
               });
 
-              totalPaused += pausedIds.length;
-              totalApiSuccess += apiOk;
-              totalApiFailed += apiFail;
+              totalNewlyQueued += pausedIds.length;
               results.push({
                 client: profile.full_name,
                 balance: Math.round(balance * 100) / 100,
                 threshold: effectiveThreshold,
-                action: "INSTANT_PAUSED",
-                campaigns_flagged: pausedIds.length,
-                api_success: apiOk,
-                api_failed: apiFail,
+                action: "QUEUED_FOR_PAUSE",
+                campaigns_queued: pausedIds.length,
               });
             }
           } else {
@@ -430,16 +430,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== PHASE 3: Re-check failed jobs that may have exceeded max attempts =====
+    // Reset failed jobs older than 1 hour to retry again
+    if (timeLeft() > 2000) {
+      const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+      const { data: failedJobs } = await sb
+        .from("guard_pause_jobs")
+        .select("id, campaign_id")
+        .eq("status", "failed")
+        .lt("created_at", oneHourAgo)
+        .limit(10);
+
+      if (failedJobs && failedJobs.length > 0) {
+        for (const job of failedJobs) {
+          await sb.from("guard_pause_jobs").update({
+            status: "pending",
+            attempts: 0,
+            available_at: new Date().toISOString(),
+            last_error: "Auto-reset after cooldown",
+          }).eq("id", job.id);
+        }
+        console.log(`Phase 3: Reset ${failedJobs.length} failed jobs for retry`);
+      }
+    }
+
     const elapsed = Date.now() - START_TIME;
+    const checked = results.filter(r => r.action === "OK").length + results.filter(r => r.action === "QUEUED_FOR_PAUSE").length;
+    
     return new Response(
       JSON.stringify({
         success: true,
         elapsed_ms: elapsed,
         timed_out: timedOut,
-        phase1_synced: guardPaused?.length ?? 0,
-        phase1_api_success: totalApiSuccess,
-        phase1_api_failed: totalApiFailed,
-        phase2_flagged: totalPaused,
+        checked,
+        phase1_jobs_processed: pendingJobs?.length ?? 0,
+        phase1_confirmed: totalConfirmed,
+        phase1_failed: totalFailed,
+        phase2_newly_queued: totalNewlyQueued,
+        total_campaigns_paused: totalConfirmed + totalNewlyQueued,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
