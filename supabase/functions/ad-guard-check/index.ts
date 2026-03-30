@@ -89,13 +89,12 @@ Deno.serve(async (req) => {
           batch.map(async (job) => {
             const campaign = campMap.get(job.campaign_id);
             if (!campaign) {
-              // Campaign deleted — remove job
               await sb.from("guard_pause_jobs").delete().eq("id", job.id);
               return;
             }
 
-            // If pause_required is false (resumed by deposit), remove job
-            if (!campaign.pause_required) {
+            // If campaign was resumed by deposit (status back to active AND pause_required false), remove job
+            if (!campaign.pause_required && campaign.status !== "guard_paused") {
               await sb.from("guard_pause_jobs").delete().eq("id", job.id);
               return;
             }
