@@ -84,7 +84,7 @@ export default function NewCampaignRequest() {
   const totalDaily = campaigns.reduce((sum, c) => sum + (Number(c.dailyBudget) || 0), 0);
 
   const handleSubmit = async () => {
-    if (!user || !allValid) return;
+    if (!user || !effectiveClientId || !allValid) return;
     setSubmitting(true);
 
     const rows = campaigns.map(c => ({
