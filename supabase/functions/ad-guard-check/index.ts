@@ -15,151 +15,6 @@ function timeLeft(): number {
   return TIMEOUT_MS - (Date.now() - START_TIME);
 }
 
-// ===== Platform pause helpers =====
-
-async function pauseTikTokCampaign(
-  advertiserId: string, rawCampaignId: string, token: string, tiktokBase: string
-): Promise<{ success: boolean; message: string; localOnly?: boolean }> {
-  try {
-    const res = await fetch(`${tiktokBase}/open_api/v1.3/campaign/status/update/`, {
-      method: "POST",
-      headers: { "Access-Token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        advertiser_id: advertiserId,
-        campaign_ids: [rawCampaignId],
-        operation_status: "DISABLE",
-      }),
-    });
-    const text = await res.text();
-    let json: any;
-    try { json = JSON.parse(text); } catch { json = { code: -1, message: text }; }
-    if (json.code === 0) return { success: true, message: "OK" };
-    if (json.code === 41000 || json.message?.includes("banned Country")) {
-      return { success: true, message: "Geo-restricted, local-only", localOnly: true };
-    }
-    return { success: false, message: json.message || `TikTok error ${json.code}` };
-  } catch (err: any) {
-    return { success: false, message: err.message || "Network error" };
-  }
-}
-
-async function pauseMetaCampaign(
-  rawCampaignId: string, token: string
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/v21.0/${rawCampaignId}?access_token=${token}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ status: "PAUSED" }).toString(),
-      }
-    );
-    const json = await res.json();
-    if (json.success || res.ok) return { success: true, message: "OK" };
-    return { success: false, message: json.error?.message || "Meta API error" };
-  } catch (err: any) {
-    return { success: false, message: err.message || "Network error" };
-  }
-}
-
-async function pauseGoogleCampaign(
-  customerId: string, rawCampaignId: string, token: string, devToken: string
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetch(
-      `https://googleads.googleapis.com/v18/customers/${customerId}/campaigns:mutate`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "developer-token": devToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          operations: [{
-            update: {
-              resourceName: `customers/${customerId}/campaigns/${rawCampaignId}`,
-              status: "PAUSED",
-            },
-            updateMask: "status",
-          }],
-        }),
-      }
-    );
-    const json = await res.json();
-    if (res.ok) return { success: true, message: "OK" };
-    return { success: false, message: json.error?.message || "Google API error" };
-  } catch (err: any) {
-    return { success: false, message: err.message || "Network error" };
-  }
-}
-
-// ===== Platform VERIFICATION helpers =====
-// After pause API succeeds, read back the actual status to confirm
-
-async function verifyTikTokPaused(
-  advertiserId: string, rawCampaignId: string, token: string, tiktokBase: string
-): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
-  try {
-    const res = await fetch(
-      `${tiktokBase}/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawCampaignId}"]}&fields=["operation_status"]`,
-      { headers: { "Access-Token": token } }
-    );
-    const json = await res.json();
-    const status = json?.data?.list?.[0]?.operation_status;
-    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
-    const isPaused = ["DISABLE", "CAMPAIGN_STATUS_DISABLE"].includes(status.toUpperCase());
-    return { verified: isPaused, actualStatus: status };
-  } catch (err: any) {
-    return { verified: false, actualStatus: null, error: err.message };
-  }
-}
-
-async function verifyMetaPaused(
-  rawCampaignId: string, token: string
-): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/v21.0/${rawCampaignId}?fields=effective_status&access_token=${token}`
-    );
-    const json = await res.json();
-    const status = json.effective_status;
-    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
-    const isPaused = ["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(status.toUpperCase());
-    return { verified: isPaused, actualStatus: status };
-  } catch (err: any) {
-    return { verified: false, actualStatus: null, error: err.message };
-  }
-}
-
-async function verifyGooglePaused(
-  customerId: string, rawCampaignId: string, token: string, devToken: string
-): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
-  try {
-    const res = await fetch(
-      `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "developer-token": devToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: `SELECT campaign.status FROM campaign WHERE campaign.id = ${rawCampaignId}` }),
-      }
-    );
-    const json = await res.json();
-    const status = json?.[0]?.results?.[0]?.campaign?.status;
-    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
-    return { verified: status.toUpperCase() === "PAUSED", actualStatus: status };
-  } catch (err: any) {
-    return { verified: false, actualStatus: null, error: err.message };
-  }
-}
-
-// ===== Main handler =====
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -168,12 +23,12 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
     // Auth: accept service role key, anon key (cron), or admin JWT
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
     if (token !== serviceRoleKey && token !== anonKey) {
       const { data: { user: caller }, error: authError } = await sb.auth.getUser(token);
@@ -191,19 +46,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get TikTok proxy URL
-    const { data: proxySetting } = await sb
-      .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
-    const tiktokBase = proxySetting?.value?.replace(/\/+$/, "") || "https://business-api.tiktok.com";
-
     let totalConfirmed = 0;
     let totalFailed = 0;
     let totalNewlyQueued = 0;
     let timedOut = false;
     const results: any[] = [];
 
-    // ===== PHASE 1: Process queued jobs (the AUTHORITATIVE retry worker) =====
-    // This is the core fix: process all pending jobs from guard_pause_jobs
+    // The URL of the pause-campaign edge function — the SAME one the manual UI uses
+    const pauseUrl = `${supabaseUrl}/functions/v1/pause-campaign`;
+
+    // ===== PHASE 1: Process queued jobs by calling pause-campaign =====
     const { data: pendingJobs } = await sb
       .from("guard_pause_jobs")
       .select("id, campaign_id, attempts, status")
@@ -215,230 +67,135 @@ Deno.serve(async (req) => {
     if (pendingJobs && pendingJobs.length > 0) {
       console.log(`Phase 1: ${pendingJobs.length} pending pause jobs to process`);
 
-      // Fetch all campaign details for these jobs
+      // Pre-fetch campaign data to check status before calling
       const campaignIds = pendingJobs.map(j => j.campaign_id);
       const { data: campaigns } = await sb
         .from("campaigns")
-        .select("id, name, platform, platform_id, ad_account_id, client_id, status, pause_required")
+        .select("id, name, platform, client_id, status, pause_required")
         .in("id", campaignIds);
 
-      if (campaigns && campaigns.length > 0) {
-        // Pre-fetch ad accounts + integrations
-        const adAccountIds = [...new Set(campaigns.map(c => c.ad_account_id))];
-        const { data: adAccounts } = await sb
-          .from("ad_accounts")
-          .select("id, ad_account_id, platform_name, api_integration_id")
-          .in("id", adAccountIds);
+      const campMap = new Map((campaigns || []).map(c => [c.id, c]));
 
-        const integrationIds = [...new Set((adAccounts || []).map(a => a.api_integration_id).filter(Boolean))];
-        const { data: integrations } = await sb
-          .from("api_integrations")
-          .select("id, api_token, app_id, platform")
-          .in("id", integrationIds as string[]);
+      // Process in batches of BATCH_SIZE
+      for (let i = 0; i < pendingJobs.length; i += BATCH_SIZE) {
+        if (timeLeft() < 3000) {
+          console.log(`⏱ Timeout approaching at job ${i}/${pendingJobs.length}`);
+          timedOut = true;
+          break;
+        }
 
-        const intMap = new Map((integrations || []).map(i => [i.id, i]));
-        const accMap = new Map((adAccounts || []).map(a => [a.id, a]));
-        const campMap = new Map(campaigns.map(c => [c.id, c]));
+        const batch = pendingJobs.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map(async (job) => {
+            const campaign = campMap.get(job.campaign_id);
+            if (!campaign) {
+              // Campaign deleted — remove job
+              await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+              return;
+            }
 
-        // Process in batches
-        for (let i = 0; i < pendingJobs.length; i += BATCH_SIZE) {
-          if (timeLeft() < 3000) {
-            console.log(`⏱ Timeout approaching at job ${i}/${pendingJobs.length}`);
-            timedOut = true;
-            break;
-          }
+            // If pause_required is false (resumed by deposit), remove job
+            if (!campaign.pause_required) {
+              await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+              return;
+            }
 
-          const batch = pendingJobs.slice(i, i + BATCH_SIZE);
-          await Promise.allSettled(
-            batch.map(async (job) => {
-              const campaign = campMap.get(job.campaign_id);
-              if (!campaign) {
-                // Campaign deleted, remove job
-                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
-                return;
-              }
+            // If already confirmed paused, clean up
+            if (campaign.status === "paused") {
+              await sb.from("campaigns").update({
+                pause_confirmed_at: new Date().toISOString(),
+                pause_required: false,
+              }).eq("id", campaign.id);
+              await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+              totalConfirmed++;
+              return;
+            }
 
-              // If pause_required is false (resumed by deposit), remove job
-              if (!campaign.pause_required) {
-                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
-                return;
-              }
+            // === Call the SAME pause-campaign function that manual pause uses ===
+            try {
+              const res = await fetch(pauseUrl, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${serviceRoleKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ campaign_id: job.campaign_id, action: "pause" }),
+              });
 
-              // If already confirmed paused, clean up
-              if (campaign.status === "paused") {
-                await sb.from("campaigns").update({
-                  pause_confirmed_at: new Date().toISOString(),
-                  pause_required: false,
-                }).eq("id", campaign.id);
-                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
-                totalConfirmed++;
-                return;
-              }
-
-              const acc = accMap.get(campaign.ad_account_id);
-              if (!acc?.api_integration_id) {
-                await sb.from("guard_pause_jobs").update({
-                  last_error: "No API integration configured",
-                  attempts: job.attempts + 1,
-                  available_at: new Date(Date.now() + 120000).toISOString(), // retry in 2 min
-                }).eq("id", job.id);
-                await sb.from("campaigns").update({
-                  pause_error: "No API integration configured",
-                  pause_attempt_count: (campaign as any).pause_attempt_count + 1,
-                }).eq("id", campaign.id);
-                totalFailed++;
-                return;
-              }
-
-              const int = intMap.get(acc.api_integration_id);
-              if (!int?.api_token) {
-                await sb.from("guard_pause_jobs").update({
-                  last_error: "No API token available",
-                  attempts: job.attempts + 1,
-                  available_at: new Date(Date.now() + 120000).toISOString(),
-                }).eq("id", job.id);
-                await sb.from("campaigns").update({
-                  pause_error: "No API token available",
-                  pause_attempt_count: (campaign as any).pause_attempt_count + 1,
-                }).eq("id", campaign.id);
-                totalFailed++;
-                return;
-              }
-
-              // Call platform API
-              const rawId = campaign.platform_id.replace(/^(meta_|google_|tiktok_)/, "");
-              let result: { success: boolean; message: string; localOnly?: boolean };
-
-              if (campaign.platform === "tiktok") {
-                result = await pauseTikTokCampaign(acc.ad_account_id, rawId, int.api_token, tiktokBase);
-              } else if (campaign.platform === "meta") {
-                result = await pauseMetaCampaign(rawId, int.api_token);
-              } else if (campaign.platform === "google") {
-                const customerId = acc.ad_account_id.replace(/-/g, "");
-                result = await pauseGoogleCampaign(customerId, rawId, int.api_token, int.app_id || "");
-              } else {
-                result = { success: false, message: `Unsupported platform: ${campaign.platform}` };
-              }
+              const result = await res.json();
 
               if (result.success) {
-                // API said success — now VERIFY by reading back the actual status
-                let verified = false;
-                let verifyMsg = "";
-                
-                if (result.localOnly) {
-                  // Geo-restricted: can't verify, treat as local-only confirmed
-                  verified = true;
-                  verifyMsg = "geo-restricted, local-only";
-                } else {
-                  // Wait 1.5s for platform to propagate, then verify
-                  await new Promise(r => setTimeout(r, 1500));
-                  
-                  let verification: { verified: boolean; actualStatus: string | null; error?: string };
-                  if (campaign.platform === "tiktok") {
-                    verification = await verifyTikTokPaused(acc.ad_account_id, rawId, int.api_token, tiktokBase);
-                  } else if (campaign.platform === "meta") {
-                    verification = await verifyMetaPaused(rawId, int.api_token);
-                  } else if (campaign.platform === "google") {
-                    const cid = acc.ad_account_id.replace(/-/g, "");
-                    verification = await verifyGooglePaused(cid, rawId, int.api_token, int.app_id || "");
-                  } else {
-                    verification = { verified: false, actualStatus: null, error: "Unsupported" };
-                  }
-                  
-                  verified = verification.verified;
-                  verifyMsg = verified
-                    ? `Verified: ${verification.actualStatus}`
-                    : `NOT verified — platform says: ${verification.actualStatus || verification.error || "unknown"}`;
-                  console.log(`🔍 Verification for ${campaign.name}: ${verifyMsg}`);
-                }
-                
-                if (verified) {
-                  // ✅ TRULY confirmed — platform read-back says paused
-                  await sb.from("campaigns").update({
-                    status: "paused",
-                    pause_required: false,
-                    pause_confirmed_at: new Date().toISOString(),
-                    pause_error: null,
-                    pause_attempt_count: job.attempts + 1,
-                    updated_at: new Date().toISOString(),
-                  }).eq("id", campaign.id);
+                // pause-campaign already updated DB status to "paused" and set pause_confirmed_at
+                // Just clean up the queue job
+                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                totalConfirmed++;
+                console.log(`✓ CONFIRMED: ${campaign.name} (${campaign.platform}) — paused via pause-campaign`);
 
-                  await sb.from("guard_pause_jobs").delete().eq("id", job.id);
-                  totalConfirmed++;
-                  console.log(`✓ VERIFIED & CONFIRMED: ${campaign.name} (${campaign.platform})`);
-
-                  await sb.from("audit_logs").insert({
-                    user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
-                    action_type: "ad_guard_platform_verified",
-                    description: `Platform VERIFIED pause for "${campaign.name}" (${campaign.platform}). ${verifyMsg}. Attempt #${job.attempts + 1}.`,
-                  });
-                } else {
-                  // API said success but verification failed — schedule retry
-                  const newAttempts = job.attempts + 1;
-                  const backoffMs = Math.min(newAttempts * 30000, 300000); // 30s, 60s, ... max 5min (faster retries)
-                  
-                  await sb.from("guard_pause_jobs").update({
-                    last_error: `API OK but verification failed: ${verifyMsg}`,
-                    attempts: newAttempts,
-                    available_at: new Date(Date.now() + backoffMs).toISOString(),
-                  }).eq("id", job.id);
-                  
-                  await sb.from("campaigns").update({
-                    pause_error: `Verification failed: ${verifyMsg}`.substring(0, 500),
-                    pause_attempt_count: newAttempts,
-                  }).eq("id", campaign.id);
-                  
-                  totalFailed++;
-                  console.error(`⚠ API said OK but verification FAILED: ${campaign.name} — ${verifyMsg}`);
-                  
-                  await sb.from("audit_logs").insert({
-                    user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
-                    action_type: "ad_guard_verify_failed",
-                    description: `Pause API returned OK but platform verification FAILED for "${campaign.name}" (${campaign.platform}). ${verifyMsg}. Will retry.`,
-                  });
-                }
+                await sb.from("audit_logs").insert({
+                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+                  action_type: "ad_guard_platform_verified",
+                  description: `Ad Guard confirmed pause for "${campaign.name}" (${campaign.platform}) via pause-campaign. Attempt #${job.attempts + 1}. ${result.message || ""}`,
+                });
               } else {
-                // ❌ Failed — update error state, schedule retry
+                // pause-campaign returned an error
                 const newAttempts = job.attempts + 1;
-                const backoffMs = Math.min(newAttempts * 60000, 600000); // 1min, 2min, ... max 10min
+                const errorMsg = result.error || "Unknown error from pause-campaign";
 
                 if (newAttempts >= MAX_ATTEMPTS) {
-                  // Max retries exceeded — mark as failed
                   await sb.from("guard_pause_jobs").update({
                     status: "failed",
-                    last_error: result.message,
+                    last_error: errorMsg,
                     attempts: newAttempts,
                   }).eq("id", job.id);
                 } else {
+                  const backoffMs = Math.min(newAttempts * 60000, 600000);
                   await sb.from("guard_pause_jobs").update({
-                    last_error: result.message,
+                    last_error: errorMsg,
                     attempts: newAttempts,
                     available_at: new Date(Date.now() + backoffMs).toISOString(),
                   }).eq("id", job.id);
                 }
 
                 await sb.from("campaigns").update({
-                  pause_error: result.message.substring(0, 500),
+                  pause_error: errorMsg.substring(0, 500),
                   pause_attempt_count: newAttempts,
                 }).eq("id", campaign.id);
 
                 totalFailed++;
-                console.error(`✗ FAILED (attempt ${newAttempts}): ${campaign.name} (${campaign.platform}): ${result.message}`);
+                console.error(`✗ FAILED (attempt ${newAttempts}): ${campaign.name} (${campaign.platform}): ${errorMsg}`);
 
                 await sb.from("audit_logs").insert({
                   user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
                   action_type: "ad_guard_api_error",
-                  description: `Platform pause FAILED for "${campaign.name}" (${campaign.platform}), attempt #${newAttempts}: ${result.message.substring(0, 200)}`,
+                  description: `Ad Guard pause FAILED for "${campaign.name}" (${campaign.platform}), attempt #${newAttempts}: ${errorMsg.substring(0, 200)}`,
                 });
               }
-            })
-          );
-        }
+            } catch (fetchErr: any) {
+              // Network error calling pause-campaign
+              const newAttempts = job.attempts + 1;
+              const errorMsg = `Network error calling pause-campaign: ${fetchErr.message || "unknown"}`;
+              const backoffMs = Math.min(newAttempts * 30000, 300000);
+
+              await sb.from("guard_pause_jobs").update({
+                last_error: errorMsg,
+                attempts: newAttempts,
+                available_at: new Date(Date.now() + backoffMs).toISOString(),
+              }).eq("id", job.id);
+
+              await sb.from("campaigns").update({
+                pause_error: errorMsg.substring(0, 500),
+                pause_attempt_count: newAttempts,
+              }).eq("id", campaign.id);
+
+              totalFailed++;
+              console.error(`✗ NETWORK ERROR (attempt ${newAttempts}): ${campaign.name}: ${errorMsg}`);
+            }
+          })
+        );
       }
     }
 
-    // ===== PHASE 2: Scan for active campaigns on low-balance clients =====
-    // Catches any campaigns that slipped through without a trigger (safety net)
+    // ===== PHASE 2: Scan for active campaigns on low-balance clients (safety net) =====
     if (timeLeft() > 5000) {
       const { data: activeCampaigns } = await sb
         .from("campaigns")
@@ -490,7 +247,6 @@ Deno.serve(async (req) => {
               const pausedNames: string[] = [];
 
               for (const campaign of camps) {
-                // Mark as guard_paused + pause_required + queue job
                 await sb.from("campaigns").update({
                   status: "guard_paused",
                   pause_required: true,
@@ -501,7 +257,6 @@ Deno.serve(async (req) => {
                   updated_at: new Date().toISOString(),
                 }).eq("id", campaign.id);
 
-                // Insert into durable queue
                 await sb.from("guard_pause_jobs").upsert({
                   campaign_id: campaign.id,
                   status: "pending",
@@ -547,8 +302,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ===== PHASE 3: Re-check failed jobs that may have exceeded max attempts =====
-    // Reset failed jobs older than 1 hour to retry again
+    // ===== PHASE 3: Re-check failed jobs older than 1 hour =====
     if (timeLeft() > 2000) {
       const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
       const { data: failedJobs } = await sb
@@ -573,7 +327,7 @@ Deno.serve(async (req) => {
 
     const elapsed = Date.now() - START_TIME;
     const checked = results.filter(r => r.action === "OK").length + results.filter(r => r.action === "QUEUED_FOR_PAUSE").length;
-    
+
     return new Response(
       JSON.stringify({
         success: true,
