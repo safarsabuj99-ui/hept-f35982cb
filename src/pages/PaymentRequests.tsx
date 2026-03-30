@@ -329,6 +329,10 @@ export default function PaymentRequests() {
                             {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
                           </div>
                         </div>
+                        {/* TrxID */}
+                        {r.transaction_id && (
+                          <p className="text-[11px] font-mono text-muted-foreground">TrxID: <span className="text-foreground">{r.transaction_id}</span></p>
+                        )}
                         {/* Footer: USD + Proof + Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
