@@ -330,6 +330,11 @@ export default function PaymentRequests() {
                         {r.final_amount_usd && (
                           <p className="text-xs text-muted-foreground">USD Credited: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></p>
                         )}
+                        {(r as any).proof_image_url && (
+                          <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
+                            <img src={(r as any).proof_image_url} alt="Proof" className="h-16 w-auto rounded border object-cover" />
+                          </a>
+                        )}
                         {r.status === "pending" && canManageFinance && (
                           <div className="flex flex-col gap-2">
                             <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1 w-full">
