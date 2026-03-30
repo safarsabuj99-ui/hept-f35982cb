@@ -44,6 +44,8 @@ interface PaymentRequest {
   final_amount_usd: number | null;
   created_at: string;
   client_name?: string;
+  proof_image_url?: string | null;
+  received_in_account_id?: string | null;
 }
 
 interface PendingDeposit {
