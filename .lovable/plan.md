@@ -1,45 +1,20 @@
 
 
-# Plan: Multi-Campaign Request Builder (Revised)
+# Fix: Campaign Requests Not Showing on Client Side
 
-## Flow
+## Root Cause
 
-Single-page builder where clients add multiple campaigns in one submission:
+`NewCampaignRequest.tsx` inserts with `client_id: user.id` (the logged-in user's auth ID), but does **not** use `useImpersonation()`. When an admin impersonates a client and submits, the record is saved with the **admin's** ID. The client's campaign list (`MyCampaignRequests`) queries by `effectiveClientId` (the **client's** ID), so the records never match.
 
-```text
-┌─────────────────────────────────────┐
-│  New Campaign Request               │
-│  [+ Add Campaign]                   │
-│                                     │
-│  ┌─ Campaign 1 ──────────────────┐  │
-│  │ Post/Video Link: [________]   │  │
-│  │ Platform: [auto-detect/pick]  │  │
-│  │ Objective: [dropdown]         │  │
-│  │ Daily Budget (USD): [___]     │  │
-│  │ Description/Notes: [______]   │  │
-│  │                    [Remove]   │  │
-│  └───────────────────────────────┘  │
-│                                     │
-│  Summary: 2 campaigns, $30/day      │
-│  [Submit All]                       │
-└─────────────────────────────────────┘
-```
+Even for real clients, using `effectiveClientId` is the correct pattern for consistency across the app.
 
-## No Database Changes
+## Fix — `src/pages/NewCampaignRequest.tsx`
 
-Each campaign inserted as a separate row in existing `campaign_requests` table. The `duration_days` column will be left null or defaulted.
-
-## Implementation — Rewrite `src/pages/NewCampaignRequest.tsx`
-
-- **State**: `campaigns[]` array, each with: `creativeLink`, `platform`, `objective`, `dailyBudget`, `description`
-- **Platform auto-detect**: `tiktok.com` → TikTok; `facebook.com`/`instagram.com` → Meta; else manual pick
-- **"+ Add Campaign"**: Appends blank campaign card
-- **Each card**: Inline fields (no wizard steps), remove button (disabled if only 1)
-- **Summary footer**: Total campaigns & total daily budget
-- **Validation**: Link, platform, objective, daily budget > 0 required per campaign
-- **Submit**: Batch insert mapping `dailyBudget` → `budget_usd`, no duration field sent
+1. Import and use `useImpersonation()` to get `effectiveClientId`
+2. Change the insert from `client_id: user.id` → `client_id: effectiveClientId`
+3. After successful submission, navigate to `/dashboard/campaigns` instead of `/dashboard` so the user immediately sees their new requests
 
 ## Files Modified
 
-1. `src/pages/NewCampaignRequest.tsx` — Full rewrite
+1. **`src/pages/NewCampaignRequest.tsx`** — 3 small changes (add hook, fix client_id, fix redirect)
 
