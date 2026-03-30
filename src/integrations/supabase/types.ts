@@ -569,6 +569,11 @@ export type Database = {
           objective: string
           org_id: string | null
           original_name_tag: string
+          pause_attempt_count: number
+          pause_confirmed_at: string | null
+          pause_error: string | null
+          pause_requested_at: string | null
+          pause_required: boolean
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
           status: string
@@ -583,6 +588,11 @@ export type Database = {
           objective?: string
           org_id?: string | null
           original_name_tag?: string
+          pause_attempt_count?: number
+          pause_confirmed_at?: string | null
+          pause_error?: string | null
+          pause_requested_at?: string | null
+          pause_required?: boolean
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
           status?: string
@@ -597,6 +607,11 @@ export type Database = {
           objective?: string
           org_id?: string | null
           original_name_tag?: string
+          pause_attempt_count?: number
+          pause_confirmed_at?: string | null
+          pause_error?: string | null
+          pause_requested_at?: string | null
+          pause_required?: boolean
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_id?: string
           status?: string
@@ -876,6 +891,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      guard_pause_jobs: {
+        Row: {
+          attempts: number
+          available_at: string
+          campaign_id: string
+          created_at: string
+          id: number
+          last_error: string | null
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          available_at?: string
+          campaign_id: string
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          available_at?: string
+          campaign_id?: string
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       liquid_fund_entries: {
         Row: {

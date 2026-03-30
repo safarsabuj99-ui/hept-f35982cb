@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -26,6 +26,10 @@ interface CampaignDetail {
   platform: string;
   ad_account_name: string;
   ad_account_id: string;
+  pause_confirmed: boolean;
+  pause_error: string | null;
+  pause_attempt_count: number;
+  pause_required: boolean;
 }
 
 
@@ -87,7 +91,7 @@ export function AutomationConfigTab({
   // Show paused campaigns only within resume window
   const showPausedCampaigns = isSystemPaused && isWithinResumeWindow;
 
-  // Fetch campaign details, balance, and guard history
+  // Fetch campaign details, balance
   useEffect(() => {
     async function fetchData() {
       // Fetch balance
@@ -103,13 +107,12 @@ export function AutomationConfigTab({
         setBalance(credits - debits);
       }
 
-
       // Fetch campaign details if there are paused campaigns
       if (systemPausedCampaigns.length > 0) {
         setLoadingDetails(true);
         const { data: campaigns } = await supabase
           .from("campaigns")
-          .select("id, name, platform, ad_account_id")
+          .select("id, name, platform, ad_account_id, pause_required, pause_confirmed_at, pause_error, pause_attempt_count")
           .in("id", systemPausedCampaigns);
 
         if (campaigns && campaigns.length > 0) {
@@ -128,6 +131,10 @@ export function AutomationConfigTab({
               platform: m.platform,
               ad_account_id: m.ad_account_id || "",
               ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
+              pause_confirmed: !!(m as any).pause_confirmed_at,
+              pause_error: (m as any).pause_error || null,
+              pause_attempt_count: (m as any).pause_attempt_count || 0,
+              pause_required: (m as any).pause_required ?? false,
             }))
           );
         }
@@ -176,14 +183,12 @@ export function AutomationConfigTab({
     const updatedList = systemPausedCampaigns.filter(id => id !== campaignId);
 
     try {
-      // Call pause-campaign with enable action to re-enable on platform
       const { data: result, error } = await supabase.functions.invoke("pause-campaign", {
         body: { campaign_id: campaignId, action: "enable" },
       });
       if (error) throw error;
       if (result?.error) throw new Error(result.error);
 
-      // Update profile
       await supabase
         .from("profiles")
         .update({ system_paused_campaigns: updatedList })
@@ -215,7 +220,6 @@ export function AutomationConfigTab({
       }
     }
 
-    // Clear profile state
     await supabase.from("profiles").update({ system_paused_campaigns: [], guard_paused_at: null } as any).eq("user_id", userId);
 
     setSaving(false);
@@ -238,7 +242,7 @@ export function AutomationConfigTab({
       const result = res.data;
       toast({
         title: "Ad Guard Scan Complete",
-        description: `Checked ${result.checked} clients. ${result.total_campaigns_paused} campaigns paused.`,
+        description: `Jobs processed: ${result.phase1_jobs_processed}. Confirmed: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
       });
       onSaved();
     } catch (err: any) {
@@ -256,6 +260,40 @@ export function AutomationConfigTab({
     );
   };
 
+  const pauseStatusBadge = (c: CampaignDetail) => {
+    if (c.pause_confirmed) {
+      return (
+        <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700 text-[10px]">
+          <CheckCircle2 className="h-3 w-3" /> Confirmed
+        </Badge>
+      );
+    }
+    if (c.pause_error && c.pause_attempt_count > 0) {
+      return (
+        <div className="space-y-0.5">
+          <Badge variant="destructive" className="gap-1 text-[10px]">
+            <XCircle className="h-3 w-3" /> Failed #{c.pause_attempt_count}
+          </Badge>
+          <p className="text-[9px] text-destructive/70 max-w-[160px] truncate" title={c.pause_error}>
+            {c.pause_error}
+          </p>
+        </div>
+      );
+    }
+    if (c.pause_required) {
+      return (
+        <Badge variant="outline" className="gap-1 text-[10px] border-amber-500 text-amber-600">
+          <Loader2 className="h-3 w-3 animate-spin" /> Pending
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="gap-1 text-[10px]">
+        <AlertTriangle className="h-3 w-3" /> Paused (local)
+      </Badge>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Status + Balance Card */}
@@ -266,6 +304,7 @@ export function AutomationConfigTab({
           </CardTitle>
           <CardDescription>
             Automatically pause all campaigns when the client's balance drops to or below the threshold amount.
+            The system retries platform pauses every 2 minutes until confirmed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -396,6 +435,7 @@ export function AutomationConfigTab({
                       <TableHead>Campaign</TableHead>
                       <TableHead>Ad Account</TableHead>
                       <TableHead className="w-[80px]">Platform</TableHead>
+                      <TableHead className="w-[140px]">Platform Status</TableHead>
                       <TableHead className="w-[90px] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -405,6 +445,7 @@ export function AutomationConfigTab({
                         <TableCell className="font-medium text-sm">{c.campaign_name || c.campaign_id}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{c.ad_account_name}</TableCell>
                         <TableCell>{platformIcon(c.platform)}</TableCell>
+                        <TableCell>{pauseStatusBadge(c)}</TableCell>
                         <TableCell className="text-right">
                           <Button
                             size="sm"

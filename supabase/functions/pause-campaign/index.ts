@@ -307,12 +307,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update local DB
+    // Update local DB + clear pause queue state
     const newStatus = isEnableAction ? "active" : "paused";
+    const updatePayload: any = { status: newStatus, updated_at: new Date().toISOString() };
+    if (isEnableAction) {
+      // Clearing pause state on resume
+      updatePayload.pause_required = false;
+      updatePayload.pause_requested_at = null;
+      updatePayload.pause_confirmed_at = null;
+      updatePayload.pause_attempt_count = 0;
+      updatePayload.pause_error = null;
+    } else {
+      // Confirming pause
+      updatePayload.pause_required = false;
+      updatePayload.pause_confirmed_at = new Date().toISOString();
+      updatePayload.pause_error = null;
+    }
     await supabase
       .from("campaigns")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", campaign_id);
+
+    // Remove from guard_pause_jobs queue if exists
+    await supabase
+      .from("guard_pause_jobs")
+      .delete()
+      .eq("campaign_id", campaign_id);
 
     const actionVerb = isEnableAction ? "enabled" : "paused";
     const auditDesc = localOnly
