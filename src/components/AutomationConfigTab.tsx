@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 
 interface Props {
   userId: string;
