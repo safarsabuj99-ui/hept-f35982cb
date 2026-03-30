@@ -304,6 +304,7 @@ export default function ClientWallet() {
                       <TableCell className="whitespace-nowrap">{new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell><Badge variant="secondary">{pr.payment_method}</Badge></TableCell>
                       <TableCell className="text-right font-mono">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground">{pr.transaction_id || "—"}</TableCell>
                       <TableCell>
                         {pr.status === "pending" && <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Pending</Badge>}
                         {pr.status === "approved" && <Badge variant="outline" className="bg-success/10 text-success border-success/30">Approved</Badge>}

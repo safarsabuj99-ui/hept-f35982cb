@@ -387,7 +387,7 @@ export default function PaymentRequests() {
                               {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
                             </TableCell>
                             <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
-                            <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground font-mono">{r.transaction_id || "—"}</TableCell>
                             <TableCell>{statusBadge(r.status)}</TableCell>
                             <TableCell className="hidden lg:table-cell text-right font-mono">
                               {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
