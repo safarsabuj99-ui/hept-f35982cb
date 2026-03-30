@@ -284,15 +284,16 @@ export function AutomationConfigTab({
     if (c.pause_confirmed) {
       return (
         <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700 text-[10px]">
-          <CheckCircle2 className="h-3 w-3" /> Confirmed
+          <CheckCircle2 className="h-3 w-3" /> Verified ✓
         </Badge>
       );
     }
     if (c.pause_error && c.pause_attempt_count > 0) {
+      const isVerifyFail = c.pause_error.includes("Verification failed");
       return (
         <div className="space-y-0.5">
           <Badge variant="destructive" className="gap-1 text-[10px]">
-            <XCircle className="h-3 w-3" /> Failed #{c.pause_attempt_count}
+            <XCircle className="h-3 w-3" /> {isVerifyFail ? "Not Verified" : "Failed"} #{c.pause_attempt_count}
           </Badge>
           <p className="text-[9px] text-destructive/70 max-w-[160px] truncate" title={c.pause_error}>
             {c.pause_error}
@@ -303,13 +304,13 @@ export function AutomationConfigTab({
     if (c.pause_required) {
       return (
         <Badge variant="outline" className="gap-1 text-[10px] border-amber-500 text-amber-600">
-          <Loader2 className="h-3 w-3 animate-spin" /> Pending
+          <Loader2 className="h-3 w-3 animate-spin" /> Pending Verify
         </Badge>
       );
     }
     return (
       <Badge variant="secondary" className="gap-1 text-[10px]">
-        <AlertTriangle className="h-3 w-3" /> Paused (local)
+        <AlertTriangle className="h-3 w-3" /> Unverified
       </Badge>
     );
   };
