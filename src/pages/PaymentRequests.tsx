@@ -378,16 +378,17 @@ export default function PaymentRequests() {
                             {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
                           </div>
                         </div>
+                        {/* USD */}
+                        {r.final_amount_usd && (
+                          <p className="text-[11px] text-muted-foreground">USD: <span className="font-mono font-semibold text-foreground">${fmt(r.final_amount_usd)}</span></p>
+                        )}
                         {/* TrxID */}
                         {r.transaction_id && (
                           <p className="text-[11px] font-mono text-muted-foreground">TrxID: <span className="text-foreground">{r.transaction_id}</span></p>
                         )}
-                        {/* Footer: USD + Proof + Actions */}
+                        {/* Footer: Proof + Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            {r.final_amount_usd && (
-                              <span className="text-[10px] text-muted-foreground">USD: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></span>
-                            )}
                             {(r as any).proof_image_url && (
                               <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
                                 <img src={(r as any).proof_image_url} alt="Proof" className="h-8 w-auto rounded border object-cover" />
