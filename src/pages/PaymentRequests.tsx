@@ -329,6 +329,10 @@ export default function PaymentRequests() {
                             {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
                           </div>
                         </div>
+                        {/* TrxID */}
+                        {r.transaction_id && (
+                          <p className="text-[11px] font-mono text-muted-foreground">TrxID: <span className="text-foreground">{r.transaction_id}</span></p>
+                        )}
                         {/* Footer: USD + Proof + Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
@@ -367,7 +371,7 @@ export default function PaymentRequests() {
                           <TableHead>Method</TableHead>
                           <TableHead>Platform</TableHead>
                           <TableHead className="text-right">Amount (BDT)</TableHead>
-                          <TableHead className="hidden md:table-cell">TrxID</TableHead>
+                          <TableHead>TrxID</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
                           <TableHead className="text-center">Actions</TableHead>
@@ -383,7 +387,7 @@ export default function PaymentRequests() {
                               {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
                             </TableCell>
                             <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
-                            <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{r.transaction_id || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground font-mono">{r.transaction_id || "—"}</TableCell>
                             <TableCell>{statusBadge(r.status)}</TableCell>
                             <TableCell className="hidden lg:table-cell text-right font-mono">
                               {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
