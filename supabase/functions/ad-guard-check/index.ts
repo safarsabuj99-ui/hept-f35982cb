@@ -302,6 +302,49 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== PHASE 2.5: Re-queue stuck guard_paused campaigns with no queue entry =====
+    if (timeLeft() > 5000) {
+      const { data: stuckCampaigns } = await sb
+        .from("campaigns")
+        .select("id, name, platform, client_id")
+        .eq("status", "guard_paused")
+        .not("client_id", "is", null);
+
+      if (stuckCampaigns && stuckCampaigns.length > 0) {
+        // Check which ones have NO queue entry
+        const stuckIds = stuckCampaigns.map(c => c.id);
+        const { data: existingJobs } = await sb
+          .from("guard_pause_jobs")
+          .select("campaign_id")
+          .in("campaign_id", stuckIds);
+        const jobSet = new Set((existingJobs || []).map(j => j.campaign_id));
+
+        let requeued = 0;
+        for (const camp of stuckCampaigns) {
+          if (jobSet.has(camp.id)) continue; // Already has a job
+          // Re-queue with pause_required = true
+          await sb.from("campaigns").update({
+            pause_required: true,
+            pause_attempt_count: 0,
+            pause_error: null,
+          }).eq("id", camp.id);
+          await sb.from("guard_pause_jobs").upsert({
+            campaign_id: camp.id,
+            status: "pending",
+            available_at: new Date().toISOString(),
+            last_error: "Re-queued by safety net",
+            attempts: 0,
+          }, { onConflict: "campaign_id" });
+          requeued++;
+          console.log(`🔄 Re-queued stuck campaign: ${camp.name} (${camp.platform})`);
+        }
+        if (requeued > 0) {
+          totalNewlyQueued += requeued;
+          console.log(`Phase 2.5: Re-queued ${requeued} stuck guard_paused campaigns`);
+        }
+      }
+    }
+
     // ===== PHASE 3: Re-check failed jobs older than 1 hour =====
     if (timeLeft() > 2000) {
       const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
