@@ -1,113 +1,86 @@
 
-Plan: Bulletproof Ad Guard fix for “UI says paused, TikTok still active”
 
-What is actually wrong
-- I checked the real code and data path, and the failure is not the threshold math anymore.
-- Your app is marking campaigns as `guard_paused` in the database, so the UI shows “Paused”.
-- But the real TikTok pause depends on a fragile fire-and-forget trigger (`instant_guard_pause`) that tries to call `pause-campaign` from Postgres.
-- That path is not reliable enough, and there is no real scheduled retry safety net in the database right now for `ad-guard-check`.
-- Result: local state changes, but platform state can stay active. That is exactly what your screenshots show.
+# Plan: Make Auto-Pause Work Exactly Like Manual Pause
 
-Evidence from your project
-- For Akram Ahmed, the database currently has 3 TikTok campaigns still in `guard_paused`.
-- Those same 3 are the ones still active in TikTok.
-- Audit logs show local “Auto-paused … campaigns” events.
-- But I found no recent `pause-campaign` execution logs, and no cron schedule for `ad-guard-check`.
-- So the app is successfully flagging the campaigns, but not reliably dispatching/retrying the real platform pause.
+## The Core Problem
+The manual pause (from DeepDiveTable) calls `pause-campaign` edge function for each campaign — and it works every time. But the automatic guard system (`ad-guard-check`) duplicates all the API logic internally with its own pause/verify functions, creating a parallel code path that fails differently.
 
-Why previous fixes did not fully solve it
-- The previous fixes mostly improved:
-  - threshold calculation
-  - status preservation during sync
-  - manual guard scans
-- But they did not replace the weak part: the automatic platform pause is still edge-triggered, non-idempotent, and easy to miss.
-- In other words: the system detects the problem, but the enforcement path is still brittle.
+## The Fix: One Simple Principle
+**When balance hits threshold → select all active campaigns → call the same `pause-campaign` function that manual pause uses.**
 
-What I will change
-1. Replace “pause immediately from DB trigger” with a durable queue/state model
-- Add campaign-level pause state fields, for example:
-  - `pause_required`
-  - `pause_requested_at`
-  - `pause_attempted_at`
-  - `pause_confirmed_at`
-  - `pause_error`
-  - `pause_attempt_count`
-- Add a `guard_pause_jobs` table for queued/retryable pause work.
-- Use unique open-job rules so repeated debits cannot create duplicate chaos.
+No duplicate API logic. No separate verification layer. Same function, same result.
 
-2. Make the debit trigger idempotent
-- Update `auto_pause_on_debit()` so it does not depend on hitting the exact threshold moment.
-- When balance is below the effective threshold:
-  - mark matching active campaigns as `guard_paused`
-  - set `pause_required = true`
-  - insert queue jobs with `ON CONFLICT DO NOTHING`
-- This means even if the first API call fails, the system still knows those campaigns must be paused.
+## What Changes
 
-3. Make `ad-guard-check` the real worker
-- Rework `supabase/functions/ad-guard-check/index.ts` to process queued/pending campaigns first.
-- It will retry all campaigns where:
-  - `pause_required = true`
-  - and `pause_confirmed_at is null`
-- Only after confirmed platform success should it move the campaign from “pending pause” to fully confirmed paused state.
+### 1. Simplify `ad-guard-check` worker (rewrite core logic)
+**File:** `supabase/functions/ad-guard-check/index.ts`
 
-4. Add a real scheduled retry job
-- Create a cron schedule for `ad-guard-check` every few minutes.
-- Right now I found cron jobs for sync functions, but not for `ad-guard-check`.
-- This is a major missing piece.
-- With the schedule in place, even if TikTok fails once, the worker retries automatically.
+- Remove all duplicate platform API code (pauseTikTokCampaign, pauseMetaCampaign, pauseGoogleCampaign, verifyTikTokPaused, verifyMetaPaused, verifyGooglePaused — ~160 lines of duplicated logic)
+- Phase 1 (process queued jobs): Instead of calling platform APIs directly, call `pause-campaign` edge function via HTTP for each campaign — the exact same call the manual UI makes
+- This reuses the proven pause logic including geo-restriction handling, status checks, and DB updates
+- Process in parallel batches of 5 with the existing timeout guard
 
-5. Stop the UI from lying
-- Update the Ad Guard UI so it distinguishes:
-  - `Pending platform pause`
-  - `Paused on platform`
-  - `Pause failed / retrying`
-- Right now `guard_paused` is effectively shown as “Paused”, which is misleading when the external API has not succeeded yet.
-- This is why you see “Paused” in the app while TikTok still shows active.
+```text
+Current flow (broken):
+  ad-guard-check → own TikTok/Meta/Google API calls → own verification → own DB updates
 
-6. Improve observability
-- Add clear audit/error logging for:
-  - job queued
-  - pause attempt started
-  - platform response
-  - confirmed paused
-  - failed with reason
-- Add last error / retry count to the paused campaign list for admins.
-- This will make future failures diagnosable in minutes, not by guessing.
+New flow (same as manual):
+  ad-guard-check → calls pause-campaign function → pause-campaign handles everything
+```
 
-Files / areas to update
-- `supabase/migrations/...`
-  - new durable pause queue/state columns
-  - new `guard_pause_jobs` table
-  - revised `auto_pause_on_debit()`
-  - revised `check_auto_resume()`
-  - cron schedule for `ad-guard-check`
-  - remove or downgrade the current fragile `instant_guard_pause` HTTP trigger
-- `supabase/functions/ad-guard-check/index.ts`
-  - convert from “best-effort scanner” to authoritative retry worker
-- `supabase/functions/pause-campaign/index.ts`
-  - keep for manual actions, but align status confirmation and shared pause logic
-- `src/components/AutomationConfigTab.tsx`
-  - show pending/confirmed/error state accurately
-- any paused campaign UI/table component used in client detail
-  - surface confirmation state and retry status
+### 2. Keep the queue + detection system as-is
+The `auto_pause_on_debit()` trigger and `guard_pause_jobs` queue work correctly for **detection**. Keep them:
+- Trigger detects low balance → marks campaigns `guard_paused` → inserts queue jobs
+- Worker processes queue by calling `pause-campaign` for each job
+- On success response from `pause-campaign` → mark job done, update `pause_confirmed_at`
+- On failure → increment attempts, schedule retry with backoff
 
-Technical design note
-- I will apply the advisor’s state-machine idea, but at the campaign level instead of only ad-account level, because your system pauses client-linked campaigns across ad accounts/platforms.
-- The key rule will be:
-  - detection sets `pause_required = true`
-  - worker keeps retrying until `pause_confirmed_at` is set
-  - UI never claims “paused on platform” before confirmation
+### 3. Ensure the cron schedule exists
+- Verify the 2-minute cron schedule for `ad-guard-check` is active
+- If not present, create it via SQL insert
 
-Validation after implementation
-- Reproduce with a client balance crossing below threshold
-- Confirm DB changes to `guard_paused + pause_required`
-- Confirm queued job creation
-- Confirm worker retries automatically without clicking “Run Ad Guard Now”
-- Confirm TikTok campaign status changes to disabled
-- Confirm UI changes from “Pending platform pause” to “Paused on platform”
-- Confirm no duplicate job spam and no misleading status
+### 4. Update `pause-campaign` to accept service-role calls for guard pauses
+- Already supports `isServiceCall` — verify it handles `guard_paused` status campaigns correctly (it does, line 130 normalizes `guard_paused` → `active` for the check)
+- No changes needed here
 
-Expected outcome
-- Even if the first TikTok API call is missed, blocked, or delayed, the campaign will still be paused on a later retry automatically.
-- The system becomes deterministic instead of “hope the trigger fired”.
-- And if TikTok ever refuses the pause, the UI will show that truthfully instead of showing a false paused state.
+### 5. Minor UI cleanup
+**File:** `src/components/AutomationConfigTab.tsx`
+- Keep existing status badges (Verified, Pending, Failed) — they already work correctly with the `pause_confirmed_at` field
+
+## Technical Detail
+
+The rewritten Phase 1 loop in `ad-guard-check` will look like:
+
+```typescript
+// For each pending job, call the SAME pause-campaign function
+const pauseUrl = `${supabaseUrl}/functions/v1/pause-campaign`;
+const res = await fetch(pauseUrl, {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ campaign_id: job.campaign_id, action: "pause" }),
+});
+const result = await res.json();
+if (result.success) {
+  // pause-campaign already updated DB status to "paused"
+  // Just confirm in queue and set pause_confirmed_at
+  await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+  await sb.from("campaigns").update({
+    pause_confirmed_at: new Date().toISOString(),
+    pause_required: false,
+  }).eq("id", campaign.id);
+}
+```
+
+## Files Modified
+1. `supabase/functions/ad-guard-check/index.ts` — Remove ~300 lines of duplicate API code, replace with calls to `pause-campaign`
+2. Verify cron schedule exists (SQL insert if needed)
+
+## What This Guarantees
+- Auto-pause uses the **identical code path** as clicking "Pause" in the UI
+- If manual pause works → auto-pause works
+- No more "UI says paused but platform says active" because there's only one pause implementation
+- Queue + retry still provides durability for network failures
+
