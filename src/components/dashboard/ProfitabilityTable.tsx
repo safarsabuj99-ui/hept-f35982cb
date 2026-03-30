@@ -229,37 +229,32 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
                   className="py-2.5 px-1 cursor-pointer"
                   onClick={() => toggleExpand(i)}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {expanded[i] ? (
-                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      )}
-                      <span className="font-medium text-xs truncate">{r.clientName}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono text-xs text-muted-foreground">${r.spendUsd.toLocaleString()}</span>
-                      <span className="font-mono text-xs">৳{r.profitBdt.toLocaleString()}</span>
-                      <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5 py-0">
-                        {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
-                      </Badge>
-                    </div>
+                  <div className="grid grid-cols-[14px_1fr_56px_56px_52px] items-center gap-1 text-xs">
+                    {expanded[i] ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    <span className="font-medium truncate">{r.clientName}</span>
+                    <span className="font-mono text-muted-foreground text-right">${r.spendUsd.toLocaleString()}</span>
+                    <span className="font-mono text-right">৳{r.profitBdt.toLocaleString()}</span>
+                    <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5 py-0 justify-center">
+                      {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                    </Badge>
                   </div>
                   {expanded[i] && (
-                    <div className="ml-5 mt-2 space-y-1.5 pb-1">
+                    <div className="mt-1.5 pb-1 space-y-1">
                       {r.platforms.map((p) => (
-                        <div key={p.platform} className="flex items-center justify-between text-xs">
-                          <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
+                        <div key={p.platform} className="grid grid-cols-[14px_1fr_56px_56px_52px] items-center gap-1 text-[11px]">
+                          <span />
+                          <Badge variant="outline" className={`text-[10px] w-fit ${PLATFORM_COLORS[p.platform] || ""}`}>
                             {PLATFORM_LABELS[p.platform] || p.platform}
                           </Badge>
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground font-mono text-[11px]">${p.spendUsd.toLocaleString()}</span>
-                            <span className="font-mono text-[11px]">৳{p.profitBdt.toLocaleString()}</span>
-                            <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1 py-0">
-                              {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
-                            </Badge>
-                          </div>
+                          <span className="text-muted-foreground font-mono text-right">${p.spendUsd.toLocaleString()}</span>
+                          <span className="font-mono text-right">৳{p.profitBdt.toLocaleString()}</span>
+                          <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1 py-0 justify-center">
+                            {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
+                          </Badge>
                         </div>
                       ))}
                     </div>
