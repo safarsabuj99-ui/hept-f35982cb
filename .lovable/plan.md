@@ -1,30 +1,24 @@
 
 
-## Fix: Align Mobile Profitability Rows
+## Plan: Compact Mobile Payment Cards + Fix Date Filter
 
-The issue is that the three data values (spend, profit, margin) are not aligned across rows — each client name has a different length, pushing values to different positions. This makes it look messy.
+### Problem 1: Date filter shows "Today" but doesn't filter
+The `DateRangeFilter` component defaults its UI to "Today" (line 67) but never calls `onRangeChange` on mount. Meanwhile `PaymentRequests` initializes `dateRange` as `null` (no filter), so all data shows despite "Today" appearing selected.
 
-### Solution
+**Fix** — `src/components/DateRangeFilter.tsx`: Add a `useEffect` on mount that calls `onRangeChange` with today's range, syncing the parent state to match the UI.
 
-Use a **fixed-width grid layout** instead of `justify-between` so all values line up in columns:
+### Problem 2: Mobile payment cards too large
+Each card uses a spacious layout with `p-4`, 2×2 grid, full-width buttons, and separate proof image row.
 
-```text
-Before (messy - values shift based on name length):
-│ ▶ MD ARIF BEPARY     $18.3 ৳23  +1.7%  │
-│ ▶ Yasin Arafat  $8.24 ৳166  +13.5%     │
+**Fix** — `src/pages/PaymentRequests.tsx` (lines 305–351): Redesign mobile cards to a compact layout:
+- Reduce padding to `p-3`, gap to `gap-2`
+- Row 1: Client name + status badge (same line)
+- Row 2: Amount, Method, Date, Platform — inline with smaller text (`text-xs`), use a tight `grid-cols-4` instead of `grid-cols-2`
+- USD Credited stays as a small footer line
+- Proof image thumbnail shrinks to `h-10`
+- Approve/Reject buttons side by side in one row instead of stacked
 
-After (aligned columns):
-│ ▶ MD ARIF BEPARY      $18.3   ৳23   +1.7%  │
-│ ▶ Yasin Arafat         $8.24  ৳166  +13.5%  │
-```
-
-### Changes — `src/components/dashboard/ProfitabilityTable.tsx`
-
-**Mobile row layout (lines 232-247):** Replace the flex `justify-between` with a CSS grid:
-- Client name takes remaining space with `truncate`
-- Spend, Profit, Margin each get fixed-width columns with `text-right` alignment
-- Grid template: `grid-cols-[14px_1fr_auto_auto_auto]` — chevron, name, spend (w-14), profit (w-14), margin badge (w-16)
-- This ensures all dollar amounts, taka amounts, and badges line up vertically across all rows
-
-**Expanded platform rows (lines 250-265):** Apply same column alignment so platform breakdowns also align under the parent values.
+### Files Changed
+1. `src/components/DateRangeFilter.tsx` — add mount-time `useEffect`
+2. `src/pages/PaymentRequests.tsx` — compact mobile card layout
 
