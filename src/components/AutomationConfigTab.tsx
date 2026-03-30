@@ -53,6 +53,7 @@ export function AutomationConfigTab({
   const [balance, setBalance] = useState<number | null>(null);
   
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
