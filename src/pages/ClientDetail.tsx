@@ -478,7 +478,7 @@ export default function ClientDetail() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="flex w-full overflow-x-auto scrollbar-hide flex-nowrap h-auto p-1">
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide h-auto p-1 justify-start">
           <TabsTrigger value="profile" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
           <TabsTrigger value="pricing" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
           <TabsTrigger value="automation" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Ad Guard</TabsTrigger>
