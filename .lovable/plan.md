@@ -1,28 +1,30 @@
 
 
-## Plan: Compact Mobile Profitability View + Remove Client Overview
+## Fix: Align Mobile Profitability Rows
 
-### Changes
+The issue is that the three data values (spend, profit, margin) are not aligned across rows — each client name has a different length, pushing values to different positions. This makes it look messy.
 
-**1. Remove Client Overview Table** — `src/pages/AdminDashboard.tsx`
-- Remove the "Client Data" section (lines 348-352) with `<ClientOverviewTable>`
-- Remove the `ClientOverviewTable` import
+### Solution
 
-**2. Compact Mobile Profitability Cards** — `src/components/dashboard/ProfitabilityTable.tsx`
-
-Replace the current mobile card layout (lines 225-286) which uses large cards with a 2x2 grid inside each. New layout will be a **single-row per client** — a tight list where each row shows:
+Use a **fixed-width grid layout** instead of `justify-between` so all values line up in columns:
 
 ```text
-┌─────────────────────────────────────┐
-│ ▶ ClientName   $450  ৳12K  +18.5%  │
-├─────────────────────────────────────┤
-│ ▶ ClientName2  $220  ৳6K   +15.2%  │
-└─────────────────────────────────────┘
+Before (messy - values shift based on name length):
+│ ▶ MD ARIF BEPARY     $18.3 ৳23  +1.7%  │
+│ ▶ Yasin Arafat  $8.24 ৳166  +13.5%     │
+
+After (aligned columns):
+│ ▶ MD ARIF BEPARY      $18.3   ৳23   +1.7%  │
+│ ▶ Yasin Arafat         $8.24  ৳166  +13.5%  │
 ```
 
-- Each row: chevron + name on left, spend + profit + margin badge on right — all on one line
-- Tapping expands to show platform breakdown (kept as-is but tighter)
-- Remove the Revenue/Cost fields from the collapsed view (only show Spend, Profit, Margin)
-- Reduced padding (`p-2.5` instead of `p-4`), smaller text (`text-xs`)
-- Desktop table stays unchanged
+### Changes — `src/components/dashboard/ProfitabilityTable.tsx`
+
+**Mobile row layout (lines 232-247):** Replace the flex `justify-between` with a CSS grid:
+- Client name takes remaining space with `truncate`
+- Spend, Profit, Margin each get fixed-width columns with `text-right` alignment
+- Grid template: `grid-cols-[14px_1fr_auto_auto_auto]` — chevron, name, spend (w-14), profit (w-14), margin badge (w-16)
+- This ensures all dollar amounts, taka amounts, and badges line up vertically across all rows
+
+**Expanded platform rows (lines 250-265):** Apply same column alignment so platform breakdowns also align under the parent values.
 
