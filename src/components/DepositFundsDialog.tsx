@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { Banknote, CalendarIcon, Loader2 } from "lucide-react";
+import { Banknote, CalendarIcon, Loader2, ImagePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { compressImage } from "@/lib/compressImage";
 
 interface DepositFundsDialogProps {
   open: boolean;
@@ -19,6 +20,12 @@ interface DepositFundsDialogProps {
   showClientSelector?: boolean;
   isAdmin?: boolean;
   onSuccess?: () => void;
+}
+
+interface AgencyAccount {
+  id: string;
+  name: string;
+  type: string;
 }
 
 export function DepositFundsDialog({
@@ -38,6 +45,11 @@ export function DepositFundsDialog({
   const [selectedClient, setSelectedClient] = useState(clientId || "");
   const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load clients list when selector is shown
   useEffect(() => {
@@ -56,6 +68,16 @@ export function DepositFundsDialog({
     loadClients();
   }, [showClientSelector, open]);
 
+  // Load agency accounts
+  useEffect(() => {
+    if (!open) return;
+    async function loadAccounts() {
+      const { data } = await (supabase.from("agency_accounts" as any).select("id, name, type").eq("is_active", true).order("name") as any);
+      setAgencyAccounts((data as AgencyAccount[]) || []);
+    }
+    loadAccounts();
+  }, [open]);
+
   // Sync external clientId prop
   useEffect(() => {
     if (clientId) setSelectedClient(clientId);
@@ -70,16 +92,66 @@ export function DepositFundsDialog({
       setPlatform("");
       setSubmitting(false);
       setPaymentDate(new Date());
+      setSelectedAccountId("");
+      setProofFile(null);
+      setProofPreview(null);
       if (!clientId) setSelectedClient("");
     }
   }, [open, clientId]);
 
   const resolvedClientId = showClientSelector ? selectedClient : clientId;
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please select an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max 20MB allowed", variant: "destructive" });
+      return;
+    }
+    setProofFile(file);
+    const url = URL.createObjectURL(file);
+    setProofPreview(url);
+  };
+
+  const removeProof = () => {
+    setProofFile(null);
+    if (proofPreview) URL.revokeObjectURL(proofPreview);
+    setProofPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0 || !method || !platform || !resolvedClientId) return;
     setSubmitting(true);
+
+    let proofUrl: string | null = null;
+
+    // Upload proof image if provided
+    if (proofFile && resolvedClientId) {
+      try {
+        const compressed = await compressImage(proofFile, 1200, 0.7);
+        const fileName = `${resolvedClientId}/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from("payment-proofs")
+          .upload(fileName, compressed, { contentType: "image/jpeg", upsert: false });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from("payment-proofs")
+          .getPublicUrl(fileName);
+        proofUrl = urlData.publicUrl;
+      } catch (err: any) {
+        toast({ title: "Upload failed", description: err.message || "Could not upload proof image", variant: "destructive" });
+        setSubmitting(false);
+        return;
+      }
+    }
 
     const insertPayload: any = {
       client_id: resolvedClientId,
@@ -87,6 +159,8 @@ export function DepositFundsDialog({
       payment_method: method,
       transaction_id: trxId || null,
       platform,
+      received_in_account_id: selectedAccountId || null,
+      proof_image_url: proofUrl,
     };
 
     if (paymentDate) {
@@ -106,7 +180,7 @@ export function DepositFundsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5 text-primary" /> Deposit Funds
@@ -157,6 +231,24 @@ export function DepositFundsDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Account Selector */}
+          {agencyAccounts.length > 0 && (
+            <div className="space-y-2">
+              <Label>Paid To Account</Label>
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectContent>
+                  {agencyAccounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({a.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Payment Date</Label>
               <Popover>
@@ -184,6 +276,47 @@ export function DepositFundsDialog({
                 </PopoverContent>
               </Popover>
             </div>
+
+          {/* Payment Proof Upload */}
+          <div className="space-y-2">
+            <Label>Payment Proof (optional)</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {proofPreview ? (
+              <div className="relative inline-block">
+                <img
+                  src={proofPreview}
+                  alt="Payment proof"
+                  className="h-24 w-auto rounded-lg border object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={removeProof}
+                  className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="h-4 w-4" />
+                Attach Screenshot / Photo
+              </Button>
+            )}
+            <p className="text-xs text-muted-foreground">Image will be compressed before upload</p>
+          </div>
+
           <div className="space-y-2">
             <Label>Transaction ID / Note (optional)</Label>
             <Input
