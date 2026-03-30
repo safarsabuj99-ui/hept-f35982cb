@@ -95,6 +95,69 @@ async function pauseGoogleCampaign(
   }
 }
 
+// ===== Platform VERIFICATION helpers =====
+// After pause API succeeds, read back the actual status to confirm
+
+async function verifyTikTokPaused(
+  advertiserId: string, rawCampaignId: string, token: string, tiktokBase: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `${tiktokBase}/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawCampaignId}"]}&fields=["operation_status"]`,
+      { headers: { "Access-Token": token } }
+    );
+    const json = await res.json();
+    const status = json?.data?.list?.[0]?.operation_status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    const isPaused = ["DISABLE", "CAMPAIGN_STATUS_DISABLE"].includes(status.toUpperCase());
+    return { verified: isPaused, actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
+async function verifyMetaPaused(
+  rawCampaignId: string, token: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${rawCampaignId}?fields=effective_status&access_token=${token}`
+    );
+    const json = await res.json();
+    const status = json.effective_status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    const isPaused = ["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(status.toUpperCase());
+    return { verified: isPaused, actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
+async function verifyGooglePaused(
+  customerId: string, rawCampaignId: string, token: string, devToken: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "developer-token": devToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: `SELECT campaign.status FROM campaign WHERE campaign.id = ${rawCampaignId}` }),
+      }
+    );
+    const json = await res.json();
+    const status = json?.[0]?.results?.[0]?.campaign?.status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    return { verified: status.toUpperCase() === "PAUSED", actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
 // ===== Main handler =====
 
 Deno.serve(async (req) => {
@@ -258,28 +321,82 @@ Deno.serve(async (req) => {
               }
 
               if (result.success) {
-                // ✅ CONFIRMED paused on platform — update everything
-                await sb.from("campaigns").update({
-                  status: "paused",
-                  pause_required: false,
-                  pause_confirmed_at: new Date().toISOString(),
-                  pause_error: null,
-                  pause_attempt_count: job.attempts + 1,
-                  updated_at: new Date().toISOString(),
-                }).eq("id", campaign.id);
+                // API said success — now VERIFY by reading back the actual status
+                let verified = false;
+                let verifyMsg = "";
+                
+                if (result.localOnly) {
+                  // Geo-restricted: can't verify, treat as local-only confirmed
+                  verified = true;
+                  verifyMsg = "geo-restricted, local-only";
+                } else {
+                  // Wait 1.5s for platform to propagate, then verify
+                  await new Promise(r => setTimeout(r, 1500));
+                  
+                  let verification: { verified: boolean; actualStatus: string | null; error?: string };
+                  if (campaign.platform === "tiktok") {
+                    verification = await verifyTikTokPaused(acc.ad_account_id, rawId, int.api_token, tiktokBase);
+                  } else if (campaign.platform === "meta") {
+                    verification = await verifyMetaPaused(rawId, int.api_token);
+                  } else if (campaign.platform === "google") {
+                    const cid = acc.ad_account_id.replace(/-/g, "");
+                    verification = await verifyGooglePaused(cid, rawId, int.api_token, int.app_id || "");
+                  } else {
+                    verification = { verified: false, actualStatus: null, error: "Unsupported" };
+                  }
+                  
+                  verified = verification.verified;
+                  verifyMsg = verified
+                    ? `Verified: ${verification.actualStatus}`
+                    : `NOT verified — platform says: ${verification.actualStatus || verification.error || "unknown"}`;
+                  console.log(`🔍 Verification for ${campaign.name}: ${verifyMsg}`);
+                }
+                
+                if (verified) {
+                  // ✅ TRULY confirmed — platform read-back says paused
+                  await sb.from("campaigns").update({
+                    status: "paused",
+                    pause_required: false,
+                    pause_confirmed_at: new Date().toISOString(),
+                    pause_error: null,
+                    pause_attempt_count: job.attempts + 1,
+                    updated_at: new Date().toISOString(),
+                  }).eq("id", campaign.id);
 
-                // Remove from queue
-                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                  await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+                  totalConfirmed++;
+                  console.log(`✓ VERIFIED & CONFIRMED: ${campaign.name} (${campaign.platform})`);
 
-                totalConfirmed++;
-                console.log(`✓ CONFIRMED: ${campaign.name} (${campaign.platform}) paused on platform${result.localOnly ? " [local-only]" : ""}`);
-
-                // Audit success
-                await sb.from("audit_logs").insert({
-                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
-                  action_type: "ad_guard_platform_confirmed",
-                  description: `Platform CONFIRMED pause for "${campaign.name}" (${campaign.platform}). Attempt #${job.attempts + 1}.${result.localOnly ? " [geo-restricted, local-only]" : ""}`,
-                });
+                  await sb.from("audit_logs").insert({
+                    user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+                    action_type: "ad_guard_platform_verified",
+                    description: `Platform VERIFIED pause for "${campaign.name}" (${campaign.platform}). ${verifyMsg}. Attempt #${job.attempts + 1}.`,
+                  });
+                } else {
+                  // API said success but verification failed — schedule retry
+                  const newAttempts = job.attempts + 1;
+                  const backoffMs = Math.min(newAttempts * 30000, 300000); // 30s, 60s, ... max 5min (faster retries)
+                  
+                  await sb.from("guard_pause_jobs").update({
+                    last_error: `API OK but verification failed: ${verifyMsg}`,
+                    attempts: newAttempts,
+                    available_at: new Date(Date.now() + backoffMs).toISOString(),
+                  }).eq("id", job.id);
+                  
+                  await sb.from("campaigns").update({
+                    pause_error: `Verification failed: ${verifyMsg}`.substring(0, 500),
+                    pause_attempt_count: newAttempts,
+                  }).eq("id", campaign.id);
+                  
+                  totalFailed++;
+                  console.error(`⚠ API said OK but verification FAILED: ${campaign.name} — ${verifyMsg}`);
+                  
+                  await sb.from("audit_logs").insert({
+                    user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
+                    action_type: "ad_guard_verify_failed",
+                    description: `Pause API returned OK but platform verification FAILED for "${campaign.name}" (${campaign.platform}). ${verifyMsg}. Will retry.`,
+                  });
+                }
               } else {
                 // ❌ Failed — update error state, schedule retry
                 const newAttempts = job.attempts + 1;

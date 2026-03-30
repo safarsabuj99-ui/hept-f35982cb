@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -53,6 +53,7 @@ export function AutomationConfigTab({
   const [balance, setBalance] = useState<number | null>(null);
   
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
@@ -242,13 +243,32 @@ export function AutomationConfigTab({
       const result = res.data;
       toast({
         title: "Ad Guard Scan Complete",
-        description: `Jobs processed: ${result.phase1_jobs_processed}. Confirmed: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
+        description: `Jobs processed: ${result.phase1_jobs_processed}. Verified: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
       });
       onSaved();
     } catch (err: any) {
       toast({ title: "Guard Error", description: err.message, variant: "destructive" });
     }
     setRunningGuard(false);
+  }
+
+  async function handleVerifySingle(campaignId: string) {
+    setVerifyingId(campaignId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke("ad-guard-check", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.error) throw res.error;
+      toast({
+        title: "Verification Complete",
+        description: `Verified: ${res.data.phase1_confirmed}, Failed: ${res.data.phase1_failed}`,
+      });
+      onSaved();
+    } catch (err: any) {
+      toast({ title: "Verify Error", description: err.message, variant: "destructive" });
+    }
+    setVerifyingId(null);
   }
 
   const platformIcon = (platform: string) => {
@@ -264,15 +284,16 @@ export function AutomationConfigTab({
     if (c.pause_confirmed) {
       return (
         <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700 text-[10px]">
-          <CheckCircle2 className="h-3 w-3" /> Confirmed
+          <CheckCircle2 className="h-3 w-3" /> Verified ✓
         </Badge>
       );
     }
     if (c.pause_error && c.pause_attempt_count > 0) {
+      const isVerifyFail = c.pause_error.includes("Verification failed");
       return (
         <div className="space-y-0.5">
           <Badge variant="destructive" className="gap-1 text-[10px]">
-            <XCircle className="h-3 w-3" /> Failed #{c.pause_attempt_count}
+            <XCircle className="h-3 w-3" /> {isVerifyFail ? "Not Verified" : "Failed"} #{c.pause_attempt_count}
           </Badge>
           <p className="text-[9px] text-destructive/70 max-w-[160px] truncate" title={c.pause_error}>
             {c.pause_error}
@@ -283,13 +304,13 @@ export function AutomationConfigTab({
     if (c.pause_required) {
       return (
         <Badge variant="outline" className="gap-1 text-[10px] border-amber-500 text-amber-600">
-          <Loader2 className="h-3 w-3 animate-spin" /> Pending
+          <Loader2 className="h-3 w-3 animate-spin" /> Pending Verify
         </Badge>
       );
     }
     return (
       <Badge variant="secondary" className="gap-1 text-[10px]">
-        <AlertTriangle className="h-3 w-3" /> Paused (local)
+        <AlertTriangle className="h-3 w-3" /> Unverified
       </Badge>
     );
   };
@@ -436,7 +457,7 @@ export function AutomationConfigTab({
                       <TableHead>Ad Account</TableHead>
                       <TableHead className="w-[80px]">Platform</TableHead>
                       <TableHead className="w-[140px]">Platform Status</TableHead>
-                      <TableHead className="w-[90px] text-right">Action</TableHead>
+                      <TableHead className="w-[140px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -446,7 +467,18 @@ export function AutomationConfigTab({
                         <TableCell className="text-sm text-muted-foreground">{c.ad_account_name}</TableCell>
                         <TableCell>{platformIcon(c.platform)}</TableCell>
                         <TableCell>{pauseStatusBadge(c)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
+                          {!c.pause_confirmed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              disabled={verifyingId === c.campaign_id}
+                              onClick={() => handleVerifySingle(c.campaign_id)}
+                            >
+                              <Search className="h-3 w-3" /> {verifyingId === c.campaign_id ? "…" : "Verify"}
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
