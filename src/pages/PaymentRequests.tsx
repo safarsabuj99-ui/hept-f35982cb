@@ -592,6 +592,22 @@ export default function PaymentRequests() {
                     <span className="font-mono text-xs">{confirmModal.request.transaction_id}</span>
                   </div>
                 )}
+                {(confirmModal.request as any)?.proof_image_url && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-muted-foreground mb-1">Payment Proof</p>
+                    <a
+                      href={(confirmModal.request as any).proof_image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <img
+                        src={(confirmModal.request as any).proof_image_url}
+                        alt="Payment proof"
+                        className="h-32 w-auto rounded-lg border object-cover hover:opacity-80 transition-opacity cursor-zoom-in"
+                      />
+                    </a>
+                  </div>
+                )}
               </div>
 
               {confirmModal.action === "approved" && (
