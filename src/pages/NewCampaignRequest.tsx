@@ -88,7 +88,7 @@ export default function NewCampaignRequest() {
     setSubmitting(true);
 
     const rows = campaigns.map(c => ({
-      client_id: user.id,
+      client_id: effectiveClientId,
       creative_link: c.creativeLink,
       platform: c.platform,
       objective: c.objective,
