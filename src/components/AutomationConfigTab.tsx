@@ -243,13 +243,32 @@ export function AutomationConfigTab({
       const result = res.data;
       toast({
         title: "Ad Guard Scan Complete",
-        description: `Jobs processed: ${result.phase1_jobs_processed}. Confirmed: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
+        description: `Jobs processed: ${result.phase1_jobs_processed}. Verified: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
       });
       onSaved();
     } catch (err: any) {
       toast({ title: "Guard Error", description: err.message, variant: "destructive" });
     }
     setRunningGuard(false);
+  }
+
+  async function handleVerifySingle(campaignId: string) {
+    setVerifyingId(campaignId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke("ad-guard-check", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.error) throw res.error;
+      toast({
+        title: "Verification Complete",
+        description: `Verified: ${res.data.phase1_confirmed}, Failed: ${res.data.phase1_failed}`,
+      });
+      onSaved();
+    } catch (err: any) {
+      toast({ title: "Verify Error", description: err.message, variant: "destructive" });
+    }
+    setVerifyingId(null);
   }
 
   const platformIcon = (platform: string) => {
