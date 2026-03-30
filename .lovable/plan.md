@@ -1,35 +1,71 @@
 
 
-# Plan: Reorder TrxID & Add KPI Widgets to Payments Page
+# Plan: Client Urgent Notice System
 
-## 1. Move TrxID below USD (mobile cards)
+## Overview
+A targeted notification system where admins create time-limited urgent notices that appear as a prominent banner in the client dashboard. Notices can target specific client segments (all, negative balance, specific ad accounts, individual clients).
 
-In the mobile card layout (lines 305-361), swap the order so USD appears before TrxID:
+## Database
 
-```text
-Current order:     →  New order:
-Amount/Method/Date    Amount/Method/Date
-TrxID                 USD: $13.79
-USD: $13.79           TrxID: 2000 টাকা...
-```
+### New table: `client_notices`
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid | PK |
+| title | text | Short headline |
+| message | text | Notice body |
+| type | text | `info`, `warning`, `urgent` (controls color) |
+| target_type | text | `all`, `negative_balance`, `ad_account`, `specific_clients` |
+| target_ids | uuid[] | Used when target_type is `ad_account` or `specific_clients` — stores ad_account IDs or client user IDs |
+| starts_at | timestamptz | When to start showing |
+| ends_at | timestamptz | When to stop showing |
+| is_active | boolean | Manual on/off toggle |
+| created_by | uuid | Admin who created it |
+| created_at | timestamptz | Default now() |
 
-Move the USD line out of the footer div and place it above TrxID as its own line.
+**RLS**: Admins get full CRUD. Clients get SELECT on active notices within their time window (filtering by target happens in app code since it requires balance/account lookups).
 
-## 2. Add KPI summary widgets above the tabs
+### Migration SQL
+- Create the table with RLS enabled
+- Admin ALL policy
+- Client SELECT policy: `is_active = true AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`
 
-Add a row of compact stat cards between the DateRangeFilter and Tabs showing filtered totals for approved payments:
+## Admin UI — Manage Notices
 
-- **Total Received (BDT)** — sum of `amount_bdt` for approved requests in date range
-- **Total Credited (USD)** — sum of `final_amount_usd` for approved requests in date range
-- **Approved Count** — number of approved requests in date range
-- **Pending Count** — number of pending requests in date range
+### New page: `src/pages/ClientNotices.tsx`
+- Route: `/admin/client-notices` (add to AdminLayout nav)
+- List all notices with status badge (Active/Expired/Scheduled)
+- "Create Notice" dialog with:
+  - Title, Message, Type (info/warning/urgent)
+  - Target selector: dropdown with `All Clients`, `Negative Balance`, `Specific Ad Account`, `Specific Clients`
+  - When "Specific Ad Account" → multi-select of ad accounts
+  - When "Specific Clients" → multi-select of clients
+  - Start date/time, End date/time
+- Edit and delete existing notices
+- Toggle active/inactive
 
-These are computed from the already-fetched `filteredRequests` array using `useMemo` — no new API calls needed. Styled as compact KPI cards matching the project's existing design system.
+## Client-Side Display
 
-## Files Modified
+### New component: `src/components/ClientNoticeBanner.tsx`
+- Fetches active notices from `client_notices` where `is_active = true` and within time window
+- Client-side filtering based on `target_type`:
+  - `all` → show to everyone
+  - `negative_balance` → show only if client's computed balance < 0
+  - `ad_account` → show if client has any ad account in `target_ids` (query `ad_account_clients`)
+  - `specific_clients` → show if `auth.uid()` is in `target_ids`
+- Renders as a dismissible banner between the header and hero section in `ClientDashboard.tsx`
+- Color-coded: blue (info), amber (warning), red (urgent with pulse animation)
+- Dismissible per-session via local state (not persisted — notice reappears on refresh if still active)
 
-1. **`src/pages/PaymentRequests.tsx`**
-   - Add `useMemo` block computing KPI totals from `filteredRequests`
-   - Insert KPI card row between DateRangeFilter and Tabs
-   - Reorder mobile card: move USD line above TrxID line
+### Integration point: `src/pages/ClientDashboard.tsx`
+- Import and render `<ClientNoticeBanner />` at the top of the return JSX, above the hero card
+- Pass `balance` and `effectiveClientId` as props for target filtering
+
+## Files Modified/Created
+
+1. **DB migration** — Create `client_notices` table + RLS policies
+2. **`src/pages/ClientNotices.tsx`** — New admin management page
+3. **`src/components/ClientNoticeBanner.tsx`** — New client-facing banner component
+4. **`src/pages/ClientDashboard.tsx`** — Add `<ClientNoticeBanner />` above hero
+5. **`src/App.tsx`** — Add route `/admin/client-notices`
+6. **`src/components/AdminLayout.tsx`** — Add nav link for "Client Notices"
 
