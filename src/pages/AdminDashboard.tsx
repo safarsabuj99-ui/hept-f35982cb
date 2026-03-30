@@ -9,7 +9,7 @@ import { SpendTrendChart } from "@/components/SpendTrendChart";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { RevenueVsCostChart } from "@/components/dashboard/RevenueVsCostChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
-import { ClientOverviewTable } from "@/components/dashboard/ClientOverviewTable";
+
 import { ProfitabilityTable } from "@/components/dashboard/ProfitabilityTable";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QuickActions } from "@/components/dashboard/QuickActions";
