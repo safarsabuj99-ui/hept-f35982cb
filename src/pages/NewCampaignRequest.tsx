@@ -105,7 +105,7 @@ export default function NewCampaignRequest() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Submitted!", description: `${campaigns.length} campaign request${campaigns.length > 1 ? "s" : ""} sent for review.` });
-      navigate("/dashboard");
+      navigate("/dashboard/campaigns");
     }
   };
 
