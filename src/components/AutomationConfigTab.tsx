@@ -457,7 +457,7 @@ export function AutomationConfigTab({
                       <TableHead>Ad Account</TableHead>
                       <TableHead className="w-[80px]">Platform</TableHead>
                       <TableHead className="w-[140px]">Platform Status</TableHead>
-                      <TableHead className="w-[90px] text-right">Action</TableHead>
+                      <TableHead className="w-[140px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -467,7 +467,18 @@ export function AutomationConfigTab({
                         <TableCell className="text-sm text-muted-foreground">{c.ad_account_name}</TableCell>
                         <TableCell>{platformIcon(c.platform)}</TableCell>
                         <TableCell>{pauseStatusBadge(c)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
+                          {!c.pause_confirmed && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              disabled={verifyingId === c.campaign_id}
+                              onClick={() => handleVerifySingle(c.campaign_id)}
+                            >
+                              <Search className="h-3 w-3" /> {verifyingId === c.campaign_id ? "…" : "Verify"}
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
