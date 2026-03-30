@@ -293,6 +293,7 @@ export default function ClientWallet() {
                     <TableHead>Date</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead className="text-right">Amount (BDT)</TableHead>
+                    <TableHead>TrxID</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Credited (USD)</TableHead>
                   </TableRow>
