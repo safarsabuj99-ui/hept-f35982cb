@@ -222,63 +222,46 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
         ) : (
           <>
             {/* Mobile card view */}
-            <div className="space-y-3 md:hidden">
+            <div className="divide-y md:hidden">
               {rows.map((r, i) => (
                 <div
                   key={`mobile-${i}`}
-                  className="rounded-xl border bg-card p-4 space-y-3 cursor-pointer"
+                  className="py-2.5 px-1 cursor-pointer"
                   onClick={() => toggleExpand(i)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       {expanded[i] ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       )}
-                      <span className="font-medium text-sm">{r.clientName}</span>
+                      <span className="font-medium text-xs truncate">{r.clientName}</span>
                     </div>
-                    <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-xs">
-                      {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Spend</p>
-                      <p className="font-mono font-medium">${r.spendUsd.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Revenue</p>
-                      <p className="font-mono font-medium">৳{r.revenueBdt.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Cost</p>
-                      <p className="font-mono font-medium">৳{r.cogsBdt.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Profit</p>
-                      <p className="font-mono font-medium">৳{r.profitBdt.toLocaleString()}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-xs text-muted-foreground">${r.spendUsd.toLocaleString()}</span>
+                      <span className="font-mono text-xs">৳{r.profitBdt.toLocaleString()}</span>
+                      <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5 py-0">
+                        {r.marginPct >= 0 ? "+" : ""}{r.marginPct}%
+                      </Badge>
                     </div>
                   </div>
                   {expanded[i] && (
-                    <div className="space-y-2 pt-2 border-t">
+                    <div className="ml-5 mt-2 space-y-1.5 pb-1">
                       {r.platforms.map((p) => (
                         <div key={p.platform} className="flex items-center justify-between text-xs">
                           <Badge variant="outline" className={`text-[10px] ${PLATFORM_COLORS[p.platform] || ""}`}>
                             {PLATFORM_LABELS[p.platform] || p.platform}
                           </Badge>
-                          <div className="flex items-center gap-3">
-                            <span className="text-muted-foreground font-mono">${p.spendUsd.toLocaleString()}</span>
-                            <span className="font-mono">৳{p.profitBdt.toLocaleString()}</span>
-                            <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground font-mono text-[11px]">${p.spendUsd.toLocaleString()}</span>
+                            <span className="font-mono text-[11px]">৳{p.profitBdt.toLocaleString()}</span>
+                            <Badge variant={p.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1 py-0">
                               {p.marginPct >= 0 ? "+" : ""}{p.marginPct}%
                             </Badge>
                           </div>
                         </div>
                       ))}
-                      <p className="text-[10px] text-muted-foreground pt-1">
-                        {r.platforms.map(p => `${PLATFORM_LABELS[p.platform] || p.platform}: ৳${p.billingRate} (gap ৳${p.gap})`).join(" · ")}
-                      </p>
                     </div>
                   )}
                 </div>

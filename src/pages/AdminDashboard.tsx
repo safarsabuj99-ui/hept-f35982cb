@@ -345,11 +345,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Zone 7: Data Tables */}
-      <div>
-        <p className="section-label">Client Data</p>
-        <ClientOverviewTable clients={clients} loading={loading} />
-      </div>
 
       <DepositFundsDialog
         open={depositOpen}
