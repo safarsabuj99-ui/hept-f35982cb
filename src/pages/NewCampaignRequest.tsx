@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useImpersonation } from "@/hooks/useImpersonation";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ function isValid(c: CampaignEntry): boolean {
 
 export default function NewCampaignRequest() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<CampaignEntry[]>([{ ...EMPTY_CAMPAIGN }]);
@@ -82,11 +84,11 @@ export default function NewCampaignRequest() {
   const totalDaily = campaigns.reduce((sum, c) => sum + (Number(c.dailyBudget) || 0), 0);
 
   const handleSubmit = async () => {
-    if (!user || !allValid) return;
+    if (!user || !effectiveClientId || !allValid) return;
     setSubmitting(true);
 
     const rows = campaigns.map(c => ({
-      client_id: user.id,
+      client_id: effectiveClientId,
       creative_link: c.creativeLink,
       platform: c.platform,
       objective: c.objective,
@@ -103,7 +105,7 @@ export default function NewCampaignRequest() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Submitted!", description: `${campaigns.length} campaign request${campaigns.length > 1 ? "s" : ""} sent for review.` });
-      navigate("/dashboard");
+      navigate("/dashboard/campaigns");
     }
   };
 
