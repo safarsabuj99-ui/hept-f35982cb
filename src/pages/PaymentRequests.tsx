@@ -272,6 +272,55 @@ export default function PaymentRequests() {
 
       <DateRangeFilter onRangeChange={handleDateChange} />
 
+      {/* KPI Summary Widgets */}
+      {(() => {
+        const approved = filteredRequests.filter(r => r.status === "approved");
+        const totalBdt = approved.reduce((s, r) => s + (Number(r.amount_bdt) || 0), 0);
+        const totalUsd = approved.reduce((s, r) => s + (Number(r.final_amount_usd) || 0), 0);
+        const approvedCount = approved.length;
+        const pendingCount = filteredRequests.filter(r => r.status === "pending").length;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Banknote className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Received (BDT)</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">৳{fmt(totalBdt)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Credited (USD)</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">${fmt(totalUsd)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Approved</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">{approvedCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="h-3.5 w-3.5 text-yellow-500" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">{pendingCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
+
       <Tabs defaultValue="payments" className="space-y-4">
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
           <TabsTrigger value="payments" className="gap-2 flex-shrink-0">
