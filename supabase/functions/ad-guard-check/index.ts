@@ -95,6 +95,69 @@ async function pauseGoogleCampaign(
   }
 }
 
+// ===== Platform VERIFICATION helpers =====
+// After pause API succeeds, read back the actual status to confirm
+
+async function verifyTikTokPaused(
+  advertiserId: string, rawCampaignId: string, token: string, tiktokBase: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `${tiktokBase}/open_api/v1.3/campaign/get/?advertiser_id=${advertiserId}&filtering={"campaign_ids":["${rawCampaignId}"]}&fields=["operation_status"]`,
+      { headers: { "Access-Token": token } }
+    );
+    const json = await res.json();
+    const status = json?.data?.list?.[0]?.operation_status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    const isPaused = ["DISABLE", "CAMPAIGN_STATUS_DISABLE"].includes(status.toUpperCase());
+    return { verified: isPaused, actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
+async function verifyMetaPaused(
+  rawCampaignId: string, token: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${rawCampaignId}?fields=effective_status&access_token=${token}`
+    );
+    const json = await res.json();
+    const status = json.effective_status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    const isPaused = ["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(status.toUpperCase());
+    return { verified: isPaused, actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
+async function verifyGooglePaused(
+  customerId: string, rawCampaignId: string, token: string, devToken: string
+): Promise<{ verified: boolean; actualStatus: string | null; error?: string }> {
+  try {
+    const res = await fetch(
+      `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "developer-token": devToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: `SELECT campaign.status FROM campaign WHERE campaign.id = ${rawCampaignId}` }),
+      }
+    );
+    const json = await res.json();
+    const status = json?.[0]?.results?.[0]?.campaign?.status;
+    if (!status) return { verified: false, actualStatus: null, error: "Could not read status" };
+    return { verified: status.toUpperCase() === "PAUSED", actualStatus: status };
+  } catch (err: any) {
+    return { verified: false, actualStatus: null, error: err.message };
+  }
+}
+
 // ===== Main handler =====
 
 Deno.serve(async (req) => {
