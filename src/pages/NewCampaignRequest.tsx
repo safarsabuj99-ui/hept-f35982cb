@@ -55,6 +55,7 @@ function isValid(c: CampaignEntry): boolean {
 
 export default function NewCampaignRequest() {
   const { user } = useAuth();
+  const { effectiveClientId } = useImpersonation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<CampaignEntry[]>([{ ...EMPTY_CAMPAIGN }]);
