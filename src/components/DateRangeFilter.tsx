@@ -67,7 +67,12 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
   const [activePreset, setActivePreset] = useState<DatePreset>("today");
   const [customRange, setCustomRange] = useState<RDPDateRange | undefined>();
 
-  // Parent initializes with today's range, no mount-time call needed
+  // Sync parent state on mount so "Today" preset is actually applied
+  useEffect(() => {
+    const range = getPresetRange(activePreset);
+    onRangeChange(range, activePreset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePreset = (preset: DatePreset) => {
     setActivePreset(preset);

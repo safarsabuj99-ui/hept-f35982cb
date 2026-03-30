@@ -302,50 +302,57 @@ export default function PaymentRequests() {
               ) : (
                 <>
                   {/* Mobile card view */}
-                  <div className="flex flex-col gap-3 md:hidden">
+                   <div className="flex flex-col gap-2 md:hidden">
                     {paginatedRequests.map((r) => (
-                      <div key={r.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                      <div key={r.id} className="rounded-lg border p-3 space-y-1.5 bg-card">
+                        {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{r.client_name}</span>
+                          <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
                           {statusBadge(r.status)}
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        {/* Row 2: Metrics inline */}
+                        <div className="grid grid-cols-4 gap-1 text-[11px]">
                           <div>
-                            <p className="text-xs text-muted-foreground">Amount</p>
-                            <p className="font-mono font-semibold">৳{fmt(r.amount_bdt)}</p>
+                            <p className="text-muted-foreground leading-none mb-0.5">Amount</p>
+                            <p className="font-mono font-semibold text-xs">৳{fmt(r.amount_bdt)}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Method</p>
-                            <Badge variant="secondary">{r.payment_method}</Badge>
+                            <p className="text-muted-foreground leading-none mb-0.5">Method</p>
+                            <p className="font-medium text-xs">{r.payment_method}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Date</p>
-                            <p className="text-xs font-mono">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                            <p className="text-muted-foreground leading-none mb-0.5">Date</p>
+                            <p className="font-mono text-xs">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Platform</p>
-                            {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : <span className="text-xs text-muted-foreground">—</span>}
+                            <p className="text-muted-foreground leading-none mb-0.5">Platform</p>
+                            {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
                           </div>
                         </div>
-                        {r.final_amount_usd && (
-                          <p className="text-xs text-muted-foreground">USD Credited: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></p>
-                        )}
-                        {(r as any).proof_image_url && (
-                          <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
-                            <img src={(r as any).proof_image_url} alt="Proof" className="h-16 w-auto rounded border object-cover" />
-                          </a>
-                        )}
-                        {r.status === "pending" && canManageFinance && (
-                          <div className="flex flex-col gap-2">
-                            <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1 w-full">
-                              {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1 w-full">
-                              <XCircle className="h-3 w-3" /> Reject
-                            </Button>
+                        {/* Footer: USD + Proof + Actions */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {r.final_amount_usd && (
+                              <span className="text-[10px] text-muted-foreground">USD: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></span>
+                            )}
+                            {(r as any).proof_image_url && (
+                              <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
+                                <img src={(r as any).proof_image_url} alt="Proof" className="h-8 w-auto rounded border object-cover" />
+                              </a>
+                            )}
                           </div>
-                        )}
+                          {r.status === "pending" && canManageFinance && (
+                            <div className="flex gap-1.5">
+                              <Button size="sm" onClick={() => openConfirm(r, "approved")} disabled={processing === r.id} className="gap-1 h-7 px-2 text-xs">
+                                {processing === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                                Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1 h-7 px-2 text-xs">
+                                <XCircle className="h-3 w-3" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
