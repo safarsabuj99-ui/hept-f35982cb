@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -272,6 +272,55 @@ export default function PaymentRequests() {
 
       <DateRangeFilter onRangeChange={handleDateChange} />
 
+      {/* KPI Summary Widgets */}
+      {(() => {
+        const approved = filteredRequests.filter(r => r.status === "approved");
+        const totalBdt = approved.reduce((s, r) => s + (Number(r.amount_bdt) || 0), 0);
+        const totalUsd = approved.reduce((s, r) => s + (Number(r.final_amount_usd) || 0), 0);
+        const approvedCount = approved.length;
+        const pendingCount = filteredRequests.filter(r => r.status === "pending").length;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Banknote className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Received (BDT)</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">৳{fmt(totalBdt)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Credited (USD)</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">${fmt(totalUsd)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Approved</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">{approvedCount}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="h-3.5 w-3.5 text-yellow-500" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending</span>
+                </div>
+                <p className="text-base sm:text-lg font-bold font-mono">{pendingCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
+
       <Tabs defaultValue="payments" className="space-y-4">
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
           <TabsTrigger value="payments" className="gap-2 flex-shrink-0">
@@ -329,16 +378,17 @@ export default function PaymentRequests() {
                             {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
                           </div>
                         </div>
+                        {/* USD */}
+                        {r.final_amount_usd && (
+                          <p className="text-[11px] text-muted-foreground">USD: <span className="font-mono font-semibold text-foreground">${fmt(r.final_amount_usd)}</span></p>
+                        )}
                         {/* TrxID */}
                         {r.transaction_id && (
                           <p className="text-[11px] font-mono text-muted-foreground">TrxID: <span className="text-foreground">{r.transaction_id}</span></p>
                         )}
-                        {/* Footer: USD + Proof + Actions */}
+                        {/* Footer: Proof + Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            {r.final_amount_usd && (
-                              <span className="text-[10px] text-muted-foreground">USD: <span className="font-mono font-medium text-foreground">${fmt(r.final_amount_usd)}</span></span>
-                            )}
                             {(r as any).proof_image_url && (
                               <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
                                 <img src={(r as any).proof_image_url} alt="Proof" className="h-8 w-auto rounded border object-cover" />
