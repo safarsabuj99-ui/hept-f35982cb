@@ -371,7 +371,7 @@ export default function PaymentRequests() {
                           <TableHead>Method</TableHead>
                           <TableHead>Platform</TableHead>
                           <TableHead className="text-right">Amount (BDT)</TableHead>
-                          <TableHead className="hidden md:table-cell">TrxID</TableHead>
+                          <TableHead>TrxID</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="hidden lg:table-cell text-right">USD Credited</TableHead>
                           <TableHead className="text-center">Actions</TableHead>
