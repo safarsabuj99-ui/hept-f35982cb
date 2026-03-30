@@ -149,6 +149,7 @@ const App = () => (
                 <Route path="/admin/cash-flow" element={<Navigate to="/admin/finance?tab=cash-flow" replace />} />
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
+                <Route path="/admin/client-notices" element={<ClientNotices />} />
               </Route>
 
               {/* Manager routes */}
