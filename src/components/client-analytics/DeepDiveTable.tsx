@@ -112,6 +112,11 @@ const FROZEN_LEFT: Record<string, string> = {
 };
 const isFrozen = (id: string) => FROZEN_COLS.includes(id);
 
+const isPausedStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "paused" || s === "disable" || s === "guard_paused";
+};
+
 interface DeepDiveTableProps {
   data: CampaignRow[];
   onCampaignPaused?: () => void;
@@ -121,6 +126,7 @@ interface DeepDiveTableProps {
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
   canToggleCampaigns?: boolean;
+  isAdmin?: boolean;
 }
 
 export function DeepDiveTable({
@@ -132,6 +138,7 @@ export function DeepDiveTable({
   savedColumnOrder,
   onColumnOrderChange,
   canToggleCampaigns = true,
+  isAdmin = false,
 }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,7 +152,9 @@ export function DeepDiveTable({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [showBulkActivate, setShowBulkActivate] = useState(false);
   const [bulkPausing, setBulkPausing] = useState(false);
+  const [bulkActivating, setBulkActivating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   // Drag-and-drop state
@@ -195,8 +204,13 @@ export function DeepDiveTable({
   }, [filteredData, currentPage, pageSize]);
 
   const selectableRows = useMemo(
-    () => canToggleCampaigns ? paginatedData.filter(r => r.campaign_id && isActiveStatus(r.status)) : [],
-    [paginatedData, canToggleCampaigns]
+    () => paginatedData.filter(r => {
+      if (!r.campaign_id) return false;
+      if (canToggleCampaigns && isActiveStatus(r.status)) return true;
+      if (isAdmin && isPausedStatus(r.status)) return true;
+      return false;
+    }),
+    [paginatedData, canToggleCampaigns, isAdmin]
   );
 
   const toggleSelect = useCallback((id: string) => {
@@ -278,6 +292,48 @@ export function DeepDiveTable({
     onCampaignPaused?.();
   };
 
+  const handleBulkActivate = async () => {
+    const ids = Array.from(selectedIds).filter(id => {
+      const row = data.find(r => r.campaign_id === id);
+      return row && isPausedStatus(row.status);
+    });
+    setBulkActivating(true);
+    setBulkProgress({ current: 0, total: ids.length });
+    let successCount = 0;
+    let failCount = 0;
+
+    // Parallel batches of 5
+    for (let i = 0; i < ids.length; i += 5) {
+      const batch = ids.slice(i, i + 5);
+      const results = await Promise.allSettled(
+        batch.map(id =>
+          supabase.functions.invoke("pause-campaign", {
+            body: { campaign_id: id, action: "enable" },
+          })
+        )
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled" && !r.value.error && !r.value.data?.error) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+      setBulkProgress({ current: Math.min(i + batch.length, ids.length), total: ids.length });
+    }
+
+    setBulkActivating(false);
+    setShowBulkActivate(false);
+    setSelectedIds(new Set());
+
+    if (failCount === 0) {
+      toast({ title: "Bulk Activate Complete", description: `${successCount} campaign${successCount > 1 ? "s" : ""} activated successfully.` });
+    } else {
+      toast({ title: "Bulk Activate Partial", description: `${successCount} activated, ${failCount} failed.`, variant: "destructive" });
+    }
+    onCampaignPaused?.();
+  };
+
   const hasObjectiveData = useMemo(() => {
     const has = { sales: false, messages: false };
     for (const r of data) {
@@ -314,7 +370,7 @@ export function DeepDiveTable({
         },
         cell: (info) => {
           const row = info.row.original;
-          const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
+          const isSelectable = row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
           if (!isSelectable) return <div className="w-4" />;
           return (
             <Checkbox
@@ -782,7 +838,7 @@ export function DeepDiveTable({
     const roas = safeDivide(row.conversion_value, row.spend);
     const cpo = safeDivide(row.spend, row.results);
     const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
-    const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
+    const isSelectable = row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
@@ -1221,31 +1277,53 @@ export function DeepDiveTable({
         </div>
 
         {/* Floating bulk action bar */}
-        {canToggleCampaigns && selectedIds.size > 0 && (
-          <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
-            <span className="text-sm font-medium text-foreground">
-              {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedIds(new Set())}
-                className="h-8 text-xs rounded-lg"
-              >
-                <X className="h-3.5 w-3.5 mr-1" /> Clear
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowBulkConfirm(true)}
-                className="h-8 text-xs rounded-lg"
-              >
-                <Power className="h-3.5 w-3.5 mr-1" /> Pause All
-              </Button>
+        {selectedIds.size > 0 && (() => {
+          const hasActive = Array.from(selectedIds).some(id => {
+            const row = data.find(r => r.campaign_id === id);
+            return row && isActiveStatus(row.status);
+          });
+          const hasPaused = Array.from(selectedIds).some(id => {
+            const row = data.find(r => r.campaign_id === id);
+            return row && isPausedStatus(row.status);
+          });
+          if (!canToggleCampaigns && !isAdmin) return null;
+          return (
+            <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
+              <span className="text-sm font-medium text-foreground">
+                {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="h-8 text-xs rounded-lg"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Clear
+                </Button>
+                {canToggleCampaigns && hasActive && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowBulkConfirm(true)}
+                    className="h-8 text-xs rounded-lg"
+                  >
+                    <Power className="h-3.5 w-3.5 mr-1" /> Pause All
+                  </Button>
+                )}
+                {isAdmin && hasPaused && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowBulkActivate(true)}
+                    className="h-8 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Power className="h-3.5 w-3.5 mr-1" /> Activate All
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <TablePagination
@@ -1310,6 +1388,35 @@ export function DeepDiveTable({
                 </>
               ) : (
                 `Pause ${selectedIds.size} Campaign${selectedIds.size > 1 ? "s" : ""}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk activate confirm */}
+      <AlertDialog open={showBulkActivate} onOpenChange={(open) => { if (!bulkActivating) setShowBulkActivate(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Activate {selectedIds.size} Campaign{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will activate <strong>{selectedIds.size} paused campaign{selectedIds.size > 1 ? "s" : ""}</strong> directly on their ad platforms. They will start delivering ads again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkActivating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={(e) => { e.preventDefault(); handleBulkActivate(); }}
+              disabled={bulkActivating}
+            >
+              {bulkActivating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Activating {bulkProgress.current} of {bulkProgress.total}…
+                </>
+              ) : (
+                `Activate ${selectedIds.size} Campaign${selectedIds.size > 1 ? "s" : ""}`
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

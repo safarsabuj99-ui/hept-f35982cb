@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +38,7 @@ interface ClientProfile {
 
 export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
+  const { role } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -682,7 +684,7 @@ export default function AdAccountDetail() {
         {/* SPEND TAB */}
         <TabsContent value="spend" className="space-y-4">
           <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendPreset} />
-          <CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} />
+          <CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} isAdmin={role === "admin"} />
         </TabsContent>
 
         {/* BILLING HEALTH TAB */}

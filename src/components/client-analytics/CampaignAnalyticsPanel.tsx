@@ -14,11 +14,12 @@ interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
   onRefresh: () => void;
   canToggleCampaigns?: boolean;
+  isAdmin?: boolean;
 }
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
-export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true }: CampaignAnalyticsPanelProps) {
+export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true, isAdmin = false }: CampaignAnalyticsPanelProps) {
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
 
   const totals = useMemo(() => {
@@ -46,6 +47,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       savedColumnOrder={getColumnOrder(platform)}
       onColumnOrderChange={(order) => setColumnOrder(platform, order)}
       canToggleCampaigns={canToggleCampaigns}
+      isAdmin={isAdmin}
     />
   );
 

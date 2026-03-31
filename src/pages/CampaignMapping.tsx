@@ -248,7 +248,7 @@ export default function CampaignMapping() {
 
       {/* Analytics Panel with subtle opacity during refresh */}
       <div className={refreshing ? "opacity-60 pointer-events-none transition-opacity duration-200" : "transition-opacity duration-200"}>
-        <CampaignAnalyticsPanel campaignRows={filteredRows} onRefresh={fetchData} />
+        <CampaignAnalyticsPanel campaignRows={filteredRows} onRefresh={fetchData} isAdmin={isAdmin} />
       </div>
     </div>
   );
