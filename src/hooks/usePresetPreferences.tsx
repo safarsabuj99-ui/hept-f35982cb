@@ -30,6 +30,7 @@ export function usePresetPreferences() {
           setPrefs({
             campaign_presets: p.campaign_presets || {},
             column_order: p.column_order || {},
+            ui_prefs: p.ui_prefs || {},
           });
         }
         setLoading(false);
