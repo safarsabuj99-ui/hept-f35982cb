@@ -782,7 +782,7 @@ export function DeepDiveTable({
     const roas = safeDivide(row.conversion_value, row.spend);
     const cpo = safeDivide(row.spend, row.results);
     const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
-    const isSelectable = row.campaign_id && isActiveStatus(row.status);
+    const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
