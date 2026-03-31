@@ -314,7 +314,7 @@ export function DeepDiveTable({
         },
         cell: (info) => {
           const row = info.row.original;
-          const isSelectable = row.campaign_id && isActiveStatus(row.status);
+          const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
           if (!isSelectable) return <div className="w-4" />;
           return (
             <Checkbox
@@ -782,7 +782,7 @@ export function DeepDiveTable({
     const roas = safeDivide(row.conversion_value, row.spend);
     const cpo = safeDivide(row.spend, row.results);
     const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
-    const isSelectable = row.campaign_id && isActiveStatus(row.status);
+    const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     const active = isActiveStatus(row.status);
@@ -1221,7 +1221,7 @@ export function DeepDiveTable({
         </div>
 
         {/* Floating bulk action bar */}
-        {selectedIds.size > 0 && (
+        {canToggleCampaigns && selectedIds.size > 0 && (
           <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
