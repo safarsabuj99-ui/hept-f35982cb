@@ -1393,6 +1393,35 @@ export function DeepDiveTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk activate confirm */}
+      <AlertDialog open={showBulkActivate} onOpenChange={(open) => { if (!bulkActivating) setShowBulkActivate(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Activate {selectedIds.size} Campaign{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will activate <strong>{selectedIds.size} paused campaign{selectedIds.size > 1 ? "s" : ""}</strong> directly on their ad platforms. They will start delivering ads again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkActivating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={(e) => { e.preventDefault(); handleBulkActivate(); }}
+              disabled={bulkActivating}
+            >
+              {bulkActivating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Activating {bulkProgress.current} of {bulkProgress.total}…
+                </>
+              ) : (
+                `Activate ${selectedIds.size} Campaign${selectedIds.size > 1 ? "s" : ""}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

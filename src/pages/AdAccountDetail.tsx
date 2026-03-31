@@ -683,7 +683,7 @@ export default function AdAccountDetail() {
         {/* SPEND TAB */}
         <TabsContent value="spend" className="space-y-4">
           <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendPreset} />
-          <CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} />
+          <CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={loadSpendTab} isAdmin={role === "admin"} />
         </TabsContent>
 
         {/* BILLING HEALTH TAB */}

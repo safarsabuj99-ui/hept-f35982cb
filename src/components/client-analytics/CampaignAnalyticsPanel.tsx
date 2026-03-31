@@ -47,6 +47,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       savedColumnOrder={getColumnOrder(platform)}
       onColumnOrderChange={(order) => setColumnOrder(platform, order)}
       canToggleCampaigns={canToggleCampaigns}
+      isAdmin={isAdmin}
     />
   );
 
