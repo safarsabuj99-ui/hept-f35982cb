@@ -97,5 +97,36 @@ export function usePresetPreferences() {
     [user?.id, prefs]
   );
 
-  return { loading, getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder };
+  const getUiPref = useCallback(
+    (key: string): any => {
+      return prefs.ui_prefs?.[key];
+    },
+    [prefs]
+  );
+
+  const setUiPref = useCallback(
+    async (key: string, value: any) => {
+      if (!user?.id) return;
+      const newUiPrefs = { ...prefs.ui_prefs, [key]: value };
+      setPrefs((p) => ({ ...p, ui_prefs: newUiPrefs }));
+
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("permissions")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const currentPerms = (current?.permissions && typeof current.permissions === "object" ? current.permissions : {}) as Record<string, any>;
+
+      await supabase
+        .from("profiles")
+        .update({ permissions: { ...currentPerms, ui_prefs: newUiPrefs } })
+        .eq("user_id", user.id);
+
+      toast({ title: "Preference saved" });
+    },
+    [user?.id, prefs]
+  );
+
+  return { loading, getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder, getUiPref, setUiPref };
 }
