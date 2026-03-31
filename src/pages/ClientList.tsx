@@ -14,6 +14,8 @@ import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePresetPreferences } from "@/hooks/usePresetPreferences";
 
+type SortKey = "name" | "business" | "email" | "pricing" | "margin" | "balance";
+
 interface ClientRow {
   user_id: string;
   full_name: string;
