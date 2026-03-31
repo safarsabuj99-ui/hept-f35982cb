@@ -11,7 +11,9 @@ import { toISODate, getLocalToday } from "@/components/DateRangeFilter";
 interface ProfitData {
   totalRevenueBdt: number;
   totalCogsBdt: number;
-  totalProfitBdt: number;
+  grossProfitBdt: number;
+  totalOpexBdt: number;
+  netProfitBdt: number;
   wac: number;
 }
 
@@ -36,13 +38,28 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           .lte("date", toISODate(dateRange.to));
       }
 
-      const [purchasesRes, profilesRes, rolesRes] = await Promise.all([
+      // Fetch expenses (excluding Owner_Draw, date-filtered)
+      let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date").neq("category", "Owner_Draw");
+      if (dateRange) {
+        expensesQuery = expensesQuery
+          .gte("date", toISODate(dateRange.from))
+          .lte("date", toISODate(dateRange.to));
+      }
+
+      const [purchasesRes, profilesRes, rolesRes, expensesRes] = await Promise.all([
         purchasesQuery,
         supabase.from("profiles").select("user_id, pricing_config"),
         supabase.from("user_roles").select("user_id").eq("role", "client"),
+        expensesQuery,
       ]);
 
-      // Step 2: Calculate WAC with cascading fallback (same as FinanceDashboard)
+      // Calculate OpEx
+      let totalOpexBdt = 0;
+      for (const e of (expensesRes.data ?? []) as any[]) {
+        totalOpexBdt += Number(e.amount_bdt);
+      }
+
+      // Step 2: Calculate WAC with cascading fallback
       const calcWac = (data: any[] | null) => {
         let bdt = 0, usd = 0;
         for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
@@ -51,7 +68,6 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
 
       let wac = calcWac(purchasesRes.data);
 
-      // Fallback: current month
       if (wac === 0) {
         const today = getLocalToday();
         const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -62,7 +78,6 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         wac = calcWac(monthPurchases);
       }
 
-      // Fallback: all-time
       if (wac === 0) {
         const { data: allPurchases } = await supabase.from("usd_purchases")
           .select("bdt_amount_paid, usd_received");
@@ -76,11 +91,11 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
       }
 
-      // Step 4: Get campaigns with client_id (authoritative mapping — same as FinanceDashboard)
+      // Step 4: Get campaigns with client_id
       const { data: allCampaigns } = await supabase.from("campaigns").select("id, platform, client_id");
 
       if (!allCampaigns?.length) {
-        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac });
+        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, grossProfitBdt: 0, totalOpexBdt: Math.round(totalOpexBdt), netProfitBdt: -Math.round(totalOpexBdt), wac });
         setLoading(false);
         return;
       }
@@ -101,7 +116,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
       }
       const { data: metricsData } = await metricsQuery;
 
-      // Step 6: Aggregate spend per client per platform (using campaigns.client_id)
+      // Step 6: Aggregate spend per client per platform
       const clientPlatformSpend: Record<string, Record<string, number>> = {};
       for (const m of (metricsData ?? []) as any[]) {
         const clientId = campaignToClient[m.campaign_id];
@@ -111,7 +126,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(m.spend);
       }
 
-      // Step 7: Calculate revenue & COGS (identical to FinanceDashboard)
+      // Step 7: Calculate revenue & COGS
       let totalRevenueBdt = 0;
       let totalCogsBdt = 0;
 
@@ -132,7 +147,6 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           totalSpendUsd += spendUsd as number;
         }
 
-        // Include percentage markup (was missing before!)
         if (percentageMarkup > 0) {
           revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
         }
@@ -142,12 +156,15 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         totalCogsBdt += cogsBdt;
       }
 
-      const totalProfitBdt = totalRevenueBdt - totalCogsBdt;
+      const grossProfitBdt = totalRevenueBdt - totalCogsBdt;
+      const netProfitBdt = grossProfitBdt - totalOpexBdt;
 
       setData({
         totalRevenueBdt: Math.round(totalRevenueBdt),
         totalCogsBdt: Math.round(totalCogsBdt),
-        totalProfitBdt: Math.round(totalProfitBdt),
+        grossProfitBdt: Math.round(grossProfitBdt),
+        totalOpexBdt: Math.round(totalOpexBdt),
+        netProfitBdt: Math.round(netProfitBdt),
         wac,
       });
       setLoading(false);
@@ -156,21 +173,22 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
   }, [dateRange]);
 
   const fmt = (n: number) => `৳${n.toLocaleString("en-US")}`;
-  const marginPct = data && data.totalRevenueBdt > 0 ? ((data.totalProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
-  const isProfit = data ? data.totalProfitBdt >= 0 : true;
+  const netMarginPct = data && data.totalRevenueBdt > 0 ? ((data.netProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
+  const isNetProfit = data ? data.netProfitBdt >= 0 : true;
+  const isGrossProfit = data ? data.grossProfitBdt >= 0 : true;
 
   if (!hasPermission("can_view_profit")) return null;
-  if (loading) return <Skeleton className="h-[200px]" />;
+  if (loading) return <Skeleton className="h-[280px]" />;
 
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-medium text-muted-foreground">Profit / Loss (BDT)</CardTitle>
-        <Badge variant={isProfit ? "default" : "destructive"} className="text-xs font-mono">
-          {isProfit ? "+" : ""}{marginPct}%
+        <Badge variant={isNetProfit ? "default" : "destructive"} className="text-xs font-mono">
+          {isNetProfit ? "+" : ""}{netMarginPct}%
         </Badge>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Revenue</span>
           <span className="font-mono">{fmt(data?.totalRevenueBdt ?? 0)}</span>
@@ -179,11 +197,24 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           <span className="text-muted-foreground">Cost (WAC: {data?.wac})</span>
           <span className="font-mono">{fmt(data?.totalCogsBdt ?? 0)}</span>
         </div>
-        <div className="flex justify-between border-t pt-3">
-          <span className="font-medium text-sm">Margin</span>
-          <span className={`flex items-center gap-1 font-mono font-bold ${isProfit ? "text-success" : "text-destructive"}`}>
-            {isProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            {fmt(Math.abs(data?.totalProfitBdt ?? 0))}
+
+        <div className="border-t pt-2 flex justify-between text-sm">
+          <span className="font-medium">Gross Profit</span>
+          <span className={`font-mono font-semibold ${isGrossProfit ? "text-success" : "text-destructive"}`}>
+            {fmt(Math.abs(data?.grossProfitBdt ?? 0))}
+          </span>
+        </div>
+
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">OpEx</span>
+          <span className="font-mono">{fmt(data?.totalOpexBdt ?? 0)}</span>
+        </div>
+
+        <div className="border-t pt-2 flex justify-between">
+          <span className="font-medium text-sm">Net Profit</span>
+          <span className={`flex items-center gap-1 font-mono font-bold ${isNetProfit ? "text-success" : "text-destructive"}`}>
+            {isNetProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+            {fmt(Math.abs(data?.netProfitBdt ?? 0))}
           </span>
         </div>
       </CardContent>
