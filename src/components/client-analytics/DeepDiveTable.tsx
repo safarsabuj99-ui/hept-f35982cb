@@ -314,7 +314,7 @@ export function DeepDiveTable({
         },
         cell: (info) => {
           const row = info.row.original;
-          const isSelectable = row.campaign_id && isActiveStatus(row.status);
+          const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
           if (!isSelectable) return <div className="w-4" />;
           return (
             <Checkbox
