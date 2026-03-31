@@ -9,6 +9,7 @@ type PlatformTab = "all" | "meta" | "tiktok" | "google";
 interface PresetPreferences {
   campaign_presets?: Record<string, PresetType>;
   column_order?: Record<string, string[]>;
+  ui_prefs?: Record<string, any>;
 }
 
 export function usePresetPreferences() {
