@@ -38,6 +38,7 @@ interface ClientProfile {
 
 export default function AdAccountDetail() {
   const { accountId } = useParams<{ accountId: string }>();
+  const { role } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
