@@ -1,22 +1,39 @@
 
 
-# Plan: Compact Mobile Client Cards
+# Fix: Bulk Pause Button Visible When Campaign Toggle Control is Off (Client Side)
 
-## Goal
-Reduce card height so more clients fit on one screen on mobile.
+## Bug
 
-## Changes — `src/pages/ClientList.tsx`
+When an admin disables `can_toggle_campaigns` for a client, the individual toggle switches correctly hide. However, **checkboxes still appear** on each campaign row, allowing multi-select. Once selected, the **bulk pause button appears** — bypassing the permission entirely.
 
-Condense the mobile card layout (lines 322-375):
+## Root Cause — `src/components/client-analytics/DeepDiveTable.tsx`
 
-1. **Reduce padding & gaps**: `p-4 space-y-3` → `p-3 space-y-1.5`, outer gap `gap-3` → `gap-2`
-2. **Inline Balance & Margin on one row**: Combine Balance and Margin into a single flex row instead of two stacked rows, using a compact `grid-cols-[1fr_auto_auto]` or side-by-side layout
-3. **Shrink action buttons**: Remove `pt-1` padding, use smaller button heights (`h-7`), keep side-by-side layout
-4. **Tighter name/pricing row**: Reduce vertical spacing between name and pricing badge
+Three locations check if a row is "selectable" using only `isActiveStatus(row.status)` but ignore the `canToggleCampaigns` prop:
 
-Result: Each card shrinks from ~5 visual rows to ~3, fitting roughly 2x more clients per screen.
+1. **Desktop checkbox column** (line 317): `isSelectable = row.campaign_id && isActiveStatus(row.status)` — missing `canToggleCampaigns` check
+2. **Mobile card checkbox** (line 785): Same issue
+3. **Bulk action bar** (line 1224): Shows whenever `selectedIds.size > 0` — no guard
+
+## Fix — 3 one-line changes in `DeepDiveTable.tsx`
+
+1. **Desktop column cell** — add `canToggleCampaigns` to `isSelectable`:
+   ```ts
+   const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
+   ```
+
+2. **Mobile card** — same fix:
+   ```ts
+   const isSelectable = canToggleCampaigns && row.campaign_id && isActiveStatus(row.status);
+   ```
+
+3. **Bulk action bar** — add guard:
+   ```ts
+   {canToggleCampaigns && selectedIds.size > 0 && (
+   ```
+
+This ensures that when `canToggleCampaigns` is `false`, no checkboxes render and no bulk actions appear — consistent with the individual toggle behavior.
 
 ## Files Modified
 
-1. `src/pages/ClientList.tsx` — Mobile card section only (lines 322-375)
+1. `src/components/client-analytics/DeepDiveTable.tsx` — 3 lines changed
 
