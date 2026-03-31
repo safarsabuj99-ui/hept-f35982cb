@@ -1277,31 +1277,53 @@ export function DeepDiveTable({
         </div>
 
         {/* Floating bulk action bar */}
-        {canToggleCampaigns && selectedIds.size > 0 && (
-          <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
-            <span className="text-sm font-medium text-foreground">
-              {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedIds(new Set())}
-                className="h-8 text-xs rounded-lg"
-              >
-                <X className="h-3.5 w-3.5 mr-1" /> Clear
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowBulkConfirm(true)}
-                className="h-8 text-xs rounded-lg"
-              >
-                <Power className="h-3.5 w-3.5 mr-1" /> Pause All
-              </Button>
+        {selectedIds.size > 0 && (() => {
+          const hasActive = Array.from(selectedIds).some(id => {
+            const row = data.find(r => r.campaign_id === id);
+            return row && isActiveStatus(row.status);
+          });
+          const hasPaused = Array.from(selectedIds).some(id => {
+            const row = data.find(r => r.campaign_id === id);
+            return row && isPausedStatus(row.status);
+          });
+          if (!canToggleCampaigns && !isAdmin) return null;
+          return (
+            <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
+              <span className="text-sm font-medium text-foreground">
+                {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="h-8 text-xs rounded-lg"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Clear
+                </Button>
+                {canToggleCampaigns && hasActive && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowBulkConfirm(true)}
+                    className="h-8 text-xs rounded-lg"
+                  >
+                    <Power className="h-3.5 w-3.5 mr-1" /> Pause All
+                  </Button>
+                )}
+                {isAdmin && hasPaused && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowBulkActivate(true)}
+                    className="h-8 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Power className="h-3.5 w-3.5 mr-1" /> Activate All
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <TablePagination
