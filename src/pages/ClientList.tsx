@@ -232,6 +232,30 @@ export default function ClientList() {
     );
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortAsc(!sortAsc);
+    else { setSortKey(key); setSortAsc(key === "name" || key === "business" || key === "email"); }
+    setCurrentPage(1);
+  };
+
+  const saveDefaultSort = () => {
+    setUiPref("clientListSort", { key: sortKey, asc: sortAsc });
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-50" />;
+    return sortAsc ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const SortBtn = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
+    <button
+      onClick={() => handleSort(k)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${sortKey === k ? "text-foreground font-semibold" : ""} ${className || ""}`}
+    >
+      {label} <SortIcon k={k} />
+    </button>
+  );
+
   const filtered = clients.filter(
     (c) =>
       c.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -239,7 +263,20 @@ export default function ClientList() {
       c.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const paginatedData = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const sorted = [...filtered].sort((a, b) => {
+    const mul = sortAsc ? 1 : -1;
+    switch (sortKey) {
+      case "name": return mul * a.full_name.localeCompare(b.full_name);
+      case "business": return mul * (a.business_name || "").localeCompare(b.business_name || "");
+      case "email": return mul * a.email.localeCompare(b.email);
+      case "pricing": return mul * getPricingLabel(a.pricing_config).localeCompare(getPricingLabel(b.pricing_config));
+      case "margin": return mul * ((margins[a.user_id]?.margin ?? 0) - (margins[b.user_id]?.margin ?? 0));
+      case "balance": return mul * ((balances[a.user_id] ?? 0) - (balances[b.user_id] ?? 0));
+      default: return 0;
+    }
+  });
+
+  const paginatedData = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6">
