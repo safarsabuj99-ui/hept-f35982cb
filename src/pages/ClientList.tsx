@@ -459,7 +459,7 @@ export default function ClientList() {
                 </Table>
               </div>
               <TablePagination
-                totalItems={filtered.length}
+                totalItems={sorted.length}
                 pageSize={pageSize}
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
