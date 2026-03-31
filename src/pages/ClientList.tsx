@@ -379,12 +379,12 @@ export default function ClientList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Business</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Pricing</TableHead>
-                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
-                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead><SortBtn k="name" label="Name" /></TableHead>
+                      <TableHead><SortBtn k="business" label="Business" /></TableHead>
+                      <TableHead><SortBtn k="email" label="Email" /></TableHead>
+                      <TableHead><SortBtn k="pricing" label="Pricing" /></TableHead>
+                      {canViewProfit && <TableHead className="text-right"><SortBtn k="margin" label="Margin" className="justify-end" /></TableHead>}
+                      <TableHead className="text-right"><SortBtn k="balance" label="Balance" className="justify-end" /></TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
