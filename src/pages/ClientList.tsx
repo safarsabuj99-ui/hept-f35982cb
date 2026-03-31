@@ -7,11 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Save } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePresetPreferences } from "@/hooks/usePresetPreferences";
+
+type SortKey = "name" | "business" | "email" | "pricing" | "margin" | "balance";
 
 interface ClientRow {
   user_id: string;
@@ -31,6 +34,7 @@ interface MarginData {
 export default function ClientList() {
   const { hasPermission } = usePermissions();
   const canViewProfit = hasPermission("can_view_profit");
+  const { loading: prefsLoading, getUiPref, setUiPref } = usePresetPreferences();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -41,7 +45,21 @@ export default function ClientList() {
   const [margins, setMargins] = useState<Record<string, MarginData>>({});
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [bdtBalances, setBdtBalances] = useState<Record<string, number>>({});
+  const [sortKey, setSortKey] = useState<SortKey>("balance");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [sortInitialized, setSortInitialized] = useState(false);
   const location = useLocation();
+
+  // Load saved sort preference
+  useEffect(() => {
+    if (prefsLoading || sortInitialized) return;
+    const saved = getUiPref("clientListSort");
+    if (saved && saved.key && typeof saved.asc === "boolean") {
+      setSortKey(saved.key);
+      setSortAsc(saved.asc);
+    }
+    setSortInitialized(true);
+  }, [prefsLoading, sortInitialized, getUiPref]);
 
   const load = useCallback(async () => {
       const { data: roles } = await supabase
@@ -214,6 +232,30 @@ export default function ClientList() {
     );
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortAsc(!sortAsc);
+    else { setSortKey(key); setSortAsc(key === "name" || key === "business" || key === "email"); }
+    setCurrentPage(1);
+  };
+
+  const saveDefaultSort = () => {
+    setUiPref("clientListSort", { key: sortKey, asc: sortAsc });
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-50" />;
+    return sortAsc ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const SortBtn = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
+    <button
+      onClick={() => handleSort(k)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${sortKey === k ? "text-foreground font-semibold" : ""} ${className || ""}`}
+    >
+      {label} <SortIcon k={k} />
+    </button>
+  );
+
   const filtered = clients.filter(
     (c) =>
       c.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -221,7 +263,20 @@ export default function ClientList() {
       c.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const paginatedData = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const sorted = [...filtered].sort((a, b) => {
+    const mul = sortAsc ? 1 : -1;
+    switch (sortKey) {
+      case "name": return mul * a.full_name.localeCompare(b.full_name);
+      case "business": return mul * (a.business_name || "").localeCompare(b.business_name || "");
+      case "email": return mul * a.email.localeCompare(b.email);
+      case "pricing": return mul * getPricingLabel(a.pricing_config).localeCompare(getPricingLabel(b.pricing_config));
+      case "margin": return mul * ((margins[a.user_id]?.margin ?? 0) - (margins[b.user_id]?.margin ?? 0));
+      case "balance": return mul * ((balances[a.user_id] ?? 0) - (balances[b.user_id] ?? 0));
+      default: return 0;
+    }
+  });
+
+  const paginatedData = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6">
@@ -235,14 +290,19 @@ export default function ClientList() {
         </Badge>
       </div>
 
-      <div className="relative w-full sm:max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, business, or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, business, or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs shrink-0 self-start" onClick={saveDefaultSort}>
+          <Save className="h-3 w-3" /> Set Default Sort
+        </Button>
       </div>
 
       <Card>
@@ -319,12 +379,12 @@ export default function ClientList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Business</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Pricing</TableHead>
-                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
-                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead><SortBtn k="name" label="Name" /></TableHead>
+                      <TableHead><SortBtn k="business" label="Business" /></TableHead>
+                      <TableHead><SortBtn k="email" label="Email" /></TableHead>
+                      <TableHead><SortBtn k="pricing" label="Pricing" /></TableHead>
+                      {canViewProfit && <TableHead className="text-right"><SortBtn k="margin" label="Margin" className="justify-end" /></TableHead>}
+                      <TableHead className="text-right"><SortBtn k="balance" label="Balance" className="justify-end" /></TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -399,7 +459,7 @@ export default function ClientList() {
                 </Table>
               </div>
               <TablePagination
-                totalItems={filtered.length}
+                totalItems={sorted.length}
                 pageSize={pageSize}
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
