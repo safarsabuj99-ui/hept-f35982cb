@@ -152,7 +152,9 @@ export function DeepDiveTable({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [showBulkActivate, setShowBulkActivate] = useState(false);
   const [bulkPausing, setBulkPausing] = useState(false);
+  const [bulkActivating, setBulkActivating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   // Drag-and-drop state
