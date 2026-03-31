@@ -34,6 +34,7 @@ interface MarginData {
 export default function ClientList() {
   const { hasPermission } = usePermissions();
   const canViewProfit = hasPermission("can_view_profit");
+  const { loading: prefsLoading, getUiPref, setUiPref } = usePresetPreferences();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -44,7 +45,21 @@ export default function ClientList() {
   const [margins, setMargins] = useState<Record<string, MarginData>>({});
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [bdtBalances, setBdtBalances] = useState<Record<string, number>>({});
+  const [sortKey, setSortKey] = useState<SortKey>("balance");
+  const [sortAsc, setSortAsc] = useState(false);
+  const [sortInitialized, setSortInitialized] = useState(false);
   const location = useLocation();
+
+  // Load saved sort preference
+  useEffect(() => {
+    if (prefsLoading || sortInitialized) return;
+    const saved = getUiPref("clientListSort");
+    if (saved && saved.key && typeof saved.asc === "boolean") {
+      setSortKey(saved.key);
+      setSortAsc(saved.asc);
+    }
+    setSortInitialized(true);
+  }, [prefsLoading, sortInitialized, getUiPref]);
 
   const load = useCallback(async () => {
       const { data: roles } = await supabase
