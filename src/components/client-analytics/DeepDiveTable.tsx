@@ -112,6 +112,11 @@ const FROZEN_LEFT: Record<string, string> = {
 };
 const isFrozen = (id: string) => FROZEN_COLS.includes(id);
 
+const isPausedStatus = (status: string) => {
+  const s = status.toLowerCase();
+  return s === "paused" || s === "disable" || s === "guard_paused";
+};
+
 interface DeepDiveTableProps {
   data: CampaignRow[];
   onCampaignPaused?: () => void;
@@ -121,6 +126,7 @@ interface DeepDiveTableProps {
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
   canToggleCampaigns?: boolean;
+  isAdmin?: boolean;
 }
 
 export function DeepDiveTable({
@@ -132,6 +138,7 @@ export function DeepDiveTable({
   savedColumnOrder,
   onColumnOrderChange,
   canToggleCampaigns = true,
+  isAdmin = false,
 }: DeepDiveTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
