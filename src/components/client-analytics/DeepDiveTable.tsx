@@ -1221,7 +1221,7 @@ export function DeepDiveTable({
         </div>
 
         {/* Floating bulk action bar */}
-        {selectedIds.size > 0 && (
+        {canToggleCampaigns && selectedIds.size > 0 && (
           <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""} selected
