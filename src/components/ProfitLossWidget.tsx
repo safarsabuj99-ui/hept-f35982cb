@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { format } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
+import { toISODate, getLocalToday } from "@/components/DateRangeFilter";
 
 interface ProfitData {
   totalRevenueBdt: number;
@@ -28,130 +28,128 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
     const fetchData = async () => {
       setLoading(true);
 
-      // Step 1: Get mapped accounts WITH keywords
-      const { data: mappedAssignments } = await supabase
-        .from("ad_account_clients")
-        .select("ad_account_id, client_id, mapping_keyword")
-        .neq("mapping_keyword", "");
-
-      const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
-
-      if (mappedAccountIds.length === 0) {
-        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac: 0 });
-        setLoading(false);
-        return;
-      }
-
-      // Get campaigns from mapped accounts only
-      const { data: mappedCampaigns } = await supabase
-        .from("campaigns")
-        .select("id, ad_account_id, platform")
-        .in("ad_account_id", mappedAccountIds);
-
-      const campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
-
-      let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
-      if (campaignIds.length > 0) {
-        metricsQuery = metricsQuery.in("campaign_id", campaignIds);
-      }
+      // Step 1: Fetch purchases (date-filtered if range provided)
+      let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
       if (dateRange) {
-        metricsQuery = metricsQuery
-          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+        purchasesQuery = purchasesQuery
+          .gte("date", toISODate(dateRange.from))
+          .lte("date", toISODate(dateRange.to));
       }
 
-      const [purchasesRes, metricsRes, profilesRes, rolesRes] = await Promise.all([
-        supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
-        metricsQuery,
+      const [purchasesRes, profilesRes, rolesRes] = await Promise.all([
+        purchasesQuery,
         supabase.from("profiles").select("user_id, pricing_config"),
         supabase.from("user_roles").select("user_id").eq("role", "client"),
       ]);
 
-      // 1. Calculate WAC with cascading fallback
+      // Step 2: Calculate WAC with cascading fallback (same as FinanceDashboard)
       const calcWac = (data: any[] | null) => {
         let bdt = 0, usd = 0;
         for (const p of (data ?? [])) { bdt += Number(p.bdt_amount_paid); usd += Number(p.usd_received); }
-        return usd > 0 ? bdt / usd : 0;
+        return usd > 0 ? Math.round((bdt / usd) * 100) / 100 : 0;
       };
 
-      // Try date-range filtered purchases first
-      let rangePurchases = purchasesRes.data as any[] | null;
-      if (dateRange) {
-        const { data: filteredPurchases } = await supabase.from("usd_purchases")
-          .select("bdt_amount_paid, usd_received")
-          .gte("date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("date", format(dateRange.to, "yyyy-MM-dd"));
-        rangePurchases = filteredPurchases;
-      }
-
-      let wac = calcWac(rangePurchases);
+      let wac = calcWac(purchasesRes.data);
 
       // Fallback: current month
       if (wac === 0) {
-        const today = new Date();
+        const today = getLocalToday();
         const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const { data: monthPurchases } = await supabase.from("usd_purchases")
           .select("bdt_amount_paid, usd_received")
-          .gte("date", format(firstOfMonth, "yyyy-MM-dd"))
-          .lte("date", format(today, "yyyy-MM-dd"));
+          .gte("date", toISODate(firstOfMonth))
+          .lte("date", toISODate(today));
         wac = calcWac(monthPurchases);
       }
 
       // Fallback: all-time
       if (wac === 0) {
-        wac = calcWac(purchasesRes.data);
+        const { data: allPurchases } = await supabase.from("usd_purchases")
+          .select("bdt_amount_paid, usd_received");
+        wac = calcWac(allPurchases);
       }
 
-      // 2. Build mappings
-      const campaignMap: Record<string, { ad_account_id: string; platform: string }> = {};
-      for (const c of (mappedCampaigns ?? []) as any[]) {
-        campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform };
-      }
-
-      const accToClients: Record<string, string[]> = {};
-      for (const ac of (mappedAssignments ?? []) as any[]) {
-        if (!accToClients[ac.ad_account_id]) accToClients[ac.ad_account_id] = [];
-        accToClients[ac.ad_account_id].push(ac.client_id);
-      }
-
-      const clientIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
+      // Step 3: Build client profile map
+      const clientIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
       const profileMap: Record<string, any> = {};
       for (const p of (profilesRes.data ?? []) as any[]) {
         if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
       }
 
-      // 3. Aggregate spend per client per platform
-      const clientPlatformSpend: Record<string, Record<string, number>> = {};
-      for (const m of (metricsRes.data ?? []) as any[]) {
-        const camp = campaignMap[m.campaign_id];
-        if (!camp) continue;
-        const clients = accToClients[camp.ad_account_id] || [];
-        for (const cid of clients) {
-          if (!clientIds.has(cid)) continue;
-          if (!clientPlatformSpend[cid]) clientPlatformSpend[cid] = {};
-          clientPlatformSpend[cid][camp.platform] = (clientPlatformSpend[cid][camp.platform] || 0) + Number(m.spend);
-        }
+      // Step 4: Get campaigns with client_id (authoritative mapping — same as FinanceDashboard)
+      const { data: allCampaigns } = await supabase.from("campaigns").select("id, platform, client_id");
+
+      if (!allCampaigns?.length) {
+        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, totalProfitBdt: 0, wac });
+        setLoading(false);
+        return;
       }
 
-      // 4. Calculate revenue & COGS
+      const campaignToPlatform: Record<string, string> = {};
+      const campaignToClient: Record<string, string> = {};
+      for (const c of allCampaigns) {
+        campaignToPlatform[c.id] = c.platform;
+        if (c.client_id) campaignToClient[c.id] = c.client_id;
+      }
+
+      // Step 5: Fetch daily_metrics with date range filter
+      let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
+      if (dateRange) {
+        metricsQuery = metricsQuery
+          .gte("data_date", toISODate(dateRange.from))
+          .lte("data_date", toISODate(dateRange.to));
+      }
+      const { data: metricsData } = await metricsQuery;
+
+      // Step 6: Aggregate spend per client per platform (using campaigns.client_id)
+      const clientPlatformSpend: Record<string, Record<string, number>> = {};
+      for (const m of (metricsData ?? []) as any[]) {
+        const clientId = campaignToClient[m.campaign_id];
+        if (!clientId) continue;
+        const platform = campaignToPlatform[m.campaign_id] || "meta";
+        if (!clientPlatformSpend[clientId]) clientPlatformSpend[clientId] = {};
+        clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(m.spend);
+      }
+
+      // Step 7: Calculate revenue & COGS (identical to FinanceDashboard)
       let totalRevenueBdt = 0;
       let totalCogsBdt = 0;
+
       for (const [cid, platformSpends] of Object.entries(clientPlatformSpend)) {
         const profile = profileMap[cid];
         if (!profile) continue;
+
         const pricingConfig = profile.pricing_config as any;
-        const rates = getPlatformRates(pricingConfig);
+        const platformRates = getPlatformRates(pricingConfig);
+        const percentageMarkup = Number(pricingConfig?.percentage || 0);
+
+        let revenueBdt = 0;
+        let totalSpendUsd = 0;
 
         for (const [platform, spendUsd] of Object.entries(platformSpends)) {
-          const rate = Number(rates[platform] || 120);
-          totalRevenueBdt += (spendUsd as number) * rate;
-          totalCogsBdt += (spendUsd as number) * wac;
+          const rate = Number(platformRates[platform] || 120);
+          revenueBdt += (spendUsd as number) * rate;
+          totalSpendUsd += spendUsd as number;
         }
+
+        // Include percentage markup (was missing before!)
+        if (percentageMarkup > 0) {
+          revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
+        }
+
+        const cogsBdt = totalSpendUsd * wac;
+        totalRevenueBdt += revenueBdt;
+        totalCogsBdt += cogsBdt;
       }
 
       const totalProfitBdt = totalRevenueBdt - totalCogsBdt;
 
-      setData({ totalRevenueBdt: Math.round(totalRevenueBdt), totalCogsBdt: Math.round(totalCogsBdt), totalProfitBdt: Math.round(totalProfitBdt), wac: Math.round(wac * 100) / 100 });
+      setData({
+        totalRevenueBdt: Math.round(totalRevenueBdt),
+        totalCogsBdt: Math.round(totalCogsBdt),
+        totalProfitBdt: Math.round(totalProfitBdt),
+        wac,
+      });
       setLoading(false);
     };
     fetchData();
