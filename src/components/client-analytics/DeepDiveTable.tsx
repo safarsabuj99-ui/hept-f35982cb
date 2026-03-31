@@ -292,6 +292,48 @@ export function DeepDiveTable({
     onCampaignPaused?.();
   };
 
+  const handleBulkActivate = async () => {
+    const ids = Array.from(selectedIds).filter(id => {
+      const row = data.find(r => r.campaign_id === id);
+      return row && isPausedStatus(row.status);
+    });
+    setBulkActivating(true);
+    setBulkProgress({ current: 0, total: ids.length });
+    let successCount = 0;
+    let failCount = 0;
+
+    // Parallel batches of 5
+    for (let i = 0; i < ids.length; i += 5) {
+      const batch = ids.slice(i, i + 5);
+      const results = await Promise.allSettled(
+        batch.map(id =>
+          supabase.functions.invoke("pause-campaign", {
+            body: { campaign_id: id, action: "enable" },
+          })
+        )
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled" && !r.value.error && !r.value.data?.error) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+      setBulkProgress({ current: Math.min(i + batch.length, ids.length), total: ids.length });
+    }
+
+    setBulkActivating(false);
+    setShowBulkActivate(false);
+    setSelectedIds(new Set());
+
+    if (failCount === 0) {
+      toast({ title: "Bulk Activate Complete", description: `${successCount} campaign${successCount > 1 ? "s" : ""} activated successfully.` });
+    } else {
+      toast({ title: "Bulk Activate Partial", description: `${successCount} activated, ${failCount} failed.`, variant: "destructive" });
+    }
+    onCampaignPaused?.();
+  };
+
   const hasObjectiveData = useMemo(() => {
     const has = { sales: false, messages: false };
     for (const r of data) {
