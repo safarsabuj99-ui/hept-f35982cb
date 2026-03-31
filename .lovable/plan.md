@@ -1,49 +1,41 @@
 
 
-## Problem
+## Update Profit/Loss Widget to Show Gross Profit, OpEx, and Net Profit
 
-The **Profit/Loss (BDT) widget** on the Admin Dashboard uses **different calculation logic** than the P&L Overview page, producing mismatched numbers (৳4,793 vs ৳1,044).
+### What Changes
 
-### Root Cause — Two Key Differences
+Restructure the P&L widget from the current 3-row layout (Revenue, Cost, Margin) to a proper P&L breakdown with 5 rows:
 
-1. **Client-to-campaign mapping**: The widget uses the `ad_account_clients` junction table to find clients, while the P&L Overview uses `campaigns.client_id` directly (the authoritative source per your wallet system architecture).
-
-2. **Missing percentage markup**: The widget ignores `percentage_markup` in `pricing_config`, while the P&L Overview includes it in revenue calculations.
-
-## Plan
-
-### Single change: Rewrite `ProfitLossWidget` to use the same calculation logic as `FinanceDashboard`
-
-**File**: `src/components/ProfitLossWidget.tsx`
-
-Replace the current data-fetching logic with the FinanceDashboard approach:
-
-- Use `campaigns.client_id` directly instead of the `ad_account_clients` junction table
-- Include `percentage_markup` in revenue calculation
-- Apply the same date-range filtering on `daily_metrics` using `toISODate()` helper
-- Keep the same cascading WAC fallback (date range → current month → all-time)
-- Keep the existing card UI unchanged
-
-This ensures both views query the same data path and produce identical numbers.
-
-### Technical Details
-
-The widget currently:
-```
-ad_account_clients → campaigns (by ad_account_id) → daily_metrics
+```text
+Revenue              ৳12,577
+Cost (WAC: 130)     -৳10,997
+────────────────────────────
+Gross Profit          ৳1,580
+OpEx                   -৳536
+────────────────────────────
+Net Profit           ৳1,044
 ```
 
-Will be changed to match P&L Overview:
-```
-campaigns (with client_id) → daily_metrics
-```
+### File: `src/components/ProfitLossWidget.tsx`
 
-Revenue calculation will add:
-```typescript
-if (percentageMarkup > 0) {
-  revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
-}
-```
+1. **Add `totalOpexBdt` to `ProfitData` interface** and rename `totalProfitBdt` to `grossProfitBdt`, add `netProfitBdt`
 
-No new files, no database changes. Single file edit.
+2. **Fetch `agency_expenses`** (date-filtered, excluding `Owner_Draw` category — same logic as FinanceDashboard):
+   - Sum `amount_bdt` for all non-Owner_Draw expenses in the date range
+   - Store as `totalOpexBdt`
+
+3. **Update calculations**:
+   - `grossProfitBdt = Revenue - COGS`
+   - `netProfitBdt = grossProfitBdt - totalOpexBdt`
+
+4. **Update UI** to show 5 rows with two separator lines:
+   - Revenue
+   - Cost (WAC)
+   - **── Gross Profit** (with green/red coloring)
+   - OpEx
+   - **── Net Profit** (bold, with trending icon and badge percentage based on net profit)
+
+5. **Badge** shows net profit margin percentage instead of gross
+
+Single file change. No database modifications.
 
