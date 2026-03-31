@@ -1,45 +1,49 @@
 
 
-# Plan: Bulk Activate Paused Campaigns (Admin Only) via CampaignAnalyticsPanel
+## Problem
 
-## Overview
-Allow admins to multi-select paused campaigns and activate them all with a single click. The bulk activate sends one API call per campaign (using `Promise.allSettled` for parallelism). This is admin-only — clients never see selection on paused campaigns.
+The **Profit/Loss (BDT) widget** on the Admin Dashboard uses **different calculation logic** than the P&L Overview page, producing mismatched numbers (৳4,793 vs ৳1,044).
 
-## Changes
+### Root Cause — Two Key Differences
 
-### 1. `src/components/client-analytics/DeepDiveTable.tsx`
+1. **Client-to-campaign mapping**: The widget uses the `ad_account_clients` junction table to find clients, while the P&L Overview uses `campaigns.client_id` directly (the authoritative source per your wallet system architecture).
 
-- Add `isAdmin?: boolean` prop (default `false`)
-- Add `isPausedStatus` helper: checks for `paused`, `disable`, `guard_paused`
-- Expand `selectableRows` to include paused campaigns when `isAdmin` is true
-- Update `isSelectable` in both desktop (line 317) and mobile (line 785) to also allow paused rows when `isAdmin`
-- Add `handleBulkActivate` function — parallel batches via `Promise.allSettled`, calls `pause-campaign` with `action: "enable"` for each selected paused campaign
-- Add `showBulkActivate` state and confirmation dialog (similar to existing bulk pause dialog)
-- Update floating bulk action bar:
-  - Determine if selected campaigns are active, paused, or mixed
-  - Show "Pause All" for active selections, "Activate All" for paused selections, both for mixed
-- Update `selectableRows` memo to include paused campaigns when `isAdmin`
+2. **Missing percentage markup**: The widget ignores `percentage_markup` in `pricing_config`, while the P&L Overview includes it in revenue calculations.
 
-### 2. `src/components/client-analytics/CampaignAnalyticsPanel.tsx`
+## Plan
 
-- Add `isAdmin?: boolean` prop, pass through to `DeepDiveTable`
+### Single change: Rewrite `ProfitLossWidget` to use the same calculation logic as `FinanceDashboard`
 
-### 3. `src/pages/CampaignMapping.tsx`
+**File**: `src/components/ProfitLossWidget.tsx`
 
-- Pass `isAdmin={isAdmin}` to `CampaignAnalyticsPanel` (already has `const isAdmin = role === "admin"`)
+Replace the current data-fetching logic with the FinanceDashboard approach:
 
-### 4. `src/pages/AdAccountDetail.tsx`
+- Use `campaigns.client_id` directly instead of the `ad_account_clients` junction table
+- Include `percentage_markup` in revenue calculation
+- Apply the same date-range filtering on `daily_metrics` using `toISODate()` helper
+- Keep the same cascading WAC fallback (date range → current month → all-time)
+- Keep the existing card UI unchanged
 
-- Import `useAuth`, pass `isAdmin={role === "admin"}` to `CampaignAnalyticsPanel`
+This ensures both views query the same data path and produce identical numbers.
 
-## Edge Function — No Changes Needed
+### Technical Details
 
-The existing `pause-campaign` function already supports `action: "enable"`. The frontend will call it in parallel batches from `handleBulkActivate`, no bulk endpoint needed.
+The widget currently:
+```
+ad_account_clients → campaigns (by ad_account_id) → daily_metrics
+```
 
-## Files Modified
+Will be changed to match P&L Overview:
+```
+campaigns (with client_id) → daily_metrics
+```
 
-1. `src/components/client-analytics/DeepDiveTable.tsx` — isAdmin prop, paused selection, bulk activate handler + UI
-2. `src/components/client-analytics/CampaignAnalyticsPanel.tsx` — Pass through isAdmin
-3. `src/pages/CampaignMapping.tsx` — Pass isAdmin
-4. `src/pages/AdAccountDetail.tsx` — Pass isAdmin
+Revenue calculation will add:
+```typescript
+if (percentageMarkup > 0) {
+  revenueBdt += totalSpendUsd * (percentageMarkup / 100) * (platformRates.meta || 120);
+}
+```
+
+No new files, no database changes. Single file edit.
 
