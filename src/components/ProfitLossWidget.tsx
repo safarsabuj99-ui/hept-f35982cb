@@ -221,13 +221,22 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           <span className="font-mono">{fmt(data?.totalOpexBdt ?? 0)}</span>
         </div>
 
-        <div className="border-t pt-2 flex justify-between">
-          <span className="font-medium text-sm">Net Profit</span>
-          <span className={`flex items-center gap-1 font-mono font-bold ${isNetProfit ? "text-success" : "text-destructive"}`}>
-            {isNetProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            {fmt(Math.abs(data?.netProfitBdt ?? 0))}
-          </span>
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="border-t pt-2 flex justify-between cursor-help">
+                <span className="font-medium text-sm">Net Profit</span>
+                <span className={`flex items-center gap-1 font-mono font-bold ${isNetProfit ? "text-success" : "text-destructive"}`}>
+                  {isNetProfit ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {fmt(Math.abs(data?.netProfitBdt ?? 0))}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Net Margin: {isNetProfit ? "+" : "-"}{netMarginPct}%</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </CardContent>
     </Card>
   );
