@@ -16,48 +16,27 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // 1. Get latest snapshot (before today)
     const today = new Date()
       .toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
-    const { data: snapshots, error: snapErr } = await supabase
-      .from("usd_inventory_snapshots")
-      .select("*")
-      .lt("snapshot_date", today)
-      .order("snapshot_date", { ascending: false })
-      .limit(1);
+    // 1. Full recomputation — sum ALL purchases and ALL spend from source tables
+    const [purchasesRes, spendRes] = await Promise.all([
+      supabase.from("usd_purchases").select("usd_received"),
+      supabase.from("daily_metrics").select("spend"),
+    ]);
 
-    if (snapErr) throw snapErr;
+    if (purchasesRes.error) throw purchasesRes.error;
+    if (spendRes.error) throw spendRes.error;
 
-    const snapshot = snapshots?.[0] ?? null;
-    const carryForward = snapshot ? Number(snapshot.balance_usd) : 0;
-    const sinceDate = snapshot?.snapshot_date ?? "2020-01-01";
-
-    // 2. Sum purchases since snapshot
-    const { data: purchases, error: purErr } = await supabase
-      .from("usd_purchases")
-      .select("usd_received")
-      .gt("date", sinceDate);
-
-    if (purErr) throw purErr;
-
-    // 3. Sum spend since snapshot
-    const { data: spend, error: spendErr } = await supabase
-      .from("daily_metrics")
-      .select("spend")
-      .gt("data_date", sinceDate);
-
-    if (spendErr) throw spendErr;
-
-    const boughtSince = (purchases ?? []).reduce(
-      (s: number, r: any) => s + Number(r.usd_received), 0
+    const totalPurchased = (purchasesRes.data ?? []).reduce(
+      (s: number, r: any) => s + Number(r.usd_received || 0), 0
     );
-    const spentSince = (spend ?? []).reduce(
-      (s: number, r: any) => s + Number(r.spend), 0
+    const totalSpend = (spendRes.data ?? []).reduce(
+      (s: number, r: any) => s + Number(r.spend || 0), 0
     );
-    const balance = carryForward + boughtSince - spentSince;
+    const balance = totalPurchased - totalSpend;
 
-    // 4. 7-day burn rate
+    // 2. 7-day burn rate
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
@@ -77,7 +56,7 @@ Deno.serve(async (req) => {
       ? Math.max(0, Math.floor(balance / dailyBurn))
       : balance > 0 ? 999 : 0;
 
-    // 5. Client obligations (all completed transactions)
+    // 3. Client obligations (all completed transactions)
     const { data: txns, error: txnErr } = await supabase
       .from("transactions")
       .select("type, amount, client_id")
@@ -96,19 +75,17 @@ Deno.serve(async (req) => {
       .reduce((s, b) => s + b, 0);
     const usdNeeded = Math.max(0, clientObligations - balance);
 
-    // 6. Build metrics object
+    // 4. Build metrics object
     const metrics = {
-      carry_forward: carryForward,
-      bought_since: boughtSince,
-      spent_since: spentSince,
+      total_purchased: Math.round(totalPurchased * 100) / 100,
+      total_spend: Math.round(totalSpend * 100) / 100,
       daily_burn: Math.round(dailyBurn * 100) / 100,
       runway_days: runwayDays,
       client_obligations: Math.round(clientObligations * 100) / 100,
       usd_needed: Math.round(usdNeeded * 100) / 100,
-      since_date: sinceDate,
     };
 
-    // 7. Upsert today's snapshot
+    // 5. Upsert today's snapshot
     const now = new Date();
     const monthLabel = now.toLocaleDateString("en-US", {
       month: "long", year: "numeric", timeZone: "Asia/Dhaka",
