@@ -634,6 +634,130 @@ export type Database = {
           },
         ]
       }
+      cash_withdrawal_returns: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          note: string | null
+          org_id: string | null
+          to_account_id: string
+          withdrawal_id: string
+        }
+        Insert: {
+          amount_bdt: number
+          created_at?: string
+          created_by: string
+          date?: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          to_account_id: string
+          withdrawal_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          to_account_id?: string
+          withdrawal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_withdrawal_returns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_withdrawal_returns_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_withdrawal_returns_withdrawal_id_fkey"
+            columns: ["withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "cash_withdrawals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_withdrawals: {
+        Row: {
+          amount_bdt: number
+          borrower_name: string
+          category: Database["public"]["Enums"]["withdrawal_category"]
+          created_at: string
+          created_by: string
+          date: string
+          expected_return_date: string | null
+          from_account_id: string
+          id: string
+          note: string | null
+          org_id: string | null
+          returned_bdt: number
+          status: Database["public"]["Enums"]["withdrawal_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount_bdt: number
+          borrower_name?: string
+          category: Database["public"]["Enums"]["withdrawal_category"]
+          created_at?: string
+          created_by: string
+          date?: string
+          expected_return_date?: string | null
+          from_account_id: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          returned_bdt?: number
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount_bdt?: number
+          borrower_name?: string
+          category?: Database["public"]["Enums"]["withdrawal_category"]
+          created_at?: string
+          created_by?: string
+          date?: string
+          expected_return_date?: string | null
+          from_account_id?: string
+          id?: string
+          note?: string | null
+          org_id?: string | null
+          returned_bdt?: number
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_withdrawals_from_account_id_fkey"
+            columns: ["from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_withdrawals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_notices: {
         Row: {
           created_at: string
@@ -1895,6 +2019,13 @@ export type Database = {
       subscription_payment_status: "paid" | "pending" | "overdue" | "cancelled"
       transaction_status: "pending_approval" | "completed" | "rejected"
       transaction_type: "credit" | "debit"
+      withdrawal_category:
+        | "personal_loan"
+        | "business_loan"
+        | "others_loan"
+        | "advance"
+        | "other"
+      withdrawal_status: "active" | "partially_returned" | "fully_returned"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2057,6 +2188,14 @@ export const Constants = {
       subscription_payment_status: ["paid", "pending", "overdue", "cancelled"],
       transaction_status: ["pending_approval", "completed", "rejected"],
       transaction_type: ["credit", "debit"],
+      withdrawal_category: [
+        "personal_loan",
+        "business_loan",
+        "others_loan",
+        "advance",
+        "other",
+      ],
+      withdrawal_status: ["active", "partially_returned", "fully_returned"],
     },
   },
 } as const
