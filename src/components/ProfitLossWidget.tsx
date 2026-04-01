@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toISODate, getLocalToday } from "@/components/DateRangeFilter";
 
@@ -174,6 +175,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
 
   const fmt = (n: number) => `৳${n.toLocaleString("en-US")}`;
   const netMarginPct = data && data.totalRevenueBdt > 0 ? ((data.netProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
+  const grossMarginPct = data && data.totalRevenueBdt > 0 ? ((data.grossProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
   const isNetProfit = data ? data.netProfitBdt >= 0 : true;
   const isGrossProfit = data ? data.grossProfitBdt >= 0 : true;
 
@@ -198,12 +200,21 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           <span className="font-mono">{fmt(data?.totalCogsBdt ?? 0)}</span>
         </div>
 
-        <div className="border-t pt-2 flex justify-between text-sm">
-          <span className="font-medium">Gross Profit</span>
-          <span className={`font-mono font-semibold ${isGrossProfit ? "text-success" : "text-destructive"}`}>
-            {fmt(Math.abs(data?.grossProfitBdt ?? 0))}
-          </span>
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="border-t pt-2 flex justify-between text-sm cursor-help">
+                <span className="font-medium">Gross Profit</span>
+                <span className={`font-mono font-semibold ${isGrossProfit ? "text-success" : "text-destructive"}`}>
+                  {fmt(Math.abs(data?.grossProfitBdt ?? 0))}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Gross Margin: {isGrossProfit ? "+" : "-"}{grossMarginPct}%</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">OpEx</span>
