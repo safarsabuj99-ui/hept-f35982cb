@@ -175,6 +175,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
 
   const fmt = (n: number) => `৳${n.toLocaleString("en-US")}`;
   const netMarginPct = data && data.totalRevenueBdt > 0 ? ((data.netProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
+  const grossMarginPct = data && data.totalRevenueBdt > 0 ? ((data.grossProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";
   const isNetProfit = data ? data.netProfitBdt >= 0 : true;
   const isGrossProfit = data ? data.grossProfitBdt >= 0 : true;
 
