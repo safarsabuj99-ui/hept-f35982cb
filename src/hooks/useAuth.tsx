@@ -66,7 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(newSession?.user ?? null);
         if (!newSession?.user) {
           setRole(null);
-          setLoading(false);
         }
       }
     );
