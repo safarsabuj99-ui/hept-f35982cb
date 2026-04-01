@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank } from "lucide-react";
+import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 
 interface AgencyAccount {
@@ -46,16 +46,55 @@ interface RecentActivity {
   account_name?: string;
 }
 
+interface CashWithdrawal {
+  id: string;
+  from_account_id: string;
+  amount_bdt: number;
+  returned_bdt: number;
+  category: string;
+  status: string;
+  borrower_name: string;
+  date: string;
+  expected_return_date: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+interface CashWithdrawalReturn {
+  id: string;
+  withdrawal_id: string;
+  amount_bdt: number;
+  to_account_id: string;
+  date: string;
+  note: string | null;
+  created_at: string;
+}
+
 const ACCOUNT_TYPE_ICONS: Record<string, any> = {
   Cash: Banknote,
   Bank: Building2,
   MFS: Smartphone,
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  personal_loan: "Personal Loan",
+  business_loan: "Business Loan",
+  others_loan: "Others Loan",
+  advance: "Advance",
+  other: "Other",
+};
+
+const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  active: "destructive",
+  partially_returned: "outline",
+  fully_returned: "default",
+};
+
 export default function CashFlowManagement() {
   const [accounts, setAccounts] = useState<AgencyAccount[]>([]);
   const [transfers, setTransfers] = useState<FundTransfer[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [withdrawals, setWithdrawals] = useState<CashWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -83,23 +122,48 @@ export default function CashFlowManagement() {
   const [fundNote, setFundNote] = useState("");
   const [fundSubmitting, setFundSubmitting] = useState(false);
 
+  // Withdrawal state
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [wdCategory, setWdCategory] = useState<string>("personal_loan");
+  const [wdBorrower, setWdBorrower] = useState("");
+  const [wdAmount, setWdAmount] = useState("");
+  const [wdFromAccId, setWdFromAccId] = useState("");
+  const [wdExpectedDate, setWdExpectedDate] = useState("");
+  const [wdNote, setWdNote] = useState("");
+  const [wdSubmitting, setWdSubmitting] = useState(false);
+
+  // Return state
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnWithdrawal, setReturnWithdrawal] = useState<CashWithdrawal | null>(null);
+  const [retAmount, setRetAmount] = useState("");
+  const [retToAccId, setRetToAccId] = useState("");
+  const [retDate, setRetDate] = useState(new Date().toISOString().slice(0, 10));
+  const [retNote, setRetNote] = useState("");
+  const [retSubmitting, setRetSubmitting] = useState(false);
+
+  // Withdrawal pagination
+  const [wdPage, setWdPage] = useState(1);
+  const [wdPageSize, setWdPageSize] = useState(20);
+
   const { user } = useAuth();
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes] = await Promise.all([
+    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes] = await Promise.all([
       supabase.from("agency_accounts" as any).select("*").order("type").order("name"),
       supabase.from("fund_transfers" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("payment_requests" as any).select("amount_bdt, payment_method, created_at, status, received_in_account_id").eq("status", "approved").order("created_at", { ascending: false }).limit(10),
       supabase.from("usd_purchases" as any).select("bdt_amount_paid, date, created_at, paid_from_account_id, notes").order("created_at", { ascending: false }).limit(10),
       supabase.from("agency_expenses" as any).select("amount_bdt, category, date, created_at, paid_from_account_id, description").order("created_at", { ascending: false }).limit(10),
       supabase.from("liquid_fund_entries" as any).select("*").order("created_at", { ascending: false }).limit(20),
+      supabase.from("cash_withdrawals" as any).select("*").order("created_at", { ascending: false }),
     ]);
 
     const accs = (accRes.data as any[]) ?? [];
     setAccounts(accs);
     setTransfers((transferRes.data as any[]) ?? []);
+    setWithdrawals((wdRes.data as any[]) ?? []);
 
     const accMap: Record<string, string> = {};
     for (const a of accs) accMap[a.id] = a.name;
@@ -157,6 +221,18 @@ export default function CashFlowManagement() {
       });
     }
 
+    // Add withdrawal & return activity
+    for (const w of (wdRes.data as any[]) ?? []) {
+      activity.push({
+        id: `wd-${w.id}`,
+        type: "out",
+        description: `Withdrawal: ${CATEGORY_LABELS[w.category] || w.category}${w.borrower_name ? ` — ${w.borrower_name}` : ""}`,
+        amount_bdt: Number(w.amount_bdt),
+        date: w.created_at,
+        account_name: w.from_account_id ? accMap[w.from_account_id] : undefined,
+      });
+    }
+
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setRecentActivity(activity.slice(0, 20));
     setLoading(false);
@@ -172,6 +248,8 @@ export default function CashFlowManagement() {
       .on("postgres_changes", { event: "*", schema: "public", table: "fund_transfers" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_entries" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_withdrawals" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_withdrawal_returns" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
@@ -285,6 +363,105 @@ export default function CashFlowManagement() {
     fetchData();
   };
 
+  const handleWithdraw = async () => {
+    const amt = Number(wdAmount);
+    if (!wdFromAccId || amt <= 0 || !wdBorrower.trim()) {
+      toast({ title: "Error", description: "Fill in account, borrower name, and amount", variant: "destructive" });
+      return;
+    }
+    const fromAcc = accounts.find(a => a.id === wdFromAccId);
+    if (fromAcc && Number(fromAcc.current_balance_bdt) < amt) {
+      toast({ title: "Insufficient Balance", description: `${fromAcc.name} has only ৳${Number(fromAcc.current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+      return;
+    }
+    setWdSubmitting(true);
+
+    const { error: insertErr } = await supabase.from("cash_withdrawals" as any).insert({
+      from_account_id: wdFromAccId,
+      amount_bdt: amt,
+      category: wdCategory,
+      borrower_name: wdBorrower.trim(),
+      expected_return_date: wdExpectedDate || null,
+      note: wdNote || null,
+      created_by: user?.id,
+    } as any);
+
+    if (insertErr) {
+      setWdSubmitting(false);
+      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
+      return;
+    }
+
+    // Deduct from account balance
+    await supabase.from("agency_accounts" as any)
+      .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) - amt } as any)
+      .eq("id", wdFromAccId);
+
+    setWdSubmitting(false);
+    toast({ title: "Withdrawal Recorded", description: `৳${amt.toLocaleString()} withdrawn from ${fromAcc?.name}` });
+    setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
+    setWdFromAccId(""); setWdExpectedDate(""); setWdNote("");
+    setWithdrawOpen(false);
+    fetchData();
+  };
+
+  const openReturnDialog = (w: CashWithdrawal) => {
+    setReturnWithdrawal(w);
+    setRetAmount("");
+    setRetToAccId(w.from_account_id);
+    setRetDate(new Date().toISOString().slice(0, 10));
+    setRetNote("");
+    setReturnOpen(true);
+  };
+
+  const handleRecordReturn = async () => {
+    if (!returnWithdrawal) return;
+    const amt = Number(retAmount);
+    const remaining = Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt);
+    if (!retToAccId || amt <= 0 || amt > remaining) {
+      toast({ title: "Error", description: `Enter a valid amount (max ৳${remaining.toLocaleString()})`, variant: "destructive" });
+      return;
+    }
+    setRetSubmitting(true);
+
+    // Insert return record
+    const { error: insertErr } = await supabase.from("cash_withdrawal_returns" as any).insert({
+      withdrawal_id: returnWithdrawal.id,
+      amount_bdt: amt,
+      to_account_id: retToAccId,
+      date: retDate,
+      note: retNote || null,
+      created_by: user?.id,
+    } as any);
+
+    if (insertErr) {
+      setRetSubmitting(false);
+      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
+      return;
+    }
+
+    // Update withdrawal returned_bdt and status
+    const newReturned = Number(returnWithdrawal.returned_bdt) + amt;
+    const newStatus = newReturned >= Number(returnWithdrawal.amount_bdt) ? "fully_returned" : "partially_returned";
+    await supabase.from("cash_withdrawals" as any)
+      .update({ returned_bdt: newReturned, status: newStatus } as any)
+      .eq("id", returnWithdrawal.id);
+
+    // Credit account balance
+    const toAcc = accounts.find(a => a.id === retToAccId);
+    if (toAcc) {
+      await supabase.from("agency_accounts" as any)
+        .update({ current_balance_bdt: Number(toAcc.current_balance_bdt) + amt } as any)
+        .eq("id", retToAccId);
+    }
+
+    setRetSubmitting(false);
+    toast({ title: "Return Recorded", description: `৳${amt.toLocaleString()} returned` });
+    setReturnOpen(false);
+    setReturnWithdrawal(null);
+    fetchData();
+  };
+
   const handleToggleActive = async (acc: AgencyAccount) => {
     await supabase.from("agency_accounts" as any).update({ is_active: !acc.is_active } as any).eq("id", acc.id);
     fetchData();
@@ -308,6 +485,9 @@ export default function CashFlowManagement() {
   }
 
   const activeAccounts = accounts.filter(a => a.is_active);
+  const outstandingWithdrawals = withdrawals
+    .filter(w => w.status !== "fully_returned")
+    .reduce((s, w) => s + (Number(w.amount_bdt) - Number(w.returned_bdt)), 0);
 
   const activityIcon = (type: string) => {
     if (type === "in") return <ArrowDown className="h-3.5 w-3.5 text-success" />;
@@ -315,9 +495,70 @@ export default function CashFlowManagement() {
     return <MoveHorizontal className="h-3.5 w-3.5 text-primary" />;
   };
 
+  const isOverdue = (w: CashWithdrawal) => {
+    if (w.status === "fully_returned" || !w.expected_return_date) return false;
+    return new Date(w.expected_return_date) < new Date();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-end gap-2">
+        <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto"><HandCoins className="mr-2 h-4 w-4" /> Withdraw</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Category</Label>
+                <Select value={wdCategory} onValueChange={setWdCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal_loan">Personal Loan</SelectItem>
+                    <SelectItem value="business_loan">Business Loan</SelectItem>
+                    <SelectItem value="others_loan">Others Loan</SelectItem>
+                    <SelectItem value="advance">Advance</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Borrower Name</Label>
+                <Input placeholder="Who is this for?" value={wdBorrower} onChange={e => setWdBorrower(e.target.value)} />
+              </div>
+              <div>
+                <Label>Amount (BDT)</Label>
+                <Input type="number" placeholder="e.g. 50000" value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>From Account</Label>
+                <Select value={wdFromAccId} onValueChange={setWdFromAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Expected Return Date (optional)</Label>
+                <Input type="date" value={wdExpectedDate} onChange={e => setWdExpectedDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
+              </div>
+              <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
+                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Withdrawal
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full sm:w-auto"><PiggyBank className="mr-2 h-4 w-4" /> Add Fund</Button>
@@ -458,20 +699,39 @@ export default function CashFlowManagement() {
         </Dialog>
       </div>
 
-      {/* Total Liquid Funds */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Total Liquid Funds</p>
-              {loading ? <Skeleton className="h-10 w-48" /> : (
-                <p className="text-2xl sm:text-3xl font-bold font-mono">৳{totalBalance.toLocaleString()}</p>
-              )}
+      {/* Total Liquid Funds + Outstanding Withdrawals */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Liquid Funds</p>
+                {loading ? <Skeleton className="h-10 w-48" /> : (
+                  <p className="text-2xl sm:text-3xl font-bold font-mono">৳{totalBalance.toLocaleString()}</p>
+                )}
+              </div>
+              <Wallet className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
             </div>
-            <Wallet className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {outstandingWithdrawals > 0 && (
+          <Card className="border-warning/30 bg-warning/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Outstanding Withdrawals</p>
+                  {loading ? <Skeleton className="h-10 w-48" /> : (
+                    <p className="text-2xl sm:text-3xl font-bold font-mono text-warning">৳{outstandingWithdrawals.toLocaleString()}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">Money owed back to cash flow</p>
+                </div>
+                <HandCoins className="h-8 w-8 sm:h-10 sm:w-10 text-warning/40" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Breakdown by Type */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
@@ -499,6 +759,9 @@ export default function CashFlowManagement() {
       <Tabs defaultValue="accounts">
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
           <TabsTrigger value="accounts" className="flex-shrink-0">Accounts ({accounts.length})</TabsTrigger>
+          <TabsTrigger value="withdrawals" className="flex-shrink-0">
+            Withdrawals ({withdrawals.filter(w => w.status !== "fully_returned").length})
+          </TabsTrigger>
           <TabsTrigger value="activity" className="flex-shrink-0">Recent Activity</TabsTrigger>
           <TabsTrigger value="transfers" className="flex-shrink-0">Transfer History</TabsTrigger>
         </TabsList>
@@ -569,6 +832,133 @@ export default function CashFlowManagement() {
                       </TableBody>
                     </Table>
                   </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="withdrawals">
+          <Card>
+            <CardContent className="pt-6">
+              {loading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : withdrawals.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No withdrawals recorded yet</p>
+              ) : (
+                <>
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
+                      const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
+                      const overdue = isOverdue(w);
+                      const fromAcc = accounts.find(a => a.id === w.from_account_id);
+                      return (
+                        <div key={w.id} className={`rounded-xl border p-4 space-y-3 bg-card ${overdue ? "border-destructive/50" : ""}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs">
+                                {CATEGORY_LABELS[w.category] || w.category}
+                              </Badge>
+                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
+                                {w.status.replace(/_/g, " ")}
+                              </Badge>
+                              {overdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{w.borrower_name || "—"}</p>
+                            <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"} · {new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</p>
+                              {remaining > 0 && remaining < Number(w.amount_bdt) && (
+                                <p className="text-xs text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
+                              )}
+                            </div>
+                            {w.status !== "fully_returned" && (
+                              <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
+                                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                              </Button>
+                            )}
+                          </div>
+                          {w.expected_return_date && (
+                            <p className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                              {overdue ? "Overdue" : "Due"}: {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Borrower</TableHead>
+                          <TableHead>From</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Outstanding</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
+                          const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
+                          const overdue = isOverdue(w);
+                          const fromAcc = accounts.find(a => a.id === w.from_account_id);
+                          return (
+                            <TableRow key={w.id} className={overdue ? "bg-destructive/5" : ""}>
+                              <TableCell className="font-mono text-sm">{new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[w.category] || w.category}</Badge>
+                              </TableCell>
+                              <TableCell className="font-medium">{w.borrower_name || "—"}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</TableCell>
+                              <TableCell className={`text-right font-mono font-semibold ${remaining > 0 ? "text-destructive" : "text-success"}`}>
+                                ৳{remaining.toLocaleString()}
+                              </TableCell>
+                              <TableCell className={`text-sm ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                                {w.expected_return_date ? (
+                                  <span className="flex items-center gap-1">
+                                    {overdue && <AlertTriangle className="h-3 w-3" />}
+                                    {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                ) : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
+                                  {w.status.replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {w.status !== "fully_returned" && (
+                                  <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
+                                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={withdrawals.length}
+                    pageSize={wdPageSize}
+                    currentPage={wdPage}
+                    onPageChange={setWdPage}
+                    onPageSizeChange={setWdPageSize}
+                  />
                 </>
               )}
             </CardContent>
@@ -676,6 +1066,57 @@ export default function CashFlowManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Record Return Dialog */}
+      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Record Return</DialogTitle></DialogHeader>
+          {returnWithdrawal && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-3 space-y-1">
+                <p className="text-sm font-medium">{returnWithdrawal.borrower_name} — {CATEGORY_LABELS[returnWithdrawal.category] || returnWithdrawal.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  Total: ৳{Number(returnWithdrawal.amount_bdt).toLocaleString()} · Returned: ৳{Number(returnWithdrawal.returned_bdt).toLocaleString()} · 
+                  <span className="text-destructive font-medium"> Outstanding: ৳{(Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt)).toLocaleString()}</span>
+                </p>
+              </div>
+              <div>
+                <Label>Return Amount (BDT)</Label>
+                <Input
+                  type="number"
+                  placeholder={`Max ৳${(Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt)).toLocaleString()}`}
+                  value={retAmount}
+                  onChange={e => setRetAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Return To Account</Label>
+                <Select value={retToAccId} onValueChange={setRetToAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={retDate} onChange={e => setRetDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={retNote} onChange={e => setRetNote(e.target.value)} placeholder="e.g. Partial return" />
+              </div>
+              <Button className="w-full" onClick={handleRecordReturn} disabled={retSubmitting}>
+                {retSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Return
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
