@@ -145,6 +145,10 @@ export default function CashFlowManagement() {
   const [wdPage, setWdPage] = useState(1);
   const [wdPageSize, setWdPageSize] = useState(20);
 
+  // Activity pagination
+  const [actPage, setActPage] = useState(1);
+  const [actPageSize, setActPageSize] = useState(20);
+
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -234,7 +238,8 @@ export default function CashFlowManagement() {
     }
 
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setRecentActivity(activity.slice(0, 20));
+    setRecentActivity(activity);
+    setActPage(1);
     setLoading(false);
   }, []);
 
@@ -973,25 +978,34 @@ export default function CashFlowManagement() {
               ) : recentActivity.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No activity yet</p>
               ) : (
-                <div className="space-y-3">
-                  {recentActivity.map(a => (
-                    <div key={a.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {activityIcon(a.type)}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{a.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            {a.account_name && ` · ${a.account_name}`}
-                          </p>
+                <>
+                  <div className="space-y-3">
+                    {recentActivity.slice((actPage - 1) * actPageSize, actPage * actPageSize).map(a => (
+                      <div key={a.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {activityIcon(a.type)}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{a.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              {a.account_name && ` · ${a.account_name}`}
+                            </p>
+                          </div>
                         </div>
+                        <span className={`font-mono text-sm font-semibold flex-shrink-0 ml-2 ${a.type === "in" ? "text-success" : a.type === "out" ? "text-destructive" : "text-primary"}`}>
+                          {a.type === "in" ? "+" : a.type === "out" ? "-" : ""}৳{a.amount_bdt.toLocaleString()}
+                        </span>
                       </div>
-                      <span className={`font-mono text-sm font-semibold flex-shrink-0 ml-2 ${a.type === "in" ? "text-success" : a.type === "out" ? "text-destructive" : "text-primary"}`}>
-                        {a.type === "in" ? "+" : a.type === "out" ? "-" : ""}৳{a.amount_bdt.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <TablePagination
+                    totalItems={recentActivity.length}
+                    pageSize={actPageSize}
+                    currentPage={actPage}
+                    onPageChange={setActPage}
+                    onPageSizeChange={setActPageSize}
+                  />
+                </>
               )}
             </CardContent>
           </Card>
