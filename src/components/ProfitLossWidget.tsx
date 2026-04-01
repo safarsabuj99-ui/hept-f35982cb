@@ -200,12 +200,21 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
           <span className="font-mono">{fmt(data?.totalCogsBdt ?? 0)}</span>
         </div>
 
-        <div className="border-t pt-2 flex justify-between text-sm">
-          <span className="font-medium">Gross Profit</span>
-          <span className={`font-mono font-semibold ${isGrossProfit ? "text-success" : "text-destructive"}`}>
-            {fmt(Math.abs(data?.grossProfitBdt ?? 0))}
-          </span>
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="border-t pt-2 flex justify-between text-sm cursor-help">
+                <span className="font-medium">Gross Profit</span>
+                <span className={`font-mono font-semibold ${isGrossProfit ? "text-success" : "text-destructive"}`}>
+                  {fmt(Math.abs(data?.grossProfitBdt ?? 0))}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Gross Margin: {isGrossProfit ? "+" : "-"}{grossMarginPct}%</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">OpEx</span>
