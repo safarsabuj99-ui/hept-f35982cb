@@ -145,6 +145,10 @@ export default function CashFlowManagement() {
   const [wdPage, setWdPage] = useState(1);
   const [wdPageSize, setWdPageSize] = useState(20);
 
+  // Activity pagination
+  const [actPage, setActPage] = useState(1);
+  const [actPageSize, setActPageSize] = useState(20);
+
   const { user } = useAuth();
   const { toast } = useToast();
 
