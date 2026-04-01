@@ -238,7 +238,8 @@ export default function CashFlowManagement() {
     }
 
     activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setRecentActivity(activity.slice(0, 20));
+    setRecentActivity(activity);
+    setActPage(1);
     setLoading(false);
   }, []);
 
