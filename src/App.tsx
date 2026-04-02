@@ -181,6 +181,7 @@ const App = () => (
                 <Route path="/dashboard/campaigns" element={<MyCampaignRequests />} />
                 <Route path="/dashboard/campaigns/new" element={<NewCampaignRequest />} />
                 <Route path="/dashboard/reports" element={<ClientReports />} />
+                <Route path="/dashboard/notifications" element={<Notifications />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
