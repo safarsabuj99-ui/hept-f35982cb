@@ -202,7 +202,7 @@ export default function Login() {
         {/* Bottom accent */}
         <div className="mt-8 text-center">
           <p className="text-xs text-white/20">
-            Powered by AdSpend • Secure Login
+            Powered by HEPT • Secure Login
           </p>
         </div>
       </div>

@@ -51,7 +51,7 @@ export function ClientLayout() {
           <div className="client-logo-orb">
             <BarChart3 className="h-4 w-4 text-primary-foreground relative z-10" />
           </div>
-          <span className="text-base font-bold tracking-tight hidden sm:inline">AdSpend</span>
+          <span className="text-base font-bold tracking-tight hidden sm:inline">HEPT</span>
         </div>
 
         {/* Center: Desktop pill nav */}

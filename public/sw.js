@@ -21,7 +21,7 @@ self.addEventListener("push", (event) => {
     renotify: true,
   };
 
-  event.waitUntil(self.registration.showNotification(data.title || "AdSpend", options));
+  event.waitUntil(self.registration.showNotification(data.title || "HEPT", options));
 });
 
 self.addEventListener("notificationclick", (event) => {

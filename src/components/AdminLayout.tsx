@@ -222,7 +222,7 @@ export function AdminLayout() {
             <SidebarTrigger className="press-effect" />
             <div className="flex items-center gap-2 lg:hidden">
               <BarChart3 className="h-5 w-5 text-primary" />
-              <span className="text-base font-bold">AdSpend</span>
+              <span className="text-base font-bold">HEPT</span>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <NotificationBell allNotificationsPath="/admin/notifications" />

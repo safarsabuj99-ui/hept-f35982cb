@@ -67,7 +67,7 @@ export function ManagerLayout() {
         <header className="flex h-16 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 lg:hidden">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
-            <span className="text-lg font-bold">AdSpend</span>
+            <span className="text-lg font-bold">HEPT</span>
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell allNotificationsPath="/manager/notifications" />

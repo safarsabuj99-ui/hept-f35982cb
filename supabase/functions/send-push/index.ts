@@ -264,7 +264,7 @@ async function createVapidJwt(
   );
   const payload = bytesToBase64url(
     new TextEncoder().encode(
-      JSON.stringify({ aud: audience, exp: expiry, sub: "mailto:admin@adspend.app" })
+      JSON.stringify({ aud: audience, exp: expiry, sub: "mailto:admin@hept.app" })
     )
   );
 
