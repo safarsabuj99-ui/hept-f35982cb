@@ -60,6 +60,7 @@ export default function AdAccounts() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
   const { toast } = useToast();
   const navigate = useNavigate();
 
