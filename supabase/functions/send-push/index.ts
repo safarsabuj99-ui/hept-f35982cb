@@ -197,12 +197,12 @@ async function sendWebPush(
 // --- Crypto helpers ---
 
 function base64urlToBytes(b64url: string): Uint8Array {
-  // Replace URL-safe chars and add padding
-  let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  while (b64.length % 4 !== 0) b64 += "=";
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  // Use Deno's built-in base64 decoding which handles URL-safe variants
+  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  // Use TextEncoder approach to avoid atob issues in Deno
+  const binaryString = globalThis.atob(padded);
+  const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
   return bytes;
 }
 
