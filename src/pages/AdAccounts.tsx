@@ -14,6 +14,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Monitor, Download, ExternalLink, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -59,6 +60,7 @@ export default function AdAccounts() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"active" | "inactive">("active");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -260,7 +262,7 @@ export default function AdAccounts() {
     fetchData();
   };
 
-  const filteredAccounts = accounts.filter((a: any) => {
+  const searchFiltered = accounts.filter((a: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const integration = integrations.find((i: any) => i.id === a.api_integration_id);
@@ -270,6 +272,13 @@ export default function AdAccounts() {
       || (a.platform_name || "").toLowerCase().includes(q)
       || instanceName.includes(q);
   });
+
+  const activeCount = searchFiltered.filter((a: any) => a.is_active).length;
+  const inactiveCount = searchFiltered.filter((a: any) => !a.is_active).length;
+
+  const filteredAccounts = searchFiltered.filter((a: any) =>
+    activeTab === "active" ? a.is_active : !a.is_active
+  );
 
   const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const allPageSelected = paginatedAccounts.length > 0 && paginatedAccounts.every((a: any) => selectedAccounts.has(a.id));
@@ -414,15 +423,23 @@ export default function AdAccounts() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by account name, ID, platform, or instance name..."
-          value={searchQuery}
-          onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-          className="pl-9 w-full sm:max-w-md"
-        />
+      {/* Tabs + Search */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "active" | "inactive"); setCurrentPage(1); setSelectedAccounts(new Set()); }}>
+          <TabsList>
+            <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+            <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by account name, ID, platform, or instance name..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            className="pl-9 w-full sm:max-w-md"
+          />
+        </div>
       </div>
 
       {/* Content */}
