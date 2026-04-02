@@ -1,71 +1,30 @@
 
 
-## Web Push Notifications for AdSpend
+## Make Client Notice Banner More Eye-Catching
 
-### What You'll Get
-Real browser push notifications that pop up on users' devices — even when the app tab is closed. When a new notification is created (payment, guard alert, campaign update), users will receive a native OS-level push notification in addition to the existing in-app bell/toast.
-
-### Compatibility
-- **Android + Chrome/Edge/Brave**: Full support, works in background
-- **macOS + Chrome/Edge/Firefox**: Full support
-- **Windows + Chrome/Edge**: Full support
-- **iOS Safari (PWA only)**: Supported since iOS 16.4, but only when installed as PWA
-
----
+The current notice banner is subtle — low-opacity backgrounds, small text, and minimal visual weight. The goal is to make it impossible to miss when a client opens their dashboard.
 
 ### Changes
 
-**1. Generate VAPID keys (secret)**
-- Web Push requires a VAPID key pair (public + private). We'll generate these and store the private key as a backend secret (`VAPID_PRIVATE_KEY`), and embed the public key in the frontend code.
-- You'll need to provide the VAPID keys (I'll give you a generation command) or I can generate them via an edge function.
+**1. Redesign `ClientNoticeBanner` component** (`src/components/ClientNoticeBanner.tsx`)
 
-**2. Create `push_subscriptions` table (migration)**
-- Stores each user's push subscription (endpoint, keys) so the backend knows where to send pushes.
-- Columns: `id`, `user_id`, `endpoint`, `keys_p256dh`, `keys_auth`, `created_at`
-- RLS: users can only manage their own subscriptions
+- **Stronger backgrounds & borders**: Increase opacity from `/10` → `/20` for backgrounds, `/30` → `/50` for borders. Add `shadow-lg` with colored shadows per type.
+- **Larger icon with colored bubble**: Wrap the icon in a rounded colored circle (like the sidebar icon bubbles) to create a visual anchor.
+- **Bigger, bolder text**: Title bumped from `text-sm` → `text-base font-bold`, message from `text-xs` → `text-sm`.
+- **Animated entry**: Add `animate-slide-up-fade` with stagger so banners cascade in.
+- **Urgent type gets extra treatment**: Glowing border effect via `ring-2 ring-destructive/40`, stronger pulse, and a gradient left-accent bar.
+- **Left accent stripe**: A 4px colored vertical bar on the left edge for all notice types for quick visual scanning.
 
-**3. Create service worker (`public/sw.js`)**
-- Minimal service worker that listens for `push` events and displays native notifications
-- Handles notification click to open the app at the correct link
-- Will NOT cache anything or interfere with navigation (no workbox/PWA caching)
+**2. Add shimmer/glow keyframe** (`src/index.css`)
 
-**4. Add push subscription logic (`src/hooks/usePushNotifications.ts`)**
-- On login, requests notification permission from the browser
-- Subscribes to push using the VAPID public key
-- Saves the subscription to the `push_subscriptions` table
-- Registers the service worker (with iframe/preview guards so it doesn't break the editor)
+- Add a subtle `animate-attention-glow` keyframe that pulses the box-shadow for urgent notices, making them visually demand attention.
 
-**5. Create `send-push` edge function**
-- Triggered from a database webhook (or called by existing notification triggers)
-- When a row is inserted into `notifications`, this function:
-  - Looks up the user's push subscriptions
-  - Sends a Web Push message using the `web-push` protocol
-  - Removes stale/expired subscriptions automatically
+**3. Ensure banner is above the fold** (`src/pages/ClientDashboard.tsx`)
 
-**6. Add database webhook on `notifications` INSERT**
-- Fires the `send-push` edge function whenever a notification is created, so every existing notification trigger automatically sends a push too
+- Already positioned first — no change needed. Optionally add a small `scroll-mt-4` so it's never clipped.
 
-**7. Integrate subscription prompt in the UI**
-- Add a subtle "Enable push notifications" prompt in the notification bell dropdown or settings page
-- Show subscription status (enabled/disabled)
-
-### Technical Details
-
-```text
-┌──────────────┐    INSERT    ┌──────────────┐   webhook   ┌─────────────┐
-│  DB Trigger   │ ──────────► │ notifications │ ──────────► │ send-push   │
-│ (existing)    │             │   table       │             │ edge fn     │
-└──────────────┘             └──────────────┘             └──────┬──────┘
-                                                                  │
-                                                    Web Push API  │
-                                                                  ▼
-                                                         ┌──────────────┐
-                                                         │ Browser/OS   │
-                                                         │ Notification │
-                                                         └──────────────┘
-```
-
-- No third-party push service needed — Web Push is a free W3C standard
-- The `web-push` npm library handles the encryption protocol in the edge function
-- Existing notification triggers (payment, guard, campaign) will automatically send pushes with zero changes
+### Summary of Visual Impact
+- Info: Blue left bar + blue icon bubble + stronger blue tint
+- Warning: Amber left bar + amber icon bubble + amber glow  
+- Urgent: Red left bar + red icon bubble + pulsing red glow + ring highlight
 
