@@ -62,11 +62,22 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={markAllAsRead}>
-              <CheckCheck className="h-3 w-3" /> Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {isSupported && (
+              <Button
+                variant="ghost" size="sm" className="h-7 text-xs gap-1"
+                onClick={handleTogglePush} disabled={pushLoading}
+              >
+                {isSubscribed ? <BellOff className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+                {isSubscribed ? "Mute" : "Push"}
+              </Button>
+            )}
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={markAllAsRead}>
+                <CheckCheck className="h-3 w-3" /> Mark all read
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* List */}
