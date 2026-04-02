@@ -14,6 +14,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Monitor, Download, ExternalLink, Search, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
