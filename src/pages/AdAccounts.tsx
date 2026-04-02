@@ -450,7 +450,14 @@ export default function AdAccounts() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <Monitor className="h-10 w-10" />
-              <p>No ad accounts yet</p>
+              {activeTab === "inactive" ? (
+                <>
+                  <p className="font-medium text-foreground">No inactive accounts</p>
+                  <p className="text-sm">All your ad accounts are currently active.</p>
+                </>
+              ) : (
+                <p>{searchQuery ? "No accounts match your search" : "No ad accounts yet"}</p>
+              )}
             </div>
           </CardContent>
         </Card>
