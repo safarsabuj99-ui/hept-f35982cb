@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: data.tag || "adspend-notification",
+    tag: data.tag || "hept-notification",
     data: { link: data.link || "/" },
     vibrate: [200, 100, 200],
     renotify: true,
