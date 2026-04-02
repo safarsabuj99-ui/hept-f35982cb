@@ -99,6 +99,14 @@ Deno.serve(async (req) => {
               return;
             }
 
+            // If instant trigger already confirmed the pause, just clean up the job
+            if (campaign.pause_confirmed_at) {
+              await sb.from("guard_pause_jobs").delete().eq("id", job.id);
+              totalConfirmed++;
+              console.log(`✓ ALREADY CONFIRMED (instant trigger): ${campaign.name} (${campaign.platform})`);
+              return;
+            }
+
             // If already confirmed paused, clean up
             if (campaign.status === "paused") {
               await sb.from("campaigns").update({
