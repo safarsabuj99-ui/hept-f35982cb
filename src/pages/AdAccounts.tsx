@@ -262,7 +262,7 @@ export default function AdAccounts() {
     fetchData();
   };
 
-  const filteredAccounts = accounts.filter((a: any) => {
+  const searchFiltered = accounts.filter((a: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const integration = integrations.find((i: any) => i.id === a.api_integration_id);
@@ -272,6 +272,13 @@ export default function AdAccounts() {
       || (a.platform_name || "").toLowerCase().includes(q)
       || instanceName.includes(q);
   });
+
+  const activeCount = searchFiltered.filter((a: any) => a.is_active).length;
+  const inactiveCount = searchFiltered.filter((a: any) => !a.is_active).length;
+
+  const filteredAccounts = searchFiltered.filter((a: any) =>
+    activeTab === "active" ? a.is_active : !a.is_active
+  );
 
   const paginatedAccounts = filteredAccounts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const allPageSelected = paginatedAccounts.length > 0 && paginatedAccounts.every((a: any) => selectedAccounts.has(a.id));
