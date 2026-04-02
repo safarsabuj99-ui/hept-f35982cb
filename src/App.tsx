@@ -151,6 +151,7 @@ const App = () => (
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
                 <Route path="/admin/client-notices" element={<ClientNotices />} />
+                <Route path="/admin/notifications" element={<Notifications />} />
               </Route>
 
               {/* Manager routes */}
