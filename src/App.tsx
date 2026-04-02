@@ -164,6 +164,7 @@ const App = () => (
               >
                 <Route path="/manager" element={<ManagerDashboard />} />
                 <Route path="/manager/add-funds" element={<AddFunds />} />
+                <Route path="/manager/notifications" element={<Notifications />} />
                 
               </Route>
 
