@@ -128,7 +128,7 @@ export default function Login() {
           </div>
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-white">
-              AdSpend Portal
+              HEPT Portal
             </h1>
             <p className="text-sm text-white/50">
               Sign in to manage your ad campaigns
