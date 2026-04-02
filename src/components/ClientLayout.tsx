@@ -9,6 +9,7 @@ import {
   BarChart3, LogOut, Megaphone, LayoutDashboard, FileBarChart,
   ArrowLeft, Wallet
 } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
 export function ClientLayout() {

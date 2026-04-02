@@ -70,6 +70,7 @@ export function ManagerLayout() {
             <span className="text-lg font-bold">AdSpend</span>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationBell allNotificationsPath="/manager/notifications" />
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)} className="press-effect">
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
