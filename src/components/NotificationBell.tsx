@@ -1,12 +1,14 @@
-import { Bell, Check, CheckCheck, Trash2, ExternalLink } from "lucide-react";
+import { Bell, Check, CheckCheck, Trash2, ExternalLink, BellRing, BellOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
   payment: "bg-emerald-500",
