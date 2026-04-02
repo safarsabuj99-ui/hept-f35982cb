@@ -1,30 +1,23 @@
 
 
-## Make Client Notice Banner More Eye-Catching
+## Rename "AdSpend" → "HEPT" Across the Entire Project
 
-The current notice banner is subtle — low-opacity backgrounds, small text, and minimal visual weight. The goal is to make it impossible to miss when a client opens their dashboard.
+Replace every user-visible occurrence of "AdSpend" with "HEPT" across 9 files. Variable names like `adSpend`, `totalAdSpend` that refer to ad spending data (not branding) will be left unchanged.
 
-### Changes
+### Files to Update
 
-**1. Redesign `ClientNoticeBanner` component** (`src/components/ClientNoticeBanner.tsx`)
+| File | Changes |
+|------|---------|
+| **index.html** | Title → "HEPT - Ad Management Platform", meta author → "HEPT", apple-mobile-web-app-title → "HEPT", og:title → "HEPT - …" |
+| **public/manifest.json** | `name` → "HEPT - Ad Management Platform", `short_name` → "HEPT" |
+| **public/sw.js** | Default notification tag → "hept-notification", fallback title → "HEPT" |
+| **src/components/AdminLayout.tsx** | Two brand text instances → "HEPT" |
+| **src/components/ClientLayout.tsx** | Brand text → "HEPT" |
+| **src/components/ManagerLayout.tsx** | Two brand text instances → "HEPT" |
+| **src/pages/Login.tsx** | "AdSpend Portal" → "HEPT Portal", "Powered by AdSpend" → "Powered by HEPT" |
+| **src/pages/Settings.tsx** | No branding text — no changes needed |
+| **supabase/functions/send-push/index.ts** | VAPID subject email → "mailto:admin@hept.app" |
 
-- **Stronger backgrounds & borders**: Increase opacity from `/10` → `/20` for backgrounds, `/30` → `/50` for borders. Add `shadow-lg` with colored shadows per type.
-- **Larger icon with colored bubble**: Wrap the icon in a rounded colored circle (like the sidebar icon bubbles) to create a visual anchor.
-- **Bigger, bolder text**: Title bumped from `text-sm` → `text-base font-bold`, message from `text-xs` → `text-sm`.
-- **Animated entry**: Add `animate-slide-up-fade` with stagger so banners cascade in.
-- **Urgent type gets extra treatment**: Glowing border effect via `ring-2 ring-destructive/40`, stronger pulse, and a gradient left-accent bar.
-- **Left accent stripe**: A 4px colored vertical bar on the left edge for all notice types for quick visual scanning.
-
-**2. Add shimmer/glow keyframe** (`src/index.css`)
-
-- Add a subtle `animate-attention-glow` keyframe that pulses the box-shadow for urgent notices, making them visually demand attention.
-
-**3. Ensure banner is above the fold** (`src/pages/ClientDashboard.tsx`)
-
-- Already positioned first — no change needed. Optionally add a small `scroll-mt-4` so it's never clipped.
-
-### Summary of Visual Impact
-- Info: Blue left bar + blue icon bubble + stronger blue tint
-- Warning: Amber left bar + amber icon bubble + amber glow  
-- Urgent: Red left bar + red icon bubble + pulsing red glow + ring highlight
+### What stays unchanged
+- Variable names (`adSpend`, `setAdSpend`, `filteredAdSpend`, `totalAdSpend`) — these are code-level references to ad spending data, not branding.
 
