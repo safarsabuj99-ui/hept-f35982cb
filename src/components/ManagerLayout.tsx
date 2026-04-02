@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   BarChart3, Users, DollarSign, LogOut, Menu, X, Megaphone,
 } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
