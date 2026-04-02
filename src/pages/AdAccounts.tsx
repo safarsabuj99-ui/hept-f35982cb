@@ -423,15 +423,23 @@ export default function AdAccounts() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by account name, ID, platform, or instance name..."
-          value={searchQuery}
-          onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-          className="pl-9 w-full sm:max-w-md"
-        />
+      {/* Tabs + Search */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "active" | "inactive"); setCurrentPage(1); setSelectedAccounts(new Set()); }}>
+          <TabsList>
+            <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+            <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by account name, ID, platform, or instance name..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            className="pl-9 w-full sm:max-w-md"
+          />
+        </div>
       </div>
 
       {/* Content */}
