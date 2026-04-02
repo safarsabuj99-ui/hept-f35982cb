@@ -23,8 +23,20 @@ interface NotificationBellProps {
 
 export function NotificationBell({ allNotificationsPath = "/admin/notifications" }: NotificationBellProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+  const { isSupported, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  const handleTogglePush = async () => {
+    if (isSubscribed) {
+      await unsubscribe();
+      toast.success("Push notifications disabled");
+    } else {
+      const ok = await subscribe();
+      if (ok) toast.success("Push notifications enabled!");
+      else toast.error("Could not enable push notifications");
+    }
+  };
 
   const handleClick = (notif: Notification) => {
     if (!notif.is_read) markAsRead(notif.id);
