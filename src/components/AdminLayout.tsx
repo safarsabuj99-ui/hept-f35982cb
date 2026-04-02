@@ -223,8 +223,9 @@ export function AdminLayout() {
               <BarChart3 className="h-5 w-5 text-primary" />
               <span className="text-base font-bold">AdSpend</span>
             </div>
-            <div className="ml-auto flex items-center gap-2 lg:hidden">
-              <ThemeToggle />
+            <div className="ml-auto flex items-center gap-2">
+              <NotificationBell allNotificationsPath="/admin/notifications" />
+              <div className="lg:hidden"><ThemeToggle /></div>
             </div>
           </header>
 
