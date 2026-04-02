@@ -41,6 +41,7 @@ import ClientWallet from "@/pages/ClientWallet";
 import AdAccountDetail from "@/pages/AdAccountDetail";
 import AttentionRequired from "@/pages/AttentionRequired";
 import ClientNotices from "@/pages/ClientNotices";
+import Notifications from "@/pages/Notifications";
 
 import PlatformDashboard from "@/pages/PlatformDashboard";
 import AgencyList from "@/pages/AgencyList";
@@ -150,6 +151,7 @@ const App = () => (
                 <Route path="/admin/payment-requests" element={<PaymentRequests />} />
                 <Route path="/admin/orders" element={<OrderManagement />} />
                 <Route path="/admin/client-notices" element={<ClientNotices />} />
+                <Route path="/admin/notifications" element={<Notifications />} />
               </Route>
 
               {/* Manager routes */}
@@ -162,6 +164,7 @@ const App = () => (
               >
                 <Route path="/manager" element={<ManagerDashboard />} />
                 <Route path="/manager/add-funds" element={<AddFunds />} />
+                <Route path="/manager/notifications" element={<Notifications />} />
                 
               </Route>
 
@@ -178,6 +181,7 @@ const App = () => (
                 <Route path="/dashboard/campaigns" element={<MyCampaignRequests />} />
                 <Route path="/dashboard/campaigns/new" element={<NewCampaignRequest />} />
                 <Route path="/dashboard/reports" element={<ClientReports />} />
+                <Route path="/dashboard/notifications" element={<Notifications />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

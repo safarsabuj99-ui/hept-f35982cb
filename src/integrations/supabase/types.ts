@@ -1222,6 +1222,50 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_read: boolean
+          link: string | null
+          org_id: string | null
+          title: string
+          type: Database["public"]["Enums"]["notification_type"]
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          org_id?: string | null
+          title: string
+          type?: Database["public"]["Enums"]["notification_type"]
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          org_id?: string | null
+          title?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_subscriptions: {
         Row: {
           amount_bdt: number
@@ -2012,6 +2056,7 @@ export type Database = {
         | "Marketing"
         | "Other"
       invoice_status: "draft" | "sent" | "paid" | "overdue" | "void"
+      notification_type: "payment" | "guard" | "campaign" | "system"
       org_plan: "starter" | "growth" | "agency_pro"
       org_status: "active" | "suspended" | "trial" | "cancelled"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
@@ -2181,6 +2226,7 @@ export const Constants = {
         "Other",
       ],
       invoice_status: ["draft", "sent", "paid", "overdue", "void"],
+      notification_type: ["payment", "guard", "campaign", "system"],
       org_plan: ["starter", "growth", "agency_pro"],
       org_status: ["active", "suspended", "trial", "cancelled"],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],

@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   BarChart3, Users, DollarSign, LogOut, Menu, X, Megaphone,
 } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,7 @@ export function ManagerLayout() {
             <span className="text-lg font-bold">AdSpend</span>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationBell allNotificationsPath="/manager/notifications" />
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={() => setMobileOpen(!mobileOpen)} className="press-effect">
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

@@ -6,8 +6,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity, Bell,
+  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity, Bell as BellIcon,
 } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
@@ -51,7 +52,7 @@ const allSections: NavSection[] = [
     items: [
       { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
       { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
-      { to: "/admin/client-notices", icon: Bell, label: "Notices", permKey: "can_manage_clients" },
+      { to: "/admin/client-notices", icon: BellIcon, label: "Notices", permKey: "can_manage_clients" },
       { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
     ],
   },
@@ -223,8 +224,9 @@ export function AdminLayout() {
               <BarChart3 className="h-5 w-5 text-primary" />
               <span className="text-base font-bold">AdSpend</span>
             </div>
-            <div className="ml-auto flex items-center gap-2 lg:hidden">
-              <ThemeToggle />
+            <div className="ml-auto flex items-center gap-2">
+              <NotificationBell allNotificationsPath="/admin/notifications" />
+              <div className="lg:hidden"><ThemeToggle /></div>
             </div>
           </header>
 
