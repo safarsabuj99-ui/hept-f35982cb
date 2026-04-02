@@ -741,6 +741,32 @@
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
+@keyframes attention-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px -2px hsl(var(--destructive) / 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 24px -4px hsl(var(--destructive) / 0.5), 0 0 12px -2px hsl(var(--destructive) / 0.3);
+  }
+}
+.animate-attention-glow {
+  animation: attention-glow 2s ease-in-out infinite;
+}
+
+@keyframes slide-up-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-up-fade {
+  animation: slide-up-fade 0.4s ease-out both;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

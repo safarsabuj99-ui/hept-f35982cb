@@ -17,10 +17,42 @@ interface Props {
   balance: number;
 }
 
-const TYPE_STYLES: Record<string, { bg: string; border: string; text: string; icon: any }> = {
-  info: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-700 dark:text-blue-300", icon: Info },
-  warning: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-700 dark:text-amber-300", icon: AlertTriangle },
-  urgent: { bg: "bg-destructive/10", border: "border-destructive/30", text: "text-destructive", icon: Megaphone },
+const TYPE_STYLES: Record<string, {
+  bg: string;
+  border: string;
+  text: string;
+  icon: any;
+  accent: string;
+  iconBg: string;
+  shadow: string;
+}> = {
+  info: {
+    bg: "bg-blue-500/20",
+    border: "border-blue-500/50",
+    text: "text-blue-700 dark:text-blue-300",
+    icon: Info,
+    accent: "bg-blue-500",
+    iconBg: "bg-blue-500/20 ring-1 ring-blue-500/30",
+    shadow: "shadow-lg shadow-blue-500/10",
+  },
+  warning: {
+    bg: "bg-amber-500/20",
+    border: "border-amber-500/50",
+    text: "text-amber-700 dark:text-amber-300",
+    icon: AlertTriangle,
+    accent: "bg-amber-500",
+    iconBg: "bg-amber-500/20 ring-1 ring-amber-500/30",
+    shadow: "shadow-lg shadow-amber-500/10",
+  },
+  urgent: {
+    bg: "bg-destructive/15",
+    border: "border-destructive/50",
+    text: "text-destructive dark:text-red-300",
+    icon: Megaphone,
+    accent: "bg-destructive",
+    iconBg: "bg-destructive/20 ring-1 ring-destructive/30",
+    shadow: "shadow-lg shadow-destructive/15",
+  },
 };
 
 export function ClientNoticeBanner({ clientId, balance }: Props) {
@@ -32,7 +64,6 @@ export function ClientNoticeBanner({ clientId, balance }: Props) {
     if (!clientId) return;
 
     const fetchNotices = async () => {
-      // Fetch active notices (RLS filters by is_active + time window)
       const { data } = await supabase
         .from("client_notices")
         .select("id, title, message, type, target_type, target_ids");
@@ -63,27 +94,39 @@ export function ClientNoticeBanner({ clientId, balance }: Props) {
   if (visibleNotices.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      {visibleNotices.map((n) => {
+    <div className="space-y-3 scroll-mt-4">
+      {visibleNotices.map((n, idx) => {
         const style = TYPE_STYLES[n.type] || TYPE_STYLES.info;
         const Icon = style.icon;
+        const isUrgent = n.type === "urgent";
         return (
           <div
             key={n.id}
             className={cn(
-              "relative flex items-start gap-3 rounded-xl border p-3 md:p-4",
-              style.bg, style.border,
-              n.type === "urgent" && "animate-pulse-subtle"
+              "relative flex items-start gap-3 rounded-xl border p-4 md:p-5 overflow-hidden animate-slide-up-fade",
+              style.bg, style.border, style.shadow,
+              isUrgent && "ring-2 ring-destructive/40 animate-attention-glow"
             )}
+            style={{ animationDelay: `${idx * 100}ms` }}
           >
-            <Icon className={cn("h-5 w-5 shrink-0 mt-0.5", style.text)} />
-            <div className="flex-1 min-w-0">
-              <p className={cn("text-sm font-semibold", style.text)}>{n.title}</p>
-              <p className={cn("text-xs mt-0.5 opacity-80", style.text)}>{n.message}</p>
+            {/* Left accent stripe */}
+            <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl", style.accent)} />
+
+            {/* Icon bubble */}
+            <div className={cn("shrink-0 flex items-center justify-center h-9 w-9 rounded-full ml-1", style.iconBg)}>
+              <Icon className={cn("h-5 w-5", style.text)} />
             </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <p className={cn("text-base font-bold leading-tight", style.text)}>{n.title}</p>
+              <p className={cn("text-sm mt-1 opacity-85 leading-snug", style.text)}>{n.message}</p>
+            </div>
+
+            {/* Dismiss */}
             <button
               onClick={() => setDismissed(prev => new Set(prev).add(n.id))}
-              className={cn("shrink-0 p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors", style.text)}
+              className={cn("shrink-0 p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors", style.text)}
             >
               <X className="h-4 w-4" />
             </button>
