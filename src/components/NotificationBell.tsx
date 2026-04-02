@@ -1,12 +1,14 @@
-import { Bell, Check, CheckCheck, Trash2, ExternalLink } from "lucide-react";
+import { Bell, Check, CheckCheck, Trash2, ExternalLink, BellRing, BellOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const typeColors: Record<string, string> = {
   payment: "bg-emerald-500",
@@ -21,8 +23,20 @@ interface NotificationBellProps {
 
 export function NotificationBell({ allNotificationsPath = "/admin/notifications" }: NotificationBellProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+  const { isSupported, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  const handleTogglePush = async () => {
+    if (isSubscribed) {
+      await unsubscribe();
+      toast.success("Push notifications disabled");
+    } else {
+      const ok = await subscribe();
+      if (ok) toast.success("Push notifications enabled!");
+      else toast.error("Could not enable push notifications");
+    }
+  };
 
   const handleClick = (notif: Notification) => {
     if (!notif.is_read) markAsRead(notif.id);
@@ -48,11 +62,22 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={markAllAsRead}>
-              <CheckCheck className="h-3 w-3" /> Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {isSupported && (
+              <Button
+                variant="ghost" size="sm" className="h-7 text-xs gap-1"
+                onClick={handleTogglePush} disabled={pushLoading}
+              >
+                {isSubscribed ? <BellOff className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+                {isSubscribed ? "Mute" : "Push"}
+              </Button>
+            )}
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={markAllAsRead}>
+                <CheckCheck className="h-3 w-3" /> Mark all read
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* List */}
