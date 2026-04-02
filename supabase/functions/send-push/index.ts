@@ -270,8 +270,11 @@ async function createVapidJwt(
 
   const unsignedToken = `${header}.${payload}`;
 
+  const trimmedPrivateKey = privateKeyBase64.trim();
+  console.log(`VAPID private key length: ${trimmedPrivateKey.length}, public key length: ${VAPID_PUBLIC_KEY.length}`);
+  
   const publicKeyBytes = base64urlToBytes(VAPID_PUBLIC_KEY);
-  const privateKeyBytes = base64urlToBytes(privateKeyBase64);
+  const privateKeyBytes = base64urlToBytes(trimmedPrivateKey);
 
   const jwk = {
     kty: "EC",
