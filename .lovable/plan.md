@@ -1,45 +1,64 @@
 
 
-## Fix: Instant Platform Pause on Ad Guard Trigger
+## Real-Time Notification System
 
-### Problem
-When Ad Guard triggers (balance drops below threshold), campaigns are marked as `guard_paused` in the database but the actual platform API call (Meta/Google/TikTok) only happens when the 2-minute cron runs `ad-guard-check`, or when admin manually clicks "Verify." The user expects campaigns to be paused on the ad platform **instantly** (~1-3 seconds).
+### What You'll Get
+A complete in-app notification system that delivers instant alerts to both admin and client browsers (mobile or laptop) whenever key events happen — no page refresh needed.
 
-### Root Cause
-The `instant_guard_pause` trigger (which used `pg_net` to fire HTTP calls immediately) was dropped in migration `20260330` as "fragile." Now only the cron-based `ad-guard-check` processes the queue.
+### Events That Trigger Notifications
 
-### Solution
-Re-introduce the `instant_guard_pause` database trigger with improved reliability. When `auto_pause_on_debit` sets campaigns to `guard_paused`, this trigger fires immediately and calls the `pause-campaign` edge function for each campaign via `pg_net`.
+| Event | Who Gets Notified |
+|---|---|
+| Client submits a payment request | Admin |
+| Admin approves/rejects payment | Client |
+| Ad Guard triggers & pauses campaigns | Client + Admin |
+| Ad Guard auto-resumes campaigns | Client + Admin |
+| Campaign request submitted | Admin |
+| Campaign request approved/rejected | Client |
+
+### Architecture
+
+```text
+Event happens (e.g. payment approved)
+  → Edge function / DB trigger inserts row into `notifications` table
+  → Supabase Realtime broadcasts the INSERT
+  → All open browser tabs (mobile/laptop) receive it instantly
+  → Bell icon shows unread count badge
+  → Click bell → dropdown shows notification list
+  → Click notification → navigates to relevant page
+```
 
 ### Changes
 
-**1. Database Migration — Re-create `instant_guard_pause` trigger**
-- Create function `instant_guard_pause()` using `pg_net` extension to POST to `pause-campaign`
-- Reads Supabase URL and service role key from vault (already stored there)
-- Fires for each campaign row when `status` changes to `guard_paused`
-- Includes safety check: skips if vault secrets are missing (falls back to cron)
-- The `ad-guard-check` cron remains as a safety net for any that fail
+**1. Database — `notifications` table + trigger**
+- New table: `notifications` with columns: `id`, `user_id` (recipient), `title`, `body`, `type` (payment, guard, campaign, system), `is_read`, `link` (URL to navigate to), `created_at`, `org_id`
+- RLS: users read/update only their own notifications; service role inserts
+- Enable Realtime publication on the table
+- New DB trigger `notify_on_payment_status_change`: fires on `payment_requests` UPDATE when status changes to approved/rejected → inserts notification for the client
+- New DB trigger `notify_on_guard_pause`: fires on `campaigns` UPDATE when status changes to `guard_paused` → inserts notification for both the client AND all admins in the org
+- New DB trigger `notify_on_guard_resume`: fires on `campaigns` UPDATE when status changes from `guard_paused`/`paused` to `active` (auto-resume) → inserts notification for client + admins
+- New DB trigger `notify_on_payment_request_created`: fires on `payment_requests` INSERT → inserts notification for all admins
+- New DB trigger `notify_on_campaign_request`: fires on `campaign_requests` INSERT/UPDATE → notifies admin on new request, client on status change
 
-**2. Update `ad-guard-check` edge function — Skip already-confirmed jobs**
-- In Phase 1, if `pause_confirmed_at` is already set, delete the job immediately (instant trigger already handled it)
-- This avoids duplicate API calls when the cron runs after instant trigger succeeded
+**2. React — NotificationBell component**
+- New `src/hooks/useNotifications.tsx`: subscribes to Realtime `postgres_changes` on `notifications` table filtered by `user_id = auth.uid()`, maintains unread count and recent list
+- New `src/components/NotificationBell.tsx`: bell icon with red badge (unread count), click opens dropdown/popover showing recent notifications with timestamps, mark-as-read on click, "Mark all read" button, "View all" link
+- Plays a subtle sound or shows a toast when a new notification arrives in real-time
+- Integrate into `AdminLayout`, `ClientLayout`, and `ManagerLayout` header bars
 
-### Flow After Fix
-```text
-Debit inserted
-  → auto_pause_on_debit trigger
-    → campaigns.status = 'guard_paused'
-    → guard_pause_jobs queue entry created
-    → instant_guard_pause trigger fires (pg_net)
-      → POST /pause-campaign for each campaign (~1-3s)
-      → Platform API pauses campaign
-      → DB updated to status='paused', pause_confirmed_at set
-  → ad-guard-check cron (every 2 min) picks up any failures
-```
+**3. Notification Management Page**
+- New `src/pages/Notifications.tsx`: full-page view of all notifications with filters (type, read/unread, date range), bulk mark-as-read, bulk delete
+- Route: `/admin/notifications`, `/dashboard/notifications`, `/manager/notifications`
+
+**4. Update existing edge functions to create notifications**
+- `approve-payment/index.ts`: after approval/rejection, insert notification for the client
+- `ad-guard-check/index.ts`: after successful pause confirmation, insert notification for client + admins
+- `pause-campaign/index.ts`: on successful platform pause, insert notification
 
 ### Technical Details
-- `pg_net` extension is already enabled
-- `pause-campaign` already accepts service role auth and handles all 3 platforms
-- The trigger uses `SECURITY DEFINER` and reads secrets from Supabase vault
-- Vault secrets `supabase_url` and `service_role_key` are auto-provisioned by Lovable Cloud
+- Realtime subscription uses channel filter `eq('user_id', currentUserId)` for efficiency
+- Notifications auto-expire after 30 days via a scheduled cleanup (optional, Phase 2)
+- The `notifications` table uses a composite index on `(user_id, is_read, created_at)` for fast queries
+- DB triggers use `SECURITY DEFINER` to bypass RLS when inserting notifications for other users
+- Guard pause notifications are deduplicated: one notification per client per guard event (not per campaign)
 
