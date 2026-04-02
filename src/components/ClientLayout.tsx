@@ -77,6 +77,7 @@ export function ClientLayout() {
 
         {/* Right: Avatar + controls */}
         <div className="flex items-center gap-2 md:gap-3">
+          <NotificationBell allNotificationsPath="/dashboard/notifications" />
           <ThemeToggle />
           {!isImpersonating && (
             <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5 press-effect h-8 px-2 md:px-3 text-muted-foreground hover:text-foreground">
