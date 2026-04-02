@@ -31,7 +31,7 @@ export function ManagerLayout() {
       <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground lg:flex sticky top-0 h-screen">
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
           <BarChart3 className="h-6 w-6 text-sidebar-primary breathing-glow" />
-          <span className="text-lg font-bold text-sidebar-primary-foreground">AdSpend</span>
+          <span className="text-lg font-bold text-sidebar-primary-foreground">HEPT</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => (
@@ -67,7 +67,7 @@ export function ManagerLayout() {
         <header className="flex h-16 items-center justify-between border-b bg-card/80 backdrop-blur-xl px-4 lg:hidden">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
-            <span className="text-lg font-bold">AdSpend</span>
+            <span className="text-lg font-bold">HEPT</span>
           </div>
           <div className="flex items-center gap-1">
             <NotificationBell allNotificationsPath="/manager/notifications" />

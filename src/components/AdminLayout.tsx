@@ -120,7 +120,7 @@ function AdminSidebarContent() {
           {!collapsed && (
             <div className="flex items-center gap-2 animate-slide-up-fade">
               <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                AdSpend
+                HEPT
               </span>
               <span className="sidebar-version-tag">v2.0</span>
             </div>
@@ -222,7 +222,7 @@ export function AdminLayout() {
             <SidebarTrigger className="press-effect" />
             <div className="flex items-center gap-2 lg:hidden">
               <BarChart3 className="h-5 w-5 text-primary" />
-              <span className="text-base font-bold">AdSpend</span>
+              <span className="text-base font-bold">HEPT</span>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <NotificationBell allNotificationsPath="/admin/notifications" />

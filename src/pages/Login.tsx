@@ -128,7 +128,7 @@ export default function Login() {
           </div>
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-white">
-              AdSpend Portal
+              HEPT Portal
             </h1>
             <p className="text-sm text-white/50">
               Sign in to manage your ad campaigns
@@ -202,7 +202,7 @@ export default function Login() {
         {/* Bottom accent */}
         <div className="mt-8 text-center">
           <p className="text-xs text-white/20">
-            Powered by AdSpend • Secure Login
+            Powered by HEPT • Secure Login
           </p>
         </div>
       </div>
