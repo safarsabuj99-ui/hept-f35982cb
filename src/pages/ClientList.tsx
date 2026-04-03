@@ -305,7 +305,7 @@ export default function ClientList() {
         </Button>
       </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-2">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-muted-foreground">All Clients</CardTitle>
         </CardHeader>
