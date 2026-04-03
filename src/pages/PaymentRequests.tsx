@@ -289,8 +289,8 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">৳{fmt(totalBdt)}</p>
               </CardContent>
-            </Card>
-            <Card className="border-border/60">
+            </div>
+            <div className="glass-card glow-border border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="h-3.5 w-3.5 text-primary" />
