@@ -197,9 +197,9 @@ export default function TeamManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up-fade">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Team Management</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Team Management</h1>
           <p className="text-muted-foreground">Manage managers, permissions, and account status</p>
         </div>
         <Button asChild className="self-start">
