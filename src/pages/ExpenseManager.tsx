@@ -215,7 +215,7 @@ export default function ExpenseManager() {
               <p className="text-xl sm:text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Pie Chart + Expenses */}
