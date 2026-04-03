@@ -136,7 +136,7 @@ export default function ExpenseManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end animate-slide-up-fade">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Expense</Button>
