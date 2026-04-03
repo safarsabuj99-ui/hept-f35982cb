@@ -117,7 +117,7 @@ export default function OrderManagement() {
         <p className="text-sm text-muted-foreground mt-1">Manage incoming campaign requests from clients</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 opacity-0 animate-slide-up-fade stagger-2">
         {(["pending", "processing", "completed", "rejected"] as const).map((s) => {
           const badge = STATUS_BADGE[s];
           return (
