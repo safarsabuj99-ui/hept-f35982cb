@@ -83,8 +83,8 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+      <div className="animate-slide-up-fade">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Global configuration</p>
       </div>
 
