@@ -210,9 +210,9 @@ export default function CampaignMapping() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-6 w-6 text-primary" /> Campaigns
+      <div className="animate-slide-up-fade">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Campaigns
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Unified spend analytics & campaign management

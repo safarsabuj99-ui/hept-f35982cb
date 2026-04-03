@@ -287,7 +287,7 @@ export default function AdAccounts() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header — stacks on mobile */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-slide-up-fade">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Ad Accounts</h1>
           <p className="text-sm text-muted-foreground">Manage platform ad accounts linked to clients</p>

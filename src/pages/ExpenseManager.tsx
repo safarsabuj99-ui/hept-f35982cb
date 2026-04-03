@@ -219,7 +219,7 @@ export default function ExpenseManager() {
       </div>
 
       {/* Pie Chart + Expenses */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 opacity-0 animate-slide-up-fade stagger-3">
         <Card>
           <CardHeader><CardTitle className="text-base">Distribution</CardTitle></CardHeader>
           <CardContent>

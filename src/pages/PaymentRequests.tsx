@@ -316,7 +316,7 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">{pendingCount}</p>
               </CardContent>
-            </Card>
+            </div>
           </div>
         );
       })()}

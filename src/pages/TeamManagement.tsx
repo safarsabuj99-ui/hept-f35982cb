@@ -351,7 +351,7 @@ export default function TeamManagement() {
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       {/* Edit Permissions Dialog */}
       <Dialog open={!!editManager} onOpenChange={(open) => !open && setEditManager(null)}>

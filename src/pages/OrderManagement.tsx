@@ -201,13 +201,13 @@ export default function OrderManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Client</TableHead>
-                        <TableHead>Platform</TableHead>
-                        <TableHead>Objective</TableHead>
-                        <TableHead className="text-right">Budget</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Platform</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Objective</TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Budget</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Status</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Date</TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
