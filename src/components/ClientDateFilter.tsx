@@ -112,7 +112,12 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
           <Button
             variant={activePreset === "custom" ? "default" : "outline"}
             size="sm"
-            className="h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start"
+            className={cn(
+              "h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start rounded-full",
+              activePreset === "custom"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+            )}
             onClick={() => setInternalPreset("custom")}
           >
             <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
