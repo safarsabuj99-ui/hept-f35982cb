@@ -191,7 +191,7 @@ export default function ExpenseManager() {
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 opacity-0 animate-slide-up-fade stagger-2">
         <Card>
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
