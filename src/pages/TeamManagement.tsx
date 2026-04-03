@@ -210,7 +210,7 @@ export default function TeamManagement() {
         </Button>
       </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-2">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
