@@ -199,8 +199,8 @@ export default function ExpenseManager() {
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
           </CardContent>
-        </Card>
-        <Card>
+        </div>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
