@@ -173,7 +173,7 @@ export default function Settings() {
         </CardContent>
       </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-4">
         <CardHeader>
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
