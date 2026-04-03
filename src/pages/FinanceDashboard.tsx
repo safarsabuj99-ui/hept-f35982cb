@@ -384,7 +384,7 @@ export default function FinanceDashboard() {
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

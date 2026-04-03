@@ -470,7 +470,7 @@ export default function ClientList() {
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       <DepositFundsDialog
         open={depositOpen}
