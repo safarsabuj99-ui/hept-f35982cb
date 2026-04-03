@@ -110,9 +110,9 @@ export default function OrderManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Megaphone className="h-6 w-6 text-primary" /> Order Management
+      <div className="animate-slide-up-fade">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Megaphone className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Order Management
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Manage incoming campaign requests from clients</p>
       </div>
