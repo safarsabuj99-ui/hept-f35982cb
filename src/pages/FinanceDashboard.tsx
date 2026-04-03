@@ -214,9 +214,9 @@ export default function FinanceDashboard() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </div>
         )}
-        <Card>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
