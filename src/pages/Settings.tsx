@@ -171,7 +171,7 @@ export default function Settings() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       <Card>
         <CardHeader>
