@@ -95,7 +95,12 @@ export function ClientDateFilter({ onRangeChange, activePreset: controlledPreset
           key={p.value}
           variant={activePreset === p.value ? "default" : "outline"}
           size="sm"
-          className="h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start"
+          className={cn(
+            "h-9 text-sm md:h-8 md:text-xs shrink-0 snap-start rounded-full",
+            activePreset === p.value
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+          )}
           onClick={() => handlePreset(p.value)}
         >
           {p.label}
