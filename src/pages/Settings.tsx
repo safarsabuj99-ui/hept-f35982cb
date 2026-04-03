@@ -117,7 +117,7 @@ export default function Settings() {
             </form>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       <Card>
         <CardHeader>
