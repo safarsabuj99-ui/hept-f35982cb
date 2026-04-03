@@ -343,12 +343,12 @@ export default function FinanceDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead className="text-right">Spend (USD)</TableHead>
-                      <TableHead className="text-right">Revenue (BDT)</TableHead>
-                      <TableHead className="text-right">COGS (BDT)</TableHead>
-                      {canViewProfit && <TableHead className="text-right">Profit (BDT)</TableHead>}
-                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
+                      <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Spend (USD)</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Revenue (BDT)</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">COGS (BDT)</TableHead>
+                      {canViewProfit && <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Profit (BDT)</TableHead>}
+                      {canViewProfit && <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Margin</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
