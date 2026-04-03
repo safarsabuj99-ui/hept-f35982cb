@@ -285,11 +285,11 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Client Profitability */}
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-4">
         <CardHeader><CardTitle className="text-base">Client Profitability</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
