@@ -254,7 +254,7 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* P&L Summary */}
