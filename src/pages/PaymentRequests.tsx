@@ -280,7 +280,7 @@ export default function PaymentRequests() {
         const approvedCount = approved.length;
         const pendingCount = filteredRequests.filter(r => r.status === "pending").length;
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 opacity-0 animate-slide-up-fade stagger-2">
             <Card className="border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
