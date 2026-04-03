@@ -259,7 +259,7 @@ export default function FinanceDashboard() {
 
       {/* P&L Summary */}
       {canViewProfit && (
-        <Card>
+        <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
           <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
