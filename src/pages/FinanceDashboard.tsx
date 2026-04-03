@@ -198,7 +198,7 @@ export default function FinanceDashboard() {
       </div>
 
       {/* Main KPI Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 opacity-0 animate-slide-up-fade stagger-2">
         {canViewProfit && (
           <Card className="border-success/30">
             <CardContent className="pt-6">
