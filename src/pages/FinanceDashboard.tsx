@@ -193,14 +193,14 @@ export default function FinanceDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end animate-slide-up-fade">
         <DateRangeFilter onRangeChange={handleRangeChange} />
       </div>
 
       {/* Main KPI Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 opacity-0 animate-slide-up-fade stagger-2">
         {canViewProfit && (
-          <Card className="border-success/30">
+          <div className="glass-card glow-border border-success/30">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
@@ -214,9 +214,9 @@ export default function FinanceDashboard() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </div>
         )}
-        <Card>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
@@ -228,8 +228,8 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
-        <Card>
+        </div>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
@@ -241,8 +241,8 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
-        <Card>
+        </div>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="hidden sm:block rounded-lg bg-accent p-2"><Banknote className="h-5 w-5 text-accent-foreground" /></div>
@@ -254,12 +254,12 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* P&L Summary */}
       {canViewProfit && (
-        <Card>
+        <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
           <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
@@ -285,11 +285,11 @@ export default function FinanceDashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Client Profitability */}
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-4">
         <CardHeader><CardTitle className="text-base">Client Profitability</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
@@ -343,12 +343,12 @@ export default function FinanceDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Client</TableHead>
-                      <TableHead className="text-right">Spend (USD)</TableHead>
-                      <TableHead className="text-right">Revenue (BDT)</TableHead>
-                      <TableHead className="text-right">COGS (BDT)</TableHead>
-                      {canViewProfit && <TableHead className="text-right">Profit (BDT)</TableHead>}
-                      {canViewProfit && <TableHead className="text-right">Margin</TableHead>}
+                      <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Spend (USD)</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Revenue (BDT)</TableHead>
+                      <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">COGS (BDT)</TableHead>
+                      {canViewProfit && <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Profit (BDT)</TableHead>}
+                      {canViewProfit && <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Margin</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -384,7 +384,7 @@ export default function FinanceDashboard() {
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

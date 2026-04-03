@@ -110,14 +110,14 @@ export default function OrderManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Megaphone className="h-6 w-6 text-primary" /> Order Management
+      <div className="animate-slide-up-fade">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Megaphone className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Order Management
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Manage incoming campaign requests from clients</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 opacity-0 animate-slide-up-fade stagger-2">
         {(["pending", "processing", "completed", "rejected"] as const).map((s) => {
           const badge = STATUS_BADGE[s];
           return (
@@ -201,13 +201,13 @@ export default function OrderManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Client</TableHead>
-                        <TableHead>Platform</TableHead>
-                        <TableHead>Objective</TableHead>
-                        <TableHead className="text-right">Budget</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Platform</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Objective</TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Budget</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Status</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Date</TableHead>
+                        <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

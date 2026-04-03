@@ -98,7 +98,12 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
           key={p.value}
           variant={activePreset === p.value ? "default" : "outline"}
           size="sm"
-          className="shrink-0 snap-start h-9 text-sm md:h-8 md:text-xs"
+          className={cn(
+            "shrink-0 snap-start h-9 text-sm md:h-8 md:text-xs rounded-full",
+            activePreset === p.value
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+          )}
           onClick={() => handlePreset(p.value)}
         >
           {p.label}
@@ -110,7 +115,12 @@ export function DateRangeFilter({ onRangeChange }: DateRangeFilterProps) {
           <Button
             variant={activePreset === "custom" ? "default" : "outline"}
             size="sm"
-            className="shrink-0 snap-start h-9 text-sm md:h-8 md:text-xs"
+            className={cn(
+              "shrink-0 snap-start h-9 text-sm md:h-8 md:text-xs rounded-full",
+              activePreset === "custom"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+            )}
             onClick={() => setActivePreset("custom")}
           >
             <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />

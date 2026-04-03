@@ -83,12 +83,12 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+      <div className="animate-slide-up-fade">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Global configuration</p>
       </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-2">
         <CardHeader>
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -117,9 +117,9 @@ export default function Settings() {
             </form>
           )}
         </CardContent>
-      </Card>
+      </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
         <CardHeader>
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -171,9 +171,9 @@ export default function Settings() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-4">
         <CardHeader>
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -209,7 +209,7 @@ export default function Settings() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

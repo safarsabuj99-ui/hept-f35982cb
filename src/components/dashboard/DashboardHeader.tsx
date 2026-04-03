@@ -28,10 +28,8 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
-            <span className="inline-block overflow-hidden">
-              <span className="inline-block typewriter">
-                {greeting},{" "}
-              </span>
+            <span className="inline-block animate-slide-up-fade">
+              {greeting},{" "}
             </span>
             <span className="text-primary">{displayName}</span>
           </h1>

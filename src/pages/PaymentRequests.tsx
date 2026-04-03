@@ -263,7 +263,7 @@ export default function PaymentRequests() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="animate-slide-up-fade">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
           <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
         </h1>
@@ -280,8 +280,8 @@ export default function PaymentRequests() {
         const approvedCount = approved.length;
         const pendingCount = filteredRequests.filter(r => r.status === "pending").length;
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            <Card className="border-border/60">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 opacity-0 animate-slide-up-fade stagger-2">
+            <div className="glass-card glow-border border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Banknote className="h-3.5 w-3.5 text-primary" />
@@ -289,8 +289,8 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">৳{fmt(totalBdt)}</p>
               </CardContent>
-            </Card>
-            <Card className="border-border/60">
+            </div>
+            <div className="glass-card glow-border border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="h-3.5 w-3.5 text-primary" />
@@ -298,8 +298,8 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">${fmt(totalUsd)}</p>
               </CardContent>
-            </Card>
-            <Card className="border-border/60">
+            </div>
+            <div className="glass-card glow-border border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
@@ -307,8 +307,8 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">{approvedCount}</p>
               </CardContent>
-            </Card>
-            <Card className="border-border/60">
+            </div>
+            <div className="glass-card glow-border border-border/60">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Clock className="h-3.5 w-3.5 text-yellow-500" />
@@ -316,7 +316,7 @@ export default function PaymentRequests() {
                 </div>
                 <p className="text-base sm:text-lg font-bold font-mono">{pendingCount}</p>
               </CardContent>
-            </Card>
+            </div>
           </div>
         );
       })()}

@@ -280,9 +280,9 @@ export default function ClientList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up-fade">
         <div>
-          <h1 className="text-2xl font-bold">Client List</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Client List</h1>
           <p className="text-sm text-muted-foreground">Manage client configurations, pricing, and history</p>
         </div>
         <Badge variant="secondary" className="gap-1 self-start">
@@ -305,7 +305,7 @@ export default function ClientList() {
         </Button>
       </div>
 
-      <Card>
+      <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-2">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-muted-foreground">All Clients</CardTitle>
         </CardHeader>
@@ -470,7 +470,7 @@ export default function ClientList() {
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       <DepositFundsDialog
         open={depositOpen}

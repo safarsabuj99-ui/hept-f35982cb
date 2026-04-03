@@ -136,7 +136,7 @@ export default function ExpenseManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end animate-slide-up-fade">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Expense</Button>
@@ -191,35 +191,35 @@ export default function ExpenseManager() {
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Card>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 opacity-0 animate-slide-up-fade stagger-2">
+        <div className="glass-card glow-border">
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
           </CardContent>
-        </Card>
-        <Card>
+        </div>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
             )}
           </CardContent>
-        </Card>
-        <Card>
+        </div>
+        <div className="glass-card glow-border">
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Pie Chart + Expenses */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 opacity-0 animate-slide-up-fade stagger-3">
         <Card>
           <CardHeader><CardTitle className="text-base">Distribution</CardTitle></CardHeader>
           <CardContent>
