@@ -193,7 +193,7 @@ export default function FinanceDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end animate-slide-up-fade">
         <DateRangeFilter onRangeChange={handleRangeChange} />
       </div>
 
