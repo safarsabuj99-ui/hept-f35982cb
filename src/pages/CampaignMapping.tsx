@@ -2,13 +2,16 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateRangeFilter, DateRange, getLocalToday } from "@/components/DateRangeFilter";
 import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
-import { BarChart3, Loader2 } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
+import { BarChart3, Loader2, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function CampaignMapping() {
   const { role } = useAuth();
