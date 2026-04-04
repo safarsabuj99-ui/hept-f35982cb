@@ -23,6 +23,7 @@ export default function CampaignMapping() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clientFilter, setClientFilter] = useState("all");
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
 
   const fetchData = useCallback(async () => {
