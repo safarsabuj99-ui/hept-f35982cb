@@ -228,17 +228,48 @@ export default function CampaignMapping() {
         {isAdmin && (
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Client</Label>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-44 h-9 text-sm">
-                <SelectValue placeholder="All Clients" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clients.map((c: any) => (
-                  <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={clientPopoverOpen}
+                  className="w-48 h-9 text-sm justify-between font-normal"
+                >
+                  {clientFilter === "all"
+                    ? "All Clients"
+                    : clients.find((c) => c.user_id === clientFilter)?.full_name ?? "All Clients"}
+                  <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search clients..." className="h-9" />
+                  <CommandList className="max-h-[280px]" style={{ scrollBehavior: "smooth", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+                    <CommandEmpty>No client found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="all"
+                        onSelect={() => { setClientFilter("all"); setClientPopoverOpen(false); }}
+                      >
+                        <Check className={cn("mr-2 h-3.5 w-3.5", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
+                        All Clients
+                      </CommandItem>
+                      {clients.map((c: any) => (
+                        <CommandItem
+                          key={c.user_id}
+                          value={c.full_name}
+                          onSelect={() => { setClientFilter(c.user_id); setClientPopoverOpen(false); }}
+                        >
+                          <Check className={cn("mr-2 h-3.5 w-3.5", clientFilter === c.user_id ? "opacity-100" : "opacity-0")} />
+                          {c.full_name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
         <div className="space-y-1 flex-1 min-w-0">
