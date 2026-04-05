@@ -20,13 +20,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole>(null);
   const [loading, setLoading] = useState(true);
-  const roleFetchRef = useRef<string | null>(null);
+  const initializedRef = useRef(false);
 
   const fetchRole = useCallback(async (userId: string) => {
-    // Dedup concurrent fetches for same user
-    if (roleFetchRef.current === userId) return;
-    roleFetchRef.current = userId;
-
     try {
       const { data } = await supabase
         .from("user_roles")
@@ -50,27 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(null);
         }
       }
-    } finally {
-      roleFetchRef.current = null;
+    } catch {
+      setRole(null);
     }
   }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    // 1. Listen for auth changes (don't do async work here — just update session/user)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
-        if (!mounted) return;
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        if (!newSession?.user) {
-          setRole(null);
-        }
-      }
-    );
-
-    // 2. Get initial session (for page reloads)
+    // 1. Get initial session first (for page reloads)
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (!mounted) return;
       setSession(initialSession);
@@ -80,21 +64,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setRole(null);
       }
+      initializedRef.current = true;
       setLoading(false);
     });
+
+    // 2. Listen for auth changes — only fetch role for post-init events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, newSession) => {
+        if (!mounted) return;
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+
+        if (!initializedRef.current) {
+          // Skip — getSession path handles the initial load
+          return;
+        }
+
+        if (newSession?.user) {
+          await fetchRole(newSession.user.id);
+        } else {
+          setRole(null);
+        }
+      }
+    );
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
   }, [fetchRole]);
-
-  // 3. Fetch role whenever user changes (handles sign-in via onAuthStateChange)
-  useEffect(() => {
-    if (user) {
-      fetchRole(user.id).then(() => setLoading(false));
-    }
-  }, [user?.id, fetchRole]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
