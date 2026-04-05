@@ -10,23 +10,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Send, Link2, Sparkles } from "lucide-react";
+import { Loader2, Plus, Trash2, Send, Link2, Sparkles, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface CampaignEntry {
+interface TaskEntry {
   creativeLink: string;
   platform: string;
   objective: string;
   dailyBudget: string;
-  description: string;
+  adCaption: string;
+  quantity: string;
 }
 
-const EMPTY_CAMPAIGN: CampaignEntry = {
+const EMPTY_TASK: TaskEntry = {
   creativeLink: "",
   platform: "",
   objective: "",
   dailyBudget: "",
-  description: "",
+  adCaption: "",
+  quantity: "1",
 };
 
 const PLATFORMS = [
@@ -49,8 +51,8 @@ function detectPlatform(url: string): string {
   return "";
 }
 
-function isValid(c: CampaignEntry): boolean {
-  return !!c.creativeLink && !!c.platform && !!c.objective && Number(c.dailyBudget) > 0;
+function isTaskValid(t: TaskEntry): boolean {
+  return !!t.creativeLink && !!t.platform && !!t.objective && Number(t.dailyBudget) > 0 && Number(t.quantity) >= 1;
 }
 
 export default function NewCampaignRequest() {
@@ -58,14 +60,16 @@ export default function NewCampaignRequest() {
   const { effectiveClientId } = useImpersonation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [campaigns, setCampaigns] = useState<CampaignEntry[]>([{ ...EMPTY_CAMPAIGN }]);
+
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [tasks, setTasks] = useState<TaskEntry[]>([{ ...EMPTY_TASK }]);
   const [submitting, setSubmitting] = useState(false);
 
-  const update = useCallback((index: number, field: keyof CampaignEntry, value: string) => {
-    setCampaigns(prev => {
+  const updateTask = useCallback((index: number, field: keyof TaskEntry, value: string) => {
+    setTasks(prev => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
-      // Auto-detect platform when link changes
       if (field === "creativeLink") {
         const detected = detectPlatform(value);
         if (detected) next[index].platform = detected;
@@ -74,88 +78,136 @@ export default function NewCampaignRequest() {
     });
   }, []);
 
-  const addCampaign = () => setCampaigns(prev => [...prev, { ...EMPTY_CAMPAIGN }]);
+  const addTask = () => setTasks(prev => [...prev, { ...EMPTY_TASK }]);
+  const removeTask = (index: number) => setTasks(prev => prev.filter((_, i) => i !== index));
 
-  const removeCampaign = (index: number) => {
-    setCampaigns(prev => prev.filter((_, i) => i !== index));
-  };
+  const allValid = title.trim().length > 0 && tasks.length > 0 && tasks.every(isTaskValid);
+  const totalDaily = tasks.reduce((sum, t) => sum + (Number(t.dailyBudget) || 0) * (Number(t.quantity) || 1), 0);
+  const totalTasks = tasks.reduce((sum, t) => sum + (Number(t.quantity) || 1), 0);
 
-  const allValid = campaigns.every(isValid);
-  const totalDaily = campaigns.reduce((sum, c) => sum + (Number(c.dailyBudget) || 0), 0);
+  const platformBreakdown = tasks.reduce<Record<string, number>>((acc, t) => {
+    if (t.platform) {
+      acc[t.platform] = (acc[t.platform] || 0) + (Number(t.quantity) || 1);
+    }
+    return acc;
+  }, {});
 
   const handleSubmit = async () => {
     if (!user || !effectiveClientId || !allValid) return;
     setSubmitting(true);
 
-    const rows = campaigns.map(c => ({
+    // Create parent request
+    const { data: parentData, error: parentError } = await (supabase.from("campaign_requests" as any).insert({
       client_id: effectiveClientId,
-      creative_link: c.creativeLink,
-      platform: c.platform,
-      objective: c.objective,
-      budget_usd: Number(c.dailyBudget),
-      duration_days: 1,
+      title: title.trim(),
+      ad_caption: notes || null,
+      total_budget_usd: totalDaily,
+      task_count: tasks.length,
+      // Legacy fields (use first task's values for backward compat)
+      platform: tasks[0].platform,
+      objective: tasks[0].objective,
+      budget_usd: totalDaily,
+      creative_link: tasks[0].creativeLink,
       start_date: new Date().toISOString().split("T")[0],
-      ad_caption: c.description || null,
+      duration_days: 1,
+    }).select("id").single() as any);
+
+    if (parentError || !parentData) {
+      setSubmitting(false);
+      toast({ title: "Error", description: parentError?.message || "Failed to create request", variant: "destructive" });
+      return;
+    }
+
+    // Create child tasks
+    const taskRows = tasks.map(t => ({
+      request_id: parentData.id,
+      platform: t.platform,
+      objective: t.objective,
+      budget_usd: Number(t.dailyBudget),
+      creative_link: t.creativeLink,
+      ad_caption: t.adCaption || null,
+      quantity: Number(t.quantity) || 1,
     }));
 
-    const { error } = await supabase.from("campaign_requests" as any).insert(rows as any);
+    const { error: taskError } = await (supabase.from("campaign_tasks" as any).insert(taskRows) as any);
     setSubmitting(false);
 
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    if (taskError) {
+      toast({ title: "Error", description: taskError.message, variant: "destructive" });
     } else {
-      toast({ title: "Submitted!", description: `${campaigns.length} campaign request${campaigns.length > 1 ? "s" : ""} sent for review.` });
+      toast({ title: "Submitted!", description: `Campaign request "${title}" with ${tasks.length} task(s) sent for review.` });
       navigate("/dashboard/campaigns");
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">New Campaign Request</h1>
+        <p className="text-sm text-muted-foreground mt-1">Create a campaign request with one or more tasks.</p>
+      </div>
+
+      {/* Request Info */}
+      <Card>
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Package className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Info</span>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Campaign / Product Name *</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Summer Sale 2026, Product X Launch" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>General Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Overall instructions, target audience, goals..." rows={2} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tasks */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Campaign Request</h1>
-          <p className="text-sm text-muted-foreground mt-1">Add one or more campaigns to submit as a batch.</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={addCampaign} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Campaign
+        <span className="text-sm font-semibold">Campaign Tasks</span>
+        <Button variant="outline" size="sm" onClick={addTask} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Add Task
         </Button>
       </div>
 
       <div className="space-y-4">
-        {campaigns.map((c, i) => (
+        {tasks.map((t, i) => (
           <Card key={i} className="relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded-l-lg" />
             <CardContent className="pt-5 pb-4 pl-5 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Campaign {i + 1}</span>
-                {campaigns.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeCampaign(i)}>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task {i + 1}</span>
+                {tasks.length > 1 && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeTask(i)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
 
-              {/* Link */}
+              {/* Creative Link */}
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5" /> Post / Video Link *</Label>
                 <Input
-                  value={c.creativeLink}
-                  onChange={e => update(i, "creativeLink", e.target.value)}
+                  value={t.creativeLink}
+                  onChange={e => updateTask(i, "creativeLink", e.target.value)}
                   placeholder="https://www.tiktok.com/@user/video/... or drive link"
                 />
-                {c.creativeLink && c.platform && (
+                {t.creativeLink && t.platform && (
                   <p className="text-xs text-primary">
                     <Sparkles className="inline h-3 w-3 mr-1" />
-                    Auto-detected: {PLATFORMS.find(p => p.value === c.platform)?.label}
+                    Auto-detected: {PLATFORMS.find(p => p.value === t.platform)?.label}
                   </p>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 {/* Platform */}
                 <div className="space-y-1.5">
                   <Label>Platform *</Label>
-                  <Select value={c.platform} onValueChange={v => update(i, "platform", v)}>
+                  <Select value={t.platform} onValueChange={v => updateTask(i, "platform", v)}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {PLATFORMS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -166,7 +218,7 @@ export default function NewCampaignRequest() {
                 {/* Objective */}
                 <div className="space-y-1.5">
                   <Label>Objective *</Label>
-                  <Select value={c.objective} onValueChange={v => update(i, "objective", v)}>
+                  <Select value={t.objective} onValueChange={v => updateTask(i, "objective", v)}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       {OBJECTIVES.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -177,26 +229,20 @@ export default function NewCampaignRequest() {
                 {/* Daily Budget */}
                 <div className="space-y-1.5">
                   <Label>Daily Budget (USD) *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    value={c.dailyBudget}
-                    onChange={e => update(i, "dailyBudget", e.target.value)}
-                    placeholder="10.00"
-                  />
+                  <Input type="number" step="0.01" min="1" value={t.dailyBudget} onChange={e => updateTask(i, "dailyBudget", e.target.value)} placeholder="10.00" />
+                </div>
+
+                {/* Quantity */}
+                <div className="space-y-1.5">
+                  <Label>Quantity</Label>
+                  <Input type="number" min="1" value={t.quantity} onChange={e => updateTask(i, "quantity", e.target.value)} placeholder="1" />
                 </div>
               </div>
 
-              {/* Description */}
+              {/* Ad Caption */}
               <div className="space-y-1.5">
-                <Label>Description / Notes</Label>
-                <Textarea
-                  value={c.description}
-                  onChange={e => update(i, "description", e.target.value)}
-                  placeholder="Target audience, special instructions, hashtags..."
-                  rows={2}
-                />
+                <Label>Ad Caption / Notes</Label>
+                <Textarea value={t.adCaption} onChange={e => updateTask(i, "adCaption", e.target.value)} placeholder="Target audience, hashtags, special instructions..." rows={2} />
               </div>
             </CardContent>
           </Card>
@@ -205,15 +251,27 @@ export default function NewCampaignRequest() {
 
       {/* Summary & Submit */}
       <Card>
-        <CardContent className="py-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{campaigns.length}</span> campaign{campaigns.length > 1 ? "s" : ""}
-            {totalDaily > 0 && <> · <span className="font-semibold text-foreground">${totalDaily.toFixed(2)}</span>/day total</>}
+        <CardContent className="py-4 space-y-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span><span className="font-semibold text-foreground">{tasks.length}</span> task{tasks.length > 1 ? "s" : ""}</span>
+            {totalTasks !== tasks.length && (
+              <span><span className="font-semibold text-foreground">{totalTasks}</span> total campaigns</span>
+            )}
+            {totalDaily > 0 && (
+              <span><span className="font-semibold text-foreground">${totalDaily.toFixed(2)}</span>/day total</span>
+            )}
+            {Object.keys(platformBreakdown).length > 0 && (
+              <span className="text-xs">
+                {Object.entries(platformBreakdown).map(([p, count]) => `${count} ${PLATFORMS.find(pl => pl.value === p)?.label || p}`).join(", ")}
+              </span>
+            )}
           </div>
-          <Button onClick={handleSubmit} disabled={submitting || !allValid} className="gap-1.5">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Submit {campaigns.length > 1 ? "All" : "Request"}
-          </Button>
+          <div className="flex justify-end">
+            <Button onClick={handleSubmit} disabled={submitting || !allValid} className="gap-1.5">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Submit Request
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

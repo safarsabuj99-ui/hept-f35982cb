@@ -2,17 +2,16 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink } from "lucide-react";
+import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
@@ -34,6 +33,7 @@ export default function OrderManagement() {
   const deepLinkHandled = useRef(false);
 
   const [requests, setRequests] = useState<any[]>([]);
+  const [tasksByRequest, setTasksByRequest] = useState<Record<string, any[]>>({});
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -49,20 +49,26 @@ export default function OrderManagement() {
   const [pageSize, setPageSize] = useState(20);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: reqs }, { data: profs }] = await Promise.all([
+    const [{ data: reqs }, { data: profs }, { data: allTasks }] = await Promise.all([
       supabase.from("campaign_requests" as any).select("*").order("created_at", { ascending: false }) as any,
       supabase.from("profiles").select("user_id, full_name, business_name, email"),
+      supabase.from("campaign_tasks" as any).select("*").order("created_at", { ascending: true }) as any,
     ]);
     setRequests(reqs ?? []);
     const profileMap: Record<string, any> = {};
     (profs ?? []).forEach((p: any) => { profileMap[p.user_id] = p; });
     setProfiles(profileMap);
+    const grouped: Record<string, any[]> = {};
+    (allTasks ?? []).forEach((t: any) => {
+      if (!grouped[t.request_id]) grouped[t.request_id] = [];
+      grouped[t.request_id].push(t);
+    });
+    setTasksByRequest(grouped);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Deep-link: auto-switch tab & open detail for highlighted request
   useEffect(() => {
     if (!highlightId || loading || deepLinkHandled.current) return;
     deepLinkHandled.current = true;
@@ -71,7 +77,6 @@ export default function OrderManagement() {
       setTab(target.status === "all" ? "all" : target.status);
       setSelectedRequest(target);
       setDetailOpen(true);
-      // Scroll to row after render
       setTimeout(() => {
         document.getElementById(`order-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 300);
@@ -82,15 +87,23 @@ export default function OrderManagement() {
     const channel = supabase
       .channel("admin-campaign-requests")
       .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_tasks" }, () => fetchAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchAll]);
 
-  const updateStatus = async (id: string, status: string, rejectionReason?: string) => {
+  const updateRequestStatus = async (id: string, status: string, rejectionReason?: string) => {
     setActionLoading(id);
     const update: any = { status };
     if (rejectionReason) update.rejection_reason = rejectionReason;
     const { error } = await (supabase.from("campaign_requests" as any).update(update).eq("id", id) as any);
+    if (!error) {
+      // Also update all child tasks to same status
+      const taskStatus = status === "processing" ? "processing" : status === "completed" ? "completed" : status === "rejected" ? "rejected" : "pending";
+      const taskUpdate: any = { status: taskStatus };
+      if (rejectionReason && status === "rejected") taskUpdate.rejection_reason = rejectionReason;
+      await (supabase.from("campaign_tasks" as any).update(taskUpdate).eq("request_id", id) as any);
+    }
     setActionLoading(null);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -101,9 +114,29 @@ export default function OrderManagement() {
     }
   };
 
+  const updateTaskStatus = async (taskId: string, requestId: string, status: string, rejectionReason?: string) => {
+    setActionLoading(taskId);
+    const update: any = { status };
+    if (rejectionReason) update.rejection_reason = rejectionReason;
+    await (supabase.from("campaign_tasks" as any).update(update).eq("id", taskId) as any);
+    setActionLoading(null);
+
+    // Derive parent status from children
+    const tasks = tasksByRequest[requestId] || [];
+    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status } : t);
+    const allCompleted = updatedTasks.every(t => t.status === "completed");
+    const allRejected = updatedTasks.every(t => t.status === "rejected");
+    const anyProcessing = updatedTasks.some(t => t.status === "processing");
+    const parentStatus = allCompleted ? "completed" : allRejected ? "rejected" : anyProcessing ? "processing" : "pending";
+    await (supabase.from("campaign_requests" as any).update({ status: parentStatus }).eq("id", requestId) as any);
+
+    toast({ title: "Task updated" });
+    fetchAll();
+  };
+
   const handleReject = () => {
     if (!rejectId || !rejectReason.trim()) return;
-    updateStatus(rejectId, "rejected", rejectReason.trim());
+    updateRequestStatus(rejectId, "rejected", rejectReason.trim());
     setRejectOpen(false);
     setRejectReason("");
     setRejectId(null);
@@ -111,11 +144,7 @@ export default function OrderManagement() {
 
   useEffect(() => { setCurrentPage(1); }, [tab]);
 
-  const filtered = requests.filter((r: any) => {
-    if (tab === "all") return true;
-    return r.status === tab;
-  });
-
+  const filtered = requests.filter((r: any) => tab === "all" ? true : r.status === tab);
   const paginatedFiltered = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
@@ -127,11 +156,13 @@ export default function OrderManagement() {
 
   if (loading) return <DataPageSkeleton />;
 
+  const selectedTasks = selectedRequest ? (tasksByRequest[selectedRequest.id] || []) : [];
+
   return (
     <div className="space-y-6">
       <div className="animate-slide-up-fade">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Megaphone className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Order Management
+          <Megaphone className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Campaign Requests
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Manage incoming campaign requests from clients</p>
       </div>
@@ -171,6 +202,8 @@ export default function OrderManagement() {
                   {paginatedFiltered.map((r: any) => {
                     const client = profiles[r.client_id];
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
+                    const tasks = tasksByRequest[r.id] || [];
+                    const displayTitle = r.title || r.platform || "Untitled";
                     return (
                       <div key={r.id} id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
                         <div className="flex items-start justify-between">
@@ -181,14 +214,15 @@ export default function OrderManagement() {
                           <Badge variant="outline" className={cn("text-xs shrink-0", badge.className)}>{badge.label}</Badge>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="secondary">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
-                          <span className="text-xs text-muted-foreground">{r.objective}</span>
+                          <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-sm font-medium">{displayTitle}</span>
+                          {tasks.length > 0 && <span className="text-xs text-muted-foreground">{tasks.length} task{tasks.length > 1 ? "s" : ""}</span>}
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">
                             {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
-                          <span className="font-mono font-semibold text-sm">${Number(r.budget_usd).toFixed(2)}</span>
+                          <span className="font-mono font-semibold text-sm">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex gap-2 pt-1">
                           <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
@@ -196,7 +230,7 @@ export default function OrderManagement() {
                           </Button>
                           {canManageCampaigns && r.status === "pending" && (
                             <>
-                              <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "processing")}>
+                              <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
                                 {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start
                               </Button>
                               <Button size="sm" variant="destructive" className="text-xs" onClick={() => { setRejectId(r.id); setRejectOpen(true); }}>
@@ -205,7 +239,7 @@ export default function OrderManagement() {
                             </>
                           )}
                           {canManageCampaigns && r.status === "processing" && (
-                            <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "completed")}>
+                            <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
                               {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Complete
                             </Button>
                           )}
@@ -221,8 +255,8 @@ export default function OrderManagement() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Platform</TableHead>
-                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Objective</TableHead>
+                        <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Request</TableHead>
+                        <TableHead className="text-center text-[11px] uppercase tracking-widest text-muted-foreground/60">Tasks</TableHead>
                         <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Budget</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Status</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Date</TableHead>
@@ -233,6 +267,8 @@ export default function OrderManagement() {
                       {paginatedFiltered.map((r: any) => {
                         const client = profiles[r.client_id];
                         const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
+                        const tasks = tasksByRequest[r.id] || [];
+                        const displayTitle = r.title || r.platform || "Untitled";
                         return (
                           <TableRow key={r.id} id={`order-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell>
@@ -241,9 +277,16 @@ export default function OrderManagement() {
                                 <p className="text-xs text-muted-foreground">{client?.business_name || ""}</p>
                               </div>
                             </TableCell>
-                            <TableCell><Badge variant="secondary">{PLATFORM_LABELS[r.platform] || r.platform}</Badge></TableCell>
-                            <TableCell className="text-sm">{r.objective}</TableCell>
-                            <TableCell className="text-right font-mono">${Number(r.budget_usd).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-medium truncate max-w-[200px]">{displayTitle}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary" className="text-xs">{tasks.length || 1}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</TableCell>
                             <TableCell><Badge variant="outline" className={badge.className}>{badge.label}</Badge></TableCell>
                             <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                               {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -255,7 +298,7 @@ export default function OrderManagement() {
                                 </Button>
                                 {canManageCampaigns && r.status === "pending" && (
                                   <>
-                                    <Button size="sm" variant="outline" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "processing")}>
+                                    <Button size="sm" variant="outline" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
                                       {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                                     </Button>
                                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setRejectId(r.id); setRejectOpen(true); }}>
@@ -264,7 +307,7 @@ export default function OrderManagement() {
                                   </>
                                 )}
                                 {canManageCampaigns && r.status === "processing" && (
-                                  <Button size="sm" variant="default" disabled={actionLoading === r.id} onClick={() => updateStatus(r.id, "completed")}>
+                                  <Button size="sm" variant="default" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
                                     {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
                                     Complete
                                   </Button>
@@ -277,48 +320,121 @@ export default function OrderManagement() {
                     </TableBody>
                   </Table>
                 </div>
-                <TablePagination
-                  totalItems={filtered.length}
-                  pageSize={pageSize}
-                  currentPage={currentPage}
-                  onPageChange={setCurrentPage}
-                  onPageSizeChange={setPageSize}
-                />
-              </>
-            )}
+                <TablePagination totalItems={filtered.length} pageSize={pageSize} currentPage={currentPage} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Detail Modal */}
+      {/* Detail Modal with Tasks */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Campaign Request Details</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Campaign Request Details
+            </DialogTitle>
           </DialogHeader>
           {selectedRequest && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{PLATFORM_LABELS[selectedRequest.platform] || selectedRequest.platform}</Badge>
+            <div className="space-y-5">
+              {/* Header info */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className={STATUS_BADGE[selectedRequest.status]?.className}>{STATUS_BADGE[selectedRequest.status]?.label}</Badge>
+                <span className="text-sm font-medium">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <DetailItem label="Client" value={profiles[selectedRequest.client_id]?.full_name || "Unknown"} />
-                <DetailItem label="Objective" value={selectedRequest.objective} />
-                <DetailItem label="Budget" value={`$${Number(selectedRequest.budget_usd).toFixed(2)}`} />
-                <DetailItem label="Duration" value={`${selectedRequest.duration_days} days`} />
-                <DetailItem label="Start Date" value={selectedRequest.start_date} />
+                <DetailItem label="Total Budget" value={`$${Number(selectedRequest.total_budget_usd || selectedRequest.budget_usd || 0).toFixed(2)}`} />
                 <DetailItem label="Submitted" value={new Date(selectedRequest.created_at).toLocaleDateString()} />
               </div>
-              <DetailItem label="Creative Link" value={selectedRequest.creative_link} isLink />
-              {selectedRequest.landing_page_url && <DetailItem label="Landing Page" value={selectedRequest.landing_page_url} isLink />}
-              {selectedRequest.ad_caption && <DetailItem label="Ad Caption" value={selectedRequest.ad_caption} />}
-              {selectedRequest.target_audience_note && <DetailItem label="Target Audience" value={selectedRequest.target_audience_note} />}
+              {selectedRequest.ad_caption && <DetailItem label="Notes" value={selectedRequest.ad_caption} />}
+
+              {/* Tasks list */}
+              {selectedTasks.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold">Tasks ({selectedTasks.length})</h3>
+                  {selectedTasks.map((task: any, idx: number) => {
+                    const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
+                    return (
+                      <div key={task.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                            <Badge variant="secondary">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
+                            <span className="text-sm">{task.objective}</span>
+                            {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm">${Number(task.budget_usd).toFixed(2)}</span>
+                            <Badge variant="outline" className={cn("text-[10px]", taskBadge.className)}>{taskBadge.label}</Badge>
+                          </div>
+                        </div>
+                        {task.creative_link && (
+                          <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 truncate">
+                            <ExternalLink className="h-3 w-3 shrink-0" /> {task.creative_link}
+                          </a>
+                        )}
+                        {task.ad_caption && <p className="text-xs text-muted-foreground">{task.ad_caption}</p>}
+                        {task.rejection_reason && (
+                          <p className="text-xs text-destructive">Rejected: {task.rejection_reason}</p>
+                        )}
+                        {/* Per-task actions */}
+                        {canManageCampaigns && task.status === "pending" && (
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" variant="outline" className="text-xs h-7" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, selectedRequest.id, "processing")}>
+                              {actionLoading === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />} Start
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, selectedRequest.id, "rejected", "Rejected by admin")}>
+                              <XCircle className="h-3 w-3 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                        {canManageCampaigns && task.status === "processing" && (
+                          <Button size="sm" variant="default" className="text-xs h-7" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, selectedRequest.id, "completed")}>
+                            {actionLoading === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Complete
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Legacy single-task detail */
+                <div className="grid grid-cols-2 gap-3">
+                  <DetailItem label="Platform" value={PLATFORM_LABELS[selectedRequest.platform] || selectedRequest.platform} />
+                  <DetailItem label="Objective" value={selectedRequest.objective} />
+                  <DetailItem label="Budget" value={`$${Number(selectedRequest.budget_usd).toFixed(2)}`} />
+                  <DetailItem label="Duration" value={`${selectedRequest.duration_days} days`} />
+                  <DetailItem label="Start Date" value={selectedRequest.start_date} />
+                  {selectedRequest.creative_link && <DetailItem label="Creative Link" value={selectedRequest.creative_link} isLink />}
+                </div>
+              )}
+
               {selectedRequest.rejection_reason && (
                 <div className="rounded-lg bg-destructive/10 p-3 border border-destructive/20">
                   <p className="text-xs text-destructive font-medium mb-0.5">Rejection Reason</p>
                   <p className="text-sm">{selectedRequest.rejection_reason}</p>
+                </div>
+              )}
+
+              {/* Bulk actions */}
+              {canManageCampaigns && selectedTasks.length > 0 && selectedRequest.status === "pending" && (
+                <div className="flex gap-2 pt-2 border-t">
+                  <Button size="sm" disabled={actionLoading === selectedRequest.id} onClick={() => updateRequestStatus(selectedRequest.id, "processing")}>
+                    {actionLoading === selectedRequest.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start All
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => { setRejectId(selectedRequest.id); setRejectOpen(true); setDetailOpen(false); }}>
+                    <XCircle className="h-3.5 w-3.5 mr-1" /> Reject All
+                  </Button>
+                </div>
+              )}
+              {canManageCampaigns && selectedTasks.length > 0 && selectedRequest.status === "processing" && (
+                <div className="flex gap-2 pt-2 border-t">
+                  <Button size="sm" disabled={actionLoading === selectedRequest.id} onClick={() => updateRequestStatus(selectedRequest.id, "completed")}>
+                    {actionLoading === selectedRequest.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Complete All
+                  </Button>
                 </div>
               )}
             </div>
