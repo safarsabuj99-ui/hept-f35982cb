@@ -88,6 +88,7 @@ function AdminSidebarContent() {
   const { pendingPayments, pendingOrders } = usePendingCounts();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const prefetch = usePrefetch();
 
   const badgeCounts: Record<string, number> = {
     "/admin/payment-requests": pendingPayments,
