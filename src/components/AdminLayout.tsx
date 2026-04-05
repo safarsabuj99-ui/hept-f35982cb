@@ -60,7 +60,6 @@ const allSections: NavSection[] = [
     title: "Advertising",
     items: [
       { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts", permKey: "can_view_ad_accounts" },
-      { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
       { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
     ],
   },
