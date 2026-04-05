@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity, Bell as BellIcon,
+  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useMemo } from "react";
