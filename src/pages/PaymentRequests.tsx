@@ -62,6 +62,8 @@ interface PendingDeposit {
 }
 
 export default function PaymentRequests() {
+  const { highlightId } = useDeepLinkAction();
+  const deepLinkHandled = useRef(false);
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
