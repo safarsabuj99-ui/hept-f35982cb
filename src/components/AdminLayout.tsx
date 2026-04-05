@@ -9,9 +9,10 @@ import {
   UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
+import { usePrefetch } from "@/hooks/usePrefetch";
 import {
   Sidebar,
   SidebarContent,
@@ -87,6 +88,7 @@ function AdminSidebarContent() {
   const { pendingPayments, pendingOrders } = usePendingCounts();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const prefetch = usePrefetch();
 
   const badgeCounts: Record<string, number> = {
     "/admin/payment-requests": pendingPayments,
@@ -151,6 +153,7 @@ function AdminSidebarContent() {
                         <NavLink
                           to={item.to}
                           end
+                          onMouseEnter={() => prefetch(item.to)}
                           className={cn(
                             "group/nav relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300",
                             active
