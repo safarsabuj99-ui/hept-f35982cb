@@ -9,7 +9,7 @@ import {
   UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
 import { usePrefetch } from "@/hooks/usePrefetch";
