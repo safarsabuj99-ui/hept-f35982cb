@@ -74,9 +74,7 @@ const allSections: NavSection[] = [
   {
     title: "System",
     items: [
-      { to: "/admin/profile", icon: UserCircle, label: "My Profile" },
       { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
-      { to: "/admin/sync-health", icon: Activity, label: "Sync Health", permKey: "can_configure_system" },
       { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_view_audit_logs" },
     ],
   },
