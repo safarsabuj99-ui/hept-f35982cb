@@ -83,6 +83,7 @@ export default function PaymentRequests() {
   const [depositsLoading, setDepositsLoading] = useState(true);
   const [depositPage, setDepositPage] = useState(1);
   const [depositPageSize, setDepositPageSize] = useState(20);
+  const [searchQuery, setSearchQuery] = useState("");
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
