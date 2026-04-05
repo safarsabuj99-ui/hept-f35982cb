@@ -447,7 +447,7 @@ export default function PaymentRequests() {
                       </TableHeader>
                       <TableBody>
                         {paginatedRequests.map((r) => (
-                          <TableRow key={r.id}>
+                          <TableRow key={r.id} id={`payment-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                             <TableCell className="font-medium">{r.client_name}</TableCell>
                             <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>

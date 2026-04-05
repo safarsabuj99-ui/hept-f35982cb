@@ -314,7 +314,7 @@ export default function ClientWallet() {
                 </TableHeader>
                 <TableBody>
                   {filteredPaymentRequests.map((pr: any) => (
-                    <TableRow key={pr.id} className="border-border/30 hover:bg-accent/50 transition-colors">
+                    <TableRow key={pr.id} id={`wallet-pr-${pr.id}`} className={cn("border-border/30 hover:bg-accent/50 transition-colors", highlightId === pr.id && "deep-link-highlight")}>
                       <TableCell className="whitespace-nowrap">{new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell><Badge variant="secondary">{pr.payment_method}</Badge></TableCell>
                       <TableCell className="text-right font-mono">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
