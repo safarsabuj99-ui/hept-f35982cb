@@ -30,6 +30,8 @@ export default function OrderManagement() {
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
   const canManageCampaigns = hasPermission("can_manage_campaigns");
+  const { highlightId } = useDeepLinkAction();
+  const deepLinkHandled = useRef(false);
 
   const [requests, setRequests] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
