@@ -59,6 +59,18 @@ export default function ClientWallet() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Deep-link: show guard toast or highlight payment request
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    if (highlightId === "guard") {
+      toast({ title: "⚠️ Campaigns Paused", description: "Your campaigns were paused due to low balance. Add funds to resume." });
+    } else {
+      setTimeout(() => {
+        document.getElementById(`wallet-pr-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 500);
+    }
+  }, [highlightId, loading]);
+
   useEffect(() => {
     if (!effectiveClientId) return;
     const channel = supabase
