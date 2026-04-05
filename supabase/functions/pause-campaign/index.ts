@@ -203,19 +203,36 @@ Deno.serve(async (req) => {
 
     if (platform === "meta") {
       const targetStatus = isEnableAction ? "ACTIVE" : "PAUSED";
+      console.log(`Meta ${action}: calling POST /v21.0/${rawId} with status=${targetStatus}`);
       const res = await fetch(
-        `https://graph.facebook.com/v21.0/${rawId}?access_token=${integration.api_token}`,
+        `https://graph.facebook.com/v21.0/${rawId}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ status: targetStatus }).toString(),
+          body: new URLSearchParams({ status: targetStatus, access_token: integration.api_token }).toString(),
         }
       );
-      const json = await res.json();
-      if (json.success || res.ok) {
-        apiSuccess = true;
+      const resText = await res.text();
+      console.log(`Meta ${action} response (HTTP ${res.status}): ${resText}`);
+      let json: any;
+      try { json = JSON.parse(resText); } catch { json = { success: false, error: { message: resText } }; }
+
+      if (json.success === true) {
+        // Verify with a read-back to confirm platform state
+        const verifyStatus = await checkMetaStatus(rawId, integration.api_token);
+        console.log(`Meta ${action} read-back verification: ${verifyStatus}`);
+        if (isEnableAction ? isOnStatus("meta", verifyStatus) : isOffStatus("meta", verifyStatus)) {
+          apiSuccess = true;
+        } else if (verifyStatus === null) {
+          // Read-back failed but write succeeded — trust the write
+          apiSuccess = true;
+          console.log("Meta read-back returned null, trusting write success");
+        } else {
+          apiMessage = `Meta reported success but verification shows status="${verifyStatus}"`;
+        }
       } else {
         const currentStatus = await checkMetaStatus(rawId, integration.api_token);
+        console.log(`Meta ${action} failed, checking current status: ${currentStatus}`);
         if (isEnableAction ? isOnStatus("meta", currentStatus) : isOffStatus("meta", currentStatus)) {
           alreadyInState = true;
         } else {
