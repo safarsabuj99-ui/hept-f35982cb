@@ -48,6 +48,7 @@ export default function OrderManagement() {
   const [rejectReason, setRejectReason] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchAll = useCallback(async () => {
     const [{ data: reqs }, { data: profs }, { data: allTasks }] = await Promise.all([
