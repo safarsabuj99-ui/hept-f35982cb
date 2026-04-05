@@ -9,7 +9,7 @@ import {
   UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -86,9 +86,13 @@ function AdminSidebarContent() {
   const { signOut } = useAuth();
   const location = useLocation();
   const { pendingPayments, pendingOrders } = usePendingCounts();
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const prefetch = usePrefetch();
+
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [location.pathname, setOpenMobile]);
 
   const badgeCounts: Record<string, number> = {
     "/admin/payment-requests": pendingPayments,
