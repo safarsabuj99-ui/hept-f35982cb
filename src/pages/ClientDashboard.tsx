@@ -138,6 +138,15 @@ export default function ClientDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const { toast } = useToast();
+
+  // Deep-link: show resumed toast
+  useEffect(() => {
+    if (highlightId === "resumed" && !loading) {
+      toast({ title: "✅ Campaigns Resumed", description: "Your campaigns have been auto-resumed after balance top-up." });
+    }
+  }, [highlightId, loading]);
+
   useEffect(() => {
     if (!effectiveClientId) return;
     const channel = supabase

@@ -133,8 +133,8 @@ export default function MyCampaignRequests() {
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                     return (
                       <Collapsible key={r.id}>
-                        <CollapsibleTrigger className="w-full">
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2">
+                        <CollapsibleTrigger className="w-full" id={`campaign-req-${r.id}`}>
+                          <div className={cn("flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
                             {/* Mobile: stacked layout */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
                               <div className="flex items-center gap-2">
