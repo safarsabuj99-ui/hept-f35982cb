@@ -149,7 +149,7 @@ export default function MyCampaignRequests() {
                     return (
                       <Collapsible key={r.id}>
                         <CollapsibleTrigger className="w-full" id={`campaign-req-${r.id}`}>
-                          <div className={cn("flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
+                          <div className={cn("flex items-center justify-between p-2.5 sm:p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
