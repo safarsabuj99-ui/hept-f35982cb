@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Globe } from "lucide-react";
+import { Loader2, Percent, CalendarIcon, Globe, Bell, Volume2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { setNotifSoundEnabled } from "@/hooks/useNotifications";
 
 export default function Settings() {
   const [serviceMargin, setServiceMargin] = useState("");
