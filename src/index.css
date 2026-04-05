@@ -778,6 +778,23 @@
   border-radius: var(--radius);
 }
 
+/* Notification priority animations */
+@keyframes urgent-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.4); }
+  50% { box-shadow: 0 0 0 4px hsl(var(--destructive) / 0); }
+}
+.notif-urgent-badge {
+  animation: urgent-pulse 2s ease-in-out infinite;
+}
+
+@keyframes notif-slide-in {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.notif-slide-in {
+  animation: notif-slide-in 0.3s ease-out both;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
