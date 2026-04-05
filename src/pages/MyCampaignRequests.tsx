@@ -184,7 +184,7 @@ export default function MyCampaignRequests() {
                                 {tasks.map((task: any, idx: number) => {
                                   const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
                                   return (
-                                    <div key={task.id} className="flex items-center justify-between p-2.5 rounded-md border bg-background gap-2">
+                                    <div key={task.id} className="flex items-center justify-between p-2 sm:p-2.5 rounded-md border bg-background gap-1.5 sm:gap-2">
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
                                         <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
                                         <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>

@@ -197,13 +197,29 @@ export default function OrderManagement() {
         })}
       </div>
 
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+        <Input
+          placeholder="Search client, request title, platform..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="pending">Pending ({counts.pending})</TabsTrigger>
-          <TabsTrigger value="processing">Processing ({counts.processing})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({counts.completed})</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected ({counts.rejected})</TabsTrigger>
-          <TabsTrigger value="all">All ({requests.length})</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+          <TabsTrigger value="pending" className="flex-shrink-0">Pending ({counts.pending})</TabsTrigger>
+          <TabsTrigger value="processing" className="flex-shrink-0">Processing ({counts.processing})</TabsTrigger>
+          <TabsTrigger value="completed" className="flex-shrink-0">Completed ({counts.completed})</TabsTrigger>
+          <TabsTrigger value="rejected" className="flex-shrink-0">Rejected ({counts.rejected})</TabsTrigger>
+          <TabsTrigger value="all" className="flex-shrink-0">All ({requests.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">

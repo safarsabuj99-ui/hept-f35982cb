@@ -272,7 +272,7 @@ export default function CampaignMapping() {
             </Popover>
           </div>
         )}
-        <div className="space-y-1 flex-1 min-w-0">
+        <div className="space-y-1 flex-1 min-w-0 overflow-hidden">
           <Label className="text-xs text-muted-foreground">Date Range</Label>
           <div className="flex items-center gap-2">
             <DateRangeFilter onRangeChange={(range) => setDateRange(range)} />

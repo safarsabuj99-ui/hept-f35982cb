@@ -313,7 +313,23 @@ export default function PaymentRequests() {
         <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
       </div>
 
-      <DateRangeFilter onRangeChange={handleDateChange} />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+          <Input
+            placeholder="Search client, TXN ID, method..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); setDepositPage(1); }}
+            className="pl-9 h-9 text-sm"
+          />
+          {searchQuery && (
+            <button onClick={() => { setSearchQuery(""); setCurrentPage(1); setDepositPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+        </div>
+        <DateRangeFilter onRangeChange={handleDateChange} />
+      </div>
 
       {/* KPI Summary Widgets */}
       {(() => {
