@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, Plug, MapPin, TrendingUp, Banknote, Megaphone, UserCircle, AlertTriangle, Activity, Bell as BellIcon,
+  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useMemo } from "react";
@@ -60,7 +60,6 @@ const allSections: NavSection[] = [
     title: "Advertising",
     items: [
       { to: "/admin/ad-accounts", icon: Monitor, label: "Ad Accounts", permKey: "can_view_ad_accounts" },
-      { to: "/admin/integrations", icon: Plug, label: "Integrations", permKey: "can_configure_system" },
       { to: "/admin/campaigns", icon: MapPin, label: "Campaigns", permKey: "can_manage_campaigns" },
     ],
   },
@@ -75,9 +74,7 @@ const allSections: NavSection[] = [
   {
     title: "System",
     items: [
-      { to: "/admin/profile", icon: UserCircle, label: "My Profile" },
       { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
-      { to: "/admin/sync-health", icon: Activity, label: "Sync Health", permKey: "can_configure_system" },
       { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_view_audit_logs" },
     ],
   },
