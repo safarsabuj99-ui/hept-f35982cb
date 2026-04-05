@@ -7,7 +7,7 @@ export function usePendingCounts() {
     queryFn: async () => {
       const [payments, orders, deposits] = await Promise.all([
         supabase.from("payment_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
-        supabase.from("campaign_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+        supabase.from("campaign_requests" as any).select("*", { count: "exact", head: true }).eq("status", "pending") as any,
         supabase.from("transactions").select("*", { count: "exact", head: true }).eq("type", "credit").eq("status", "pending_approval"),
       ]);
       return {

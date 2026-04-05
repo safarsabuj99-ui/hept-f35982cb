@@ -511,6 +511,9 @@ export type Database = {
           start_date: string
           status: Database["public"]["Enums"]["campaign_request_status"]
           target_audience_note: string | null
+          task_count: number
+          title: string
+          total_budget_usd: number
           updated_at: string
         }
         Insert: {
@@ -529,6 +532,9 @@ export type Database = {
           start_date: string
           status?: Database["public"]["Enums"]["campaign_request_status"]
           target_audience_note?: string | null
+          task_count?: number
+          title?: string
+          total_budget_usd?: number
           updated_at?: string
         }
         Update: {
@@ -547,6 +553,9 @@ export type Database = {
           start_date?: string
           status?: Database["public"]["Enums"]["campaign_request_status"]
           target_audience_note?: string | null
+          task_count?: number
+          title?: string
+          total_budget_usd?: number
           updated_at?: string
         }
         Relationships: [
@@ -555,6 +564,56 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_tasks: {
+        Row: {
+          ad_caption: string | null
+          budget_usd: number
+          created_at: string
+          creative_link: string
+          id: string
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          platform: Database["public"]["Enums"]["ad_platform"]
+          quantity: number
+          rejection_reason: string | null
+          request_id: string
+          status: Database["public"]["Enums"]["campaign_task_status"]
+        }
+        Insert: {
+          ad_caption?: string | null
+          budget_usd?: number
+          created_at?: string
+          creative_link?: string
+          id?: string
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          platform: Database["public"]["Enums"]["ad_platform"]
+          quantity?: number
+          rejection_reason?: string | null
+          request_id: string
+          status?: Database["public"]["Enums"]["campaign_task_status"]
+        }
+        Update: {
+          ad_caption?: string | null
+          budget_usd?: number
+          created_at?: string
+          creative_link?: string
+          id?: string
+          objective?: Database["public"]["Enums"]["campaign_objective"]
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          quantity?: number
+          rejection_reason?: string | null
+          request_id?: string
+          status?: Database["public"]["Enums"]["campaign_task_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_tasks_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -2112,6 +2171,7 @@ export type Database = {
         | "processing"
         | "completed"
         | "rejected"
+      campaign_task_status: "pending" | "processing" | "completed" | "rejected"
       expense_category:
         | "Rent"
         | "Salary"
@@ -2281,6 +2341,7 @@ export const Constants = {
         "completed",
         "rejected",
       ],
+      campaign_task_status: ["pending", "processing", "completed", "rejected"],
       expense_category: [
         "Rent",
         "Salary",

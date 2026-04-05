@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Megaphone, Clock, Loader2, CheckCircle2, XCircle, ChevronDown, ExternalLink, Target, FileText } from "lucide-react";
+import { Plus, Megaphone, Clock, Loader2, CheckCircle2, XCircle, ChevronDown, ExternalLink, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 
@@ -27,11 +27,11 @@ export default function MyCampaignRequests() {
   const { effectiveClientId } = useImpersonation();
   const { highlightId } = useDeepLinkAction();
   const [requests, setRequests] = useState<any[]>([]);
+  const [tasksByRequest, setTasksByRequest] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  // Deep-link: scroll to highlighted campaign request
   useEffect(() => {
     if (!highlightId || loading) return;
     setTimeout(() => {
@@ -41,8 +41,17 @@ export default function MyCampaignRequests() {
 
   const fetchRequests = useCallback(async () => {
     if (!effectiveClientId) return;
-    const { data } = await (supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any);
-    setRequests(data ?? []);
+    const [{ data: reqs }, { data: allTasks }] = await Promise.all([
+      supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any,
+      supabase.from("campaign_tasks" as any).select("*").order("created_at", { ascending: true }) as any,
+    ]);
+    setRequests(reqs ?? []);
+    const grouped: Record<string, any[]> = {};
+    (allTasks ?? []).forEach((t: any) => {
+      if (!grouped[t.request_id]) grouped[t.request_id] = [];
+      grouped[t.request_id].push(t);
+    });
+    setTasksByRequest(grouped);
     setLoading(false);
   }, [effectiveClientId]);
 
@@ -53,6 +62,7 @@ export default function MyCampaignRequests() {
     const channel = supabase
       .channel("my-campaign-requests")
       .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests", filter: `client_id=eq.${effectiveClientId}` }, () => fetchRequests())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_tasks" }, () => fetchRequests())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchRequests]);
@@ -72,10 +82,10 @@ export default function MyCampaignRequests() {
             <Megaphone className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
             <span className="truncate">Campaign Requests</span>
           </h1>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1">Submit and track your ad campaign orders</p>
+          <p className="text-xs md:text-sm text-muted-foreground mt-1">Submit and track your campaign requests</p>
         </div>
         <Button asChild size="sm" className="shrink-0 h-9 md:h-10">
-          <Link to="/dashboard/campaigns/new"><Plus className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">New Campaign</span><span className="sm:hidden">New</span></Link>
+          <Link to="/dashboard/campaigns/new"><Plus className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">New Request</span><span className="sm:hidden">New</span></Link>
         </Button>
       </div>
 
@@ -132,22 +142,31 @@ export default function MyCampaignRequests() {
                 <div className="space-y-2">
                   {requests.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((r: any) => {
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
+                    const tasks = tasksByRequest[r.id] || [];
+                    const isLegacy = tasks.length === 0;
+                    const displayTitle = r.title || r.platform || "Untitled";
+
                     return (
                       <Collapsible key={r.id}>
                         <CollapsibleTrigger className="w-full" id={`campaign-req-${r.id}`}>
                           <div className={cn("flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
-                            {/* Mobile: stacked layout */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
                                   {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                 </span>
-                                <Badge variant="secondary" className="shrink-0 text-[10px] md:text-xs">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
+                                <Package className="h-3.5 w-3.5 text-muted-foreground" />
                               </div>
-                              <span className="text-xs md:text-sm truncate">{r.objective}</span>
+                              <span className="text-xs md:text-sm font-medium truncate">{displayTitle}</span>
+                              {!isLegacy && (
+                                <span className="text-[10px] text-muted-foreground">{tasks.length} task{tasks.length > 1 ? "s" : ""}</span>
+                              )}
+                              {isLegacy && (
+                                <Badge variant="secondary" className="shrink-0 text-[10px] md:text-xs">{PLATFORM_LABELS[r.platform] || r.platform}</Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 md:gap-3 shrink-0">
-                              <span className="font-mono text-xs md:text-sm font-medium">${Number(r.budget_usd).toFixed(2)}</span>
+                              <span className="font-mono text-xs md:text-sm font-medium">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</span>
                               <Badge variant="outline" className={`text-[10px] md:text-xs ${badge.className}`}>{badge.label}</Badge>
                               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" />
                             </div>
@@ -155,42 +174,47 @@ export default function MyCampaignRequests() {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <div className="mx-3 mb-2 p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                              <div className="flex items-start gap-2">
-                                <Target className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            {r.ad_caption && (
+                              <p className="text-xs md:text-sm text-muted-foreground">{r.ad_caption}</p>
+                            )}
+
+                            {/* Child tasks */}
+                            {tasks.length > 0 ? (
+                              <div className="space-y-2">
+                                {tasks.map((task: any, idx: number) => {
+                                  const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
+                                  return (
+                                    <div key={task.id} className="flex items-center justify-between p-2.5 rounded-md border bg-background gap-2">
+                                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
+                                        <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
+                                        <span className="text-xs truncate">{task.objective}</span>
+                                        {task.quantity > 1 && <span className="text-[10px] text-muted-foreground">×{task.quantity}</span>}
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className="font-mono text-xs">${Number(task.budget_usd).toFixed(2)}</span>
+                                        <Badge variant="outline" className={cn("text-[10px]", taskBadge.className)}>{taskBadge.label}</Badge>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* Legacy single-task display */
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                                 <div>
-                                  <p className="text-[10px] md:text-xs text-muted-foreground">Target Audience</p>
-                                  <p className="text-xs md:text-sm">{r.target_audience_note || "Not specified"}</p>
+                                  <p className="text-[10px] md:text-xs text-muted-foreground">Objective</p>
+                                  <p className="text-xs md:text-sm">{r.objective}</p>
                                 </div>
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                <div>
-                                  <p className="text-[10px] md:text-xs text-muted-foreground">Ad Caption</p>
-                                  <p className="text-xs md:text-sm line-clamp-2">{r.ad_caption || "Not specified"}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-[10px] md:text-xs text-muted-foreground">Creative Link</p>
-                                  <a href={r.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs md:text-sm text-primary hover:underline truncate block">{r.creative_link}</a>
-                                </div>
-                              </div>
-                              {r.landing_page_url && (
-                                <div className="flex items-start gap-2">
-                                  <ExternalLink className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                {r.creative_link && (
                                   <div className="min-w-0">
-                                    <p className="text-[10px] md:text-xs text-muted-foreground">Landing Page</p>
-                                    <a href={r.landing_page_url} target="_blank" rel="noopener noreferrer" className="text-xs md:text-sm text-primary hover:underline truncate block">{r.landing_page_url}</a>
+                                    <p className="text-[10px] md:text-xs text-muted-foreground">Creative Link</p>
+                                    <a href={r.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs md:text-sm text-primary hover:underline truncate block">{r.creative_link}</a>
                                   </div>
-                                </div>
-                              )}
-                              <div>
-                                <p className="text-[10px] md:text-xs text-muted-foreground">Schedule</p>
-                                <p className="text-xs md:text-sm">{r.duration_days} days from {r.start_date}</p>
+                                )}
                               </div>
-                            </div>
+                            )}
+
                             {r.status === "rejected" && r.rejection_reason && (
                               <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                                 <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
