@@ -144,9 +144,23 @@ export default function OrderManagement() {
     setRejectId(null);
   };
 
-  useEffect(() => { setCurrentPage(1); }, [tab]);
+  useEffect(() => { setCurrentPage(1); }, [tab, searchQuery]);
 
-  const filtered = requests.filter((r: any) => tab === "all" ? true : r.status === tab);
+  const filtered = useMemo(() => {
+    let result = requests.filter((r: any) => tab === "all" ? true : r.status === tab);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((r: any) => {
+        const client = profiles[r.client_id];
+        const clientName = (client?.full_name || "").toLowerCase();
+        const businessName = (client?.business_name || "").toLowerCase();
+        const title = (r.title || "").toLowerCase();
+        const platform = (r.platform || "").toLowerCase();
+        return clientName.includes(q) || businessName.includes(q) || title.includes(q) || platform.includes(q);
+      });
+    }
+    return result;
+  }, [requests, tab, searchQuery, profiles]);
   const paginatedFiltered = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
