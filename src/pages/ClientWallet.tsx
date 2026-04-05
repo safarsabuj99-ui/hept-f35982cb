@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { format } from "date-fns";
 import { getPlatformRate } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
