@@ -31,6 +31,7 @@ interface Transaction {
 export default function ClientWallet() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [pricingConfig, setPricingConfig] = useState<any>(null);
