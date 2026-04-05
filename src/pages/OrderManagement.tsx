@@ -172,7 +172,7 @@ export default function OrderManagement() {
                     const client = profiles[r.client_id];
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                     return (
-                      <div key={r.id} className="rounded-xl border bg-card p-4 space-y-3">
+                      <div key={r.id} id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
