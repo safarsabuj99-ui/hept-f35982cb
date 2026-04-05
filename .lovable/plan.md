@@ -1,29 +1,59 @@
 
 
-## Bug Fix: Auto-close sidebar on mobile navigation
+## Plan: Search in Payments, Mobile-Optimize Campaign Requests, Fix Campaigns Overflow
 
-### Problem
-On mobile, when you tap a nav link in the sidebar, the page navigates but the sidebar stays open — requiring a manual close.
+### 1. Add Client Search to Payments & Deposits Page
 
-### Root Cause
-The `AdminSidebarContent` component uses the shadcn `Sidebar` which renders as a `Sheet` on mobile. The `NavLink` clicks navigate the route, but nothing calls `setOpenMobile(false)` to dismiss the sheet.
+**File: `src/pages/PaymentRequests.tsx`**
 
-### Fix
-In `AdminSidebarContent`, use the `setOpenMobile` from `useSidebar()` and add a `useEffect` that watches `location.pathname` — when it changes, call `setOpenMobile(false)`.
+- Add a `searchQuery` state variable
+- Add a searchable `Input` field (matching the campaign page's search style) above the tabs, with a `Search` icon and clear button
+- Filter `filteredRequests` and `filteredDeposits` by client name, transaction ID, or payment method matching the search query (case-insensitive)
+- Reset pagination when search changes
 
-### File: `src/components/AdminLayout.tsx`
+### 2. Add Client Search to Campaign Requests (Admin) Page
 
-Add after existing hooks in `AdminSidebarContent`:
+**File: `src/pages/OrderManagement.tsx`**
 
-```typescript
-const { state, setOpenMobile } = useSidebar();
+- Add a `searchQuery` state variable  
+- Add a search `Input` between the summary cards and the tabs
+- Filter requests by client name, request title, or platform matching the search query
+- Reset pagination when search changes
 
-useEffect(() => {
-  setOpenMobile(false);
-}, [location.pathname, setOpenMobile]);
-```
+### 3. Mobile-Optimize Campaign Requests (Client View)
 
-Add `useEffect` to the existing imports from React.
+**File: `src/pages/MyCampaignRequests.tsx`**
 
-**One file changed, ~3 lines added. No visual or functional side effects.**
+- The page already uses mobile-friendly collapsible cards, but needs tighter spacing and better touch targets
+- Reduce card padding on mobile (`p-2.5` instead of `p-3`)
+- Make the collapsible trigger content more compact: move date inline with budget, use smaller text sizes
+- Ensure task list items inside collapsible are compact with `p-2` and `text-xs`
+
+### 4. Fix Campaigns Page Horizontal Overflow on Mobile
+
+**File: `src/pages/CampaignMapping.tsx`**
+
+- Wrap the root container with `overflow-x-hidden` to prevent horizontal scroll bleed
+- Add `min-w-0` to flex children (controls bar) to prevent flex items from overflowing
+- The `DateRangeFilter` "Today" button appears clipped in the screenshot — ensure the controls bar wraps properly with `flex-wrap`
+
+**File: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`**
+
+- The platform tabs container already has `overflow-x-auto` — no change needed
+- Add `overflow-hidden` to the root `div` to contain any child overflow from the DeepDiveTable
+
+**File: `src/components/client-analytics/DeepDiveTable.tsx`**
+
+- Ensure the table wrapper has `overflow-x-auto` with `max-w-full` so the wide table scrolls within its container rather than pushing the page width
+
+### Technical Summary
+
+| File | Change |
+|------|--------|
+| `PaymentRequests.tsx` | Add search input + filter logic (~20 lines) |
+| `OrderManagement.tsx` | Add search input + filter logic (~20 lines) |
+| `MyCampaignRequests.tsx` | Tighten mobile spacing (~5 lines) |
+| `CampaignMapping.tsx` | Add `overflow-x-hidden`, `min-w-0` (~3 lines) |
+| `CampaignAnalyticsPanel.tsx` | Add `overflow-hidden` to root (~1 line) |
+| `DeepDiveTable.tsx` | Ensure `max-w-full overflow-x-auto` on table wrapper (~2 lines) |
 
