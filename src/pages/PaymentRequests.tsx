@@ -131,6 +131,21 @@ export default function PaymentRequests() {
 
   useEffect(() => { fetchRequests(); fetchDeposits(); }, []);
 
+  // Deep-link: auto-open approval dialog for highlighted payment request
+  useEffect(() => {
+    if (!highlightId || loading || deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    const target = requests.find((r) => r.id === highlightId);
+    if (target) {
+      if (target.status === "pending") {
+        openConfirm(target, "approved");
+      }
+      setTimeout(() => {
+        document.getElementById(`payment-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }, [highlightId, loading, requests]);
+
   useEffect(() => {
     const channel = supabase
       .channel("payment-requests-admin")
