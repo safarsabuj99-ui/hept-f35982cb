@@ -41,6 +41,8 @@ interface PricingConfig {
 export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const { tab: deepLinkTab } = useDeepLinkAction();
+  const [activeTab, setActiveTab] = useState(deepLinkTab || "profile");
   const [depositOpen, setDepositOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [loading, setLoading] = useState(true);
