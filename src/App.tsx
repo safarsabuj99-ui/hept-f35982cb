@@ -75,6 +75,8 @@ const queryClient = new QueryClient({
   },
 });
 
+function NotifNavigator() { useNotificationNavigator(); return null; }
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
