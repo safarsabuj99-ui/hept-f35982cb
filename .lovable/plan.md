@@ -1,77 +1,76 @@
 
 
-## Professional Notification System Upgrade
+## Unified Settings Hub with Tabbed Navigation
 
 ### Current State
-The notification system works but is basic: plain text toasts, flat card list, simple type dot indicators, no grouping, no priority levels, no notification preferences, and no sound/vibration feedback. The bell popover is functional but lacks polish expected in a premium SaaS.
+Settings-related functionality is scattered across 4 separate pages:
+- **Settings** (`/admin/settings`) — Service Margin, Sync Start Date, TikTok Proxy, Notification Preferences
+- **My Profile** (`/admin/profile`) — Personal info, timezone, password change
+- **Sync Health** (`/admin/sync-health`) — Sync intervals, manual triggers, logs
+- **Integrations** (`/admin/integrations`) — API tokens for Meta/TikTok/Google
 
-### Upgrade Plan
+### Solution
+Consolidate everything into a single **tabbed Settings page** at `/admin/settings`. The existing separate pages will redirect to the Settings page with the appropriate tab selected via `?tab=` query param.
 
-**Step 1: Add Priority & Grouping to DB** (Migration)
-- Add `priority` column (`low`, `normal`, `high`, `urgent`) to `notifications` table with default `normal`
-- Add `group_key` column (nullable text) for collapsing related notifications (e.g., multiple guard pauses for same client get grouped)
-- Update existing trigger functions to set appropriate priority levels:
-  - `urgent`: Ad Guard pause, payment rejected
-  - `high`: New payment request, campaign request
-  - `normal`: Payment approved, campaign approved, guard resumed
-  - `low`: System announcements
+### Tab Structure
 
-**Step 2: Notification Preferences Table** (Migration)
-- Create `notification_preferences` table: `user_id`, `channel` (in_app, push, email), `type` (payment, guard, campaign, system), `enabled` (boolean), with RLS for own-row access
-- Seed defaults on profile creation via trigger
-- This lets users mute specific notification types per channel
+| Tab | Icon | Content (moved from) |
+|-----|------|---------------------|
+| **General** | Settings | Service Margin, Sync Start Date, TikTok Proxy, Theme toggle, Default currency |
+| **Profile** | UserCircle | Personal info form + Change Password (from AdminProfile) |
+| **Integrations** | Plug | Full API integrations management (from Integrations page) |
+| **Sync** | Activity | Sync schedule, manual triggers, sync logs (from SyncHealth page) |
+| **Notifications** | Bell | Notification preferences matrix + sound toggle (already in Settings) |
 
-**Step 3: Redesign NotificationBell Popover** (`NotificationBell.tsx`)
-- **Segmented header tabs**: "All | Unread | Urgent" quick filters inside the popover
-- **Rich notification cards**: Type-specific icons (Shield for guard, CreditCard for payment, Megaphone for campaign) instead of plain dots
-- **Priority indicator**: Urgent notifications get a pulsing red left-border accent; high priority gets amber
-- **Smart grouping**: Collapse 3+ notifications with same `group_key` into "X notifications about [topic]" with expand
-- **Swipe-to-dismiss** on mobile via touch handlers
-- **Sound toggle**: Small speaker icon in header to enable/disable notification sounds
-- **Empty state**: Illustration with contextual message based on role
+### Changes
 
-**Step 4: Redesign Notifications Full Page** (`Notifications.tsx`)
-- **Timeline layout**: Group notifications by date sections ("Today", "Yesterday", "This Week", "Earlier")
-- **Bulk actions toolbar**: Select multiple notifications via checkboxes, bulk delete/mark read
-- **Search**: Add a search input to filter notifications by title/body text
-- **Infinite scroll**: Replace the 50-item limit with paginated loading (load 20, fetch more on scroll)
-- **Priority badges**: Colored badges (red urgent, amber high) next to type badges
-- **Glass-card styling**: Apply `glass-card glow-border` and `animate-slide-up-fade` consistent with the rest of the app
+**1. `src/pages/Settings.tsx`** — Major rewrite
+- Add `Tabs` component with 5 tabs: General, Profile, Integrations, Sync, Notifications
+- Use `useDeepLinkAction` or `useSearchParams` to read `?tab=` param and auto-select the right tab
+- Extract each section into its own tab content component for clean code organization
+- Move existing cards into "General" tab
+- Add Theme toggle (dark/light) and Default Currency toggle to General tab
+- Move `NotificationPreferences` into its own "Notifications" tab
+- Import and embed `AdminProfile` content into "Profile" tab
+- Import and embed `Integrations` content into "Integrations" tab
+- Import and embed `SyncHealth` content into "Sync" tab
+- Max width expanded from `max-w-lg` to `max-w-4xl` to accommodate wider content like Integrations
 
-**Step 5: Smart Toast System** (`useNotifications.tsx`)
-- Replace plain `toast()` with priority-aware toasts:
-  - Urgent: `toast.error()` with persistent duration (10s), sound chime, and action button ("View Now")
-  - High: `toast.warning()` with 6s duration and action button
-  - Normal: `toast.success()` with 4s default
-  - Low: `toast.info()` with 3s, auto-dismiss
-- Add a subtle notification sound effect (HTML5 Audio) for urgent/high priority (respecting user's sound preference)
-- Vibration API (`navigator.vibrate`) on mobile for urgent notifications
+**2. `src/pages/AdminProfile.tsx`** — Redirect wrapper
+- Replace full page with a redirect: `<Navigate to="/admin/settings?tab=profile" replace />`
 
-**Step 6: Notification Preferences UI** (`Settings.tsx`)
-- Add a "Notifications" tab/section in Settings page
-- Matrix grid: rows = notification types (Payment, Guard, Campaign, System), columns = channels (In-App, Push)
-- Toggle switches for each cell
-- "Quiet Hours" time range picker (suppress non-urgent notifications between set hours)
-- "Sound" toggle for notification audio
+**3. `src/pages/SyncHealth.tsx`** — Redirect wrapper
+- Replace full page with a redirect: `<Navigate to="/admin/settings?tab=sync" replace />`
 
-**Step 7: Auto-cleanup & Retention**
-- Add a DB function `cleanup_old_notifications()` that deletes read notifications older than 30 days and unread older than 90 days
-- Schedule via pg_cron (daily at 3 AM)
+**4. `src/pages/Integrations.tsx`** — Redirect wrapper
+- Replace full page with a redirect: `<Navigate to="/admin/settings?tab=integrations" replace />`
+
+**5. `src/components/AdminLayout.tsx`** — Simplify sidebar
+- Remove separate "My Profile", "Sync Health" nav items from the System section (they now live inside Settings)
+- Remove "Integrations" from the Advertising section
+- Keep single "Settings" nav item that opens the unified hub
+
+**6. Extract reusable content components**
+- Extract `AdminProfile` form + password card into `src/components/settings/ProfileTab.tsx`
+- Extract Integrations content into `src/components/settings/IntegrationsTab.tsx`
+- Extract SyncHealth content into `src/components/settings/SyncTab.tsx`
+- Keep `NotificationPreferences` as `src/components/settings/NotificationsTab.tsx`
+- Keep General settings as inline in Settings.tsx or `src/components/settings/GeneralTab.tsx`
+
+This keeps each tab's code isolated and the main Settings.tsx clean (~100 lines orchestrating tabs).
 
 ### Files Changed (~8 files)
 
 | File | Change |
 |------|--------|
-| **Migration SQL** | Add `priority`, `group_key` columns; create `notification_preferences` table; update trigger functions with priority; add cleanup function + cron |
-| `useNotifications.tsx` | Priority-aware toasts, sound/vibration, infinite scroll support, grouped notifications logic |
-| `NotificationBell.tsx` | Complete redesign with tabs, rich icons, priority accents, grouping, swipe-to-dismiss |
-| `Notifications.tsx` | Timeline layout, search, bulk actions, infinite scroll, glass-card styling |
-| `Settings.tsx` | Add notification preferences section with toggle matrix |
-| `index.css` | Priority-specific animation classes (urgent pulse, notification slide-in) |
-
-### What Stays Unchanged
-- Push notification infrastructure (VAPID, service worker, send-push edge function)
-- Deep-linking system (useDeepLinkAction)
-- Realtime subscription channel
-- Notification DB triggers (only adding priority field to existing INSERT statements)
+| `src/pages/Settings.tsx` | Rewrite as tabbed hub with 5 tabs |
+| `src/components/settings/GeneralTab.tsx` | New — margin, sync date, proxy, theme, currency |
+| `src/components/settings/ProfileTab.tsx` | New — extracted from AdminProfile |
+| `src/components/settings/IntegrationsTab.tsx` | New — extracted from Integrations |
+| `src/components/settings/SyncTab.tsx` | New — extracted from SyncHealth |
+| `src/components/settings/NotificationsTab.tsx` | New — extracted from Settings |
+| `src/pages/AdminProfile.tsx` | Redirect to `/admin/settings?tab=profile` |
+| `src/pages/SyncHealth.tsx` | Redirect to `/admin/settings?tab=sync` |
+| `src/pages/Integrations.tsx` | Redirect to `/admin/settings?tab=integrations` |
+| `src/components/AdminLayout.tsx` | Remove redundant sidebar items |
 
