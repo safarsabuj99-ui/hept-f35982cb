@@ -277,7 +277,7 @@ export default function ClientWallet() {
             {/* Mobile card view */}
             <div className="flex flex-col gap-2 md:hidden">
               {filteredPaymentRequests.map((pr: any) => (
-                <div key={pr.id} className="mobile-card flex items-center justify-between gap-3">
+                <div key={pr.id} id={`wallet-pr-${pr.id}`} className={cn("mobile-card flex items-center justify-between gap-3", highlightId === pr.id && "deep-link-highlight")}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-[10px]">{pr.payment_method}</Badge>
