@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+
+export type NotificationPriority = "low" | "normal" | "high" | "urgent";
 
 export interface Notification {
   id: string;
@@ -9,9 +12,44 @@ export interface Notification {
   title: string;
   body: string;
   type: "payment" | "guard" | "campaign" | "system";
+  priority: NotificationPriority;
+  group_key: string | null;
   is_read: boolean;
   link: string | null;
   created_at: string;
+}
+
+const NOTIFICATION_SOUND_KEY = "notif_sound_enabled";
+
+function getNotifSoundEnabled(): boolean {
+  return localStorage.getItem(NOTIFICATION_SOUND_KEY) !== "false";
+}
+
+export function setNotifSoundEnabled(v: boolean) {
+  localStorage.setItem(NOTIFICATION_SOUND_KEY, v ? "true" : "false");
+}
+
+// Play a subtle chime for urgent/high priority notifications
+function playNotifSound() {
+  if (!getNotifSoundEnabled()) return;
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+
+function vibrate() {
+  try { navigator.vibrate?.([100, 50, 100]); } catch {}
 }
 
 export function useNotifications() {
@@ -19,25 +57,50 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const pageRef = useRef(0);
+  const PAGE_SIZE = 20;
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (reset = true) => {
     if (!user?.id) return;
+    const page = reset ? 0 : pageRef.current;
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
     const { data } = await supabase
       .from("notifications")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .range(from, to);
 
     if (data) {
       const typed = data as unknown as Notification[];
-      setNotifications(typed);
-      setUnreadCount(typed.filter((n) => !n.is_read).length);
+      if (reset) {
+        setNotifications(typed);
+        pageRef.current = 1;
+      } else {
+        setNotifications((prev) => [...prev, ...typed]);
+        pageRef.current = page + 1;
+      }
+      setHasMore(typed.length === PAGE_SIZE);
+      // Count unread separately for accuracy
+      if (reset) {
+        const { count } = await supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("is_read", false);
+        setUnreadCount(count ?? 0);
+      }
     }
     setLoading(false);
   }, [user?.id]);
 
-  // Initial fetch
+  const loadMore = useCallback(() => {
+    if (hasMore) fetchNotifications(false);
+  }, [hasMore, fetchNotifications]);
+
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
@@ -58,9 +121,44 @@ export function useNotifications() {
         },
         (payload) => {
           const newNotif = payload.new as unknown as Notification;
-          setNotifications((prev) => [newNotif, ...prev].slice(0, 50));
+          setNotifications((prev) => [newNotif, ...prev]);
           setUnreadCount((prev) => prev + 1);
-          toast(newNotif.title, { description: newNotif.body });
+
+          const priority = newNotif.priority || "normal";
+
+          // Priority-aware toast
+          if (priority === "urgent") {
+            toast.error(newNotif.title, {
+              description: newNotif.body,
+              duration: 10000,
+              action: newNotif.link ? {
+                label: "View Now",
+                onClick: () => window.dispatchEvent(new CustomEvent("notif-navigate", { detail: newNotif.link })),
+              } : undefined,
+            });
+            playNotifSound();
+            vibrate();
+          } else if (priority === "high") {
+            toast.warning(newNotif.title, {
+              description: newNotif.body,
+              duration: 6000,
+              action: newNotif.link ? {
+                label: "View",
+                onClick: () => window.dispatchEvent(new CustomEvent("notif-navigate", { detail: newNotif.link })),
+              } : undefined,
+            });
+            playNotifSound();
+          } else if (priority === "low") {
+            toast.info(newNotif.title, {
+              description: newNotif.body,
+              duration: 3000,
+            });
+          } else {
+            toast.success(newNotif.title, {
+              description: newNotif.body,
+              duration: 4000,
+            });
+          }
         }
       )
       .subscribe();
@@ -71,7 +169,7 @@ export function useNotifications() {
   }, [user?.id]);
 
   const markAsRead = useCallback(async (id: string) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    await supabase.from("notifications").update({ is_read: true } as any).eq("id", id);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
@@ -82,7 +180,7 @@ export function useNotifications() {
     if (!user?.id) return;
     await supabase
       .from("notifications")
-      .update({ is_read: true })
+      .update({ is_read: true } as any)
       .eq("user_id", user.id)
       .eq("is_read", false);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -96,13 +194,46 @@ export function useNotifications() {
     if (notif && !notif.is_read) setUnreadCount((prev) => Math.max(0, prev - 1));
   }, [notifications]);
 
+  const bulkDelete = useCallback(async (ids: string[]) => {
+    await supabase.from("notifications").delete().in("id", ids);
+    const unreadDeleted = notifications.filter((n) => ids.includes(n.id) && !n.is_read).length;
+    setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    setUnreadCount((prev) => Math.max(0, prev - unreadDeleted));
+  }, [notifications]);
+
+  const bulkMarkRead = useCallback(async (ids: string[]) => {
+    await supabase.from("notifications").update({ is_read: true } as any).in("id", ids);
+    const unreadMarked = notifications.filter((n) => ids.includes(n.id) && !n.is_read).length;
+    setNotifications((prev) =>
+      prev.map((n) => (ids.includes(n.id) ? { ...n, is_read: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - unreadMarked));
+  }, [notifications]);
+
   return {
     notifications,
     unreadCount,
     loading,
+    hasMore,
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    bulkDelete,
+    bulkMarkRead,
+    loadMore,
     refetch: fetchNotifications,
   };
+}
+
+// Hook to listen for toast action navigations
+export function useNotificationNavigator() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const link = (e as CustomEvent).detail;
+      if (link) navigate(link);
+    };
+    window.addEventListener("notif-navigate", handler);
+    return () => window.removeEventListener("notif-navigate", handler);
+  }, [navigate]);
 }
