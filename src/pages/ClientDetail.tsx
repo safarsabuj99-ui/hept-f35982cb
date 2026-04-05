@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
