@@ -767,6 +767,17 @@
   animation: slide-up-fade 0.4s ease-out both;
 }
 
+/* Deep-link pulse highlight */
+@keyframes pulse-highlight {
+  0% { background-color: hsl(var(--primary) / 0.15); }
+  50% { background-color: hsl(var(--primary) / 0.25); }
+  100% { background-color: transparent; }
+}
+.deep-link-highlight {
+  animation: pulse-highlight 0.8s ease-in-out 3;
+  border-radius: var(--radius);
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
