@@ -260,24 +260,46 @@ export default function PaymentRequests() {
   };
 
   const filteredRequests = useMemo(() => {
-    if (!dateRange) return requests;
-    const fromStr = format(dateRange.from, "yyyy-MM-dd");
-    const toStr = format(dateRange.to, "yyyy-MM-dd");
-    return requests.filter((r) => {
-      const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
-      return d >= fromStr && d <= toStr;
-    });
-  }, [requests, dateRange]);
+    let result = requests;
+    if (dateRange) {
+      const fromStr = format(dateRange.from, "yyyy-MM-dd");
+      const toStr = format(dateRange.to, "yyyy-MM-dd");
+      result = result.filter((r) => {
+        const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
+        return d >= fromStr && d <= toStr;
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((r) =>
+        (r.client_name || "").toLowerCase().includes(q) ||
+        (r.transaction_id || "").toLowerCase().includes(q) ||
+        (r.payment_method || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [requests, dateRange, searchQuery]);
 
   const filteredDeposits = useMemo(() => {
-    if (!dateRange) return deposits;
-    const fromStr = format(dateRange.from, "yyyy-MM-dd");
-    const toStr = format(dateRange.to, "yyyy-MM-dd");
-    return deposits.filter((d) => {
-      const dt = d.date?.substring(0, 10);
-      return dt >= fromStr && dt <= toStr;
-    });
-  }, [deposits, dateRange]);
+    let result = deposits;
+    if (dateRange) {
+      const fromStr = format(dateRange.from, "yyyy-MM-dd");
+      const toStr = format(dateRange.to, "yyyy-MM-dd");
+      result = result.filter((d) => {
+        const dt = d.date?.substring(0, 10);
+        return dt >= fromStr && dt <= toStr;
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((d) =>
+        (d.client_name || "").toLowerCase().includes(q) ||
+        (d.creator_name || "").toLowerCase().includes(q) ||
+        (d.description || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [deposits, dateRange, searchQuery]);
 
   const paginatedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const paginatedDeposits = filteredDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
