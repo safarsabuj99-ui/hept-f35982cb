@@ -24,10 +24,19 @@ const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok"
 export default function MyCampaignRequests() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  // Deep-link: scroll to highlighted campaign request
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    setTimeout(() => {
+      document.getElementById(`campaign-req-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 500);
+  }, [highlightId, loading]);
 
   const fetchRequests = useCallback(async () => {
     if (!effectiveClientId) return;
