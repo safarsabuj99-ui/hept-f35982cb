@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Megaphone, Clock, Loader2, CheckCircle2, XCircle, ChevronDown, ExternalLink, Target, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 
 const STATUS_BADGE: Record<string, { className: string; label: string }> = {
