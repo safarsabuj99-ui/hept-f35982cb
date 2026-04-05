@@ -1222,14 +1222,46 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          channel: string
+          created_at: string
+          enabled: boolean
+          id: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string
           created_at: string
+          group_key: string | null
           id: string
           is_read: boolean
           link: string | null
           org_id: string | null
+          priority: string
           title: string
           type: Database["public"]["Enums"]["notification_type"]
           user_id: string
@@ -1237,10 +1269,12 @@ export type Database = {
         Insert: {
           body?: string
           created_at?: string
+          group_key?: string | null
           id?: string
           is_read?: boolean
           link?: string | null
           org_id?: string | null
+          priority?: string
           title: string
           type?: Database["public"]["Enums"]["notification_type"]
           user_id: string
@@ -1248,10 +1282,12 @@ export type Database = {
         Update: {
           body?: string
           created_at?: string
+          group_key?: string | null
           id?: string
           is_read?: boolean
           link?: string | null
           org_id?: string | null
+          priority?: string
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
@@ -2036,6 +2072,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_notifications: { Args: never; Returns: undefined }
       get_managed_client_ids: {
         Args: { _manager_id: string }
         Returns: string[]
