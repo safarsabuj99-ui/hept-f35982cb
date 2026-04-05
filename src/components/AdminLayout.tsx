@@ -86,9 +86,13 @@ function AdminSidebarContent() {
   const { signOut } = useAuth();
   const location = useLocation();
   const { pendingPayments, pendingOrders } = usePendingCounts();
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const prefetch = usePrefetch();
+
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [location.pathname, setOpenMobile]);
 
   const badgeCounts: Record<string, number> = {
     "/admin/payment-requests": pendingPayments,
