@@ -5,6 +5,7 @@ import { getPlatformRate } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { useToast } from "@/hooks/use-toast";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
