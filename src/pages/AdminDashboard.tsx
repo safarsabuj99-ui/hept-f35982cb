@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { getPlatformRates } from "@/lib/pricing";
-import { supabase } from "@/integrations/supabase/client";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
+import { DateRangeFilter, DateRange, DatePreset, getLocalToday } from "@/components/DateRangeFilter";
+import { useAdminDashboardData } from "@/hooks/useAdminDashboardData";
 
 import { ProfitLossWidget } from "@/components/ProfitLossWidget";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
@@ -17,218 +17,51 @@ import { AttentionPanel } from "@/components/dashboard/AttentionPanel";
 import { RunwayPrediction } from "@/components/RunwayPrediction";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import {
-  DollarSign, Banknote, AlertCircle, Wallet, Loader2
+  DollarSign, Banknote, AlertCircle, Wallet
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
-import { startOfDay, endOfDay, format } from "date-fns";
-
-interface ClientWithBalance {
-  user_id: string;
-  full_name: string;
-  email: string;
-  business_name: string | null;
-  balance: number;
-  todaySpend: number;
-  pricing_config: any;
-}
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function AdminDashboard() {
-  const [clients, setClients] = useState<ClientWithBalance[]>([]);
-  const [todaySpend, setTodaySpend] = useState(0);
-  const [yesterdaySpend, setYesterdaySpend] = useState(0);
-  const [todayCollections, setTodayCollections] = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [activeAccounts, setActiveAccounts] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [depositOpen, setDepositOpen] = useState(false);
-  const [spendHistory, setSpendHistory] = useState<number[]>([]);
-  const [collectHistory, setCollectHistory] = useState<number[]>([]);
-  
   const [dateRange, setDateRange] = useState<DateRange | null>(() => {
     const t = getLocalToday();
     return { from: t, to: t };
   });
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
-  
-  const { toast } = useToast();
-  const navigate = useNavigate();
 
-  const today = getDhakaDateString();
-  const yesterday = getDhakaDateString(-1);
+  const { data, isLoading: loading, refetch } = useAdminDashboardData(dateRange);
+  const queryClient = useQueryClient();
 
   const handleDateChange = useCallback((range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
     setDatePreset(preset);
   }, []);
 
-  useEffect(() => { fetchData(); }, [dateRange]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("admin-dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, () => fetchData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [dateRange]);
-
-  const fetchData = useCallback(async () => {
-    // Step 1: Get mapped accounts WITH keywords
-    const { data: mappedAssignments } = await supabase
-      .from("ad_account_clients")
-      .select("ad_account_id, client_id, mapping_keyword")
-      .neq("mapping_keyword", "");
-
-    const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
-
-    // Get campaigns only from mapped accounts
-    let campaignIds: string[] = [];
-    if (mappedAccountIds.length > 0) {
-      const { data: mappedCampaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .in("ad_account_id", mappedAccountIds);
-      campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
-    }
-
-    let spendQuery = supabase.from("daily_metrics").select("spend, campaign_id");
-    if (campaignIds.length > 0) {
-      spendQuery = spendQuery.in("campaign_id", campaignIds);
-    }
-    if (dateRange) {
-      spendQuery = spendQuery
-        .gte("data_date", toISODate(dateRange.from))
-        .lte("data_date", toISODate(dateRange.to));
-    }
-
-    const [profilesRes, rolesRes, txnsRes, pendingRes, syncRes, accountsRes, spendRangeRes, spendYesterdayRes, paymentReqRes] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, business_name, pricing_config"),
-      supabase.from("user_roles").select("user_id").eq("role", "client"),
-      supabase.from("transactions").select("*"),
-      (supabase.from("transactions").select("id", { count: "exact" }) as any).eq("status", "pending_approval"),
-      supabase.from("api_integrations").select("last_synced_at").order("last_synced_at", { ascending: false }).limit(1),
-      supabase.from("ad_accounts").select("id", { count: "exact" }).eq("is_active", true),
-      spendQuery,
-      supabase.from("daily_metrics").select("spend").eq("data_date", yesterday),
-      supabase.from("payment_requests").select("amount_bdt, created_at").eq("status", "approved"),
-    ]);
-
-    // Fetch last 7 days spend for sparkline (from mapped campaigns only)
-    const sevenAgo = getDhakaDateString(-7);
-    let weekSpendQuery = supabase.from("daily_metrics").select("data_date, spend").gte("data_date", sevenAgo).order("data_date");
-    if (campaignIds.length > 0) {
-      weekSpendQuery = weekSpendQuery.in("campaign_id", campaignIds);
-    }
-    const { data: weekSpend } = await weekSpendQuery;
-    const dailySpendMap: Record<string, number> = {};
-    for (const r of (weekSpend ?? []) as any[]) {
-      dailySpendMap[r.data_date] = (dailySpendMap[r.data_date] || 0) + Number(r.spend);
-    }
-    const spark = Array.from({ length: 7 }, (_, i) => {
-      const d = getDhakaDateString(-(6 - i));
-      return dailySpendMap[d] || 0;
-    });
-    setSpendHistory(spark);
-
-    const clientUserIds = new Set(rolesRes.data?.map((r) => r.user_id) ?? []);
-    const clientProfiles = (profilesRes.data ?? []).filter((p) => clientUserIds.has(p.user_id));
-    const transactions = txnsRes.data ?? [];
-    setAllTransactions(transactions);
-
-    // Map spend to clients via campaigns -> ad_account_clients
-    const spendRows = (spendRangeRes.data ?? []) as any[];
-    const campaignIdsInRange = [...new Set(spendRows.map((r: any) => r.campaign_id))];
-    
-    let campaignToAccount: Record<string, string> = {};
-    if (campaignIdsInRange.length > 0) {
-      const { data: camps } = await supabase.from("campaigns").select("id, ad_account_id").in("id", campaignIdsInRange);
-      for (const c of camps ?? []) campaignToAccount[c.id] = c.ad_account_id;
-    }
-    
-    const { data: allMappings } = await supabase.from("ad_account_clients").select("ad_account_id, client_id").neq("mapping_keyword", "");
-    const accountToClient: Record<string, string> = {};
-    for (const m of allMappings ?? []) accountToClient[m.ad_account_id] = m.client_id;
-
-    const clientSpendInRange: Record<string, number> = {};
-    for (const row of spendRows) {
-      const accId = campaignToAccount[row.campaign_id];
-      const cid = accId ? accountToClient[accId] : null;
-      if (cid) clientSpendInRange[cid] = (clientSpendInRange[cid] || 0) + Number(row.spend);
-    }
-
-    const result: ClientWithBalance[] = clientProfiles.map((p) => {
-      const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id && t.status === "completed");
-      const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
-      return { ...p, balance: credits - debits, todaySpend: clientSpendInRange[p.user_id] || 0, pricing_config: (p as any).pricing_config };
-    });
-
-    const rangeSpendTotal = spendRows.reduce((s: number, r: any) => s + Number(r.spend), 0);
-    const yesterdaySpendTotal = (spendYesterdayRes.data ?? []).reduce((s: number, r: any) => s + Number(r.spend), 0);
-
-    // Collections from payment_requests (BDT)
-    const approvedPayments = (paymentReqRes.data ?? []) as any[];
-    const rangeCollPayments = approvedPayments.filter((p: any) => {
-      if (dateRange) {
-        const pDate = p.created_at.split("T")[0];
-        const from = toISODate(dateRange.from);
-        const to = toISODate(dateRange.to);
-        return pDate >= from && pDate <= to;
-      }
-      return true; // All Time: include all
-    });
-    const rangeCollect = rangeCollPayments.reduce((s: number, p: any) => s + Number(p.amount_bdt || 0), 0);
-
-    // Collections sparkline (BDT from payment_requests)
-    const dailyCollMap: Record<string, number> = {};
-    for (const p of approvedPayments) {
-      const pDate = p.created_at.split("T")[0];
-      if (pDate >= sevenAgo) {
-        dailyCollMap[pDate] = (dailyCollMap[pDate] || 0) + Number(p.amount_bdt || 0);
-      }
-    }
-    setCollectHistory(Array.from({ length: 7 }, (_, i) => {
-      const d = getDhakaDateString(-(6 - i));
-      return dailyCollMap[d] || 0;
-    }));
-
-    setClients(result);
-    setTodaySpend(Math.round(rangeSpendTotal * 100) / 100);
-    setYesterdaySpend(Math.round(yesterdaySpendTotal * 100) / 100);
-    setTodayCollections(Math.round(rangeCollect * 100) / 100);
-    setPendingCount(pendingRes.count ?? 0);
-    setActiveAccounts((accountsRes as any).count ?? 0);
-    if ((syncRes.data as any)?.[0]?.last_synced_at) {
-      setLastSynced(new Date((syncRes.data as any)[0].last_synced_at).toLocaleString());
-    }
-    setLoading(false);
-  }, [today, yesterday, dateRange]);
-
+  const clients = data?.clients ?? [];
+  const todaySpend = data?.todaySpend ?? 0;
+  const yesterdaySpend = data?.yesterdaySpend ?? 0;
+  const todayCollections = data?.todayCollections ?? 0;
+  const pendingCount = data?.pendingCount ?? 0;
+  const activeAccounts = data?.activeAccounts ?? 0;
+  const lastSynced = data?.lastSynced ?? null;
+  const allTransactions = data?.allTransactions ?? [];
+  const spendHistory = data?.spendHistory ?? [];
+  const collectHistory = data?.collectHistory ?? [];
 
   const totalBalance = clients.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0);
   const totalDue = clients.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
 
-  // Calculate platform-weighted BDT for Payment Due
   const totalDueBdt = (() => {
     let bdtSum = 0;
     for (const client of clients) {
       if (client.balance >= 0) continue;
       const pc = (client as any).pricing_config;
       const flatRates = getPlatformRates(pc);
-      // Get client's completed transactions grouped by platform
-      // We need to recalculate per-platform balances from transactions
-      const clientTxns = (allTransactions || []).filter((t: any) => t.client_id === client.user_id && t.status === "completed");
+      const clientTxns = allTransactions.filter((t: any) => t.client_id === client.user_id && t.status === "completed");
       const platforms: Array<"meta" | "tiktok" | "google"> = ["meta", "tiktok", "google"];
       let platformNegBdt = 0;
       let accountedUsd = 0;
-      
+
       for (const platform of platforms) {
         const pCredits = clientTxns.filter((t: any) => t.type === "credit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
         const pDebits = clientTxns.filter((t: any) => t.type === "debit" && t.platform === platform).reduce((s: number, t: any) => s + Number(t.amount), 0);
@@ -239,14 +72,13 @@ export default function AdminDashboard() {
           accountedUsd += Math.abs(pBalance);
         }
       }
-      
-      // Handle unplatformed negative remainder
+
       const unaccounted = Math.abs(client.balance) - accountedUsd;
       if (unaccounted > 0) {
         const avgRate = flatRates.meta || flatRates.tiktok || flatRates.google || 120;
         platformNegBdt += unaccounted * avgRate;
       }
-      
+
       bdtSum += platformNegBdt;
     }
     return Math.round(bdtSum * 100) / 100;
@@ -260,8 +92,12 @@ export default function AdminDashboard() {
     ? { value: `${Math.abs(Math.round((spendDiff / yesterdaySpend) * 100))}% vs yesterday`, positive: spendDiff <= 0 }
     : null;
 
+  const handleRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+  };
+
   return (
-    <PullToRefresh onRefresh={fetchData}>
+    <PullToRefresh onRefresh={handleRefresh}>
     <div className="space-y-6">
       <DashboardHeader
         lastSynced={lastSynced}
@@ -269,13 +105,10 @@ export default function AdminDashboard() {
         pendingCount={pendingCount}
       />
 
-      {/* Date Filter */}
       <DateRangeFilter onRangeChange={handleDateChange} />
 
-      {/* Zone 2: Quick Actions Strip */}
       <QuickActions pendingCount={pendingCount} onAddFunds={() => setDepositOpen(true)} />
 
-      {/* Zone 3: Primary KPIs */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title={spendLabel}
@@ -313,7 +146,6 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Zone 4: Financial Intelligence */}
       <div>
         <p className="section-label">Financial Intelligence</p>
         <div className="grid gap-4 md:grid-cols-2">
@@ -322,7 +154,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Zone 5: Analytics */}
       <div>
         <p className="section-label">Analytics</p>
         <div className="grid gap-4 md:grid-cols-2">
@@ -331,10 +162,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Zone 5b: Runway Predictions */}
       <RunwayPrediction />
 
-      {/* Zone 6: Attention Required */}
       <div>
         <p className="section-label">Operations</p>
         <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
@@ -345,13 +174,12 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-
       <DepositFundsDialog
         open={depositOpen}
         onOpenChange={setDepositOpen}
         showClientSelector
         isAdmin
-        onSuccess={fetchData}
+        onSuccess={handleRefresh}
       />
     </div>
     </PullToRefresh>
