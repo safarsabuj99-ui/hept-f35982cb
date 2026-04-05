@@ -62,6 +62,22 @@ export default function OrderManagement() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Deep-link: auto-switch tab & open detail for highlighted request
+  useEffect(() => {
+    if (!highlightId || loading || deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    const target = requests.find((r: any) => r.id === highlightId);
+    if (target) {
+      setTab(target.status === "all" ? "all" : target.status);
+      setSelectedRequest(target);
+      setDetailOpen(true);
+      // Scroll to row after render
+      setTimeout(() => {
+        document.getElementById(`order-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }, [highlightId, loading, requests]);
+
   useEffect(() => {
     const channel = supabase
       .channel("admin-campaign-requests")
