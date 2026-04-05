@@ -84,6 +84,7 @@ function WalletHealthBar({ balance, avgDailySpend }: { balance: number; avgDaily
 export default function ClientDashboard() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
