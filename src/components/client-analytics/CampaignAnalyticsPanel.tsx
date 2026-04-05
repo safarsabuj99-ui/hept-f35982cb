@@ -52,7 +52,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-hidden">
       {/* Premium KPI Cards */}
       <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-5">
         <KpiCard

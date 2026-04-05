@@ -149,7 +149,7 @@ export default function MyCampaignRequests() {
                     return (
                       <Collapsible key={r.id}>
                         <CollapsibleTrigger className="w-full" id={`campaign-req-${r.id}`}>
-                          <div className={cn("flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
+                          <div className={cn("flex items-center justify-between p-2.5 sm:p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
@@ -173,7 +173,7 @@ export default function MyCampaignRequests() {
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="mx-3 mb-2 p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-3">
+                          <div className="mx-2 sm:mx-3 mb-2 p-2 sm:p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-2 sm:space-y-3">
                             {r.ad_caption && (
                               <p className="text-xs md:text-sm text-muted-foreground">{r.ad_caption}</p>
                             )}
@@ -184,7 +184,7 @@ export default function MyCampaignRequests() {
                                 {tasks.map((task: any, idx: number) => {
                                   const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
                                   return (
-                                    <div key={task.id} className="flex items-center justify-between p-2.5 rounded-md border bg-background gap-2">
+                                    <div key={task.id} className="flex items-center justify-between p-2 sm:p-2.5 rounded-md border bg-background gap-1.5 sm:gap-2">
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
                                         <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
                                         <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>

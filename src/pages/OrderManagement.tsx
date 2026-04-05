@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package } from "lucide-react";
+import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package, Search, X as XIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
@@ -47,6 +48,7 @@ export default function OrderManagement() {
   const [rejectReason, setRejectReason] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchAll = useCallback(async () => {
     const [{ data: reqs }, { data: profs }, { data: allTasks }] = await Promise.all([
@@ -142,9 +144,23 @@ export default function OrderManagement() {
     setRejectId(null);
   };
 
-  useEffect(() => { setCurrentPage(1); }, [tab]);
+  useEffect(() => { setCurrentPage(1); }, [tab, searchQuery]);
 
-  const filtered = requests.filter((r: any) => tab === "all" ? true : r.status === tab);
+  const filtered = useMemo(() => {
+    let result = requests.filter((r: any) => tab === "all" ? true : r.status === tab);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((r: any) => {
+        const client = profiles[r.client_id];
+        const clientName = (client?.full_name || "").toLowerCase();
+        const businessName = (client?.business_name || "").toLowerCase();
+        const title = (r.title || "").toLowerCase();
+        const platform = (r.platform || "").toLowerCase();
+        return clientName.includes(q) || businessName.includes(q) || title.includes(q) || platform.includes(q);
+      });
+    }
+    return result;
+  }, [requests, tab, searchQuery, profiles]);
   const paginatedFiltered = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const counts = {
@@ -181,13 +197,29 @@ export default function OrderManagement() {
         })}
       </div>
 
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+        <Input
+          placeholder="Search client, request title, platform..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="pending">Pending ({counts.pending})</TabsTrigger>
-          <TabsTrigger value="processing">Processing ({counts.processing})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({counts.completed})</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected ({counts.rejected})</TabsTrigger>
-          <TabsTrigger value="all">All ({requests.length})</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+          <TabsTrigger value="pending" className="flex-shrink-0">Pending ({counts.pending})</TabsTrigger>
+          <TabsTrigger value="processing" className="flex-shrink-0">Processing ({counts.processing})</TabsTrigger>
+          <TabsTrigger value="completed" className="flex-shrink-0">Completed ({counts.completed})</TabsTrigger>
+          <TabsTrigger value="rejected" className="flex-shrink-0">Rejected ({counts.rejected})</TabsTrigger>
+          <TabsTrigger value="all" className="flex-shrink-0">All ({requests.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="mt-4">

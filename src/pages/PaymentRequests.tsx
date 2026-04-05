@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
@@ -82,6 +83,7 @@ export default function PaymentRequests() {
   const [depositsLoading, setDepositsLoading] = useState(true);
   const [depositPage, setDepositPage] = useState(1);
   const [depositPageSize, setDepositPageSize] = useState(20);
+  const [searchQuery, setSearchQuery] = useState("");
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
@@ -258,24 +260,46 @@ export default function PaymentRequests() {
   };
 
   const filteredRequests = useMemo(() => {
-    if (!dateRange) return requests;
-    const fromStr = format(dateRange.from, "yyyy-MM-dd");
-    const toStr = format(dateRange.to, "yyyy-MM-dd");
-    return requests.filter((r) => {
-      const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
-      return d >= fromStr && d <= toStr;
-    });
-  }, [requests, dateRange]);
+    let result = requests;
+    if (dateRange) {
+      const fromStr = format(dateRange.from, "yyyy-MM-dd");
+      const toStr = format(dateRange.to, "yyyy-MM-dd");
+      result = result.filter((r) => {
+        const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
+        return d >= fromStr && d <= toStr;
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((r) =>
+        (r.client_name || "").toLowerCase().includes(q) ||
+        (r.transaction_id || "").toLowerCase().includes(q) ||
+        (r.payment_method || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [requests, dateRange, searchQuery]);
 
   const filteredDeposits = useMemo(() => {
-    if (!dateRange) return deposits;
-    const fromStr = format(dateRange.from, "yyyy-MM-dd");
-    const toStr = format(dateRange.to, "yyyy-MM-dd");
-    return deposits.filter((d) => {
-      const dt = d.date?.substring(0, 10);
-      return dt >= fromStr && dt <= toStr;
-    });
-  }, [deposits, dateRange]);
+    let result = deposits;
+    if (dateRange) {
+      const fromStr = format(dateRange.from, "yyyy-MM-dd");
+      const toStr = format(dateRange.to, "yyyy-MM-dd");
+      result = result.filter((d) => {
+        const dt = d.date?.substring(0, 10);
+        return dt >= fromStr && dt <= toStr;
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((d) =>
+        (d.client_name || "").toLowerCase().includes(q) ||
+        (d.creator_name || "").toLowerCase().includes(q) ||
+        (d.description || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [deposits, dateRange, searchQuery]);
 
   const paginatedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const paginatedDeposits = filteredDeposits.slice((depositPage - 1) * depositPageSize, depositPage * depositPageSize);
@@ -289,7 +313,23 @@ export default function PaymentRequests() {
         <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
       </div>
 
-      <DateRangeFilter onRangeChange={handleDateChange} />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+          <Input
+            placeholder="Search client, TXN ID, method..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); setDepositPage(1); }}
+            className="pl-9 h-9 text-sm"
+          />
+          {searchQuery && (
+            <button onClick={() => { setSearchQuery(""); setCurrentPage(1); setDepositPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+        </div>
+        <DateRangeFilter onRangeChange={handleDateChange} />
+      </div>
 
       {/* KPI Summary Widgets */}
       {(() => {
