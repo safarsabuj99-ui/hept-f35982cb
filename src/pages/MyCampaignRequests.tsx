@@ -173,7 +173,7 @@ export default function MyCampaignRequests() {
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="mx-3 mb-2 p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-3">
+                          <div className="mx-2 sm:mx-3 mb-2 p-2 sm:p-3 md:p-4 rounded-lg border border-dashed bg-muted/30 space-y-2 sm:space-y-3">
                             {r.ad_caption && (
                               <p className="text-xs md:text-sm text-muted-foreground">{r.ad_caption}</p>
                             )}
