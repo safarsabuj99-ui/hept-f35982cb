@@ -371,7 +371,7 @@ export default function PaymentRequests() {
                   {/* Mobile card view */}
                    <div className="flex flex-col gap-2 md:hidden">
                     {paginatedRequests.map((r) => (
-                      <div key={r.id} className="rounded-lg border p-3 space-y-1.5 bg-card">
+                      <div key={r.id} id={`payment-row-${r.id}`} className={cn("rounded-lg border p-3 space-y-1.5 bg-card", highlightId === r.id && "deep-link-highlight")}>
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
