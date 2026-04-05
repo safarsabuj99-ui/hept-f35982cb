@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Megaphone, Clock, Loader2, CheckCircle2, XCircle, ChevronDown, ExternalLink, Target, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 
 const STATUS_BADGE: Record<string, { className: string; label: string }> = {
@@ -23,10 +25,19 @@ const PLATFORM_LABELS: Record<string, string> = { meta: "Meta", tiktok: "TikTok"
 export default function MyCampaignRequests() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  // Deep-link: scroll to highlighted campaign request
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    setTimeout(() => {
+      document.getElementById(`campaign-req-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 500);
+  }, [highlightId, loading]);
 
   const fetchRequests = useCallback(async () => {
     if (!effectiveClientId) return;
@@ -123,8 +134,8 @@ export default function MyCampaignRequests() {
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                     return (
                       <Collapsible key={r.id}>
-                        <CollapsibleTrigger className="w-full">
-                          <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2">
+                        <CollapsibleTrigger className="w-full" id={`campaign-req-${r.id}`}>
+                          <div className={cn("flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left gap-2", highlightId === r.id && "deep-link-highlight")}>
                             {/* Mobile: stacked layout */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
                               <div className="flex items-center gap-2">

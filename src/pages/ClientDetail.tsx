@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,6 +41,8 @@ interface PricingConfig {
 export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const { tab: deepLinkTab } = useDeepLinkAction();
+  const [activeTab, setActiveTab] = useState(deepLinkTab || "profile");
   const [depositOpen, setDepositOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -477,7 +480,7 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide h-auto p-1 justify-start">
           <TabsTrigger value="profile" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><User className="h-3.5 w-3.5 hidden sm:inline" /> Profile</TabsTrigger>
           <TabsTrigger value="pricing" className="gap-1 shrink-0 text-xs px-2.5 py-1.5"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>

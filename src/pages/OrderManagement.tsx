@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,8 @@ export default function OrderManagement() {
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
   const canManageCampaigns = hasPermission("can_manage_campaigns");
+  const { highlightId } = useDeepLinkAction();
+  const deepLinkHandled = useRef(false);
 
   const [requests, setRequests] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
@@ -58,6 +61,22 @@ export default function OrderManagement() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Deep-link: auto-switch tab & open detail for highlighted request
+  useEffect(() => {
+    if (!highlightId || loading || deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    const target = requests.find((r: any) => r.id === highlightId);
+    if (target) {
+      setTab(target.status === "all" ? "all" : target.status);
+      setSelectedRequest(target);
+      setDetailOpen(true);
+      // Scroll to row after render
+      setTimeout(() => {
+        document.getElementById(`order-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }, [highlightId, loading, requests]);
 
   useEffect(() => {
     const channel = supabase
@@ -153,7 +172,7 @@ export default function OrderManagement() {
                     const client = profiles[r.client_id];
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                     return (
-                      <div key={r.id} className="rounded-xl border bg-card p-4 space-y-3">
+                      <div key={r.id} id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
@@ -215,7 +234,7 @@ export default function OrderManagement() {
                         const client = profiles[r.client_id];
                         const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                         return (
-                          <TableRow key={r.id}>
+                          <TableRow key={r.id} id={`order-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell>
                               <div>
                                 <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>

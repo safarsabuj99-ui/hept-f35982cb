@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,6 +63,8 @@ interface PendingDeposit {
 }
 
 export default function PaymentRequests() {
+  const { highlightId } = useDeepLinkAction();
+  const deepLinkHandled = useRef(false);
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -127,6 +131,21 @@ export default function PaymentRequests() {
   };
 
   useEffect(() => { fetchRequests(); fetchDeposits(); }, []);
+
+  // Deep-link: auto-open approval dialog for highlighted payment request
+  useEffect(() => {
+    if (!highlightId || loading || deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    const target = requests.find((r) => r.id === highlightId);
+    if (target) {
+      if (target.status === "pending") {
+        openConfirm(target, "approved");
+      }
+      setTimeout(() => {
+        document.getElementById(`payment-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }, [highlightId, loading, requests]);
 
   useEffect(() => {
     const channel = supabase
@@ -353,7 +372,7 @@ export default function PaymentRequests() {
                   {/* Mobile card view */}
                    <div className="flex flex-col gap-2 md:hidden">
                     {paginatedRequests.map((r) => (
-                      <div key={r.id} className="rounded-lg border p-3 space-y-1.5 bg-card">
+                      <div key={r.id} id={`payment-row-${r.id}`} className={cn("rounded-lg border p-3 space-y-1.5 bg-card", highlightId === r.id && "deep-link-highlight")}>
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
@@ -429,7 +448,7 @@ export default function PaymentRequests() {
                       </TableHeader>
                       <TableBody>
                         {paginatedRequests.map((r) => (
-                          <TableRow key={r.id}>
+                          <TableRow key={r.id} id={`payment-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                             <TableCell className="font-medium">{r.client_name}</TableCell>
                             <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>

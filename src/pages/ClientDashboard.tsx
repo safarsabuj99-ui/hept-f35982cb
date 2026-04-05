@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +18,7 @@ import {
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { ClientNoticeBanner } from "@/components/ClientNoticeBanner";
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -83,6 +85,7 @@ function WalletHealthBar({ balance, avgDailySpend }: { balance: number; avgDaily
 export default function ClientDashboard() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
@@ -134,6 +137,15 @@ export default function ClientDashboard() {
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const { toast } = useToast();
+
+  // Deep-link: show resumed toast
+  useEffect(() => {
+    if (highlightId === "resumed" && !loading) {
+      toast({ title: "✅ Campaigns Resumed", description: "Your campaigns have been auto-resumed after balance top-up." });
+    }
+  }, [highlightId, loading]);
 
   useEffect(() => {
     if (!effectiveClientId) return;

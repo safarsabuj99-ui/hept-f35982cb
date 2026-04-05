@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { format } from "date-fns";
 import { getPlatformRate } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
+import { useToast } from "@/hooks/use-toast";
 import { ClientDateFilter, ClientDateRange, ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,8 @@ interface Transaction {
 export default function ClientWallet() {
   const { user } = useAuth();
   const { effectiveClientId } = useImpersonation();
+  const { highlightId } = useDeepLinkAction();
+  const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [pricingConfig, setPricingConfig] = useState<any>(null);
@@ -56,6 +60,18 @@ export default function ClientWallet() {
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Deep-link: show guard toast or highlight payment request
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    if (highlightId === "guard") {
+      toast({ title: "⚠️ Campaigns Paused", description: "Your campaigns were paused due to low balance. Add funds to resume." });
+    } else {
+      setTimeout(() => {
+        document.getElementById(`wallet-pr-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 500);
+    }
+  }, [highlightId, loading]);
 
   useEffect(() => {
     if (!effectiveClientId) return;
@@ -263,7 +279,7 @@ export default function ClientWallet() {
             {/* Mobile card view */}
             <div className="flex flex-col gap-2 md:hidden">
               {filteredPaymentRequests.map((pr: any) => (
-                <div key={pr.id} className="mobile-card flex items-center justify-between gap-3">
+                <div key={pr.id} id={`wallet-pr-${pr.id}`} className={cn("mobile-card flex items-center justify-between gap-3", highlightId === pr.id && "deep-link-highlight")}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-[10px]">{pr.payment_method}</Badge>
@@ -300,7 +316,7 @@ export default function ClientWallet() {
                 </TableHeader>
                 <TableBody>
                   {filteredPaymentRequests.map((pr: any) => (
-                    <TableRow key={pr.id} className="border-border/30 hover:bg-accent/50 transition-colors">
+                    <TableRow key={pr.id} id={`wallet-pr-${pr.id}`} className={cn("border-border/30 hover:bg-accent/50 transition-colors", highlightId === pr.id && "deep-link-highlight")}>
                       <TableCell className="whitespace-nowrap">{new Date(pr.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                       <TableCell><Badge variant="secondary">{pr.payment_method}</Badge></TableCell>
                       <TableCell className="text-right font-mono">৳{Number(pr.amount_bdt).toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
