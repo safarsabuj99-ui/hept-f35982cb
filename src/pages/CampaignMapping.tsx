@@ -224,7 +224,7 @@ export default function CampaignMapping() {
       </div>
 
       {/* Admin Controls Bar */}
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3 sm:gap-4">
         {isAdmin && (
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Client</Label>
