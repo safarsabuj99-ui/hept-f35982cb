@@ -108,38 +108,6 @@ export function GeneralTab() {
         </CardContent>
       </div>
 
-      {/* Service Margin */}
-      <div className="glass-card glow-border">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Percent className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle>Service Margin</CardTitle>
-              <CardDescription>Percentage margin applied to client billing</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : (
-            <form onSubmit={handleSaveMargin} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Margin %</Label>
-                <Input type="number" step="0.1" min="0" value={serviceMargin} onChange={(e) => setServiceMargin(e.target.value)} placeholder="0" required />
-                <p className="text-xs text-muted-foreground">Applied on top of actual ad spend when billing clients</p>
-              </div>
-              <Button type="submit" className="w-full" disabled={savingMargin}>
-                {savingMargin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Margin
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </div>
-
       {/* Sync Start Date */}
       <div className="glass-card glow-border">
         <CardHeader>
