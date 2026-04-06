@@ -10,8 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package, Search, X as XIcon } from "lucide-react";
+import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package, Search, X as XIcon, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
@@ -25,6 +27,17 @@ const STATUS_BADGE: Record<string, { className: string; label: string }> = {
   completed: { className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", label: "Completed" },
   rejected: { className: "bg-destructive/10 text-destructive border-destructive/30", label: "Rejected" },
 };
+
+function getTaskProgress(tasks: any[]) {
+  if (!tasks.length) return { completed: 0, total: 0, percent: 0, color: "bg-yellow-500" };
+  const completed = tasks.filter(t => t.status === "completed").length;
+  const total = tasks.length;
+  const percent = Math.round((completed / total) * 100);
+  const allDone = completed === total;
+  const allPending = tasks.every(t => t.status === "pending");
+  const color = allDone ? "bg-emerald-500" : allPending ? "bg-yellow-500" : "bg-blue-500";
+  return { completed, total, percent, color };
+}
 
 export default function OrderManagement() {
   const { toast } = useToast();
@@ -45,10 +58,21 @@ export default function OrderManagement() {
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectIsTask, setRejectIsTask] = useState(false);
+  const [rejectParentId, setRejectParentId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const fetchAll = useCallback(async () => {
     const [{ data: reqs }, { data: profs }, { data: allTasks }] = await Promise.all([
@@ -100,7 +124,6 @@ export default function OrderManagement() {
     if (rejectionReason) update.rejection_reason = rejectionReason;
     const { error } = await (supabase.from("campaign_requests" as any).update(update).eq("id", id) as any);
     if (!error) {
-      // Also update all child tasks to same status
       const taskStatus = status === "processing" ? "processing" : status === "completed" ? "completed" : status === "rejected" ? "rejected" : "pending";
       const taskUpdate: any = { status: taskStatus };
       if (rejectionReason && status === "rejected") taskUpdate.rejection_reason = rejectionReason;
@@ -123,7 +146,6 @@ export default function OrderManagement() {
     await (supabase.from("campaign_tasks" as any).update(update).eq("id", taskId) as any);
     setActionLoading(null);
 
-    // Derive parent status from children
     const tasks = tasksByRequest[requestId] || [];
     const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status } : t);
     const allCompleted = updatedTasks.every(t => t.status === "completed");
@@ -138,10 +160,32 @@ export default function OrderManagement() {
 
   const handleReject = () => {
     if (!rejectId || !rejectReason.trim()) return;
-    updateRequestStatus(rejectId, "rejected", rejectReason.trim());
+    if (rejectIsTask && rejectParentId) {
+      updateTaskStatus(rejectId, rejectParentId, "rejected", rejectReason.trim());
+    } else {
+      updateRequestStatus(rejectId, "rejected", rejectReason.trim());
+    }
     setRejectOpen(false);
     setRejectReason("");
     setRejectId(null);
+    setRejectIsTask(false);
+    setRejectParentId(null);
+  };
+
+  const openTaskReject = (taskId: string, parentId: string) => {
+    setRejectId(taskId);
+    setRejectIsTask(true);
+    setRejectParentId(parentId);
+    setRejectReason("");
+    setRejectOpen(true);
+  };
+
+  const openRequestReject = (requestId: string) => {
+    setRejectId(requestId);
+    setRejectIsTask(false);
+    setRejectParentId(null);
+    setRejectReason("");
+    setRejectOpen(true);
   };
 
   useEffect(() => { setCurrentPage(1); }, [tab, searchQuery]);
@@ -236,47 +280,92 @@ export default function OrderManagement() {
                     const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                     const tasks = tasksByRequest[r.id] || [];
                     const displayTitle = r.title || r.platform || "Untitled";
+                    const isMultiTask = tasks.length > 1;
+                    const progress = getTaskProgress(tasks);
+                    const isExpanded = expandedRows.has(r.id);
+
                     return (
-                      <div key={r.id} id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
-                            {client?.business_name && <p className="text-xs text-muted-foreground">{client.business_name}</p>}
+                      <Collapsible key={r.id} open={isExpanded} onOpenChange={() => isMultiTask && toggleRow(r.id)}>
+                        <div id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
+                              {client?.business_name && <p className="text-xs text-muted-foreground">{client.business_name}</p>}
+                            </div>
+                            <Badge variant="outline" className={cn("text-xs shrink-0", badge.className)}>{badge.label}</Badge>
                           </div>
-                          <Badge variant="outline" className={cn("text-xs shrink-0", badge.className)}>{badge.label}</Badge>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Package className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-sm font-medium">{displayTitle}</span>
-                          {tasks.length > 0 && <span className="text-xs text-muted-foreground">{tasks.length} task{tasks.length > 1 ? "s" : ""}</span>}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          </span>
-                          <span className="font-mono font-semibold text-sm">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
-                            <Eye className="h-3.5 w-3.5 mr-1" /> Details
-                          </Button>
-                          {canManageCampaigns && r.status === "pending" && (
-                            <>
-                              <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
-                                {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start
-                              </Button>
-                              <Button size="sm" variant="destructive" className="text-xs" onClick={() => { setRejectId(r.id); setRejectOpen(true); }}>
-                                <XCircle className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{displayTitle}</span>
+                            {isMultiTask && (
+                              <span className="text-xs text-muted-foreground">{progress.completed}/{progress.total} done</span>
+                            )}
+                          </div>
+
+                          {/* Progress bar for multi-task */}
+                          {isMultiTask && (
+                            <div className="space-y-1">
+                              <Progress value={progress.percent} className={cn("h-1.5", `[&>div]:${progress.color}`)} />
+                            </div>
                           )}
-                          {canManageCampaigns && r.status === "processing" && (
-                            <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
-                              {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Complete
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </span>
+                            <span className="font-mono font-semibold text-sm">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</span>
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            {isMultiTask && (
+                              <CollapsibleTrigger asChild>
+                                <Button size="sm" variant="outline" className="flex-1 text-xs">
+                                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
+                                  {isExpanded ? "Hide" : "View"} Tasks
+                                </Button>
+                              </CollapsibleTrigger>
+                            )}
+                            <Button size="sm" variant="outline" className={cn("text-xs", !isMultiTask && "flex-1")} onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
+                              <Eye className="h-3.5 w-3.5 mr-1" /> Details
                             </Button>
-                          )}
+                            {canManageCampaigns && r.status === "pending" && (
+                              <>
+                                <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
+                                  {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start All
+                                </Button>
+                                <Button size="sm" variant="destructive" className="text-xs" onClick={() => openRequestReject(r.id)}>
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                            {canManageCampaigns && r.status === "processing" && (
+                              <Button size="sm" variant="default" className="flex-1 text-xs" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
+                                {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Complete All
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Expanded tasks inline (mobile) */}
+                          <CollapsibleContent>
+                            <div className="space-y-2 pt-2 border-t mt-2">
+                              {tasks.map((task: any, idx: number) => (
+                                <InlineTaskCard
+                                  key={task.id}
+                                  task={task}
+                                  idx={idx}
+                                  requestId={r.id}
+                                  canManage={canManageCampaigns}
+                                  actionLoading={actionLoading}
+                                  onStart={() => updateTaskStatus(task.id, r.id, "processing")}
+                                  onComplete={() => updateTaskStatus(task.id, r.id, "completed")}
+                                  onReject={() => openTaskReject(task.id, r.id)}
+                                />
+                              ))}
+                            </div>
+                          </CollapsibleContent>
                         </div>
-                      </div>
+                      </Collapsible>
                     );
                   })}
                 </div>
@@ -286,9 +375,10 @@ export default function OrderManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-8 text-[11px] uppercase tracking-widest text-muted-foreground/60"></TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Client</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Request</TableHead>
-                        <TableHead className="text-center text-[11px] uppercase tracking-widest text-muted-foreground/60">Tasks</TableHead>
+                        <TableHead className="text-center text-[11px] uppercase tracking-widest text-muted-foreground/60">Progress</TableHead>
                         <TableHead className="text-right text-[11px] uppercase tracking-widest text-muted-foreground/60">Budget</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Status</TableHead>
                         <TableHead className="text-[11px] uppercase tracking-widest text-muted-foreground/60">Date</TableHead>
@@ -301,52 +391,141 @@ export default function OrderManagement() {
                         const badge = STATUS_BADGE[r.status] || STATUS_BADGE.pending;
                         const tasks = tasksByRequest[r.id] || [];
                         const displayTitle = r.title || r.platform || "Untitled";
+                        const isMultiTask = tasks.length > 1;
+                        const progress = getTaskProgress(tasks);
+                        const isExpanded = expandedRows.has(r.id);
+
                         return (
-                          <TableRow key={r.id} id={`order-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
-                                <p className="text-xs text-muted-foreground">{client?.business_name || ""}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                <span className="text-sm font-medium truncate max-w-[200px]">{displayTitle}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary" className="text-xs">{tasks.length || 1}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-mono">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</TableCell>
-                            <TableCell><Badge variant="outline" className={badge.className}>{badge.label}</Badge></TableCell>
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center gap-1 justify-end">
-                                <Button size="sm" variant="ghost" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                {canManageCampaigns && r.status === "pending" && (
-                                  <>
-                                    <Button size="sm" variant="outline" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
-                                      {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setRejectId(r.id); setRejectOpen(true); }}>
-                                      <XCircle className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </>
+                          <>
+                            <TableRow
+                              key={r.id}
+                              id={`order-row-${r.id}`}
+                              className={cn(
+                                highlightId === r.id && "deep-link-highlight",
+                                isMultiTask && "cursor-pointer",
+                                isExpanded && "border-b-0"
+                              )}
+                              onClick={() => isMultiTask && toggleRow(r.id)}
+                            >
+                              <TableCell className="w-8 px-2">
+                                {isMultiTask && (
+                                  isExpanded
+                                    ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                    : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 )}
-                                {canManageCampaigns && r.status === "processing" && (
-                                  <Button size="sm" variant="default" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
-                                    {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                                    Complete
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
+                                  <p className="text-xs text-muted-foreground">{client?.business_name || ""}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="text-sm font-medium truncate max-w-[200px]">{displayTitle}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {isMultiTask ? (
+                                  <div className="flex items-center gap-2 justify-center min-w-[100px]">
+                                    <Progress value={progress.percent} className={cn("h-1.5 w-16", `[&>div]:${progress.color}`)} />
+                                    <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{progress.completed}/{progress.total}</span>
+                                  </div>
+                                ) : (
+                                  <Badge variant="secondary" className="text-xs">{tasks.length || 1}</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">${Number(r.total_budget_usd || r.budget_usd || 0).toFixed(2)}</TableCell>
+                              <TableCell><Badge variant="outline" className={badge.className}>{badge.label}</Badge></TableCell>
+                              <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                                {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
+                                  <Button size="sm" variant="ghost" onClick={() => { setSelectedRequest(r); setDetailOpen(true); }}>
+                                    <Eye className="h-4 w-4" />
                                   </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
+                                  {canManageCampaigns && r.status === "pending" && (
+                                    <>
+                                      <Button size="sm" variant="outline" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "processing")}>
+                                        {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => openRequestReject(r.id)}>
+                                        <XCircle className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {canManageCampaigns && r.status === "processing" && (
+                                    <Button size="sm" variant="default" disabled={actionLoading === r.id} onClick={() => updateRequestStatus(r.id, "completed")}>
+                                      {actionLoading === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                                      Complete
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+
+                            {/* Expanded task sub-rows */}
+                            {isMultiTask && isExpanded && tasks.map((task: any, idx: number) => {
+                              const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
+                              return (
+                                <TableRow key={task.id} className="bg-muted/30 hover:bg-muted/50">
+                                  <TableCell className="w-8 px-2" />
+                                  <TableCell colSpan={2}>
+                                    <div className="flex items-center gap-2 pl-2">
+                                      <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                                      <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
+                                      <span className="text-sm">{task.objective}</span>
+                                      {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {task.creative_link && (
+                                      <a
+                                        href={task.creative_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3" /> Creative
+                                      </a>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-sm">${Number(task.budget_usd).toFixed(2)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={cn("text-[10px]", taskBadge.className)}>{taskBadge.label}</Badge>
+                                  </TableCell>
+                                  <TableCell />
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
+                                      {canManageCampaigns && task.status === "pending" && (
+                                        <>
+                                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, r.id, "processing")}>
+                                            {actionLoading === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />} Start
+                                          </Button>
+                                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => openTaskReject(task.id, r.id)}>
+                                            <XCircle className="h-3 w-3" />
+                                          </Button>
+                                        </>
+                                      )}
+                                      {canManageCampaigns && task.status === "processing" && (
+                                        <Button size="sm" variant="default" className="h-7 text-xs" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, r.id, "completed")}>
+                                          {actionLoading === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Done
+                                        </Button>
+                                      )}
+                                      {task.rejection_reason && (
+                                        <span className="text-[10px] text-destructive max-w-[120px] truncate" title={task.rejection_reason}>
+                                          {task.rejection_reason}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </>
                         );
                       })}
                     </TableBody>
@@ -371,7 +550,6 @@ export default function OrderManagement() {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-5">
-              {/* Header info */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className={STATUS_BADGE[selectedRequest.status]?.className}>{STATUS_BADGE[selectedRequest.status]?.label}</Badge>
                 <span className="text-sm font-medium">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
@@ -383,10 +561,20 @@ export default function OrderManagement() {
               </div>
               {selectedRequest.ad_caption && <DetailItem label="Notes" value={selectedRequest.ad_caption} />}
 
-              {/* Tasks list */}
               {selectedTasks.length > 0 ? (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold">Tasks ({selectedTasks.length})</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Tasks ({selectedTasks.length})</h3>
+                    {selectedTasks.length > 1 && (() => {
+                      const p = getTaskProgress(selectedTasks);
+                      return (
+                        <div className="flex items-center gap-2">
+                          <Progress value={p.percent} className={cn("h-1.5 w-20", `[&>div]:${p.color}`)} />
+                          <span className="text-xs text-muted-foreground font-mono">{p.completed}/{p.total}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   {selectedTasks.map((task: any, idx: number) => {
                     const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
                     return (
@@ -412,13 +600,12 @@ export default function OrderManagement() {
                         {task.rejection_reason && (
                           <p className="text-xs text-destructive">Rejected: {task.rejection_reason}</p>
                         )}
-                        {/* Per-task actions */}
                         {canManageCampaigns && task.status === "pending" && (
                           <div className="flex gap-2 pt-1">
                             <Button size="sm" variant="outline" className="text-xs h-7" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, selectedRequest.id, "processing")}>
                               {actionLoading === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />} Start
                             </Button>
-                            <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" disabled={actionLoading === task.id} onClick={() => updateTaskStatus(task.id, selectedRequest.id, "rejected", "Rejected by admin")}>
+                            <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" disabled={actionLoading === task.id} onClick={() => openTaskReject(task.id, selectedRequest.id)}>
                               <XCircle className="h-3 w-3 mr-1" /> Reject
                             </Button>
                           </div>
@@ -433,7 +620,6 @@ export default function OrderManagement() {
                   })}
                 </div>
               ) : (
-                /* Legacy single-task detail */
                 <div className="grid grid-cols-2 gap-3">
                   <DetailItem label="Platform" value={PLATFORM_LABELS[selectedRequest.platform] || selectedRequest.platform} />
                   <DetailItem label="Objective" value={selectedRequest.objective} />
@@ -451,13 +637,12 @@ export default function OrderManagement() {
                 </div>
               )}
 
-              {/* Bulk actions */}
               {canManageCampaigns && selectedTasks.length > 0 && selectedRequest.status === "pending" && (
                 <div className="flex gap-2 pt-2 border-t">
                   <Button size="sm" disabled={actionLoading === selectedRequest.id} onClick={() => updateRequestStatus(selectedRequest.id, "processing")}>
                     {actionLoading === selectedRequest.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 mr-1" />} Start All
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => { setRejectId(selectedRequest.id); setRejectOpen(true); setDetailOpen(false); }}>
+                  <Button size="sm" variant="destructive" onClick={() => { openRequestReject(selectedRequest.id); setDetailOpen(false); }}>
                     <XCircle className="h-3.5 w-3.5 mr-1" /> Reject All
                   </Button>
                 </div>
@@ -474,25 +659,71 @@ export default function OrderManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Reject Modal */}
-      <Dialog open={rejectOpen} onOpenChange={(o) => { setRejectOpen(o); if (!o) { setRejectReason(""); setRejectId(null); } }}>
+      {/* Reject Modal (works for both requests and individual tasks) */}
+      <Dialog open={rejectOpen} onOpenChange={(o) => { setRejectOpen(o); if (!o) { setRejectReason(""); setRejectId(null); setRejectIsTask(false); setRejectParentId(null); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject Campaign Request</DialogTitle>
+            <DialogTitle>{rejectIsTask ? "Reject Task" : "Reject Campaign Request"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Label>Reason for rejection *</Label>
-            <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Explain why this request is being rejected..." rows={3} />
+            <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder={rejectIsTask ? "Explain why this task is being rejected..." : "Explain why this request is being rejected..."} rows={3} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRejectOpen(false); setRejectReason(""); setRejectId(null); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setRejectOpen(false); setRejectReason(""); setRejectId(null); setRejectIsTask(false); setRejectParentId(null); }}>Cancel</Button>
             <Button variant="destructive" disabled={!rejectReason.trim() || actionLoading === rejectId} onClick={handleReject}>
               {actionLoading === rejectId && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Reject Request
+              {rejectIsTask ? "Reject Task" : "Reject Request"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/* Inline task card for mobile expanded view */
+function InlineTaskCard({ task, idx, canManage, actionLoading, onStart, onComplete, onReject }: {
+  task: any; idx: number; requestId: string; canManage: boolean; actionLoading: string | null;
+  onStart: () => void; onComplete: () => void; onReject: () => void;
+}) {
+  const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+          <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
+          <span className="text-xs">{task.objective}</span>
+          {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
+        </div>
+        <Badge variant="outline" className={cn("text-[10px] shrink-0", taskBadge.className)}>{taskBadge.label}</Badge>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-xs">${Number(task.budget_usd).toFixed(2)}</span>
+        {task.creative_link && (
+          <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+            <ExternalLink className="h-2.5 w-2.5" /> Creative
+          </a>
+        )}
+      </div>
+      {task.ad_caption && <p className="text-[10px] text-muted-foreground">{task.ad_caption}</p>}
+      {task.rejection_reason && <p className="text-[10px] text-destructive">Rejected: {task.rejection_reason}</p>}
+      {canManage && task.status === "pending" && (
+        <div className="flex gap-1.5 pt-1">
+          <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" disabled={actionLoading === task.id} onClick={onStart}>
+            {actionLoading === task.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5 mr-0.5" />} Start
+          </Button>
+          <Button size="sm" variant="outline" className="text-[10px] h-6 px-2 text-destructive" disabled={actionLoading === task.id} onClick={onReject}>
+            <XCircle className="h-2.5 w-2.5 mr-0.5" /> Reject
+          </Button>
+        </div>
+      )}
+      {canManage && task.status === "processing" && (
+        <Button size="sm" variant="default" className="text-[10px] h-6 px-2" disabled={actionLoading === task.id} onClick={onComplete}>
+          {actionLoading === task.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />} Done
+        </Button>
+      )}
     </div>
   );
 }
