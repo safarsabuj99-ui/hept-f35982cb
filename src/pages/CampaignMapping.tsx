@@ -234,7 +234,7 @@ export default function CampaignMapping() {
                   variant="outline"
                   role="combobox"
                   aria-expanded={clientPopoverOpen}
-                  className="w-48 h-9 text-sm justify-between font-normal"
+                  className="w-full sm:w-48 h-9 text-sm justify-between font-normal"
                 >
                   {clientFilter === "all"
                     ? "All Clients"
