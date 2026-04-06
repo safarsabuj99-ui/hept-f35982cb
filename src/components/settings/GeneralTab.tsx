@@ -8,18 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Percent, CalendarIcon, Globe, Sun, Moon, DollarSign } from "lucide-react";
+import { Loader2, CalendarIcon, Globe, Sun, Moon, DollarSign } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/hooks/useCurrency";
 
 export function GeneralTab() {
-  const [serviceMargin, setServiceMargin] = useState("");
   const [syncStartDate, setSyncStartDate] = useState<Date | undefined>();
   const [savingSyncDate, setSavingSyncDate] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [savingMargin, setSavingMargin] = useState(false);
   const [tiktokProxyUrl, setTiktokProxyUrl] = useState("");
   const [savingProxy, setSavingProxy] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
@@ -31,10 +29,9 @@ export function GeneralTab() {
     supabase
       .from("settings" as any)
       .select("key, value")
-      .in("key", ["service_margin_percentage", "sync_start_date", "tiktok_proxy_url"])
+      .in("key", ["sync_start_date", "tiktok_proxy_url"])
       .then(({ data }: any) => {
         for (const row of data ?? []) {
-          if (row.key === "service_margin_percentage") setServiceMargin(row.value);
           if (row.key === "sync_start_date") setSyncStartDate(new Date(row.value + "T00:00:00"));
           if (row.key === "tiktok_proxy_url") setTiktokProxyUrl(row.value || "");
         }
@@ -47,21 +44,6 @@ export function GeneralTab() {
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("theme", next ? "dark" : "light");
-  };
-
-  const handleSaveMargin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (serviceMargin === "" || Number(serviceMargin) < 0) return;
-    setSavingMargin(true);
-    const { error } = await (supabase.from("settings" as any) as any)
-      .update({ value: serviceMargin, updated_by: user?.id })
-      .eq("key", "service_margin_percentage");
-    setSavingMargin(false);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Saved", description: `Service margin set to ${serviceMargin}%` });
-    }
   };
 
   const handleSaveSyncDate = async () => {
@@ -123,38 +105,6 @@ export function GeneralTab() {
               Switch to {currency === "USD" ? "BDT" : "USD"}
             </Button>
           </div>
-        </CardContent>
-      </div>
-
-      {/* Service Margin */}
-      <div className="glass-card glow-border">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Percent className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle>Service Margin</CardTitle>
-              <CardDescription>Percentage margin applied to client billing</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : (
-            <form onSubmit={handleSaveMargin} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Margin %</Label>
-                <Input type="number" step="0.1" min="0" value={serviceMargin} onChange={(e) => setServiceMargin(e.target.value)} placeholder="0" required />
-                <p className="text-xs text-muted-foreground">Applied on top of actual ad spend when billing clients</p>
-              </div>
-              <Button type="submit" className="w-full" disabled={savingMargin}>
-                {savingMargin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Margin
-              </Button>
-            </form>
-          )}
         </CardContent>
       </div>
 
