@@ -1,59 +1,34 @@
 
 
-## Plan: Search in Payments, Mobile-Optimize Campaign Requests, Fix Campaigns Overflow
+## Fix: Campaign Controls Bar Overflow on Mobile
 
-### 1. Add Client Search to Payments & Deposits Page
+### Problem
+On the 390px mobile viewport, the "Client" dropdown (`w-48` = 192px) and the "Date Range" filter (horizontal scrolling pill buttons) sit side-by-side via `flex-wrap`. The Client dropdown takes ~192px + gap, leaving insufficient space for the date range pills — causing the "Today" button to clip off-screen (visible in the red-marked screenshot).
 
-**File: `src/pages/PaymentRequests.tsx`**
+### Solution
+Stack the controls vertically on mobile instead of side-by-side. Use `flex-col sm:flex-row` so they each take full width on small screens and sit inline on larger screens. Also make the Client dropdown full-width on mobile.
 
-- Add a `searchQuery` state variable
-- Add a searchable `Input` field (matching the campaign page's search style) above the tabs, with a `Search` icon and clear button
-- Filter `filteredRequests` and `filteredDeposits` by client name, transaction ID, or payment method matching the search query (case-insensitive)
-- Reset pagination when search changes
+### File: `src/pages/CampaignMapping.tsx`
 
-### 2. Add Client Search to Campaign Requests (Admin) Page
+**Line 227** — Change the controls bar flex direction:
+```
+flex flex-wrap items-end gap-4
+```
+→
+```
+flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3 sm:gap-4
+```
 
-**File: `src/pages/OrderManagement.tsx`**
+**Line 237** — Make Client dropdown responsive width:
+```
+w-48 h-9
+```
+→
+```
+w-full sm:w-48 h-9
+```
 
-- Add a `searchQuery` state variable  
-- Add a search `Input` between the summary cards and the tabs
-- Filter requests by client name, request title, or platform matching the search query
-- Reset pagination when search changes
+**Line 275** — The date range wrapper already has `flex-1 min-w-0` which is correct; no change needed there.
 
-### 3. Mobile-Optimize Campaign Requests (Client View)
-
-**File: `src/pages/MyCampaignRequests.tsx`**
-
-- The page already uses mobile-friendly collapsible cards, but needs tighter spacing and better touch targets
-- Reduce card padding on mobile (`p-2.5` instead of `p-3`)
-- Make the collapsible trigger content more compact: move date inline with budget, use smaller text sizes
-- Ensure task list items inside collapsible are compact with `p-2` and `text-xs`
-
-### 4. Fix Campaigns Page Horizontal Overflow on Mobile
-
-**File: `src/pages/CampaignMapping.tsx`**
-
-- Wrap the root container with `overflow-x-hidden` to prevent horizontal scroll bleed
-- Add `min-w-0` to flex children (controls bar) to prevent flex items from overflowing
-- The `DateRangeFilter` "Today" button appears clipped in the screenshot — ensure the controls bar wraps properly with `flex-wrap`
-
-**File: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`**
-
-- The platform tabs container already has `overflow-x-auto` — no change needed
-- Add `overflow-hidden` to the root `div` to contain any child overflow from the DeepDiveTable
-
-**File: `src/components/client-analytics/DeepDiveTable.tsx`**
-
-- Ensure the table wrapper has `overflow-x-auto` with `max-w-full` so the wide table scrolls within its container rather than pushing the page width
-
-### Technical Summary
-
-| File | Change |
-|------|--------|
-| `PaymentRequests.tsx` | Add search input + filter logic (~20 lines) |
-| `OrderManagement.tsx` | Add search input + filter logic (~20 lines) |
-| `MyCampaignRequests.tsx` | Tighten mobile spacing (~5 lines) |
-| `CampaignMapping.tsx` | Add `overflow-x-hidden`, `min-w-0` (~3 lines) |
-| `CampaignAnalyticsPanel.tsx` | Add `overflow-hidden` to root (~1 line) |
-| `DeepDiveTable.tsx` | Ensure `max-w-full overflow-x-auto` on table wrapper (~2 lines) |
+This ensures both controls get full width on mobile (stacked), and return to inline layout on `sm+` breakpoints. Clean, minimal, no functional changes.
 
