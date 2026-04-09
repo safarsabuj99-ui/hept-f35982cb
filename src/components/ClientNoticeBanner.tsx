@@ -66,7 +66,8 @@ export function ClientNoticeBanner({ clientId, balance }: Props) {
     const fetchNotices = async () => {
       const { data } = await supabase
         .from("client_notices")
-        .select("id, title, message, type, target_type, target_ids");
+        .select("id, title, message, type, target_type, target_ids")
+        .eq("is_active", true);
       setNotices((data as any[]) ?? []);
     };
 
