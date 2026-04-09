@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_requests ADD COLUMN IF NOT EXISTS platform_amounts jsonb DEFAULT NULL;

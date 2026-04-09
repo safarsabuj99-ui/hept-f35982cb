@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
@@ -15,10 +16,15 @@ import { getDhakaDateString } from "@/components/DateRangeFilter";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
+const PLATFORMS = [
+  { key: "meta", label: "Meta" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "google", label: "Google" },
+] as const;
+
 export default function AddFunds() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [clientId, setClientId] = useState("");
-  const [amount, setAmount] = useState("");
   const [date, setDate] = useState(getDhakaDateString());
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +36,19 @@ export default function AddFunds() {
   const location = useLocation();
   const isManager = role === "manager";
   const backPath = isManager ? "/manager" : "/admin";
+
+  // Multi-platform amounts (USD)
+  const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({ meta: false, tiktok: false, google: false });
+  const [platformAmounts, setPlatformAmounts] = useState<Record<string, string>>({ meta: "", tiktok: "", google: "" });
+
+  const totalAmount = PLATFORMS.reduce((sum, p) => {
+    if (platformEnabled[p.key] && platformAmounts[p.key]) {
+      return sum + Number(platformAmounts[p.key]);
+    }
+    return sum;
+  }, 0);
+
+  const hasValidPlatform = PLATFORMS.some(p => platformEnabled[p.key] && Number(platformAmounts[p.key]) > 0);
 
   // Pre-select client from query param
   useEffect(() => {
@@ -43,7 +62,6 @@ export default function AddFunds() {
   useEffect(() => {
     const fetchClients = async () => {
       if (isManager) {
-        // Manager sees only assigned clients via RLS
         const { data: profiles } = await supabase
           .from("profiles")
           .select("user_id, full_name, business_name, manager_id" as any);
@@ -62,21 +80,27 @@ export default function AddFunds() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || !amount || Number(amount) <= 0) return;
+    if (!clientId || !hasValidPlatform) return;
     setIsLoading(true);
 
     const status = isManager ? "pending_approval" : "completed";
 
-    const { error } = await supabase.from("transactions").insert({
-      client_id: clientId,
-      type: "credit" as const,
-      amount: Number(amount),
-      date,
-      description: description || "Funds deposit",
-      created_by: user!.id,
-      status,
-      exchange_rate: null,
-    } as any);
+    // Create one transaction per enabled platform
+    const inserts = PLATFORMS
+      .filter(p => platformEnabled[p.key] && Number(platformAmounts[p.key]) > 0)
+      .map(p => ({
+        client_id: clientId,
+        type: "credit" as const,
+        amount: Number(platformAmounts[p.key]),
+        date,
+        description: description || "Funds deposit",
+        created_by: user!.id,
+        status,
+        exchange_rate: null,
+        platform: p.key,
+      }));
+
+    const { error } = await supabase.from("transactions").insert(inserts as any);
 
     setIsLoading(false);
     if (error) {
@@ -84,7 +108,7 @@ export default function AddFunds() {
     } else {
       const msg = isManager
         ? "Deposit submitted for Super Admin approval"
-        : `$${Number(amount).toFixed(2)} added successfully`;
+        : `$${totalAmount.toFixed(2)} added successfully`;
       toast({ title: "Success", description: msg });
       navigate(backPath);
     }
@@ -135,13 +159,48 @@ export default function AddFunds() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Amount (USD)</Label>
-              <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
-              {amount && Number(amount) > 0 && (
-                <p className="text-xs text-muted-foreground">Amount: ${Number(amount).toFixed(2)} USD</p>
-              )}
+
+            {/* Multi-Platform Amount Inputs */}
+            <div className="space-y-3">
+              <Label>Platform Amounts (USD)</Label>
+              <div className="space-y-2 rounded-lg border p-3">
+                {PLATFORMS.map((p) => (
+                  <div key={p.key} className="flex items-center gap-3">
+                    <Checkbox
+                      id={`admin-platform-${p.key}`}
+                      checked={platformEnabled[p.key]}
+                      onCheckedChange={(checked) => {
+                        setPlatformEnabled(prev => ({ ...prev, [p.key]: !!checked }));
+                        if (!checked) setPlatformAmounts(prev => ({ ...prev, [p.key]: "" }));
+                      }}
+                    />
+                    <label
+                      htmlFor={`admin-platform-${p.key}`}
+                      className="w-16 text-sm font-medium cursor-pointer select-none"
+                    >
+                      {p.label}
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="$0.00"
+                      value={platformAmounts[p.key]}
+                      onChange={(e) => setPlatformAmounts(prev => ({ ...prev, [p.key]: e.target.value }))}
+                      disabled={!platformEnabled[p.key]}
+                      className="flex-1"
+                    />
+                  </div>
+                ))}
+                {totalAmount > 0 && (
+                  <div className="flex justify-between items-center pt-2 border-t mt-2">
+                    <span className="text-sm font-medium text-muted-foreground">Total</span>
+                    <span className="text-sm font-semibold">${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="space-y-2">
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -150,7 +209,7 @@ export default function AddFunds() {
               <Label>Description (optional)</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Payment received" />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || !hasValidPlatform}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {isManager ? "Submit for Approval" : "Add Funds"}
             </Button>
