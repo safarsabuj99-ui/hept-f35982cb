@@ -25,12 +25,14 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
-    // Auth: accept service role key, anon key (cron), or admin JWT
+    // Auth: accept service role key, anon key (cron/trigger), or admin JWT
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-    if (token !== serviceRoleKey && token !== anonKey) {
+    const isTrustedCall = token === serviceRoleKey || token === anonKey;
+
+    if (!isTrustedCall) {
       const { data: { user: caller }, error: authError } = await sb.auth.getUser(token);
       if (authError || !caller) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -45,6 +47,8 @@ Deno.serve(async (req) => {
         });
       }
     }
+
+    console.log(`ad-guard-check invoked (trusted=${isTrustedCall}) at ${new Date().toISOString()}`);
 
     let totalConfirmed = 0;
     let totalFailed = 0;

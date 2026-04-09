@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
+import { Shield, Save, Zap, AlertTriangle, DollarSign, Play, TrendingUp, RefreshCw, Clock, Timer, Info, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -53,7 +53,6 @@ export function AutomationConfigTab({
   const [balance, setBalance] = useState<number | null>(null);
   
   const [resumingId, setResumingId] = useState<string | null>(null);
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const isSystemPaused = systemPausedCampaigns.length > 0;
@@ -92,60 +91,73 @@ export function AutomationConfigTab({
   // Show paused campaigns only within resume window
   const showPausedCampaigns = isSystemPaused && isWithinResumeWindow;
 
-  // Fetch campaign details, balance
-  useEffect(() => {
-    async function fetchData() {
-      // Fetch balance
-      const { data: txns } = await supabase
-        .from("transactions")
-        .select("type, amount, status")
-        .eq("client_id", userId)
-        .eq("status", "completed");
+  // Check if any campaign is still pending verification
+  const hasPendingCampaigns = campaignDetails.some(c => !c.pause_confirmed && !c.pause_error);
 
-      if (txns) {
-        const credits = txns.filter(t => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
-        const debits = txns.filter(t => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
-        setBalance(credits - debits);
-      }
+  // Fetch campaign details + balance
+  const fetchData = useCallback(async () => {
+    // Fetch balance
+    const { data: txns } = await supabase
+      .from("transactions")
+      .select("type, amount, status")
+      .eq("client_id", userId)
+      .eq("status", "completed");
 
-      // Fetch campaign details if there are paused campaigns
-      if (systemPausedCampaigns.length > 0) {
-        setLoadingDetails(true);
-        const { data: campaigns } = await supabase
-          .from("campaigns")
-          .select("id, name, platform, ad_account_id, pause_required, pause_confirmed_at, pause_error, pause_attempt_count")
-          .in("id", systemPausedCampaigns);
-
-        if (campaigns && campaigns.length > 0) {
-          const accountIds = [...new Set(campaigns.map(m => m.ad_account_id).filter(Boolean))];
-          const { data: accounts } = await supabase
-            .from("ad_accounts")
-            .select("id, account_name")
-            .in("id", accountIds as string[]);
-
-          const accountMap = new Map((accounts || []).map(a => [a.id, a.account_name]));
-
-          setCampaignDetails(
-            campaigns.map(m => ({
-              campaign_id: m.id,
-              campaign_name: m.name,
-              platform: m.platform,
-              ad_account_id: m.ad_account_id || "",
-              ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
-              pause_confirmed: !!(m as any).pause_confirmed_at,
-              pause_error: (m as any).pause_error || null,
-              pause_attempt_count: (m as any).pause_attempt_count || 0,
-              pause_required: (m as any).pause_required ?? false,
-            }))
-          );
-        }
-        setLoadingDetails(false);
-      } else {
-        setCampaignDetails([]);
-      }
+    if (txns) {
+      const credits = txns.filter(t => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
+      const debits = txns.filter(t => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
+      setBalance(credits - debits);
     }
+
+    // Fetch campaign details if there are paused campaigns
+    if (systemPausedCampaigns.length > 0) {
+      setLoadingDetails(true);
+      const { data: campaigns } = await supabase
+        .from("campaigns")
+        .select("id, name, platform, ad_account_id, pause_required, pause_confirmed_at, pause_error, pause_attempt_count")
+        .in("id", systemPausedCampaigns);
+
+      if (campaigns && campaigns.length > 0) {
+        const accountIds = [...new Set(campaigns.map(m => m.ad_account_id).filter(Boolean))];
+        const { data: accounts } = await supabase
+          .from("ad_accounts")
+          .select("id, account_name")
+          .in("id", accountIds as string[]);
+
+        const accountMap = new Map((accounts || []).map(a => [a.id, a.account_name]));
+
+        setCampaignDetails(
+          campaigns.map(m => ({
+            campaign_id: m.id,
+            campaign_name: m.name,
+            platform: m.platform,
+            ad_account_id: m.ad_account_id || "",
+            ad_account_name: accountMap.get(m.ad_account_id || "") || "Unknown",
+            pause_confirmed: !!(m as any).pause_confirmed_at,
+            pause_error: (m as any).pause_error || null,
+            pause_attempt_count: (m as any).pause_attempt_count || 0,
+            pause_required: (m as any).pause_required ?? false,
+          }))
+        );
+      }
+      setLoadingDetails(false);
+    } else {
+      setCampaignDetails([]);
+    }
+  }, [userId, systemPausedCampaigns]);
+
+  useEffect(() => {
     fetchData();
-  }, [userId, clientName, systemPausedCampaigns]);
+  }, [fetchData]);
+
+  // Auto-refresh every 30s while campaigns are pending verification
+  useEffect(() => {
+    if (!hasPendingCampaigns || !isSystemPaused) return;
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [hasPendingCampaigns, isSystemPaused, fetchData]);
 
 
   async function handleSave() {
@@ -242,33 +254,15 @@ export function AutomationConfigTab({
       if (res.error) throw res.error;
       const result = res.data;
       toast({
-        title: "Ad Guard Scan Complete",
+        title: "Ad Guard Check Complete",
         description: `Jobs processed: ${result.phase1_jobs_processed}. Verified: ${result.phase1_confirmed}. Newly queued: ${result.phase2_newly_queued}.`,
       });
+      fetchData();
       onSaved();
     } catch (err: any) {
       toast({ title: "Guard Error", description: err.message, variant: "destructive" });
     }
     setRunningGuard(false);
-  }
-
-  async function handleVerifySingle(campaignId: string) {
-    setVerifyingId(campaignId);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke("ad-guard-check", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      if (res.error) throw res.error;
-      toast({
-        title: "Verification Complete",
-        description: `Verified: ${res.data.phase1_confirmed}, Failed: ${res.data.phase1_failed}`,
-      });
-      onSaved();
-    } catch (err: any) {
-      toast({ title: "Verify Error", description: err.message, variant: "destructive" });
-    }
-    setVerifyingId(null);
   }
 
   const platformIcon = (platform: string) => {
@@ -289,11 +283,10 @@ export function AutomationConfigTab({
       );
     }
     if (c.pause_error && c.pause_attempt_count > 0) {
-      const isVerifyFail = c.pause_error.includes("Verification failed");
       return (
         <div className="space-y-0.5">
           <Badge variant="destructive" className="gap-1 text-[10px]">
-            <XCircle className="h-3 w-3" /> {isVerifyFail ? "Not Verified" : "Failed"} #{c.pause_attempt_count}
+            <XCircle className="h-3 w-3" /> Retrying #{c.pause_attempt_count}
           </Badge>
           <p className="text-[9px] text-destructive/70 max-w-[160px] truncate" title={c.pause_error}>
             {c.pause_error}
@@ -304,13 +297,13 @@ export function AutomationConfigTab({
     if (c.pause_required) {
       return (
         <Badge variant="outline" className="gap-1 text-[10px] border-amber-500 text-amber-600">
-          <Loader2 className="h-3 w-3 animate-spin" /> Pending Verify
+          <Loader2 className="h-3 w-3 animate-spin" /> Pausing…
         </Badge>
       );
     }
     return (
       <Badge variant="secondary" className="gap-1 text-[10px]">
-        <AlertTriangle className="h-3 w-3" /> Unverified
+        <AlertTriangle className="h-3 w-3" /> Queued
       </Badge>
     );
   };
@@ -325,7 +318,7 @@ export function AutomationConfigTab({
           </CardTitle>
           <CardDescription>
             Automatically pause all campaigns when the client's balance drops to or below the threshold amount.
-            The system retries platform pauses every 2 minutes until confirmed.
+            The system pauses campaigns instantly and verifies every 2 minutes automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -421,9 +414,16 @@ export function AutomationConfigTab({
               <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Settings"}
             </Button>
             <Button variant="outline" onClick={handleRunGuard} disabled={runningGuard} className="gap-2" size="sm">
-              <Shield className="h-4 w-4" /> {runningGuard ? "Scanning…" : "Run Ad Guard Now"}
+              <Shield className="h-4 w-4" /> {runningGuard ? "Checking…" : "Check Now"}
             </Button>
           </div>
+
+          {hasPendingCampaigns && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Auto-verifying every 2 minutes. Status refreshes automatically.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -456,8 +456,8 @@ export function AutomationConfigTab({
                       <TableHead>Campaign</TableHead>
                       <TableHead>Ad Account</TableHead>
                       <TableHead className="w-[80px]">Platform</TableHead>
-                      <TableHead className="w-[140px]">Platform Status</TableHead>
-                      <TableHead className="w-[140px] text-right">Actions</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[100px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -467,18 +467,7 @@ export function AutomationConfigTab({
                         <TableCell className="text-sm text-muted-foreground">{c.ad_account_name}</TableCell>
                         <TableCell>{platformIcon(c.platform)}</TableCell>
                         <TableCell>{pauseStatusBadge(c)}</TableCell>
-                        <TableCell className="text-right space-x-1">
-                          {!c.pause_confirmed && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 gap-1 text-xs"
-                              disabled={verifyingId === c.campaign_id}
-                              onClick={() => handleVerifySingle(c.campaign_id)}
-                            >
-                              <Search className="h-3 w-3" /> {verifyingId === c.campaign_id ? "…" : "Verify"}
-                            </Button>
-                          )}
+                        <TableCell className="text-right">
                           <Button
                             size="sm"
                             variant="ghost"
