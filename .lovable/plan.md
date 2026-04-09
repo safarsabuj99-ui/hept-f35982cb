@@ -1,63 +1,86 @@
 
+Goal: make Ad Guard fully automatic so campaigns pause on the ad platform without clicking “Verify”, and the UI updates by itself.
 
-## Multi-Platform Deposit Funds
+What I found
+- The current “Verify” button in `src/components/AutomationConfigTab.tsx` is not just checking status; it runs the full `ad-guard-check` worker. That means manual verification is currently acting as the missing automation path.
+- `supabase/functions/ad-guard-check/index.ts` exists and can process queued pause jobs, but I did not find any scheduled invocation for it. So if the instant path fails, nothing automatically picks up the queue.
+- The instant trigger function (`instant_guard_pause`) depends on values from `vault.decrypted_secrets`. In the codebase it looks for vault rows like `supabase_url` / `service_role_key`, and if they are missing it silently returns. That matches your symptom: campaign becomes `guard_paused` in the SaaS, but the ad platform stays active until a manual action runs the worker.
+- The backend schema snapshot also reports no live DB triggers attached right now, so part of the fix should be re-applying and validating the actual Ad Guard triggers in the database.
 
-### What Changes
+Implementation plan
 
-Currently, both the `DepositFundsDialog` (client-facing) and `AddFunds` page (admin-facing) only allow selecting **one platform** per deposit. The user wants clients to specify amounts for **multiple platforms** (Meta, TikTok, Google) in a single deposit request.
+1. Harden the instant auto-pause path
+- Create a backend migration that re-creates the critical Ad Guard triggers:
+  - `trg_auto_pause_on_debit`
+  - `trg_check_auto_resume`
+  - `trg_instant_guard_pause`
+- Replace `public.instant_guard_pause()` so it no longer depends on vault lookups that can silently fail.
+- Make it call `pause-campaign` directly using the same project URL/auth pattern already used by the working push trigger approach.
+- Keep the durable queue as fallback, so the system has both:
+  - instant pause attempt
+  - scheduled retry/verification path
 
-### Approach
+2. Add real automatic background processing
+- Configure a backend scheduled job to invoke `ad-guard-check` every 1–2 minutes.
+- This worker will:
+  - process pending `guard_pause_jobs`
+  - verify platform pause state
+  - retry transient failures
+  - re-queue stuck `guard_paused` campaigns
+- Result: even if the instant trigger misses once, the worker finishes the job automatically.
 
-Since the `payment_requests` table has a single `platform` (text) and `amount_bdt` (numeric) column, the cleanest approach is to add a new JSONB column `platform_amounts` that stores per-platform breakdown, e.g.:
-```json
-{"meta": 5000, "tiktok": 3000, "google": 0}
-```
+3. Tighten the worker logic
+- Update `supabase/functions/ad-guard-check/index.ts` to correctly select and use all pause state fields it relies on, including `pause_confirmed_at`.
+- Improve job status handling so campaigns do not sit in endless “pending verify” state when a retry/backoff is active.
+- Add clearer audit/error updates for:
+  - queued
+  - retry scheduled
+  - permanently failed
+  - confirmed paused
 
-The existing `platform` and `amount_bdt` columns continue to work (backward compatible). When `platform_amounts` is set, `amount_bdt` becomes the **total** and `platform` can be set to `"multi"` or left null.
+4. Fix the UI so it reflects automation correctly
+- Update `src/components/AutomationConfigTab.tsx`:
+  - rename “Verify” to “Retry now” or “Check now”
+  - stop presenting manual verification as a required step
+  - auto-refresh paused campaign status while any campaign is pending
+  - show clearer states such as:
+    - Queued
+    - Pausing now
+    - Retrying
+    - Verified
+    - Failed
+- Keep a manual retry button for admins, but only as a backup tool.
 
-### Database Migration
+5. Validate end-to-end
+- Trigger a low-balance pause scenario for a test client.
+- Confirm this full flow without clicking Verify:
+  - balance crosses threshold
+  - campaign becomes `guard_paused`
+  - platform campaign pauses automatically
+  - `pause_confirmed_at` is set
+  - queue entry is cleared
+  - UI updates from pending to verified by itself
+- Also confirm deposit-based auto-resume still works after the changes.
 
-- Add column `platform_amounts jsonb default null` to `payment_requests`
-- No RLS changes needed (same policies apply)
-
-### UI Changes — `DepositFundsDialog.tsx`
-
-Replace the single platform dropdown + single amount input with:
-- **Platform amount rows**: Three inline rows for Meta, TikTok, Google, each with a checkbox toggle and amount input
-- Only enabled platforms require an amount
-- Auto-calculated total displayed below
-- At least one platform must be selected with amount > 0
+Technical details
+- Files likely involved:
+  - new migration for triggers + instant pause function
+  - `supabase/functions/ad-guard-check/index.ts`
+  - `src/components/AutomationConfigTab.tsx`
+  - possibly `supabase/functions/pause-campaign/index.ts` for small logging/status refinements
+- Intended final flow:
 
 ```text
-Platform Amounts
-┌──────────────────────────────────┐
-│ ☑ Meta         ৳ [  5,000.00  ] │
-│ ☑ TikTok       ৳ [  3,000.00  ] │
-│ ☐ Google       ৳ [     0.00   ] │
-├──────────────────────────────────┤
-│ Total:                ৳ 8,000.00│
-└──────────────────────────────────┘
+auto debit / low balance
+  -> mark campaign guard_paused + queue job
+  -> instant trigger calls pause-campaign immediately
+  -> scheduled ad-guard-check verifies/retries automatically
+  -> pause_confirmed_at set
+  -> UI auto-refresh shows Verified
 ```
 
-On submit:
-- `amount_bdt` = sum of all platform amounts
-- `platform_amounts` = `{ meta: 5000, tiktok: 3000 }` (only non-zero)
-- `platform` = single platform key if only one selected, otherwise `null`
-
-### UI Changes — `AddFunds.tsx` (Admin)
-
-Same multi-platform pattern: allow admin to specify per-platform USD amounts when adding funds. On submit, create **separate transaction rows per platform** (since `transactions.platform` is an enum and each transaction tracks one platform's balance). This preserves wallet sub-balance integrity.
-
-### Admin Approval Side
-
-When admin views/approves a multi-platform payment request, the `platform_amounts` JSON will show the breakdown. The approval flow (in `approve-payment` edge function or wherever it lives) will need to create one transaction per platform entry.
-
-### Files Modified
-
-| File | Change |
-|---|---|
-| **New migration** | Add `platform_amounts jsonb` to `payment_requests` |
-| `src/components/DepositFundsDialog.tsx` | Multi-platform amount inputs replacing single platform+amount |
-| `src/pages/AddFunds.tsx` | Multi-platform amount inputs, create per-platform transactions |
-| `supabase/functions/approve-payment/index.ts` | Handle `platform_amounts` to create per-platform transactions on approval |
-
+Expected outcome
+- No manual Verify step needed
+- Campaigns pause automatically on Meta/TikTok/Google
+- Admin UI no longer gets stuck showing long-running “loading verify”
+- Manual action remains only as an emergency retry, not part of the normal flow
