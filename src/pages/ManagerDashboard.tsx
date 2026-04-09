@@ -32,11 +32,23 @@ export default function ManagerDashboard() {
 
       const clientProfiles = (profiles ?? []).filter((p: any) => p.manager_id === user.id);
 
-      // Get transactions for these clients (RLS scoped)
-      const { data: transactions } = await supabase.from("transactions").select("*");
+      if (clientProfiles.length === 0) {
+        setClients([]);
+        setLoading(false);
+        return;
+      }
+
+      const clientIds = clientProfiles.map((p: any) => p.user_id);
+
+      // Only fetch needed columns, filtered to these clients
+      const { data: transactions } = await supabase
+        .from("transactions")
+        .select("client_id, type, amount, status")
+        .in("client_id", clientIds)
+        .eq("status", "completed");
 
       const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
-        const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id && t.status === "completed");
+        const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id);
         const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         return { user_id: p.user_id, full_name: p.full_name, email: p.email, business_name: p.business_name, balance: credits - debits };
