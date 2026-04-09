@@ -81,7 +81,6 @@ Deno.serve(async (req) => {
         .update({ status: "rejected", admin_note: admin_note || null })
         .eq("id", request_id);
 
-      // Audit log: payment rejected
       await adminClient.from("audit_logs").insert({
         user_id: user.id,
         action_type: "payment_rejected",
@@ -97,10 +96,8 @@ Deno.serve(async (req) => {
     let exchangeRate: number;
 
     if (selected_rate && typeof selected_rate === "number" && selected_rate > 0) {
-      // Admin explicitly chose a rate from the UI
       exchangeRate = selected_rate;
     } else {
-      // Fallback: read platform_rates from client's pricing_config
       const { data: profile } = await adminClient
         .from("profiles")
         .select("pricing_config")
@@ -109,14 +106,13 @@ Deno.serve(async (req) => {
 
       const pricingConfig = profile?.pricing_config as any;
       const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates;
-
-      // Use meta rate as default fallback, then 120
       exchangeRate = platformRates?.meta ? Number(platformRates.meta) : 120;
     }
 
-    const finalUsd = Math.round((Number(pr.amount_bdt) / exchangeRate) * 100) / 100;
+    const totalBdt = Number(pr.amount_bdt);
+    const finalUsd = Math.round((totalBdt / exchangeRate) * 100) / 100;
 
-    // ATOMIC: update payment_request + insert credit transaction
+    // Update payment request
     const { error: updateErr } = await adminClient
       .from("payment_requests")
       .update({
@@ -127,7 +123,7 @@ Deno.serve(async (req) => {
         received_in_account_id: received_in_account_id || null,
       })
       .eq("id", request_id)
-      .eq("status", "pending"); // guard against double-approve
+      .eq("status", "pending");
 
     if (updateErr) {
       return new Response(JSON.stringify({ error: "Failed to update request" }), {
@@ -136,20 +132,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { error: txErr } = await adminClient.from("transactions").insert({
-      client_id: pr.client_id,
-      type: "credit",
-      amount: finalUsd,
-      date: pr.payment_date || new Date().toISOString().split("T")[0],
-      description: `Payment: ৳${Number(pr.amount_bdt).toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})`,
-      created_by: user.id,
-      status: "completed",
-      exchange_rate: exchangeRate,
-      platform: platform_override || pr.platform || null,
-    });
+    // Create transactions: per-platform if platform_amounts exists, else single
+    const platformAmounts = pr.platform_amounts as Record<string, number> | null;
+    const txDate = pr.payment_date || new Date().toISOString().split("T")[0];
+    const transactions: any[] = [];
+
+    if (platformAmounts && typeof platformAmounts === "object" && Object.keys(platformAmounts).length > 0) {
+      // Multi-platform: create one transaction per platform entry
+      const totalPlatformBdt = Object.values(platformAmounts).reduce((s: number, v: any) => s + Number(v), 0);
+
+      for (const [platform, bdtAmount] of Object.entries(platformAmounts)) {
+        const platformBdt = Number(bdtAmount);
+        if (platformBdt <= 0) continue;
+        const platformUsd = Math.round((platformBdt / exchangeRate) * 100) / 100;
+
+        transactions.push({
+          client_id: pr.client_id,
+          type: "credit",
+          amount: platformUsd,
+          date: txDate,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${exchangeRate})`,
+          created_by: user.id,
+          status: "completed",
+          exchange_rate: exchangeRate,
+          platform: platform,
+        });
+      }
+    } else {
+      // Legacy single-platform transaction
+      transactions.push({
+        client_id: pr.client_id,
+        type: "credit",
+        amount: finalUsd,
+        date: txDate,
+        description: `Payment: ৳${totalBdt.toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})`,
+        created_by: user.id,
+        status: "completed",
+        exchange_rate: exchangeRate,
+        platform: platform_override || pr.platform || null,
+      });
+    }
+
+    const { error: txErr } = await adminClient.from("transactions").insert(transactions);
 
     if (txErr) {
-      // Rollback: revert payment request status
+      // Rollback
       await adminClient
         .from("payment_requests")
         .update({ status: "pending", exchange_rate_snapshot: null, final_amount_usd: null })
@@ -172,16 +199,16 @@ Deno.serve(async (req) => {
       if (agencyAcc) {
         await adminClient
           .from("agency_accounts")
-          .update({ current_balance_bdt: Number(agencyAcc.current_balance_bdt) + Number(pr.amount_bdt) })
+          .update({ current_balance_bdt: Number(agencyAcc.current_balance_bdt) + totalBdt })
           .eq("id", received_in_account_id);
       }
     }
 
-    // Audit log: payment approved
+    // Audit log
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action_type: "payment_approved",
-      description: `Approved payment ৳${Number(pr.amount_bdt).toLocaleString()} → $${finalUsd} (Rate: ${exchangeRate}) for client ${pr.client_id}`,
+      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd} (Rate: ${exchangeRate}) for client ${pr.client_id}${platformAmounts ? ` [${Object.keys(platformAmounts).join(", ")}]` : ""}`,
     });
 
     return new Response(

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Banknote, CalendarIcon, Loader2, ImagePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,12 @@ interface AgencyAccount {
   type: string;
 }
 
+const PLATFORMS = [
+  { key: "meta", label: "Meta" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "google", label: "Google" },
+] as const;
+
 export function DepositFundsDialog({
   open,
   onOpenChange,
@@ -37,11 +44,9 @@ export function DepositFundsDialog({
   onSuccess,
 }: DepositFundsDialogProps) {
   const { toast } = useToast();
-  const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [platform, setPlatform] = useState("");
   const [selectedClient, setSelectedClient] = useState(clientId || "");
   const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
@@ -50,6 +55,19 @@ export function DepositFundsDialog({
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Multi-platform amounts
+  const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({ meta: false, tiktok: false, google: false });
+  const [platformAmounts, setPlatformAmounts] = useState<Record<string, string>>({ meta: "", tiktok: "", google: "" });
+
+  const totalAmount = PLATFORMS.reduce((sum, p) => {
+    if (platformEnabled[p.key] && platformAmounts[p.key]) {
+      return sum + Number(platformAmounts[p.key]);
+    }
+    return sum;
+  }, 0);
+
+  const hasValidPlatform = PLATFORMS.some(p => platformEnabled[p.key] && Number(platformAmounts[p.key]) > 0);
 
   // Load clients list when selector is shown
   useEffect(() => {
@@ -86,15 +104,15 @@ export function DepositFundsDialog({
   // Reset on close
   useEffect(() => {
     if (!open) {
-      setAmount("");
       setMethod("");
       setTrxId("");
-      setPlatform("");
       setSubmitting(false);
       setPaymentDate(new Date());
       setSelectedAccountId("");
       setProofFile(null);
       setProofPreview(null);
+      setPlatformEnabled({ meta: false, tiktok: false, google: false });
+      setPlatformAmounts({ meta: "", tiktok: "", google: "" });
       if (!clientId) setSelectedClient("");
     }
   }, [open, clientId]);
@@ -126,7 +144,7 @@ export function DepositFundsDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0 || !method || !platform || !resolvedClientId) return;
+    if (!hasValidPlatform || !method || !resolvedClientId) return;
     setSubmitting(true);
 
     let proofUrl: string | null = null;
@@ -153,12 +171,24 @@ export function DepositFundsDialog({
       }
     }
 
+    // Build platform_amounts (only non-zero enabled platforms)
+    const platformAmountsObj: Record<string, number> = {};
+    PLATFORMS.forEach(p => {
+      if (platformEnabled[p.key] && Number(platformAmounts[p.key]) > 0) {
+        platformAmountsObj[p.key] = Number(platformAmounts[p.key]);
+      }
+    });
+
+    const enabledKeys = Object.keys(platformAmountsObj);
+    const platformValue = enabledKeys.length === 1 ? enabledKeys[0] : null;
+
     const insertPayload: any = {
       client_id: resolvedClientId,
-      amount_bdt: Number(amount),
+      amount_bdt: totalAmount,
       payment_method: method,
       transaction_id: trxId || null,
-      platform,
+      platform: platformValue,
+      platform_amounts: platformAmountsObj,
       received_in_account_id: selectedAccountId || null,
       proof_image_url: proofUrl,
     };
@@ -200,25 +230,48 @@ export function DepositFundsDialog({
               </Select>
             </div>
           )}
-          <div className="space-y-2">
-            <Label>Platform</Label>
-            <Select value={platform} onValueChange={setPlatform} required>
-              <SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="meta">Meta</SelectItem>
-                <SelectItem value="tiktok">TikTok</SelectItem>
-                <SelectItem value="google">Google</SelectItem>
-              </SelectContent>
-            </Select>
+
+          {/* Multi-Platform Amount Inputs */}
+          <div className="space-y-3">
+            <Label>Platform Amounts (BDT)</Label>
+            <div className="space-y-2 rounded-lg border p-3">
+              {PLATFORMS.map((p) => (
+                <div key={p.key} className="flex items-center gap-3">
+                  <Checkbox
+                    id={`platform-${p.key}`}
+                    checked={platformEnabled[p.key]}
+                    onCheckedChange={(checked) => {
+                      setPlatformEnabled(prev => ({ ...prev, [p.key]: !!checked }));
+                      if (!checked) setPlatformAmounts(prev => ({ ...prev, [p.key]: "" }));
+                    }}
+                  />
+                  <label
+                    htmlFor={`platform-${p.key}`}
+                    className="w-16 text-sm font-medium cursor-pointer select-none"
+                  >
+                    {p.label}
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    placeholder="৳ 0.00"
+                    value={platformAmounts[p.key]}
+                    onChange={(e) => setPlatformAmounts(prev => ({ ...prev, [p.key]: e.target.value }))}
+                    disabled={!platformEnabled[p.key]}
+                    className="flex-1"
+                  />
+                </div>
+              ))}
+              {totalAmount > 0 && (
+                <div className="flex justify-between items-center pt-2 border-t mt-2">
+                  <span className="text-sm font-medium text-muted-foreground">Total</span>
+                  <span className="text-sm font-semibold">৳{totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Amount (BDT)</Label>
-            <Input
-              type="number" step="0.01" min="1"
-              value={amount} onChange={(e) => setAmount(e.target.value)}
-              placeholder="৳ 0.00" required
-            />
-          </div>
+
           <div className="space-y-2">
             <Label>Payment Method</Label>
             <Select value={method} onValueChange={setMethod} required>
@@ -326,7 +379,7 @@ export function DepositFundsDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !method || !amount || !platform || !resolvedClientId}>
+            <Button type="submit" disabled={submitting || !method || !hasValidPlatform || !resolvedClientId}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit Request
             </Button>
