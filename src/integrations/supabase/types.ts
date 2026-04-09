@@ -1484,6 +1484,7 @@ export type Database = {
           payment_date: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform: string | null
+          platform_amounts: Json | null
           proof_image_url: string | null
           received_in_account_id: string | null
           status: Database["public"]["Enums"]["payment_request_status"]
@@ -1502,6 +1503,7 @@ export type Database = {
           payment_date?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
+          platform_amounts?: Json | null
           proof_image_url?: string | null
           received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
@@ -1520,6 +1522,7 @@ export type Database = {
           payment_date?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           platform?: string | null
+          platform_amounts?: Json | null
           proof_image_url?: string | null
           received_in_account_id?: string | null
           status?: Database["public"]["Enums"]["payment_request_status"]
