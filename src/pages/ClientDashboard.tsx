@@ -112,19 +112,19 @@ export default function ClientDashboard() {
   const fetchAll = useCallback(async () => {
     if (!effectiveClientId) return;
     const [{ data: txData }, { data: accountLinks }] = await Promise.all([
-      supabase.from("transactions").select("*").eq("client_id", effectiveClientId).order("date", { ascending: false }),
+      supabase.from("transactions").select("id, type, amount, platform, description, date, created_at, status").eq("client_id", effectiveClientId).eq("status", "completed").order("date", { ascending: false }),
       supabase.from("ad_account_clients").select("ad_account_id, mapping_keyword").eq("client_id", effectiveClientId).neq("mapping_keyword", ""),
     ]);
     setTransactions((txData as Transaction[]) ?? []);
 
     const accIds = accountLinks?.map((a: any) => a.ad_account_id) ?? [];
     if (accIds.length > 0) {
-      const { data: accounts } = await supabase.from("ad_accounts").select("*").in("id", accIds);
+      const { data: accounts } = await supabase.from("ad_accounts").select("id, account_name, platform_name, is_active").in("id", accIds);
       setAdAccounts(accounts ?? []);
       const { data: campaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform").in("ad_account_id", accIds).eq("client_id", effectiveClientId);
       const campIds = campaigns?.map((c: any) => c.id) ?? [];
       if (campIds.length > 0) {
-        const { data: metrics } = await supabase.from("daily_metrics").select("*").in("campaign_id", campIds).order("data_date", { ascending: false });
+        const { data: metrics } = await supabase.from("daily_metrics").select("campaign_id, data_date, spend, impressions, clicks, results, conversion_value, synced_at").in("campaign_id", campIds).order("data_date", { ascending: false });
         const enriched = (metrics ?? []).map((m: any) => {
           const camp = campaigns?.find((c: any) => c.id === m.campaign_id);
           return { ...m, ad_account_id: camp?.ad_account_id, platform_name: camp?.platform, date: m.data_date, final_billable_usd: m.spend };

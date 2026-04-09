@@ -77,9 +77,9 @@ export default function ClientList() {
           .in("user_id", ids),
         supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
         supabase.from("campaigns").select("id, ad_account_id, platform"),
-        supabase.from("daily_metrics").select("campaign_id, spend"),
+        supabase.from("daily_metrics").select("campaign_id, spend").gte("data_date", new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)),
         supabase.from("ad_account_clients").select("ad_account_id, client_id"),
-        supabase.from("transactions").select("client_id, type, amount, platform").eq("status", "completed"),
+        supabase.from("transactions").select("client_id, type, amount, platform, status").eq("status", "completed"),
       ]);
 
       setClients(profilesRes.data || []);
