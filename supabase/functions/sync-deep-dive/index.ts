@@ -691,7 +691,7 @@ Deno.serve(async (req) => {
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -718,7 +718,7 @@ Deno.serve(async (req) => {
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -826,8 +826,8 @@ Deno.serve(async (req) => {
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
             const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
-            const tiktokConvDm = conversions; // Use optimization conversion as messaging proxy
-            const tiktokLeadsDm = conversions; // For DM-optimized lead gen campaigns, conversion = DM leads
+            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10); // Real "Conversations (TikTok DM)" from API
+            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0; // Attribute leads only when DM conversations exist
             const rawCampaignId = row.dimensions?.campaign_id;
             const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
