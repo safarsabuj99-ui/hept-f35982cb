@@ -1,50 +1,63 @@
 
 
-## Fix Push Notifications — Root Cause & Plan
+## Multi-Platform Deposit Funds
 
-### Problem
-The database trigger `trigger_send_push` (which calls the `send-push` edge function when a notification is inserted) **does not exist** on the `notifications` table. The function exists, but no trigger connects it. So notifications are created in the database, but the push delivery step never fires.
+### What Changes
 
-### Fix
+Currently, both the `DepositFundsDialog` (client-facing) and `AddFunds` page (admin-facing) only allow selecting **one platform** per deposit. The user wants clients to specify amounts for **multiple platforms** (Meta, TikTok, Google) in a single deposit request.
 
-**1. Create the missing trigger (database migration)**
+### Approach
 
-```sql
--- Ensure pg_net is enabled for async HTTP calls
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
--- Attach trigger to notifications table
-CREATE TRIGGER on_notification_send_push
-  AFTER INSERT ON public.notifications
-  FOR EACH ROW
-  EXECUTE FUNCTION public.trigger_send_push();
+Since the `payment_requests` table has a single `platform` (text) and `amount_bdt` (numeric) column, the cleanest approach is to add a new JSONB column `platform_amounts` that stores per-platform breakdown, e.g.:
+```json
+{"meta": 5000, "tiktok": 3000, "google": 0}
 ```
 
-**2. Store vault secrets for the trigger function**
+The existing `platform` and `amount_bdt` columns continue to work (backward compatible). When `platform_amounts` is set, `amount_bdt` becomes the **total** and `platform` can be set to `"multi"` or left null.
 
-The `trigger_send_push` function reads `supabase_url` and `service_role_key` from `vault.decrypted_secrets`. These need to be inserted:
+### Database Migration
 
-```sql
-SELECT vault.create_secret(
-  current_setting('app.settings.supabase_url', true),
-  'supabase_url'
-);
-SELECT vault.create_secret(
-  current_setting('app.settings.service_role_key', true),
-  'service_role_key'
-);
+- Add column `platform_amounts jsonb default null` to `payment_requests`
+- No RLS changes needed (same policies apply)
+
+### UI Changes — `DepositFundsDialog.tsx`
+
+Replace the single platform dropdown + single amount input with:
+- **Platform amount rows**: Three inline rows for Meta, TikTok, Google, each with a checkbox toggle and amount input
+- Only enabled platforms require an amount
+- Auto-calculated total displayed below
+- At least one platform must be selected with amount > 0
+
+```text
+Platform Amounts
+┌──────────────────────────────────┐
+│ ☑ Meta         ৳ [  5,000.00  ] │
+│ ☑ TikTok       ৳ [  3,000.00  ] │
+│ ☐ Google       ৳ [     0.00   ] │
+├──────────────────────────────────┤
+│ Total:                ৳ 8,000.00│
+└──────────────────────────────────┘
 ```
 
-Since we can't read vault to verify, the migration will use `INSERT ... ON CONFLICT DO NOTHING` with the actual Supabase URL and service role key values sourced from environment.
+On submit:
+- `amount_bdt` = sum of all platform amounts
+- `platform_amounts` = `{ meta: 5000, tiktok: 3000 }` (only non-zero)
+- `platform` = single platform key if only one selected, otherwise `null`
 
-**3. Verify edge function is deployed**
+### UI Changes — `AddFunds.tsx` (Admin)
 
-Check that `send-push` is deployed and callable. Redeploy if needed.
+Same multi-platform pattern: allow admin to specify per-platform USD amounts when adding funds. On submit, create **separate transaction rows per platform** (since `transactions.platform` is an enum and each transaction tracks one platform's balance). This preserves wallet sub-balance integrity.
 
-### Files Changed
-- **New migration** — creates the trigger + vault secrets
-- No application code changes needed
+### Admin Approval Side
 
-### Expected Result
-After this fix, every new row in the `notifications` table will fire the trigger → call `send-push` edge function → deliver a browser push notification to users who have subscribed.
+When admin views/approves a multi-platform payment request, the `platform_amounts` JSON will show the breakdown. The approval flow (in `approve-payment` edge function or wherever it lives) will need to create one transaction per platform entry.
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| **New migration** | Add `platform_amounts jsonb` to `payment_requests` |
+| `src/components/DepositFundsDialog.tsx` | Multi-platform amount inputs replacing single platform+amount |
+| `src/pages/AddFunds.tsx` | Multi-platform amount inputs, create per-platform transactions |
+| `supabase/functions/approve-payment/index.ts` | Handle `platform_amounts` to create per-platform transactions on approval |
 
