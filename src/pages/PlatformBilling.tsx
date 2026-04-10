@@ -45,6 +45,10 @@ export default function PlatformBilling() {
   const [newInvoice, setNewInvoice] = useState({ org_id: "", amount_bdt: 0, period_start: "", period_end: "", due_date: "" });
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
+  const [pendingPayments, setPendingPayments] = useState<SubscriptionPayment[]>([]);
+  const [reviewingPayment, setReviewingPayment] = useState<SubscriptionPayment | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchData = async () => {
