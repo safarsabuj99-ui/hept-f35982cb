@@ -67,6 +67,7 @@ const PlatformBenchmarks = lazy(() => import("@/pages/PlatformBenchmarks"));
 const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const Signup = lazy(() => import("@/pages/Signup"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +101,7 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
                 <Route path="/" element={<LandingPage />} />
 
                 {/* Platform Owner routes */}
