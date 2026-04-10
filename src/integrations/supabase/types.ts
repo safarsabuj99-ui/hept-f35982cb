@@ -1417,6 +1417,7 @@ export type Database = {
       organizations: {
         Row: {
           accent_color: string
+          allowed_features: Json
           brand_name: string
           created_at: string
           grace_period_days: number
@@ -1438,6 +1439,7 @@ export type Database = {
         }
         Insert: {
           accent_color?: string
+          allowed_features?: Json
           brand_name?: string
           created_at?: string
           grace_period_days?: number
@@ -1459,6 +1461,7 @@ export type Database = {
         }
         Update: {
           accent_color?: string
+          allowed_features?: Json
           brand_name?: string
           created_at?: string
           grace_period_days?: number
@@ -1685,6 +1688,7 @@ export type Database = {
       platform_plans: {
         Row: {
           created_at: string
+          feature_flags: Json
           features: Json
           id: string
           is_active: boolean
@@ -1700,6 +1704,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          feature_flags?: Json
           features?: Json
           id?: string
           is_active?: boolean
@@ -1715,6 +1720,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          feature_flags?: Json
           features?: Json
           id?: string
           is_active?: boolean
