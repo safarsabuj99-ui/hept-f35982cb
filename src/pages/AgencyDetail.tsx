@@ -12,8 +12,9 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard, Check, X } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { ALL_FEATURE_KEYS, FEATURE_LABELS } from "@/hooks/useOrgFeatures";
 
 interface UsageStats {
   clientsUsed: number;
@@ -273,7 +274,30 @@ export default function AgencyDetail() {
             </Card>
           )}
 
-          {/* Plan & Status */}
+          {/* Enabled Features */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Plan Features</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {ALL_FEATURE_KEYS.map((key) => {
+                  const enabled = (org as any).allowed_features?.[key] === true;
+                  return (
+                    <div key={key} className="flex items-center gap-2 text-sm">
+                      {enabled ? (
+                        <Check className="h-3.5 w-3.5 text-success shrink-0" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                      )}
+                      <span className={enabled ? "text-foreground" : "text-muted-foreground/50 line-through"}>
+                        {FEATURE_LABELS[key]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-base">Plan</CardTitle></CardHeader>

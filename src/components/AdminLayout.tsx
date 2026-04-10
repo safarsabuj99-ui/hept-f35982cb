@@ -14,6 +14,7 @@ import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
 import { usePrefetch } from "@/hooks/usePrefetch";
+import { useOrgFeatures, type FeatureKey } from "@/hooks/useOrgFeatures";
 import {
   Sidebar,
   SidebarContent,
