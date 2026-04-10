@@ -195,7 +195,97 @@ export default function PlatformBilling() {
     toast({ title: "Payment rejected" }); setSaving(false); setReviewingPayment(null); setRejectNote(""); fetchData();
   };
 
-  const exportCSV = () => {
+  const approveUpgrade = async (req: UpgradeRequest) => {
+    setSaving(true);
+    try {
+      // Update request status
+      await supabase.from("plan_upgrade_requests").update({ status: "approved", reviewed_at: new Date().toISOString() } as any).eq("id", req.id);
+
+      // Fetch the target plan details
+      const { data: planData } = await supabase.from("platform_plans").select("*").eq("key", req.requested_plan).single();
+      if (planData) {
+        const featureFlags = (planData as any).feature_flags || {};
+        // Update organization plan, limits, features
+        await supabase.from("organizations").update({
+          plan: req.requested_plan as any,
+          max_clients: (planData as any).max_clients,
+          max_ad_accounts: (planData as any).max_ad_accounts,
+          max_managers: (planData as any).max_managers,
+          allowed_features: featureFlags,
+        }).eq("id", req.org_id);
+
+        // Update subscription
+        const amount = req.requested_billing_cycle === "yearly" ? (planData as any).price_bdt_yearly : (planData as any).price_bdt_monthly;
+        await supabase.from("organization_subscriptions").update({
+          plan: req.requested_plan as any,
+          billing_cycle: req.requested_billing_cycle as any,
+          amount_bdt: amount,
+          updated_at: new Date().toISOString(),
+        } as any).eq("org_id", req.org_id);
+
+        // Create a new invoice for the upgraded plan
+        const invNum = `INV-UPG-${Date.now().toString(36).toUpperCase()}`;
+        const today = new Date().toISOString().slice(0, 10);
+        const periodEnd = req.requested_billing_cycle === "yearly"
+          ? new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().slice(0, 10)
+          : new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().slice(0, 10);
+        const dueDate = new Date(new Date().setDate(new Date().getDate() + 15)).toISOString().slice(0, 10);
+
+        await supabase.from("platform_invoices" as any).insert({
+          org_id: req.org_id,
+          invoice_number: invNum,
+          amount_bdt: amount,
+          period_start: today,
+          period_end: periodEnd,
+          status: "sent",
+          due_date: dueDate,
+        } as any);
+      }
+
+      // Notify agency admin
+      const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id, name").eq("id", req.org_id).single();
+      if (orgOwner) {
+        await supabase.from("notifications").insert({
+          user_id: orgOwner.owner_user_id,
+          title: "Plan Upgrade Approved ✅",
+          body: `Your upgrade to ${req.requested_plan} plan has been approved! Your new limits and features are now active.`,
+          type: "system" as any,
+          priority: "normal",
+          link: "/admin/subscription",
+        });
+      }
+
+      toast({ title: "Upgrade approved", description: `${req.org_name} upgraded to ${req.requested_plan}` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSaving(false);
+    fetchData();
+  };
+
+  const rejectUpgrade = async (req: UpgradeRequest) => {
+    if (!upgradeRejectNote.trim()) { toast({ title: "Please provide a rejection reason", variant: "destructive" }); return; }
+    setSaving(true);
+    await supabase.from("plan_upgrade_requests").update({
+      status: "rejected",
+      admin_note: upgradeRejectNote.trim(),
+      reviewed_at: new Date().toISOString(),
+    } as any).eq("id", req.id);
+
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", req.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({
+        user_id: orgOwner.owner_user_id,
+        title: "Plan Upgrade Rejected ❌",
+        body: `Your upgrade request to ${req.requested_plan} was rejected. Reason: ${upgradeRejectNote.trim()}`,
+        type: "system" as any,
+        priority: "high",
+        link: "/admin/subscription",
+      });
+    }
+    toast({ title: "Upgrade rejected" }); setSaving(false); setReviewingUpgrade(null); setUpgradeRejectNote(""); fetchData();
+  };
+
     const headers = ["Invoice #", "Agency", "Amount (BDT)", "Period Start", "Period End", "Due Date", "Status", "Payment Date", "Payment Method"];
     const rows = filtered.map((i) => [i.invoice_number, i.org_name, i.amount_bdt, i.period_start, i.period_end, i.due_date || "", i.status, i.payment_date || "", i.payment_method || ""]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
