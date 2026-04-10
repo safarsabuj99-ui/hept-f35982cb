@@ -3,39 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { Loader2, TrendingUp, TrendingDown, DollarSign, Users, BarChart3, Percent } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TrendingUp, TrendingDown, DollarSign, Users, BarChart3, Percent } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Area, AreaChart } from "recharts";
 
-interface Sub {
-  id: string;
-  org_id: string;
-  plan: string;
-  amount_bdt: number;
-  billing_cycle: string;
-  payment_status: string;
-  current_period_start: string;
-  current_period_end: string;
-}
-
-interface Org {
-  id: string;
-  name: string;
-  status: string;
-  plan: string;
-  created_at: string;
-}
-
-interface MrrSnapshot {
-  snapshot_month: string;
-  total_mrr: number;
-  new_mrr: number;
-  churned_mrr: number;
-  expansion_mrr: number;
-  contraction_mrr: number;
-  active_count: number;
-}
+interface Sub { id: string; org_id: string; plan: string; amount_bdt: number; billing_cycle: string; payment_status: string; current_period_start: string; current_period_end: string; }
+interface Org { id: string; name: string; status: string; plan: string; created_at: string; }
+interface MrrSnapshot { snapshot_month: string; total_mrr: number; new_mrr: number; churned_mrr: number; expansion_mrr: number; contraction_mrr: number; active_count: number; }
 
 export default function PlatformRevenue() {
   const [subs, setSubs] = useState<Sub[]>([]);
@@ -50,10 +27,7 @@ export default function PlatformRevenue() {
         supabase.from("organizations").select("id, name, status, plan, created_at"),
         supabase.from("mrr_snapshots" as any).select("*").order("snapshot_month", { ascending: true }),
       ]);
-      setSubs((subData ?? []) as Sub[]);
-      setOrgs((orgData ?? []) as Org[]);
-      setSnapshots(((snapData as any[]) ?? []) as MrrSnapshot[]);
-      setLoading(false);
+      setSubs((subData ?? []) as Sub[]); setOrgs((orgData ?? []) as Org[]); setSnapshots(((snapData as any[]) ?? []) as MrrSnapshot[]); setLoading(false);
     };
     fetch();
   }, []);
@@ -67,10 +41,7 @@ export default function PlatformRevenue() {
     const cancelledOrgs = orgs.filter((o) => o.status === "cancelled" || o.status === "suspended");
     const churnRate = orgs.length > 0 ? (cancelledOrgs.length / orgs.length) * 100 : 0;
     const planRevenue: Record<string, number> = {};
-    activeSubs.forEach((s) => {
-      const monthly = s.billing_cycle === "yearly" ? s.amount_bdt / 12 : s.amount_bdt;
-      planRevenue[s.plan] = (planRevenue[s.plan] || 0) + monthly;
-    });
+    activeSubs.forEach((s) => { const monthly = s.billing_cycle === "yearly" ? s.amount_bdt / 12 : s.amount_bdt; planRevenue[s.plan] = (planRevenue[s.plan] || 0) + monthly; });
     const planBreakdown = Object.entries(planRevenue).map(([plan, amount]) => ({ plan, amount: Math.round(amount) }));
     const churned = cancelledOrgs.map((o) => {
       const sub = activeSubs.find((s) => s.org_id === o.id);
@@ -82,14 +53,17 @@ export default function PlatformRevenue() {
     return { mrr, arr, arpa, churnRate, mrrGrowth, nrr, planBreakdown, churned, activeCount: activeOrgs.length };
   }, [subs, orgs, snapshots]);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <Skeleton className="h-10 w-64" />
+      <div className="grid gap-3 grid-cols-3 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      <Skeleton className="h-72 rounded-xl" />
+    </div>
+  );
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Revenue Analytics</h1>
-        <p className="text-sm text-muted-foreground">MRR/ARR metrics, growth trends, and revenue breakdown</p>
-      </div>
+      <PageHeader title="Revenue Analytics" subtitle="MRR/ARR metrics, growth trends, and revenue breakdown" icon={<TrendingUp className="h-6 w-6 text-primary" />} />
 
       <div>
         <p className="section-label mb-3">Revenue KPIs</p>
@@ -112,16 +86,17 @@ export default function PlatformRevenue() {
               <CardContent>
                 {snapshots.length > 0 ? (
                   <ChartContainer config={{ mrr: { label: "MRR", color: "hsl(var(--primary))" } }} className="h-[250px]">
-                    <LineChart data={snapshots.map((s) => ({ month: s.snapshot_month.slice(0, 7), mrr: s.total_mrr }))}>
+                    <AreaChart data={snapshots.map((s) => ({ month: s.snapshot_month.slice(0, 7), mrr: s.total_mrr }))}>
+                      <defs><linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                      <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
                       <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line type="monotone" dataKey="mrr" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    </LineChart>
+                      <Area type="monotone" dataKey="mrr" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#mrrGrad)" />
+                    </AreaChart>
                   </ChartContainer>
                 ) : (
-                  <div className="h-[250px] flex items-center justify-center text-sm text-muted-foreground">No snapshot data yet. Snapshots are recorded monthly.</div>
+                  <div className="h-[250px] flex items-center justify-center text-sm text-muted-foreground">No snapshot data yet.</div>
                 )}
               </CardContent>
             </Card>
@@ -135,10 +110,10 @@ export default function PlatformRevenue() {
                   <ChartContainer config={{ amount: { label: "Monthly Revenue", color: "hsl(var(--primary))" } }} className="h-[250px]">
                     <BarChart data={metrics.planBreakdown}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="plan" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                      <XAxis dataKey="plan" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
                       <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ChartContainer>
                 ) : (
@@ -156,12 +131,10 @@ export default function PlatformRevenue() {
           <Card className="border-0 bg-transparent shadow-none">
             <CardContent className="p-0">
               <Table>
-                <TableHeader>
-                  <TableRow><TableHead>Agency</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Lost MRR</TableHead></TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Agency</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Lost MRR</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {metrics.churned.map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell><Badge variant="outline">{c.plan}</Badge></TableCell>
                       <TableCell><Badge variant={c.status === "cancelled" ? "destructive" : "secondary"}>{c.status}</Badge></TableCell>

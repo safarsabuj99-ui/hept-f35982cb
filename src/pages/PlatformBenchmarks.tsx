@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Trophy, Users, Monitor, BarChart3 } from "lucide-react";
 import { useMemo } from "react";
@@ -45,10 +46,7 @@ export default function PlatformBenchmarks() {
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Benchmark Reports</h1>
-        <p className="text-muted-foreground">Anonymous cross-agency performance comparisons</p>
-      </div>
+      <PageHeader title="Benchmark Reports" subtitle="Anonymous cross-agency performance comparisons" icon={<Trophy className="h-6 w-6 text-primary" />} />
 
       <div>
         <p className="section-label mb-3">Cross-Agency Benchmarks</p>
@@ -92,8 +90,8 @@ export default function PlatformBenchmarks() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="range" label={{ value: "Clients", position: "insideBottom", offset: -5 }} />
                 <YAxis label={{ value: "Agencies", angle: -90, position: "insideLeft" }} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
-                <Bar dataKey="agencies" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                <Bar dataKey="agencies" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

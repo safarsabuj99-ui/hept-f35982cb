@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { HeartPulse, RefreshCw, Loader2, Users, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -55,10 +56,16 @@ export default function PlatformHealthScores() {
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); } finally { setComputing(false); }
   };
 
-  const getScoreBadge = (score: number) => {
-    if (score >= 70) return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">{score}</Badge>;
-    if (score >= 40) return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">{score}</Badge>;
-    return <Badge variant="destructive">{score}</Badge>;
+  const getScoreColor = (score: number) => {
+    if (score >= 70) return "bg-success/15 text-success border-success/20";
+    if (score >= 40) return "bg-warning/15 text-warning border-warning/20";
+    return "bg-destructive/15 text-destructive border-destructive/20";
+  };
+
+  const getBarColor = (val: number) => {
+    if (val >= 70) return "bg-success";
+    if (val >= 40) return "bg-warning";
+    return "bg-destructive";
   };
 
   const avg = computedScores.length > 0 ? Math.round(computedScores.reduce((s, c) => s + c.score, 0) / computedScores.length) : 0;
@@ -67,16 +74,17 @@ export default function PlatformHealthScores() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Customer Health Scores</h1>
-          <p className="text-muted-foreground">Composite health scoring per agency</p>
-        </div>
-        <Button onClick={handleRecalculate} disabled={computing}>
-          {computing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-          Recalculate All
-        </Button>
-      </div>
+      <PageHeader
+        title="Customer Health Scores"
+        subtitle="Composite health scoring per agency"
+        icon={<HeartPulse className="h-6 w-6 text-primary" />}
+        actions={
+          <Button onClick={handleRecalculate} disabled={computing} className="press-effect">
+            {computing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Recalculate All
+          </Button>
+        }
+      />
 
       <div>
         <p className="section-label mb-3">Score Summary</p>
@@ -105,13 +113,13 @@ export default function PlatformHealthScores() {
                 </TableHeader>
                 <TableBody>
                   {computedScores.sort((a, b) => a.score - b.score).map((s) => (
-                    <TableRow key={s.org_id}>
+                    <TableRow key={s.org_id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell className="text-center">{getScoreBadge(s.score)}</TableCell>
+                      <TableCell className="text-center"><Badge className={`rounded-md ${getScoreColor(s.score)}`}>{s.score}</Badge></TableCell>
                       {[s.activity, s.payment, s.usage].map((val, i) => (
                         <TableCell key={i} className="text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <div className="w-12 h-2 rounded bg-muted overflow-hidden"><div className="h-full rounded bg-primary" style={{ width: `${val}%` }} /></div>
+                            <div className="w-12 h-2 rounded-full bg-muted overflow-hidden"><div className={`h-full rounded-full ${getBarColor(val)}`} style={{ width: `${val}%` }} /></div>
                             <span className="text-xs font-mono">{val}</span>
                           </div>
                         </TableCell>

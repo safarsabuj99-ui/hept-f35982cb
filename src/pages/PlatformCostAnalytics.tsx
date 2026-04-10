@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Plus, Calculator, DollarSign, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -49,25 +50,26 @@ export default function PlatformCostAnalytics() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Cost Analytics</h1>
-          <p className="text-muted-foreground">Track infrastructure costs and unit economics</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Add Cost</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Add Cost Entry</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Period</Label><Input type="date" value={period} onChange={(e) => setPeriod(e.target.value)} /></div>
-              <div><Label>Category</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.replace("_", " ")}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Amount (৳)</Label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></div>
-              <div><Label>Notes</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></div>
-              <Button onClick={handleAdd} disabled={!amount} className="w-full">Save</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <PageHeader
+        title="Cost Analytics"
+        subtitle="Track infrastructure costs and unit economics"
+        icon={<Calculator className="h-6 w-6 text-primary" />}
+        actions={
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild><Button className="press-effect"><Plus className="mr-2 h-4 w-4" /> Add Cost</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Add Cost Entry</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div><Label>Period</Label><Input type="date" value={period} onChange={(e) => setPeriod(e.target.value)} /></div>
+                <div><Label>Category</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.replace("_", " ")}</SelectItem>)}</SelectContent></Select></div>
+                <div><Label>Amount (৳)</Label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></div>
+                <div><Label>Notes</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></div>
+                <Button onClick={handleAdd} disabled={!amount} className="w-full">Save</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
       <div>
         <p className="section-label mb-3">Unit Economics</p>
@@ -88,9 +90,9 @@ export default function PlatformCostAnalytics() {
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="month" /><YAxis />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
-                  <Bar dataKey="revenue" fill="hsl(var(--primary))" name="Revenue" />
-                  <Bar dataKey="cost" fill="hsl(var(--destructive))" name="Cost" />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                  <Bar dataKey="revenue" fill="hsl(var(--primary))" name="Revenue" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="cost" fill="hsl(var(--destructive))" name="Cost" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -109,7 +111,7 @@ export default function PlatformCostAnalytics() {
                 <TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount (৳)</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {costs.map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell>{format(parseISO(c.period), "MMM yyyy")}</TableCell>
                       <TableCell className="capitalize">{c.category.replace("_", " ")}</TableCell>
                       <TableCell className="text-right font-mono">৳{Number(c.amount_bdt).toLocaleString()}</TableCell>

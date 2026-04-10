@@ -7,23 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Building2, Clock, AlertTriangle, XCircle, CheckCircle, ArrowRight } from "lucide-react";
+import { Building2, Clock, AlertTriangle, XCircle, CheckCircle, ArrowRight, GitBranch, Loader2 } from "lucide-react";
 
 type OrgStatus = "trial" | "active" | "suspended" | "cancelled";
+interface Org { id: string; name: string; slug: string; plan: string; status: OrgStatus; created_at: string; trial_ends_at: string | null; grace_period_days: number; status_changed_at: string; suspension_reason: string | null; max_clients: number; max_ad_accounts: number; max_managers: number; }
 
-interface Org {
-  id: string; name: string; slug: string; plan: string; status: OrgStatus; created_at: string;
-  trial_ends_at: string | null; grace_period_days: number; status_changed_at: string;
-  suspension_reason: string | null; max_clients: number; max_ad_accounts: number; max_managers: number;
-}
-
-const STATUS_COLUMNS: { key: OrgStatus; label: string; icon: React.ReactNode; iconComp: any; color: string }[] = [
-  { key: "trial", label: "Trial", icon: <Clock className="h-4 w-4" />, iconComp: Clock, color: "text-blue-500" },
-  { key: "active", label: "Active", icon: <CheckCircle className="h-4 w-4" />, iconComp: CheckCircle, color: "text-emerald-500" },
-  { key: "suspended", label: "Suspended", icon: <AlertTriangle className="h-4 w-4" />, iconComp: AlertTriangle, color: "text-amber-500" },
-  { key: "cancelled", label: "Cancelled", icon: <XCircle className="h-4 w-4" />, iconComp: XCircle, color: "text-destructive" },
+const STATUS_COLUMNS: { key: OrgStatus; label: string; icon: React.ReactNode; iconComp: any; color: string; borderColor: string }[] = [
+  { key: "trial", label: "Trial", icon: <Clock className="h-4 w-4" />, iconComp: Clock, color: "text-blue-400", borderColor: "border-t-blue-500" },
+  { key: "active", label: "Active", icon: <CheckCircle className="h-4 w-4" />, iconComp: CheckCircle, color: "text-success", borderColor: "border-t-success" },
+  { key: "suspended", label: "Suspended", icon: <AlertTriangle className="h-4 w-4" />, iconComp: AlertTriangle, color: "text-warning", borderColor: "border-t-warning" },
+  { key: "cancelled", label: "Cancelled", icon: <XCircle className="h-4 w-4" />, iconComp: XCircle, color: "text-destructive", borderColor: "border-t-destructive" },
 ];
 
 function daysAgo(dateStr: string) { return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000); }
@@ -38,12 +35,7 @@ export default function TenantLifecycle() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const fetchOrgs = async () => {
-    const { data } = await supabase.from("organizations").select("*").order("created_at", { ascending: false });
-    setOrgs((data as any[]) ?? []);
-    setLoading(false);
-  };
-
+  const fetchOrgs = async () => { const { data } = await supabase.from("organizations").select("*").order("created_at", { ascending: false }); setOrgs((data as any[]) ?? []); setLoading(false); };
   useEffect(() => { fetchOrgs(); }, []);
 
   const grouped = STATUS_COLUMNS.map((col) => ({ ...col, orgs: orgs.filter((o) => o.status === col.key) }));
@@ -64,25 +56,24 @@ export default function TenantLifecycle() {
     switch (current) { case "trial": return ["active", "suspended"]; case "active": return ["suspended", "cancelled"]; case "suspended": return ["active", "cancelled"]; case "cancelled": return ["active"]; default: return []; }
   };
 
-  const planBadgeVariant = (plan: string) => { if (plan === "agency_pro") return "default"; if (plan === "growth") return "secondary"; return "outline"; };
-
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-
   const accentColors = ["hsl(214, 80%, 52%)", "hsl(var(--success))", "hsl(var(--warning))", "hsl(var(--destructive))"];
+
+  if (loading) return (
+    <div className="space-y-6">
+      <Skeleton className="h-10 w-64" />
+      <div className="grid gap-3 grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      <div className="grid gap-4 grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}</div>
+    </div>
+  );
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Tenant Lifecycle</h1>
-        <p className="text-sm text-muted-foreground">Visual pipeline of agency states with transition controls</p>
-      </div>
+      <PageHeader title="Tenant Lifecycle" subtitle="Visual pipeline of agency states with transition controls" icon={<GitBranch className="h-6 w-6 text-primary" />} />
 
       <div>
         <p className="section-label mb-3">Status Overview</p>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-          {grouped.map((col, i) => (
-            <KpiCard key={col.key} title={col.label} value={String(col.orgs.length)} icon={col.iconComp} accentColor={accentColors[i]} staggerIndex={i} />
-          ))}
+          {grouped.map((col, i) => <KpiCard key={col.key} title={col.label} value={String(col.orgs.length)} icon={col.iconComp} accentColor={accentColors[i]} staggerIndex={i} />)}
         </div>
       </div>
 
@@ -91,7 +82,7 @@ export default function TenantLifecycle() {
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
           {grouped.map((col, colIdx) => (
             <div key={col.key} className="space-y-3 animate-slide-up-fade" style={{ animationDelay: `${colIdx * 100}ms`, animationFillMode: "forwards" }}>
-              <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+              <div className={`flex items-center gap-2 pb-2 border-b-2 ${col.borderColor}`}>
                 <span className={col.color}>{col.icon}</span>
                 <h3 className="font-semibold text-foreground">{col.label}</h3>
                 <Badge variant="secondary" className="ml-auto">{col.orgs.length}</Badge>
@@ -104,17 +95,17 @@ export default function TenantLifecycle() {
                   const nextStatuses = getNextStatuses(org.status);
                   return (
                     <div key={org.id} className="glass-card glow-border">
-                      <Card className="border-0 bg-transparent shadow-none cursor-pointer">
+                      <Card className="border-0 bg-transparent shadow-none">
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-start justify-between">
-                            <button onClick={() => navigate(`/platform/agencies/${org.id}`)} className="text-sm font-semibold text-foreground hover:text-primary text-left truncate max-w-[70%]">{org.name}</button>
-                            <Badge variant={planBadgeVariant(org.plan) as any} className="text-[10px] shrink-0">{org.plan}</Badge>
+                            <button onClick={() => navigate(`/platform/agencies/${org.id}`)} className="text-sm font-semibold text-foreground hover:text-primary text-left truncate max-w-[70%] transition-colors">{org.name}</button>
+                            <Badge variant="outline" className="text-[10px] shrink-0 capitalize">{org.plan}</Badge>
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Building2 className="h-3 w-3" />
                             <span>{daysInState}d in state</span>
                             {trialDaysLeft !== null && (
-                              <span className={`ml-auto font-medium ${trialDaysLeft <= 3 ? "text-destructive" : trialDaysLeft <= 7 ? "text-amber-500" : "text-muted-foreground"}`}>
+                              <span className={`ml-auto font-medium ${trialDaysLeft <= 3 ? "text-destructive" : trialDaysLeft <= 7 ? "text-warning" : "text-muted-foreground"}`}>
                                 {trialDaysLeft > 0 ? `${trialDaysLeft}d left` : "Expired"}
                               </span>
                             )}
@@ -124,7 +115,7 @@ export default function TenantLifecycle() {
                             {nextStatuses.map((target) => {
                               const targetCol = STATUS_COLUMNS.find((c) => c.key === target)!;
                               return (
-                                <Button key={target} variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={(e) => { e.stopPropagation(); setConfirmDialog({ org, targetStatus: target }); }}>
+                                <Button key={target} variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 press-effect" onClick={(e) => { e.stopPropagation(); setConfirmDialog({ org, targetStatus: target }); }}>
                                   <ArrowRight className="h-3 w-3" />{targetCol.label}
                                 </Button>
                               );
@@ -135,9 +126,7 @@ export default function TenantLifecycle() {
                     </div>
                   );
                 })}
-                {col.orgs.length === 0 && (
-                  <div className="text-center text-xs text-muted-foreground py-8 border border-dashed border-border/40 rounded-xl">No agencies</div>
-                )}
+                {col.orgs.length === 0 && <div className="text-center text-xs text-muted-foreground py-8 border border-dashed border-border/40 rounded-xl">No agencies</div>}
               </div>
             </div>
           ))}
@@ -150,8 +139,7 @@ export default function TenantLifecycle() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Badge variant="outline">{confirmDialog?.org.status}</Badge>
-              <ArrowRight className="h-4 w-4" />
-              <Badge>{confirmDialog?.targetStatus}</Badge>
+              <ArrowRight className="h-4 w-4" /><Badge>{confirmDialog?.targetStatus}</Badge>
             </div>
             {(confirmDialog?.targetStatus === "suspended" || confirmDialog?.targetStatus === "cancelled") && (
               <div><Label>Reason (optional)</Label><Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Non-payment, Trial expired..." rows={2} /></div>

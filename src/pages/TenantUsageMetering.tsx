@@ -7,15 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { Loader2, AlertTriangle, Users, Monitor, UserCog } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertTriangle, Users, Monitor, UserCog, BarChart3 } from "lucide-react";
 
 interface Org { id: string; name: string; plan: string; status: string; max_clients: number; max_ad_accounts: number; max_managers: number; }
 interface UsageRow extends Org { clientCount: number; adAccountCount: number; managerCount: number; hasOverage: boolean; }
 
 function usagePct(used: number, limit: number) { if (limit === 0) return 100; return Math.min(Math.round((used / limit) * 100), 100); }
-function usageColor(pct: number) { if (pct >= 90) return "text-destructive"; if (pct >= 70) return "text-amber-500"; return "text-emerald-500"; }
-function progressColor(pct: number) { if (pct >= 90) return "[&>div]:bg-destructive"; if (pct >= 70) return "[&>div]:bg-amber-500"; return "[&>div]:bg-emerald-500"; }
+function usageColor(pct: number) { if (pct >= 90) return "text-destructive"; if (pct >= 70) return "text-warning"; return "text-success"; }
+function progressColor(pct: number) { if (pct >= 90) return "[&>div]:bg-destructive"; if (pct >= 70) return "[&>div]:bg-warning"; return "[&>div]:bg-success"; }
 
 export default function TenantUsageMetering() {
   const [usageRows, setUsageRows] = useState<UsageRow[]>([]);
@@ -35,8 +37,7 @@ export default function TenantUsageMetering() {
       const profiles = profileData ?? []; const accounts = adAccountData ?? [];
       const { data: rolesData } = await supabase.from("user_roles").select("user_id, role");
       const roles = rolesData ?? [];
-      const roleMap = new Map<string, string>();
-      roles.forEach((r) => roleMap.set(r.user_id, r.role));
+      const roleMap = new Map<string, string>(); roles.forEach((r) => roleMap.set(r.user_id, r.role));
       const rows: UsageRow[] = (orgData ?? []).map((org: any) => {
         const orgProfiles = profiles.filter((p) => p.org_id === org.id);
         const clientCount = orgProfiles.filter((p) => roleMap.get(p.user_id) === "client").length;
@@ -50,29 +51,29 @@ export default function TenantUsageMetering() {
     fetch();
   }, []);
 
-  const filtered = useMemo(() => {
-    return usageRows.filter((r) => {
-      if (planFilter !== "all" && r.plan !== planFilter) return false;
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (overageOnly && !r.hasOverage) return false;
-      return true;
-    });
-  }, [usageRows, planFilter, statusFilter, overageOnly]);
+  const filtered = useMemo(() => usageRows.filter((r) => {
+    if (planFilter !== "all" && r.plan !== planFilter) return false;
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (overageOnly && !r.hasOverage) return false;
+    return true;
+  }), [usageRows, planFilter, statusFilter, overageOnly]);
 
   const overageCount = usageRows.filter((r) => r.hasOverage).length;
-  const totalOrgs = usageRows.length;
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <Skeleton className="h-10 w-64" />
+      <div className="grid gap-3 grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      <Skeleton className="h-96 rounded-xl" />
+    </div>
+  );
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Usage Metering</h1>
-        <p className="text-sm text-muted-foreground">Monitor agency resource consumption vs plan limits</p>
-      </div>
+      <PageHeader title="Usage Metering" subtitle="Monitor agency resource consumption vs plan limits" icon={<BarChart3 className="h-6 w-6 text-primary" />} />
 
       {overageCount > 0 && (
-        <div className="glass-card border-destructive/30 animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+        <div className="glass-card border-l-4 border-l-destructive animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
           <Card className="border-0 bg-transparent shadow-none">
             <CardContent className="p-4 flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
@@ -80,7 +81,7 @@ export default function TenantUsageMetering() {
                 <p className="text-sm font-medium text-foreground">{overageCount} {overageCount === 1 ? "agency exceeds" : "agencies exceed"} plan limits</p>
                 <p className="text-xs text-muted-foreground">Review and consider upgrading their plans</p>
               </div>
-              <Button variant="outline" size="sm" className="ml-auto" onClick={() => setOverageOnly(true)}>Show Over-Limit</Button>
+              <Button variant="outline" size="sm" className="ml-auto press-effect" onClick={() => setOverageOnly(true)}>Show Over-Limit</Button>
             </CardContent>
           </Card>
         </div>
@@ -89,7 +90,7 @@ export default function TenantUsageMetering() {
       <div>
         <p className="section-label mb-3">Summary</p>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-          <KpiCard title="Total Agencies" value={String(totalOrgs)} icon={Users} staggerIndex={0} />
+          <KpiCard title="Total Agencies" value={String(usageRows.length)} icon={Users} staggerIndex={0} />
           <KpiCard title="Over Limit" value={String(overageCount)} icon={AlertTriangle} accentColor="hsl(var(--destructive))" staggerIndex={1} />
           <KpiCard title="Total Ad Accounts" value={String(usageRows.reduce((s, r) => s + r.adAccountCount, 0))} icon={Monitor} staggerIndex={2} />
           <KpiCard title="Total Clients" value={String(usageRows.reduce((s, r) => s + r.clientCount, 0))} icon={UserCog} staggerIndex={3} />
@@ -115,7 +116,7 @@ export default function TenantUsageMetering() {
             <SelectItem value="suspended">Suspended</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant={overageOnly ? "default" : "outline"} size="sm" onClick={() => setOverageOnly(!overageOnly)}>
+        <Button variant={overageOnly ? "default" : "outline"} size="sm" onClick={() => setOverageOnly(!overageOnly)} className="press-effect">
           <AlertTriangle className="h-3 w-3 mr-1" />Over Limit Only
         </Button>
       </div>
@@ -125,10 +126,7 @@ export default function TenantUsageMetering() {
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Agency</TableHead><TableHead>Plan</TableHead><TableHead>Clients</TableHead>
-                  <TableHead>Ad Accounts</TableHead><TableHead>Managers</TableHead><TableHead>Status</TableHead>
-                </TableRow>
+                <TableRow><TableHead>Agency</TableHead><TableHead>Plan</TableHead><TableHead>Clients</TableHead><TableHead>Ad Accounts</TableHead><TableHead>Managers</TableHead><TableHead>Status</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => {
@@ -136,14 +134,14 @@ export default function TenantUsageMetering() {
                   const adPct = usagePct(row.adAccountCount, row.max_ad_accounts);
                   const mgrPct = usagePct(row.managerCount, row.max_managers);
                   return (
-                    <TableRow key={row.id} className="cursor-pointer" onClick={() => navigate(`/platform/agencies/${row.id}`)}>
+                    <TableRow key={row.id} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => navigate(`/platform/agencies/${row.id}`)}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {row.hasOverage && <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />}
                           <span className="font-medium">{row.name}</span>
                         </div>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{row.plan}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="capitalize">{row.plan}</Badge></TableCell>
                       <TableCell>
                         <div className="space-y-1 min-w-[120px]">
                           <div className="flex justify-between text-xs"><span className={usageColor(clientPct)}>{row.clientCount}/{row.max_clients}</span><span className="text-muted-foreground">{clientPct}%</span></div>
@@ -162,9 +160,7 @@ export default function TenantUsageMetering() {
                           <Progress value={mgrPct} className={`h-1.5 ${progressColor(mgrPct)}`} />
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={row.status === "active" ? "default" : row.status === "trial" ? "secondary" : "destructive"}>{row.status}</Badge>
-                      </TableCell>
+                      <TableCell><Badge variant={row.status === "active" ? "default" : row.status === "trial" ? "secondary" : "destructive"}>{row.status}</Badge></TableCell>
                     </TableRow>
                   );
                 })}
