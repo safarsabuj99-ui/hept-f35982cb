@@ -262,6 +262,14 @@ export default function PlatformBilling() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="verifications" className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Verifications
+            {pendingPayments.filter(p => p.status === "pending").length > 0 && (
+              <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                {pendingPayments.filter(p => p.status === "pending").length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="timeline">Payment Timeline</TabsTrigger>
           <TabsTrigger value="health">Agency Health</TabsTrigger>
         </TabsList>
