@@ -15,8 +15,8 @@ interface BrandingData {
 const defaultBranding: BrandingData = {
   brandName: "HEPT",
   logoUrl: null,
-  primaryColor: "#6d28d9",
-  accentColor: "#f59e0b",
+  primaryColor: "#2655cc",
+  accentColor: "#e8eef8",
   loading: true,
   refetch: () => {},
 };
@@ -75,8 +75,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!org) return;
     const root = document.documentElement;
-    const primaryHsl = hexToHsl(org.primary_color || "#6d28d9");
-    const accentHsl = hexToHsl(org.accent_color || "#f59e0b");
+    const primaryHsl = hexToHsl(org.primary_color || "#2655cc");
+    const accentHsl = hexToHsl(org.accent_color || "#e8eef8");
     if (primaryHsl) {
       root.style.setProperty("--primary", primaryHsl);
       root.style.setProperty("--sidebar-primary", primaryHsl);
@@ -98,8 +98,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const value: BrandingData = {
     brandName: org?.brand_name || "HEPT",
     logoUrl: org?.logo_url || null,
-    primaryColor: org?.primary_color || "#6d28d9",
-    accentColor: org?.accent_color || "#f59e0b",
+    primaryColor: org?.primary_color || "#2655cc",
+    accentColor: org?.accent_color || "#e8eef8",
     loading: isLoading,
     refetch,
   };

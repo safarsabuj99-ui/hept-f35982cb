@@ -190,7 +190,7 @@ export function BrandingTab() {
                 <Input
                   value={primary}
                   onChange={(e) => setPrimary(e.target.value)}
-                  placeholder="#6d28d9"
+                  placeholder="#2655cc"
                   className="font-mono text-sm"
                   maxLength={7}
                 />
@@ -209,7 +209,7 @@ export function BrandingTab() {
                 <Input
                   value={accent}
                   onChange={(e) => setAccent(e.target.value)}
-                  placeholder="#f59e0b"
+                  placeholder="#e8eef8"
                   className="font-mono text-sm"
                   maxLength={7}
                 />
