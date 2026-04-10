@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface UsageStats {
@@ -21,11 +21,22 @@ interface UsageStats {
   managersUsed: number;
 }
 
+interface PlanOption {
+  key: string;
+  name: string;
+  max_clients: number;
+  max_ad_accounts: number;
+  max_managers: number;
+  price_bdt_monthly: number;
+}
+
 export default function AgencyDetail() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const [org, setOrg] = useState<(Tables<"organizations"> & { suspension_reason?: string; notes?: string }) | null>(null);
   const [usage, setUsage] = useState<UsageStats>({ clientsUsed: 0, adAccountsUsed: 0, managersUsed: 0 });
   const [adminProfile, setAdminProfile] = useState<Tables<"profiles"> | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,15 +49,19 @@ export default function AgencyDetail() {
   useEffect(() => {
     if (!agencyId) return;
     const fetch = async () => {
-      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }] = await Promise.all([
+      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }, { data: subData }, { data: planData }] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", agencyId).single(),
         supabase.from("profiles").select("*").eq("org_id", agencyId),
         supabase.from("ad_accounts").select("id").eq("org_id", agencyId),
         supabase.from("platform_invoices" as any).select("*").eq("org_id", agencyId).order("created_at", { ascending: false }),
         supabase.from("audit_logs").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("organization_subscriptions").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly").eq("is_active", true).order("sort_order"),
       ]);
 
       setOrg(orgData as any);
+      setSubscription(subData?.[0] ?? null);
+      if (planData?.length) setPlans(planData as PlanOption[]);
 
       const clients = profiles?.filter((p) => !p.is_super_admin && p.user_id !== orgData?.owner_user_id) ?? [];
       const managers = profiles?.filter((p) => {
@@ -75,6 +90,39 @@ export default function AgencyDetail() {
     const { error } = await supabase.from("organizations").update({ [field]: value } as any).eq("id", agencyId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else { setOrg((prev) => prev ? { ...prev, [field]: value } : prev); toast({ title: "Updated" }); }
+    setSaving(false);
+  };
+
+  const handlePlanChange = async (newPlan: string) => {
+    if (!agencyId) return;
+    setSaving(true);
+    const planInfo = plans.find((p) => p.key === newPlan);
+
+    // Update org plan + resource limits
+    const updates: any = { plan: newPlan };
+    if (planInfo) {
+      updates.max_clients = planInfo.max_clients;
+      updates.max_ad_accounts = planInfo.max_ad_accounts;
+      updates.max_managers = planInfo.max_managers;
+    }
+
+    const { error } = await supabase.from("organizations").update(updates).eq("id", agencyId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setOrg((prev) => prev ? { ...prev, ...updates } : prev);
+
+      // Update subscription record too
+      if (subscription && planInfo) {
+        await supabase
+          .from("organization_subscriptions")
+          .update({ plan: newPlan as any, amount_bdt: planInfo.price_bdt_monthly, updated_at: new Date().toISOString() })
+          .eq("id", subscription.id);
+        setSubscription((prev: any) => prev ? { ...prev, plan: newPlan, amount_bdt: planInfo.price_bdt_monthly } : prev);
+      }
+
+      toast({ title: "Plan updated", description: `Plan changed to ${planInfo?.name ?? newPlan}. Resource limits synced.` });
+    }
     setSaving(false);
   };
 
@@ -165,6 +213,40 @@ export default function AgencyDetail() {
             ))}
           </div>
 
+          {/* Subscription Info */}
+          {subscription && (
+            <Card>
+              <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Subscription</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Amount</p>
+                    <p className="font-medium">৳{subscription.amount_bdt?.toLocaleString()}/{subscription.billing_cycle === "yearly" ? "yr" : "mo"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payment</p>
+                    <Badge className={
+                      subscription.payment_status === "paid" ? "bg-success/10 text-success" :
+                      subscription.payment_status === "overdue" ? "bg-destructive/10 text-destructive" :
+                      "bg-warning/10 text-warning"
+                    }>{subscription.payment_status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Period End</p>
+                    <p className="font-medium">{subscription.current_period_end}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Cycle</p>
+                    <p className="font-medium capitalize">{subscription.billing_cycle}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Admin Contact */}
           {adminProfile && (
             <Card>
@@ -187,12 +269,18 @@ export default function AgencyDetail() {
             <Card>
               <CardHeader><CardTitle className="text-base">Plan</CardTitle></CardHeader>
               <CardContent>
-                <Select value={org.plan} onValueChange={(v) => updateField("plan", v)} disabled={saving}>
+                <Select value={org.plan} onValueChange={handlePlanChange} disabled={saving}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="growth">Growth</SelectItem>
-                    <SelectItem value="agency_pro">Agency Pro</SelectItem>
+                    {plans.length > 0 ? plans.map((p) => (
+                      <SelectItem key={p.key} value={p.key}>{p.name}</SelectItem>
+                    )) : (
+                      <>
+                        <SelectItem value="starter">Starter</SelectItem>
+                        <SelectItem value="growth">Growth</SelectItem>
+                        <SelectItem value="agency_pro">Agency Pro</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </CardContent>
