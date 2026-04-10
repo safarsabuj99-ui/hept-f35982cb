@@ -43,7 +43,14 @@ export default function NewClient() {
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", managerIds);
       setManagers(profiles ?? []);
     };
+    const fetchOrgId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("org_id").eq("user_id", user.id).maybeSingle();
+      if (data?.org_id) setAdminOrgId(data.org_id);
+    };
     fetchManagers();
+    fetchOrgId();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
