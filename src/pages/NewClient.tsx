@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface ManagerOption { user_id: string; full_name: string; }
 
 export default function NewClient() {
+  const [adminOrgId, setAdminOrgId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
