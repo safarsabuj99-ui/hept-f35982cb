@@ -285,9 +285,16 @@ export default function ClientList() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Client List</h1>
           <p className="text-sm text-muted-foreground">Manage client configurations, pricing, and history</p>
         </div>
-        <Badge variant="secondary" className="gap-1 self-start">
-          <Users className="h-3 w-3" /> {clients.length} clients
-        </Badge>
+        <div className="flex items-center gap-2 self-start">
+          <Badge variant="secondary" className="gap-1">
+            <Users className="h-3 w-3" /> {clients.length} clients
+          </Badge>
+          <Button asChild size="sm">
+            <Link to="/admin/clients/new">
+              <PlusCircle className="h-4 w-4 mr-1" /> New Client
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
