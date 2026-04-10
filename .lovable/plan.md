@@ -1,89 +1,75 @@
 
 
-## Sales Landing Page for HEPT — Digital Marketing Agency SaaS
+## Self-Service Agency Signup Flow
 
-### Overview
-Create a high-converting sales landing page at the root route (`/`) targeting digital marketers running Meta, TikTok, and Google Ads campaigns. The page will showcase all agency admin features, pain points, and benefits with a modern SaaS landing page design.
+### What It Does
+When a visitor clicks "Get Started" on the landing page, they go through a guided multi-step flow:
+1. **Select Plan** — Browse all available plans with pricing, limits, and features
+2. **Sign Up** — Create their account (name, email, password, agency name)
+3. **Payment** — Submit manual payment with proof (bKash, Nagad, Bank Transfer)
+4. **Pending State** — Account created but in "pending_payment" status until platform owner approves
 
-### Route Changes
-- Change `"/"` from redirecting to `/login` to rendering the new `LandingPage` component
-- Add a "Get Started" / "Login" button in the landing page navbar that links to `/login`
+Once the platform owner approves the payment, the organization status changes to "trial"/"active" and the agency admin gets full access.
 
-### New File: `src/pages/LandingPage.tsx`
-A single-page sales landing page with these sections:
+### Database Changes
 
-**1. Hero Section**
-- Bold headline: "Stop Managing Ad Spend on Spreadsheets"
-- Subheadline targeting pain: Manual tracking, Excel chaos, client reporting nightmares
-- CTA buttons: "Start Free Trial" + "Watch Demo"
-- Hero visual: Dashboard mockup/gradient illustration
-- Platform badges: Meta, TikTok, Google Ads logos
+**New table: `self_signup_requests`**
+- Stores the full signup + plan + payment details before account creation
+- Fields: `id`, `full_name`, `email`, `password_hash` (won't store raw password — we'll use a different approach), `agency_name`, `plan_key`, `billing_cycle`, `payment_method`, `transaction_reference`, `proof_image_url`, `status` (pending/approved/rejected/expired), `admin_note`, `reviewed_by`, `reviewed_at`, `created_at`
+- RLS: platform_owner full access, anon insert only
 
-**2. Pain Points Section**
-- "Sound Familiar?" — 4 cards highlighting problems digital marketers face:
-  - Manual spend tracking across platforms
-  - Excel-based client billing & invoicing
-  - No real-time profit visibility
-  - Sending reports manually to each client
+**Alternative approach (simpler, recommended):** Instead of storing credentials in a pending table, create the auth user + organization immediately but set `organizations.status = 'pending_payment'`. The `ProtectedRoute` component will show a "Payment Pending" screen instead of the admin dashboard until approved. This avoids storing passwords.
 
-**3. Features Grid — Agency Admin Capabilities**
-Organized by category with icons, matching the actual admin sidebar:
+**Chosen approach: Immediate creation with pending status**
+- No new table needed
+- New edge function `self-signup` that creates auth user, organization, subscription, and payment record — all without requiring an authenticated caller (unlike `create-client` which requires admin role)
+- Organization created with `status = 'pending_payment'`
 
-- **Dashboard & Analytics**: Real-time KPIs, spend trends, profit/loss widgets, revenue vs cost charts, attention alerts
-- **Client Management**: Client list with balances, per-client pricing (platform rates), client portal with self-service dashboard, wallet health & runway prediction
-- **Ad Account Management**: Multi-platform ad accounts (Meta/TikTok/Google), campaign mapping, auto-sync from ad platforms, deep-dive analytics
-- **Finance & Billing**: P&L overview, USD wallet inventory (WAC method), expense tracking, cash flow management, payment requests with approval workflow, BDT-to-USD conversion
-- **Client Portal**: Branded client dashboard, real-time spend reports, wallet balance & deposit requests, campaign request system
-- **Team Management**: Role-based permissions, manager accounts with scoped access, audit logs for every action
-- **Automation**: Auto-import ad accounts, auto-snapshot USD rates, sync orchestrator, billing radar alerts
-- **White-Label & Branding**: Custom logo, brand name, themed interface
+### Edge Function: `supabase/functions/self-signup/index.ts`
+- No auth required (public endpoint for new signups)
+- Accepts: `full_name`, `email`, `password`, `agency_name`, `plan_key`, `billing_cycle`, `payment_method`, `transaction_reference`, `proof_image_url`
+- Creates auth user with `email_confirm: true`
+- Creates organization with `status = 'pending_payment'`
+- Assigns `admin` role to user
+- Creates `organization_subscriptions` record
+- Creates `subscription_payments` record with proof
+- Sends notification to platform owner
+- Returns `{ success: true, user_id }`
 
-**4. How It Works — 3 Steps**
-1. Connect your ad platforms (Meta, TikTok, Google)
-2. Add your clients & set pricing
-3. Everything auto-syncs — spend, billing, reports
+### Frontend Changes
 
-**5. Client Portal Preview**
-- Show what clients see: their own dashboard, spend breakdown, wallet, reports
-- "Your clients get their own portal — no more manual reporting"
+**1. New page: `src/pages/Signup.tsx`** — Multi-step wizard
+- **Step 1 — Choose Plan**: Fetches `platform_plans`, displays cards with limits/pricing, monthly/yearly toggle. User selects one.
+- **Step 2 — Account Details**: Agency name, full name, email, password, confirm password. Client-side validation.
+- **Step 3 — Payment**: Payment method selector (bKash, Nagad, Bank Transfer), transaction reference input, proof image upload (to `subscription-proofs` bucket via public upload). Shows payment instructions (account numbers etc. from a config or hardcoded).
+- **Step 4 — Confirmation**: "Your signup is under review. You'll receive access once payment is verified."
 
-**6. Pricing CTA**
-- "Plans for every agency size" — link to contact/plans
-- Highlight: Multi-tier plans with resource limits
+**2. `src/App.tsx`** — Add `/signup` route (public, no auth)
 
-**7. Trust & Social Proof**
-- "Built for Bangladeshi digital marketing agencies"
-- Key stats: "Track 10M+ data rows", "100+ clients supported"
-- Platform integrations badges
+**3. `src/pages/LandingPage.tsx`** — Change all "Get Started" / CTA links from `/login` to `/signup`
 
-**8. FAQ Section**
-- Common questions about the platform using Accordion component
+**4. `src/components/ProtectedRoute.tsx`** — When admin user's org has `status = 'pending_payment'`, show a "Payment Under Review" screen instead of redirecting to dashboard
 
-**9. Final CTA**
-- "Ready to automate your agency?" — Start Free Trial button
-- Link to login/signup
+**5. `src/pages/PlatformBilling.tsx`** — The existing Verifications tab already handles `subscription_payments` approval. On approval, update `organizations.status` from `pending_payment` to `trial` (with trial_ends_at set).
 
-### Sticky Navbar
-- HEPT logo/brand name
-- Nav links: Features, How It Works, Pricing, FAQ
-- "Login" and "Get Started" buttons
-- Smooth scroll to sections
-
-### Design Approach
-- Use existing design system (glass-card, glow-border, gradients from index.css)
-- Dark hero section with gradient, light content sections
-- Responsive: mobile-first with proper breakpoints
-- Animated sections with fade-in on scroll (Intersection Observer)
-- Platform-colored accents (Meta blue, TikTok cyan, Google colors)
+### Flow Summary
+```text
+Landing Page → [Get Started] → /signup
+  Step 1: Select Plan
+  Step 2: Fill Account Details
+  Step 3: Submit Payment Proof
+  Step 4: "Under Review" confirmation
+  
+Platform Owner → Platform Billing → Verifications tab
+  → Approve payment → org status → trial → user gets access
+```
 
 ### Files Changed
-- `src/pages/LandingPage.tsx` — new (entire landing page)
-- `src/App.tsx` — change `/` route from redirect to LandingPage, add lazy import
-
-### Technical Notes
-- No database changes needed
-- No authentication required for this page
-- Uses existing UI components (Button, Card, Accordion, Badge)
-- Intersection Observer for scroll animations
-- Smooth scroll anchors for navbar links
+- `supabase/functions/self-signup/index.ts` — new edge function
+- `src/pages/Signup.tsx` — new multi-step signup wizard
+- `src/App.tsx` — add `/signup` route
+- `src/pages/LandingPage.tsx` — update CTA links to `/signup`
+- `src/components/ProtectedRoute.tsx` — handle `pending_payment` org status
+- `src/pages/PlatformBilling.tsx` — on approval, set org status to `trial`
+- 1 database migration — add `pending_payment` to `org_status` enum
 
