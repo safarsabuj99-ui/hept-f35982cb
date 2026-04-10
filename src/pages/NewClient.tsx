@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface ManagerOption { user_id: string; full_name: string; }
 
 export default function NewClient() {
+  const [adminOrgId, setAdminOrgId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -42,7 +43,14 @@ export default function NewClient() {
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", managerIds);
       setManagers(profiles ?? []);
     };
+    const fetchOrgId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("org_id").eq("user_id", user.id).maybeSingle();
+      if (data?.org_id) setAdminOrgId(data.org_id);
+    };
     fetchManagers();
+    fetchOrgId();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,6 +82,7 @@ export default function NewClient() {
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
         pricing_config: pricingConfig,
         data_fetch_start_date: role === "client" ? format(syncStartDate, "yyyy-MM-dd") : null,
+        org_id: adminOrgId,
       },
     });
 
