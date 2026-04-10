@@ -103,6 +103,7 @@ export default function AgencyDetail() {
       setAdminProfile(admin ?? null);
       setInvoices((invData as any[]) ?? []);
       setSubPayments((spData as any[]) ?? []);
+      setUpgradeRequests((ugData as any[]) ?? []);
       setAuditLogs(logs ?? []);
       setLoading(false);
     };
