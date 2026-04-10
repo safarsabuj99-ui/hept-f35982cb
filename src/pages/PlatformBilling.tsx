@@ -332,6 +332,70 @@ export default function PlatformBilling() {
           </div>
         </TabsContent>
 
+        <TabsContent value="verifications" className="space-y-4">
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader>
+                <CardTitle className="text-sm">Payment Submissions from Agencies</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agency</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead>
+                      <TableHead>Reference</TableHead><TableHead>Proof</TableHead><TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingPayments.map((p) => (
+                      <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{p.org_name}</TableCell>
+                        <TableCell className="font-medium">৳{p.amount_bdt.toLocaleString()}</TableCell>
+                        <TableCell className="capitalize">{p.payment_method}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.transaction_reference || "—"}</TableCell>
+                        <TableCell>
+                          {p.proof_image_url ? (
+                            <Button variant="ghost" size="sm" onClick={() => setProofPreview(p.proof_image_url)} className="gap-1 text-xs">
+                              <Eye className="h-3 w-3" /> View
+                            </Button>
+                          ) : <span className="text-muted-foreground text-xs">None</span>}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.created_at.slice(0, 10)}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            p.status === "pending" ? "bg-warning/15 text-warning" :
+                            p.status === "approved" ? "bg-success/15 text-success" :
+                            "bg-destructive/15 text-destructive"
+                          }>{p.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {p.status === "pending" && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => approvePayment(p)} disabled={saving} className="text-success hover:text-success gap-1 text-xs">
+                                <CheckCircle className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setReviewingPayment(p); setRejectNote(""); }} className="text-destructive hover:text-destructive gap-1 text-xs">
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                          {p.status === "rejected" && p.admin_note && (
+                            <span className="text-xs text-muted-foreground" title={p.admin_note}>Note: {p.admin_note.slice(0, 30)}{p.admin_note.length > 30 ? "…" : ""}</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {pendingPayments.length === 0 && (
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No payment submissions yet</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="timeline">
           <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
             <Card className="border-0 bg-transparent shadow-none">
