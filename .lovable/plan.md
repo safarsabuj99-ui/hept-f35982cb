@@ -1,70 +1,89 @@
 
 
-## Plan Upgrade System for Agency Admin Side
+## Sales Landing Page for HEPT — Digital Marketing Agency SaaS
 
-### What It Does
-Agency owners can browse available plans, compare features/limits, and request an upgrade directly from their Plan & Billing page. The platform owner reviews and approves/rejects upgrade requests.
+### Overview
+Create a high-converting sales landing page at the root route (`/`) targeting digital marketers running Meta, TikTok, and Google Ads campaigns. The page will showcase all agency admin features, pain points, and benefits with a modern SaaS landing page design.
 
-### Database Changes
+### Route Changes
+- Change `"/"` from redirecting to `/login` to rendering the new `LandingPage` component
+- Add a "Get Started" / "Login" button in the landing page navbar that links to `/login`
 
-**New table: `plan_upgrade_requests`**
-```sql
-CREATE TABLE public.plan_upgrade_requests (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id uuid NOT NULL,
-  current_plan text NOT NULL,
-  requested_plan text NOT NULL,
-  requested_billing_cycle text NOT NULL DEFAULT 'monthly',
-  status text NOT NULL DEFAULT 'pending', -- pending | approved | rejected
-  admin_note text,
-  reviewed_by uuid,
-  reviewed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.plan_upgrade_requests ENABLE ROW LEVEL SECURITY;
+### New File: `src/pages/LandingPage.tsx`
+A single-page sales landing page with these sections:
 
--- Agency admin can insert and read own
-CREATE POLICY "org_admin_manage_own_upgrade_requests"
-  ON public.plan_upgrade_requests FOR ALL TO authenticated
-  USING (org_id = get_user_org_id(auth.uid()))
-  WITH CHECK (org_id = get_user_org_id(auth.uid()));
+**1. Hero Section**
+- Bold headline: "Stop Managing Ad Spend on Spreadsheets"
+- Subheadline targeting pain: Manual tracking, Excel chaos, client reporting nightmares
+- CTA buttons: "Start Free Trial" + "Watch Demo"
+- Hero visual: Dashboard mockup/gradient illustration
+- Platform badges: Meta, TikTok, Google Ads logos
 
--- Platform owner full access
-CREATE POLICY "platform_owner_all_upgrade_requests"
-  ON public.plan_upgrade_requests FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'platform_owner'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'platform_owner'::app_role));
-```
+**2. Pain Points Section**
+- "Sound Familiar?" — 4 cards highlighting problems digital marketers face:
+  - Manual spend tracking across platforms
+  - Excel-based client billing & invoicing
+  - No real-time profit visibility
+  - Sending reports manually to each client
 
-### Frontend Changes
+**3. Features Grid — Agency Admin Capabilities**
+Organized by category with icons, matching the actual admin sidebar:
 
-**1. `src/pages/AdminSubscription.tsx` — Add "Upgrade Plan" section**
-- New "Upgrade Plan" button next to Current Plan card
-- Opens a dialog showing all available plans (fetched from `platform_plans`) in comparison cards
-- Each plan card shows: name, monthly/yearly pricing toggle, resource limits (clients, ad accounts, managers), feature flags
-- Current plan is highlighted with "Current" badge, higher plans show "Upgrade" button, lower plans are disabled (downgrade not allowed initially)
-- On upgrade click: inserts into `plan_upgrade_requests`, notifies platform owner, shows confirmation
-- Show pending upgrade request status if one exists (prevents duplicate requests)
-- Show upgrade request history below payment submissions
+- **Dashboard & Analytics**: Real-time KPIs, spend trends, profit/loss widgets, revenue vs cost charts, attention alerts
+- **Client Management**: Client list with balances, per-client pricing (platform rates), client portal with self-service dashboard, wallet health & runway prediction
+- **Ad Account Management**: Multi-platform ad accounts (Meta/TikTok/Google), campaign mapping, auto-sync from ad platforms, deep-dive analytics
+- **Finance & Billing**: P&L overview, USD wallet inventory (WAC method), expense tracking, cash flow management, payment requests with approval workflow, BDT-to-USD conversion
+- **Client Portal**: Branded client dashboard, real-time spend reports, wallet balance & deposit requests, campaign request system
+- **Team Management**: Role-based permissions, manager accounts with scoped access, audit logs for every action
+- **Automation**: Auto-import ad accounts, auto-snapshot USD rates, sync orchestrator, billing radar alerts
+- **White-Label & Branding**: Custom logo, brand name, themed interface
 
-**2. `src/pages/PlatformBilling.tsx` — Add "Upgrade Requests" tab**
-- New tab alongside Invoices/Verifications showing pending `plan_upgrade_requests`
-- Each request shows: agency name, current plan → requested plan, billing cycle, requested date
-- Approve button: updates request status, updates `organizations.plan` + limits + `allowed_features` from `platform_plans`, updates `organization_subscriptions` with new plan/amount, creates new invoice, notifies agency admin
-- Reject button: updates status with admin note, notifies agency admin
+**4. How It Works — 3 Steps**
+1. Connect your ad platforms (Meta, TikTok, Google)
+2. Add your clients & set pricing
+3. Everything auto-syncs — spend, billing, reports
 
-**3. `src/pages/AgencyDetail.tsx` — Show upgrade request history**
-- In subscription section, show recent `plan_upgrade_requests` for that agency
+**5. Client Portal Preview**
+- Show what clients see: their own dashboard, spend breakdown, wallet, reports
+- "Your clients get their own portal — no more manual reporting"
 
-### Smart Safeguards
-- Prevent duplicate pending requests (check before insert)
-- Only allow upgrading to higher-tier plans (sort_order comparison)
-- Auto-sync resource limits and feature flags on approval from `platform_plans` table
-- Auto-generate a new invoice for the price difference or full new period
+**6. Pricing CTA**
+- "Plans for every agency size" — link to contact/plans
+- Highlight: Multi-tier plans with resource limits
+
+**7. Trust & Social Proof**
+- "Built for Bangladeshi digital marketing agencies"
+- Key stats: "Track 10M+ data rows", "100+ clients supported"
+- Platform integrations badges
+
+**8. FAQ Section**
+- Common questions about the platform using Accordion component
+
+**9. Final CTA**
+- "Ready to automate your agency?" — Start Free Trial button
+- Link to login/signup
+
+### Sticky Navbar
+- HEPT logo/brand name
+- Nav links: Features, How It Works, Pricing, FAQ
+- "Login" and "Get Started" buttons
+- Smooth scroll to sections
+
+### Design Approach
+- Use existing design system (glass-card, glow-border, gradients from index.css)
+- Dark hero section with gradient, light content sections
+- Responsive: mobile-first with proper breakpoints
+- Animated sections with fade-in on scroll (Intersection Observer)
+- Platform-colored accents (Meta blue, TikTok cyan, Google colors)
 
 ### Files Changed
-- 1 database migration (new table + RLS)
-- `src/pages/AdminSubscription.tsx` — upgrade plan dialog + request history
-- `src/pages/PlatformBilling.tsx` — upgrade requests tab
-- `src/pages/AgencyDetail.tsx` — upgrade request history in subscription section
+- `src/pages/LandingPage.tsx` — new (entire landing page)
+- `src/App.tsx` — change `/` route from redirect to LandingPage, add lazy import
+
+### Technical Notes
+- No database changes needed
+- No authentication required for this page
+- Uses existing UI components (Button, Card, Accordion, Badge)
+- Intersection Observer for scroll animations
+- Smooth scroll anchors for navbar links
 
