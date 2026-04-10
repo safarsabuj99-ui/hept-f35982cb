@@ -176,10 +176,16 @@ export default function PlatformBilling() {
     }
     // Update subscription payment_status
     await supabase.from("organization_subscriptions").update({ payment_status: "paid", updated_at: new Date().toISOString() } as any).eq("org_id", payment.org_id);
+    // If org is pending_payment, activate it (set to trial with 14-day trial)
+    const { data: orgData } = await supabase.from("organizations").select("status").eq("id", payment.org_id).single();
+    if ((orgData as any)?.status === "pending_payment") {
+      const trialEnds = new Date(Date.now() + 14 * 86400000).toISOString();
+      await supabase.from("organizations").update({ status: "active", trial_ends_at: trialEnds, status_changed_at: new Date().toISOString() } as any).eq("id", payment.org_id);
+    }
     // Notify agency admin
     const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", payment.org_id).single();
     if (orgOwner) {
-      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Approved", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} has been verified and approved.`, type: "system" as any, priority: "normal" });
+      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Approved", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} has been verified and approved.${(orgData as any)?.status === "pending_payment" ? " Your agency is now active!" : ""}`, type: "system" as any, priority: "normal" });
     }
     toast({ title: "Payment approved" }); setSaving(false); setReviewingPayment(null); fetchData();
   };
