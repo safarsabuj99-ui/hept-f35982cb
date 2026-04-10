@@ -42,6 +42,7 @@ export default function AgencyDetail() {
   const [subscription, setSubscription] = useState<any>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [subPayments, setSubPayments] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
