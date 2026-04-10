@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { DateRange, toISODate } from "@/components/DateRangeFilter";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ClientWithBalance {
   user_id: string;
@@ -67,6 +68,7 @@ async function fetchDashboardData(dateRange: DateRange | null): Promise<Dashboar
 }
 
 export function useAdminDashboardData(dateRange: DateRange | null) {
+  const { session } = useAuth();
   const queryClient = useQueryClient();
 
   const dateKey = dateRange
@@ -76,6 +78,7 @@ export function useAdminDashboardData(dateRange: DateRange | null) {
   const query = useQuery({
     queryKey: ["admin-dashboard", dateKey],
     queryFn: () => fetchDashboardData(dateRange),
+    enabled: !!session,
     staleTime: 60_000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
