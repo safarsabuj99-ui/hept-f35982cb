@@ -12,10 +12,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2 } from "lucide-react";
+import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2, ShieldCheck, XCircle, Eye, ImageIcon } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+
+interface SubscriptionPayment {
+  id: string; org_id: string; invoice_id: string | null; amount_bdt: number;
+  payment_method: string; transaction_reference: string | null;
+  proof_image_url: string | null; status: string; admin_note: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  org_name?: string;
+}
 
 interface Invoice {
   id: string; org_id: string; invoice_number: string; amount_bdt: number;
@@ -36,16 +45,22 @@ export default function PlatformBilling() {
   const [newInvoice, setNewInvoice] = useState({ org_id: "", amount_bdt: 0, period_start: "", period_end: "", due_date: "" });
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
+  const [pendingPayments, setPendingPayments] = useState<SubscriptionPayment[]>([]);
+  const [reviewingPayment, setReviewingPayment] = useState<SubscriptionPayment | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: invData }, { data: orgData }] = await Promise.all([
+    const [{ data: invData }, { data: orgData }, { data: payData }] = await Promise.all([
       supabase.from("platform_invoices" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("organizations").select("id, name"),
+      supabase.from("subscription_payments").select("*").order("created_at", { ascending: false }),
     ]);
     const orgMap = new Map((orgData ?? []).map((o) => [o.id, o.name]));
     setInvoices(((invData as any[]) ?? []).map((inv: any) => ({ ...inv, org_name: orgMap.get(inv.org_id) || "Unknown" })));
     setOrgs(orgData ?? []);
+    setPendingPayments(((payData as any[]) ?? []).map((p: any) => ({ ...p, org_name: orgMap.get(p.org_id) || "Unknown" })));
     setLoading(false);
   };
 
@@ -140,6 +155,34 @@ export default function PlatformBilling() {
     toast({ title: `${count} invoice(s) generated` }); setSaving(false); fetchData();
   };
 
+  const approvePayment = async (payment: SubscriptionPayment) => {
+    setSaving(true);
+    await supabase.from("subscription_payments").update({ status: "approved", reviewed_at: new Date().toISOString() } as any).eq("id", payment.id);
+    // Mark invoice as paid if linked
+    if (payment.invoice_id) {
+      await supabase.from("platform_invoices" as any).update({ status: "paid", payment_date: new Date().toISOString().slice(0, 10), payment_method: "manual" } as any).eq("id", payment.invoice_id);
+    }
+    // Update subscription payment_status
+    await supabase.from("organization_subscriptions").update({ payment_status: "paid", updated_at: new Date().toISOString() } as any).eq("org_id", payment.org_id);
+    // Notify agency admin
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", payment.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Approved", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} has been verified and approved.`, type: "system" as any, priority: "normal" });
+    }
+    toast({ title: "Payment approved" }); setSaving(false); setReviewingPayment(null); fetchData();
+  };
+
+  const rejectPayment = async (payment: SubscriptionPayment) => {
+    if (!rejectNote.trim()) { toast({ title: "Please provide a rejection reason", variant: "destructive" }); return; }
+    setSaving(true);
+    await supabase.from("subscription_payments").update({ status: "rejected", admin_note: rejectNote.trim(), reviewed_at: new Date().toISOString() } as any).eq("id", payment.id);
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", payment.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Rejected", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} was rejected. Reason: ${rejectNote.trim()}`, type: "system" as any, priority: "high" });
+    }
+    toast({ title: "Payment rejected" }); setSaving(false); setReviewingPayment(null); setRejectNote(""); fetchData();
+  };
+
   const exportCSV = () => {
     const headers = ["Invoice #", "Agency", "Amount (BDT)", "Period Start", "Period End", "Due Date", "Status", "Payment Date", "Payment Method"];
     const rows = filtered.map((i) => [i.invoice_number, i.org_name, i.amount_bdt, i.period_start, i.period_end, i.due_date || "", i.status, i.payment_date || "", i.payment_method || ""]);
@@ -219,6 +262,14 @@ export default function PlatformBilling() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="verifications" className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Verifications
+            {pendingPayments.filter(p => p.status === "pending").length > 0 && (
+              <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                {pendingPayments.filter(p => p.status === "pending").length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="timeline">Payment Timeline</TabsTrigger>
           <TabsTrigger value="health">Agency Health</TabsTrigger>
         </TabsList>
@@ -274,6 +325,70 @@ export default function PlatformBilling() {
                       </TableRow>
                     ))}
                     {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No invoices found</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="verifications" className="space-y-4">
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader>
+                <CardTitle className="text-sm">Payment Submissions from Agencies</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agency</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead>
+                      <TableHead>Reference</TableHead><TableHead>Proof</TableHead><TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingPayments.map((p) => (
+                      <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{p.org_name}</TableCell>
+                        <TableCell className="font-medium">৳{p.amount_bdt.toLocaleString()}</TableCell>
+                        <TableCell className="capitalize">{p.payment_method}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.transaction_reference || "—"}</TableCell>
+                        <TableCell>
+                          {p.proof_image_url ? (
+                            <Button variant="ghost" size="sm" onClick={() => setProofPreview(p.proof_image_url)} className="gap-1 text-xs">
+                              <Eye className="h-3 w-3" /> View
+                            </Button>
+                          ) : <span className="text-muted-foreground text-xs">None</span>}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.created_at.slice(0, 10)}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            p.status === "pending" ? "bg-warning/15 text-warning" :
+                            p.status === "approved" ? "bg-success/15 text-success" :
+                            "bg-destructive/15 text-destructive"
+                          }>{p.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {p.status === "pending" && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => approvePayment(p)} disabled={saving} className="text-success hover:text-success gap-1 text-xs">
+                                <CheckCircle className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setReviewingPayment(p); setRejectNote(""); }} className="text-destructive hover:text-destructive gap-1 text-xs">
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                          {p.status === "rejected" && p.admin_note && (
+                            <span className="text-xs text-muted-foreground" title={p.admin_note}>Note: {p.admin_note.slice(0, 30)}{p.admin_note.length > 30 ? "…" : ""}</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {pendingPayments.length === 0 && (
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No payment submissions yet</TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -378,6 +493,34 @@ export default function PlatformBilling() {
             <div><Label>Due Date</Label><Input type="date" value={newInvoice.due_date} onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })} /></div>
             <Button onClick={createInvoice} disabled={saving || !newInvoice.org_id} className="w-full">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Invoice</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Payment Dialog */}
+      <Dialog open={!!reviewingPayment} onOpenChange={(o) => !o && setReviewingPayment(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Payment — ৳{reviewingPayment?.amount_bdt.toLocaleString()}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">From: <strong className="text-foreground">{reviewingPayment?.org_name}</strong></p>
+            <div>
+              <Label>Rejection Reason</Label>
+              <Textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain why this payment is being rejected..." rows={3} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReviewingPayment(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reviewingPayment && rejectPayment(reviewingPayment)} disabled={saving || !rejectNote.trim()}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Reject Payment
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proof Preview Dialog */}
+      <Dialog open={!!proofPreview} onOpenChange={(o) => !o && setProofPreview(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ImageIcon className="h-4 w-4" /> Payment Proof</DialogTitle></DialogHeader>
+          {proofPreview && <img src={proofPreview} alt="Payment proof" className="w-full rounded-lg border" />}
         </DialogContent>
       </Dialog>
     </div>
