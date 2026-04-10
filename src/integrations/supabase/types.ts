@@ -1558,6 +1558,53 @@ export type Database = {
           },
         ]
       }
+      plan_upgrade_requests: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          current_plan: string
+          id: string
+          org_id: string
+          requested_billing_cycle: string
+          requested_plan: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          current_plan: string
+          id?: string
+          org_id: string
+          requested_billing_cycle?: string
+          requested_plan: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          current_plan?: string
+          id?: string
+          org_id?: string
+          requested_billing_cycle?: string
+          requested_plan?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_upgrade_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_announcements: {
         Row: {
           body: string
