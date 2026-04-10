@@ -18,6 +18,14 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
+interface SubscriptionPayment {
+  id: string; org_id: string; invoice_id: string | null; amount_bdt: number;
+  payment_method: string; transaction_reference: string | null;
+  proof_image_url: string | null; status: string; admin_note: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  org_name?: string;
+}
+
 interface Invoice {
   id: string; org_id: string; invoice_number: string; amount_bdt: number;
   period_start: string; period_end: string; status: string; payment_date: string | null;
