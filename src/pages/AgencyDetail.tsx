@@ -58,7 +58,7 @@ export default function AgencyDetail() {
   useEffect(() => {
     if (!agencyId) return;
     const fetchData = async () => {
-      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }, { data: subData }, { data: planData }] = await Promise.all([
+      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }, { data: subData }, { data: planData }, { data: spData }] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", agencyId).single(),
         supabase.from("profiles").select("*").eq("org_id", agencyId),
         supabase.from("ad_accounts").select("id").eq("org_id", agencyId),
@@ -66,6 +66,7 @@ export default function AgencyDetail() {
         supabase.from("audit_logs").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(50),
         supabase.from("organization_subscriptions").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(1),
         supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly, price_bdt_yearly, feature_flags").eq("is_active", true).order("sort_order"),
+        supabase.from("subscription_payments").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(20),
       ]);
 
       setOrg(orgData as any);
