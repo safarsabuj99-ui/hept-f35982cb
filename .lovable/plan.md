@@ -1,41 +1,47 @@
 
 
-## Add Plan Information & Renewal to Agency Admin Side
+## Redesign: Premium Plan Management Page
 
-### What's Missing
-Agency admins currently have zero visibility into their subscription plan. They can't see what plan they're on, what features are included, usage limits, billing cycle, or when renewal is due. All subscription management is only on the platform owner side.
+### Current Issues
+- Plain cards with no visual hierarchy or glassmorphism
+- Feature list is a flat wall of text — hard to scan
+- No monthly/yearly pricing toggle for visual comparison
+- Missing the premium design system (glass-card, glow-border, staggered animations)
+- No subscriber count per plan (useful context)
+- Dialog editor feels basic
 
-### Implementation
+### Redesign Approach
 
-**1. New Page: `src/pages/AdminSubscription.tsx`**
-A dedicated "Plan & Billing" page for agency admins showing:
-- **Current Plan Card** — plan name, status (Trial/Active/Suspended), trial end date if applicable
-- **Usage Gauges** — clients used vs max_clients, ad accounts used vs max_ad_accounts, managers used vs max_managers (with progress bars)
-- **Included Features** — list of feature flags from `organizations.allowed_features` with enabled/disabled indicators
-- **Billing Info** — current period start/end, billing cycle, amount, payment status from `organization_subscriptions`
-- **Invoice History** — list of `platform_invoices` for the org (read-only)
-- **Renewal Action** — if payment_status is "pending" or "overdue", show a prominent "Request Renewal" button that creates a notification to the platform owner requesting renewal/payment processing
+**Single file change: `src/pages/PlatformPlans.tsx`** — full rewrite with premium aesthetics.
 
-**2. Update `src/components/AdminLayout.tsx`**
-Add a new nav item under the "System" section:
-```
-{ to: "/admin/subscription", icon: CreditCard, label: "Plan & Billing", permKey: "can_configure_system" }
-```
+#### Visual Upgrades
+1. **PageHeader** component with icon and gradient accent
+2. **Monthly/Yearly toggle** at the top — switches displayed price across all cards
+3. **Glass-card plan cards** with `glow-border` and staggered `animate-slide-up-fade` entry
+4. **Popular plan** gets a gradient border highlight and "Most Popular" ribbon
+5. **Pricing** — large prominent price with yearly savings badge (e.g., "Save 20%")
+6. **Limits** shown as icon-bubble stat pills (Users, Accounts, Managers) with subtle backgrounds
+7. **Features** — compact two-column grid with green check / muted X icons, only showing enabled features prominently (disabled collapsed under "Show all")
+8. **Active subscriber count** per plan — query `organization_subscriptions` grouped by plan_id
+9. **Card actions** — subtle hover-reveal edit/delete buttons in top-right corner
+10. **Inactive plans** get a grayscale overlay with "Archived" badge
 
-**3. Update `src/App.tsx`**
-Add route: `/admin/subscription` → `AdminSubscription`
+#### Dialog Upgrades
+- **Tabs inside dialog**: "Details" | "Limits" | "Features" — instead of one long scroll
+- Glass background on dialog
+- Feature flags grid with category grouping (Analytics, Operations, Branding)
+- Live preview card in the dialog sidebar showing how the plan will look
 
-**4. Data Queries (all read-only, existing RLS supports this)**
-- `organizations` — `org_admin_read_own_org` policy already grants SELECT
-- `organization_subscriptions` — `org_admin_read_own_subscriptions` policy already grants SELECT
-- `platform_invoices` — `org_admin_read_own_invoices` policy already grants SELECT
-- `profiles` count by org_id — `admin_all_profiles` already grants access
-- `ad_accounts` count by org_id — `admin_all_ad_accounts` already grants access
+#### Loading State
+- Use `KpiSkeletonGrid` + card skeletons with shimmer
 
-No database migration needed — all required RLS policies already exist.
+### Technical Details
+- Fetch subscriber counts: `supabase.from("organization_subscriptions").select("plan_id").then(group by plan_id)`
+- Monthly/yearly toggle is local state only — just switches which price field is displayed
+- All existing CRUD logic stays the same, just wrapped in premium UI
+- Uses existing `PageHeader`, `glass-card`, `glow-border`, `animate-slide-up-fade` classes from the design system
+- Tabs component from shadcn for dialog sections
 
 ### Files Changed
-- `src/pages/AdminSubscription.tsx` — new page
-- `src/components/AdminLayout.tsx` — add nav item
-- `src/App.tsx` — add route
+- `src/pages/PlatformPlans.tsx` — full redesign
 
