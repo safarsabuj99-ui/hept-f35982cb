@@ -2317,7 +2317,12 @@ export type Database = {
       invoice_status: "draft" | "sent" | "paid" | "overdue" | "void"
       notification_type: "payment" | "guard" | "campaign" | "system"
       org_plan: "starter" | "growth" | "agency_pro"
-      org_status: "active" | "suspended" | "trial" | "cancelled"
+      org_status:
+        | "active"
+        | "suspended"
+        | "trial"
+        | "cancelled"
+        | "pending_payment"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
       payment_request_status: "pending" | "approved" | "rejected"
       subscription_payment_status: "paid" | "pending" | "overdue" | "cancelled"
@@ -2488,7 +2493,13 @@ export const Constants = {
       invoice_status: ["draft", "sent", "paid", "overdue", "void"],
       notification_type: ["payment", "guard", "campaign", "system"],
       org_plan: ["starter", "growth", "agency_pro"],
-      org_status: ["active", "suspended", "trial", "cancelled"],
+      org_status: [
+        "active",
+        "suspended",
+        "trial",
+        "cancelled",
+        "pending_payment",
+      ],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],
       payment_request_status: ["pending", "approved", "rejected"],
       subscription_payment_status: ["paid", "pending", "overdue", "cancelled"],
