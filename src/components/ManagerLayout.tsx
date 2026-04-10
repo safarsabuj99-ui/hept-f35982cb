@@ -8,6 +8,7 @@ import {
   BarChart3, Users, DollarSign, LogOut, Menu, X,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useBranding } from "@/hooks/useBranding";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -42,6 +43,7 @@ function ManagerSidebarContent() {
   const { hasPermission } = usePermissions();
   const location = useLocation();
   const { state } = useSidebar();
+  const { brandName, logoUrl } = useBranding();
   const collapsed = state === "collapsed";
 
   const navItems = useMemo(
@@ -55,13 +57,17 @@ function ManagerSidebarContent() {
     <Sidebar collapsible="icon" className="border-r-0 sidebar-premium">
       <SidebarHeader className="sidebar-header-premium">
         <div className="flex h-16 items-center gap-3 px-4">
-          <div className="sidebar-logo-orb">
-            <BarChart3 className="h-5 w-5 text-white relative z-10" />
+          <div className="sidebar-logo-orb overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-full w-full object-contain p-0.5 relative z-10" />
+            ) : (
+              <BarChart3 className="h-5 w-5 text-white relative z-10" />
+            )}
           </div>
           {!collapsed && (
             <div className="flex items-center gap-2 animate-slide-up-fade">
               <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                HEPT
+                {brandName}
               </span>
               <span className="sidebar-version-tag">v2.0</span>
             </div>

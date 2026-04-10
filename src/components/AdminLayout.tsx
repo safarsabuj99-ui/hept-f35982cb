@@ -221,6 +221,20 @@ function AdminSidebarContent() {
   );
 }
 
+function MobileHeaderBrand() {
+  const { brandName, logoUrl } = useBranding();
+  return (
+    <div className="flex items-center gap-2 lg:hidden">
+      {logoUrl ? (
+        <img src={logoUrl} alt={brandName} className="h-5 w-5 object-contain" />
+      ) : (
+        <BarChart3 className="h-5 w-5 text-primary" />
+      )}
+      <span className="text-base font-bold">{brandName}</span>
+    </div>
+  );
+}
+
 export function AdminLayout() {
   return (
     <SidebarProvider>
