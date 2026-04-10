@@ -53,7 +53,6 @@ const allSections: NavSection[] = [
     title: "Clients",
     items: [
       { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
-      { to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" },
       { to: "/admin/client-notices", icon: BellIcon, label: "Notices", permKey: "can_manage_clients" },
       { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
     ],
