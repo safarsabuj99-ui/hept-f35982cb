@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 
+interface PlanOption {
+  key: string;
+  name: string;
+  max_clients: number;
+  max_ad_accounts: number;
+  max_managers: number;
+  price_bdt_monthly: number;
+  price_bdt_yearly: number;
+}
+
 export default function CreateAgency() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -16,9 +26,23 @@ export default function CreateAgency() {
   const [ownerPassword, setOwnerPassword] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [plan, setPlan] = useState<string>("starter");
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+    supabase
+      .from("platform_plans")
+      .select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly, price_bdt_yearly")
+      .eq("is_active", true)
+      .order("sort_order")
+      .then(({ data }) => {
+        if (data?.length) setPlans(data as PlanOption[]);
+      });
+  }, []);
+
+  const selectedPlan = plans.find((p) => p.key === plan);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +58,12 @@ export default function CreateAgency() {
       const adminUserId = data?.user_id;
       if (!adminUserId) throw new Error("Failed to create admin user");
 
-      // Create organization
+      // Get plan limits
+      const maxClients = selectedPlan?.max_clients ?? 5;
+      const maxAdAccounts = selectedPlan?.max_ad_accounts ?? 10;
+      const maxManagers = selectedPlan?.max_managers ?? 2;
+
+      // Create organization with plan limits
       const { data: org, error: orgError } = await supabase.from("organizations").insert({
         name,
         slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
@@ -42,12 +71,30 @@ export default function CreateAgency() {
         plan: plan as any,
         status: "trial",
         trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+        max_clients: maxClients,
+        max_ad_accounts: maxAdAccounts,
+        max_managers: maxManagers,
       }).select().single();
 
       if (orgError) throw orgError;
 
       // Link admin profile to org
       await supabase.from("profiles").update({ org_id: org.id, is_super_admin: true }).eq("user_id", adminUserId);
+
+      // Auto-create subscription record
+      const periodStart = new Date().toISOString().slice(0, 10);
+      const periodEnd = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10); // trial end
+      const monthlyPrice = selectedPlan?.price_bdt_monthly ?? 0;
+
+      await supabase.from("organization_subscriptions").insert({
+        org_id: org.id,
+        plan: plan as any,
+        amount_bdt: monthlyPrice,
+        billing_cycle: "monthly",
+        current_period_start: periodStart,
+        current_period_end: periodEnd,
+        payment_status: "pending",
+      });
 
       toast({ title: "Agency created", description: `${name} is now live with a 14-day trial.` });
       navigate("/platform/agencies");
@@ -86,11 +133,24 @@ export default function CreateAgency() {
               <Select value={plan} onValueChange={setPlan}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="starter">Starter (5C/10A/2M)</SelectItem>
-                  <SelectItem value="growth">Growth (20C/50A/5M)</SelectItem>
-                  <SelectItem value="agency_pro">Agency Pro (Unlimited)</SelectItem>
+                  {plans.length > 0 ? plans.map((p) => (
+                    <SelectItem key={p.key} value={p.key}>
+                      {p.name} ({p.max_clients}C/{p.max_ad_accounts}A/{p.max_managers}M) — ৳{p.price_bdt_monthly}/mo
+                    </SelectItem>
+                  )) : (
+                    <>
+                      <SelectItem value="starter">Starter (5C/10A/2M)</SelectItem>
+                      <SelectItem value="growth">Growth (20C/50A/5M)</SelectItem>
+                      <SelectItem value="agency_pro">Agency Pro (Unlimited)</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
+              {selectedPlan && (
+                <p className="text-xs text-muted-foreground">
+                  Limits: {selectedPlan.max_clients} clients, {selectedPlan.max_ad_accounts} ad accounts, {selectedPlan.max_managers} managers
+                </p>
+              )}
             </div>
 
             <div className="border-t pt-5 space-y-1">
