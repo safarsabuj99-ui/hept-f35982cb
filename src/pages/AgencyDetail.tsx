@@ -98,8 +98,17 @@ export default function AgencyDetail() {
     setSaving(true);
     const planInfo = plans.find((p) => p.key === newPlan);
 
-    // Update org plan + resource limits
-    const updates: any = { plan: newPlan };
+    // Fetch feature_flags from the plan
+    const { data: planData } = await supabase
+      .from("platform_plans")
+      .select("feature_flags")
+      .eq("key", newPlan)
+      .single();
+    const featureFlags = (planData?.feature_flags && typeof planData.feature_flags === "object")
+      ? planData.feature_flags : {};
+
+    // Update org plan + resource limits + allowed_features
+    const updates: any = { plan: newPlan, allowed_features: featureFlags };
     if (planInfo) {
       updates.max_clients = planInfo.max_clients;
       updates.max_ad_accounts = planInfo.max_ad_accounts;
@@ -121,7 +130,7 @@ export default function AgencyDetail() {
         setSubscription((prev: any) => prev ? { ...prev, plan: newPlan, amount_bdt: planInfo.price_bdt_monthly } : prev);
       }
 
-      toast({ title: "Plan updated", description: `Plan changed to ${planInfo?.name ?? newPlan}. Resource limits synced.` });
+      toast({ title: "Plan updated", description: `Plan changed to ${planInfo?.name ?? newPlan}. Resource limits & features synced.` });
     }
     setSaving(false);
   };
