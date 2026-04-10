@@ -213,6 +213,40 @@ export default function AgencyDetail() {
             ))}
           </div>
 
+          {/* Subscription Info */}
+          {subscription && (
+            <Card>
+              <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Subscription</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Amount</p>
+                    <p className="font-medium">৳{subscription.amount_bdt?.toLocaleString()}/{subscription.billing_cycle === "yearly" ? "yr" : "mo"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payment</p>
+                    <Badge className={
+                      subscription.payment_status === "paid" ? "bg-success/10 text-success" :
+                      subscription.payment_status === "overdue" ? "bg-destructive/10 text-destructive" :
+                      "bg-warning/10 text-warning"
+                    }>{subscription.payment_status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Period End</p>
+                    <p className="font-medium">{subscription.current_period_end}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Cycle</p>
+                    <p className="font-medium capitalize">{subscription.billing_cycle}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Admin Contact */}
           {adminProfile && (
             <Card>
@@ -235,12 +269,18 @@ export default function AgencyDetail() {
             <Card>
               <CardHeader><CardTitle className="text-base">Plan</CardTitle></CardHeader>
               <CardContent>
-                <Select value={org.plan} onValueChange={(v) => updateField("plan", v)} disabled={saving}>
+                <Select value={org.plan} onValueChange={handlePlanChange} disabled={saving}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="growth">Growth</SelectItem>
-                    <SelectItem value="agency_pro">Agency Pro</SelectItem>
+                    {plans.length > 0 ? plans.map((p) => (
+                      <SelectItem key={p.key} value={p.key}>{p.name}</SelectItem>
+                    )) : (
+                      <>
+                        <SelectItem value="starter">Starter</SelectItem>
+                        <SelectItem value="growth">Growth</SelectItem>
+                        <SelectItem value="agency_pro">Agency Pro</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </CardContent>
