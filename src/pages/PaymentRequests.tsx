@@ -41,9 +41,10 @@ interface PaymentRequest {
   payment_method: string;
   transaction_id: string | null;
   platform: string | null;
+  platform_amounts: Record<string, number> | null;
   status: string;
   admin_note: string | null;
-  exchange_rate_snapshot: number | null;
+  exchange_rate_snapshot: number | any | null;
   final_amount_usd: number | null;
   created_at: string;
   client_name?: string;
@@ -63,6 +64,31 @@ interface PendingDeposit {
   creator_name?: string;
 }
 
+const PLATFORM_COLORS: Record<string, string> = {
+  meta: "bg-blue-500/10 text-blue-600 border-blue-500/30",
+  tiktok: "bg-slate-500/10 text-slate-700 border-slate-500/30",
+  google: "bg-red-500/10 text-red-600 border-red-500/30",
+};
+
+function PlatformBadges({ platformAmounts, platform, exchangeRateSnapshot }: { platformAmounts: Record<string, number> | null; platform: string | null; exchangeRateSnapshot?: any }) {
+  if (platformAmounts && typeof platformAmounts === "object" && Object.keys(platformAmounts).length > 0) {
+    return (
+      <div className="flex flex-wrap gap-1">
+        {Object.entries(platformAmounts).map(([p, amt]) => {
+          const rate = typeof exchangeRateSnapshot === "object" && exchangeRateSnapshot?.[p] ? `@৳${exchangeRateSnapshot[p]}` : "";
+          return (
+            <Badge key={p} variant="outline" className={cn("capitalize text-[10px] gap-0.5", PLATFORM_COLORS[p] || "")}>
+              {p} ৳{Number(amt).toLocaleString()}{rate ? <span className="text-muted-foreground ml-0.5">{rate}</span> : null}
+            </Badge>
+          );
+        })}
+      </div>
+    );
+  }
+  if (platform) return <Badge variant="outline" className={cn("capitalize text-xs", PLATFORM_COLORS[platform] || "")}>{platform}</Badge>;
+  return <span className="text-muted-foreground">—</span>;
+}
+
 export default function PaymentRequests() {
   const { highlightId } = useDeepLinkAction();
   const deepLinkHandled = useRef(false);
@@ -77,6 +103,8 @@ export default function PaymentRequests() {
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
+  // Per-platform rates for multi-platform payments
+  const [perPlatformRates, setPerPlatformRates] = useState<Record<string, number>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [deposits, setDeposits] = useState<PendingDeposit[]>([]);
@@ -88,8 +116,22 @@ export default function PaymentRequests() {
 
   const canManageFinance = hasPermission("can_manage_finance");
 
+  const isMultiPlatform = (r: PaymentRequest | null) =>
+    r?.platform_amounts && typeof r.platform_amounts === "object" && Object.keys(r.platform_amounts).length > 0;
+
   const selectedRate = rateOptions.find((r) => r.key === selectedRateKey);
   const calculatedUsd = selectedRate ? Math.round((confirmModal.request?.amount_bdt ?? 0) / selectedRate.rate * 100) / 100 : 0;
+
+  // Multi-platform total USD calculation
+  const multiPlatformTotal = useMemo(() => {
+    if (!confirmModal.request || !isMultiPlatform(confirmModal.request)) return 0;
+    const pa = confirmModal.request.platform_amounts!;
+    return Object.entries(pa).reduce((sum, [p, bdt]) => {
+      const rate = perPlatformRates[p] || 120;
+      return sum + Math.round((Number(bdt) / rate) * 100) / 100;
+    }, 0);
+  }, [confirmModal.request, perPlatformRates]);
+
   const { toast } = useToast();
 
   const fetchRequests = async () => {
@@ -180,6 +222,7 @@ export default function PaymentRequests() {
     setSelectedRateKey("");
     setSelectedAccountId("");
     setOverriddenPlatform(request.platform || "");
+    setPerPlatformRates({});
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
@@ -200,9 +243,23 @@ export default function PaymentRequests() {
       ];
 
       setRateOptions(options);
-      const platform = request.platform || "";
-      const matchingKey = platform && options.find(o => o.key === platform) ? platform : options[0]?.key;
-      setSelectedRateKey(matchingKey ?? "default");
+
+      // Multi-platform: auto-match rates per platform
+      const pa = request.platform_amounts;
+      if (pa && typeof pa === "object" && Object.keys(pa).length > 0) {
+        const rates: Record<string, number> = {};
+        for (const p of Object.keys(pa)) {
+          const matchOpt = options.find(o => o.key === p);
+          rates[p] = matchOpt?.rate || 120;
+        }
+        setPerPlatformRates(rates);
+      } else {
+        // Legacy single-platform
+        const platform = request.platform || "";
+        const matchingKey = platform && options.find(o => o.key === platform) ? platform : options[0]?.key;
+        setSelectedRateKey(matchingKey ?? "default");
+      }
+
       setAgencyAccounts((accRes.data as any[]) ?? []);
       setRateLoading(false);
     }
@@ -213,17 +270,25 @@ export default function PaymentRequests() {
     const reqId = confirmModal.request.id;
     setProcessing(reqId);
 
-    const platformToSend = overriddenPlatform || confirmModal.request.platform || undefined;
-    const { data, error } = await supabase.functions.invoke("approve-payment", {
-      body: {
-        request_id: reqId,
-        action: confirmModal.action,
-        admin_note: adminNote || undefined,
-        selected_rate: selectedRate?.rate ?? undefined,
-        received_in_account_id: selectedAccountId || undefined,
-        platform_override: platformToSend,
-      },
-    });
+    const multi = isMultiPlatform(confirmModal.request);
+
+    const body: any = {
+      request_id: reqId,
+      action: confirmModal.action,
+      admin_note: adminNote || undefined,
+      received_in_account_id: selectedAccountId || undefined,
+    };
+
+    if (confirmModal.action === "approved") {
+      if (multi) {
+        body.platform_rates = perPlatformRates;
+      } else {
+        body.selected_rate = selectedRate?.rate ?? undefined;
+        body.platform_override = overriddenPlatform || confirmModal.request.platform || undefined;
+      }
+    }
+
+    const { data, error } = await supabase.functions.invoke("approve-payment", { body });
 
     setProcessing(null);
     setConfirmModal({ open: false, request: null, action: "approved" });
@@ -234,7 +299,7 @@ export default function PaymentRequests() {
       toast({ title: "Error", description: data.error, variant: "destructive" });
     } else {
       const msg = confirmModal.action === "approved"
-        ? `Approved: $${data.final_amount_usd} credited at rate ${data.exchange_rate}`
+        ? `Approved: $${data.final_amount_usd} credited${multi ? " across platforms" : ` at rate ${data.exchange_rate}`}`
         : "Payment request rejected";
       toast({ title: confirmModal.action === "approved" ? "Approved ✓" : "Rejected", description: msg });
       fetchRequests();
@@ -419,7 +484,7 @@ export default function PaymentRequests() {
                           {statusBadge(r.status)}
                         </div>
                         {/* Row 2: Metrics inline */}
-                        <div className="grid grid-cols-4 gap-1 text-[11px]">
+                        <div className="grid grid-cols-3 gap-1 text-[11px]">
                           <div>
                             <p className="text-muted-foreground leading-none mb-0.5">Amount</p>
                             <p className="font-mono font-semibold text-xs">৳{fmt(r.amount_bdt)}</p>
@@ -432,10 +497,11 @@ export default function PaymentRequests() {
                             <p className="text-muted-foreground leading-none mb-0.5">Date</p>
                             <p className="font-mono text-xs">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
                           </div>
-                          <div>
-                            <p className="text-muted-foreground leading-none mb-0.5">Platform</p>
-                            {r.platform ? <p className="capitalize text-xs font-medium">{r.platform}</p> : <span className="text-muted-foreground">—</span>}
-                          </div>
+                        </div>
+                        {/* Platform badges */}
+                        <div className="text-[11px]">
+                          <p className="text-muted-foreground leading-none mb-1">Platform</p>
+                          <PlatformBadges platformAmounts={r.platform_amounts} platform={r.platform} exchangeRateSnapshot={r.exchange_rate_snapshot} />
                         </div>
                         {/* USD */}
                         {r.final_amount_usd && (
@@ -493,7 +559,7 @@ export default function PaymentRequests() {
                             <TableCell className="font-medium">{r.client_name}</TableCell>
                             <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
                             <TableCell>
-                              {r.platform ? <Badge variant="outline" className="capitalize text-xs">{r.platform}</Badge> : "—"}
+                              <PlatformBadges platformAmounts={r.platform_amounts} platform={r.platform} exchangeRateSnapshot={r.exchange_rate_snapshot} />
                             </TableCell>
                             <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground font-mono">{r.transaction_id || "—"}</TableCell>
@@ -516,7 +582,11 @@ export default function PaymentRequests() {
                                 <span className="text-xs text-muted-foreground text-center block">View only</span>
                               ) : (
                                 <span className="text-xs text-muted-foreground text-center block">
-                                  {r.exchange_rate_snapshot ? `Rate: ${r.exchange_rate_snapshot}` : "—"}
+                                  {r.exchange_rate_snapshot
+                                    ? typeof r.exchange_rate_snapshot === "object"
+                                      ? Object.entries(r.exchange_rate_snapshot).map(([p, rate]) => `${p}: ৳${rate}`).join(" · ")
+                                      : `Rate: ${r.exchange_rate_snapshot}`
+                                    : "—"}
                                 </span>
                               )}
                             </TableCell>
@@ -676,37 +746,47 @@ export default function PaymentRequests() {
                   <span className="text-muted-foreground">Amount Sent</span>
                   <span className="font-mono font-semibold">৳{fmt(confirmModal.request.amount_bdt)}</span>
                 </div>
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-muted-foreground">Platform</span>
-                  {confirmModal.action === "approved" ? (
-                    <Select value={overriddenPlatform} onValueChange={(val) => {
-                      setOverriddenPlatform(val);
-                      const matchingRate = rateOptions.find(o => o.key === val);
-                      if (matchingRate) setSelectedRateKey(matchingRate.key);
-                    }}>
-                      <SelectTrigger className="w-[140px] h-8 text-xs">
-                        <SelectValue placeholder="Select platform" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="meta">Meta</SelectItem>
-                        <SelectItem value="tiktok">TikTok</SelectItem>
-                        <SelectItem value="google">Google</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span>
-                      {confirmModal.request.platform ? (
-                        <Badge variant="outline" className={`capitalize text-xs ${
-                          confirmModal.request.platform === 'meta' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
-                          confirmModal.request.platform === 'tiktok' ? 'bg-slate-500/10 text-slate-700 border-slate-500/30' :
-                          'bg-red-500/10 text-red-600 border-red-500/30'
-                        }`}>{confirmModal.request.platform}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground italic">Not specified</span>
-                      )}
-                    </span>
-                  )}
-                </div>
+
+                {/* Platform display: multi vs single */}
+                {!isMultiPlatform(confirmModal.request) && (
+                  <div className="flex justify-between text-sm items-center">
+                    <span className="text-muted-foreground">Platform</span>
+                    {confirmModal.action === "approved" ? (
+                      <Select value={overriddenPlatform} onValueChange={(val) => {
+                        setOverriddenPlatform(val);
+                        const matchingRate = rateOptions.find(o => o.key === val);
+                        if (matchingRate) setSelectedRateKey(matchingRate.key);
+                      }}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <SelectValue placeholder="Select platform" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="meta">Meta</SelectItem>
+                          <SelectItem value="tiktok">TikTok</SelectItem>
+                          <SelectItem value="google">Google</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span>
+                        {confirmModal.request.platform ? (
+                          <Badge variant="outline" className={cn("capitalize text-xs", PLATFORM_COLORS[confirmModal.request.platform] || "")}>
+                            {confirmModal.request.platform}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground italic">Not specified</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {isMultiPlatform(confirmModal.request) && (
+                  <div className="flex justify-between text-sm items-start">
+                    <span className="text-muted-foreground">Platforms</span>
+                    <PlatformBadges platformAmounts={confirmModal.request.platform_amounts} platform={null} />
+                  </div>
+                )}
+
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Method</span>
                   <span>{confirmModal.request.payment_method}</span>
@@ -739,6 +819,43 @@ export default function PaymentRequests() {
                 <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
                   {rateLoading ? (
                     <div className="flex items-center justify-center py-2"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  ) : isMultiPlatform(confirmModal.request) ? (
+                    <>
+                      <Label className="text-sm font-medium">Per-Platform Rates</Label>
+                      <div className="space-y-2">
+                        {Object.entries(confirmModal.request.platform_amounts!).map(([platform, bdtAmount]) => {
+                          const rate = perPlatformRates[platform] || 120;
+                          const usd = Math.round((Number(bdtAmount) / rate) * 100) / 100;
+                          return (
+                            <div key={platform} className="flex items-center gap-2 rounded-md border p-2.5">
+                              <Badge variant="outline" className={cn("capitalize text-xs shrink-0", PLATFORM_COLORS[platform] || "")}>
+                                {platform}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground font-mono shrink-0">
+                                ৳{Number(bdtAmount).toLocaleString()}
+                              </span>
+                              <span className="text-xs text-muted-foreground shrink-0">÷</span>
+                              <Input
+                                type="number"
+                                value={rate}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (val > 0) setPerPlatformRates(prev => ({ ...prev, [platform]: val }));
+                                }}
+                                className="w-20 h-7 text-xs font-mono text-center"
+                                min={1}
+                              />
+                              <span className="text-xs text-muted-foreground shrink-0">=</span>
+                              <span className="text-sm font-mono font-semibold text-primary shrink-0">${fmt(usd)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-2 mt-2">
+                        <span className="font-medium">Total Credit to Wallet</span>
+                        <span className="text-lg font-bold text-primary font-mono">${fmt(multiPlatformTotal)}</span>
+                      </div>
+                    </>
                   ) : rateOptions.length > 0 ? (
                     <>
                       <Label className="text-sm font-medium">Select Dollar Rate</Label>

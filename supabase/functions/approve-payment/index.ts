@@ -6,6 +6,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function jsonRes(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,30 +20,20 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify caller is admin using their token
+    // Verify caller
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (authError || !user) return jsonRes({ error: "Unauthorized" }, 401);
 
-    // Check admin role using service client
+    // Check admin role
     const adminClient = createClient(supabaseUrl, serviceKey);
     const { data: roleCheck } = await adminClient
       .from("user_roles")
@@ -45,22 +42,23 @@ Deno.serve(async (req) => {
       .eq("role", "admin")
       .single();
 
-    if (!roleCheck) {
-      return new Response(JSON.stringify({ error: "Forbidden: admin only" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!roleCheck) return jsonRes({ error: "Forbidden: admin only" }, 403);
 
-    const { request_id, action, admin_note, selected_rate, received_in_account_id, platform_override } = await req.json();
+    const {
+      request_id,
+      action,
+      admin_note,
+      selected_rate,
+      platform_rates,
+      received_in_account_id,
+      platform_override,
+    } = await req.json();
+
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
-      return new Response(JSON.stringify({ error: "Invalid params" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ error: "Invalid params" }, 400);
     }
 
-    // Fetch the payment request
+    // Fetch payment request
     const { data: pr, error: prErr } = await adminClient
       .from("payment_requests")
       .select("*")
@@ -69,12 +67,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (prErr || !pr) {
-      return new Response(
-        JSON.stringify({ error: "Request not found or already processed" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonRes({ error: "Request not found or already processed" }, 404);
     }
 
+    // --- REJECTED ---
     if (action === "rejected") {
       await adminClient
         .from("payment_requests")
@@ -87,79 +83,86 @@ Deno.serve(async (req) => {
         description: `Rejected payment ৳${Number(pr.amount_bdt).toLocaleString()} from client ${pr.client_id}${admin_note ? ` — ${admin_note}` : ""}`,
       });
 
-      return new Response(JSON.stringify({ success: true, action: "rejected" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ success: true, action: "rejected" });
     }
 
-    // APPROVED flow: determine exchange rate
-    let exchangeRate: number;
-
-    if (selected_rate && typeof selected_rate === "number" && selected_rate > 0) {
-      exchangeRate = selected_rate;
-    } else {
-      const { data: profile } = await adminClient
-        .from("profiles")
-        .select("pricing_config")
-        .eq("user_id", pr.client_id)
-        .single();
-
-      const pricingConfig = profile?.pricing_config as any;
-      const platformRates = pricingConfig?.flat_rates || pricingConfig?.platform_rates;
-      exchangeRate = platformRates?.meta ? Number(platformRates.meta) : 120;
-    }
+    // --- APPROVED ---
+    const platformAmounts = pr.platform_amounts as Record<string, number> | null;
+    const isMultiPlatform =
+      platformAmounts &&
+      typeof platformAmounts === "object" &&
+      Object.keys(platformAmounts).length > 0;
 
     const totalBdt = Number(pr.amount_bdt);
-    const finalUsd = Math.round((totalBdt / exchangeRate) * 100) / 100;
-
-    // Update payment request
-    const { error: updateErr } = await adminClient
-      .from("payment_requests")
-      .update({
-        status: "approved",
-        exchange_rate_snapshot: exchangeRate,
-        final_amount_usd: finalUsd,
-        admin_note: admin_note || null,
-        received_in_account_id: received_in_account_id || null,
-      })
-      .eq("id", request_id)
-      .eq("status", "pending");
-
-    if (updateErr) {
-      return new Response(JSON.stringify({ error: "Failed to update request" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Create transactions: per-platform if platform_amounts exists, else single
-    const platformAmounts = pr.platform_amounts as Record<string, number> | null;
     const txDate = pr.payment_date || new Date().toISOString().split("T")[0];
     const transactions: any[] = [];
+    let finalUsd = 0;
+    let exchangeRateSnapshot: any;
 
-    if (platformAmounts && typeof platformAmounts === "object" && Object.keys(platformAmounts).length > 0) {
-      // Multi-platform: create one transaction per platform entry
-      const totalPlatformBdt = Object.values(platformAmounts).reduce((s: number, v: any) => s + Number(v), 0);
+    if (isMultiPlatform && platform_rates && typeof platform_rates === "object") {
+      // Multi-platform with per-platform rates
+      const rateMap: Record<string, number> = {};
 
       for (const [platform, bdtAmount] of Object.entries(platformAmounts)) {
         const platformBdt = Number(bdtAmount);
         if (platformBdt <= 0) continue;
-        const platformUsd = Math.round((platformBdt / exchangeRate) * 100) / 100;
+
+        const rate = Number(platform_rates[platform]) || await getFallbackRate(adminClient, pr.client_id, platform);
+        rateMap[platform] = rate;
+        const platformUsd = Math.round((platformBdt / rate) * 100) / 100;
+        finalUsd += platformUsd;
 
         transactions.push({
           client_id: pr.client_id,
           type: "credit",
           amount: platformUsd,
           date: txDate,
-          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${exchangeRate})`,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${rate})`,
           created_by: user.id,
           status: "completed",
-          exchange_rate: exchangeRate,
+          exchange_rate: rate,
           platform: platform,
         });
       }
+
+      finalUsd = Math.round(finalUsd * 100) / 100;
+      exchangeRateSnapshot = rateMap;
+    } else if (isMultiPlatform) {
+      // Multi-platform but no per-platform rates provided — use single rate fallback
+      const fallbackRate = selected_rate && typeof selected_rate === "number" && selected_rate > 0
+        ? selected_rate
+        : await getFallbackRate(adminClient, pr.client_id, "meta");
+
+      for (const [platform, bdtAmount] of Object.entries(platformAmounts)) {
+        const platformBdt = Number(bdtAmount);
+        if (platformBdt <= 0) continue;
+        const platformUsd = Math.round((platformBdt / fallbackRate) * 100) / 100;
+        finalUsd += platformUsd;
+
+        transactions.push({
+          client_id: pr.client_id,
+          type: "credit",
+          amount: platformUsd,
+          date: txDate,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${fallbackRate})`,
+          created_by: user.id,
+          status: "completed",
+          exchange_rate: fallbackRate,
+          platform: platform,
+        });
+      }
+
+      finalUsd = Math.round(finalUsd * 100) / 100;
+      exchangeRateSnapshot = fallbackRate;
     } else {
-      // Legacy single-platform transaction
+      // Legacy single-platform
+      const exchangeRate = selected_rate && typeof selected_rate === "number" && selected_rate > 0
+        ? selected_rate
+        : await getFallbackRate(adminClient, pr.client_id, "meta");
+
+      finalUsd = Math.round((totalBdt / exchangeRate) * 100) / 100;
+      exchangeRateSnapshot = exchangeRate;
+
       transactions.push({
         client_id: pr.client_id,
         type: "credit",
@@ -173,22 +176,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Update payment request
+    const { error: updateErr } = await adminClient
+      .from("payment_requests")
+      .update({
+        status: "approved",
+        exchange_rate_snapshot: exchangeRateSnapshot,
+        final_amount_usd: finalUsd,
+        admin_note: admin_note || null,
+        received_in_account_id: received_in_account_id || null,
+      })
+      .eq("id", request_id)
+      .eq("status", "pending");
+
+    if (updateErr) return jsonRes({ error: "Failed to update request" }, 500);
+
+    // Insert transactions
     const { error: txErr } = await adminClient.from("transactions").insert(transactions);
 
     if (txErr) {
-      // Rollback
       await adminClient
         .from("payment_requests")
         .update({ status: "pending", exchange_rate_snapshot: null, final_amount_usd: null })
         .eq("id", request_id);
-
-      return new Response(JSON.stringify({ error: "Failed to credit wallet, rolled back" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ error: "Failed to credit wallet, rolled back" }, 500);
     }
 
-    // Credit agency account balance if specified
+    // Credit agency account
     if (received_in_account_id) {
       const { data: agencyAcc } = await adminClient
         .from("agency_accounts")
@@ -205,25 +219,41 @@ Deno.serve(async (req) => {
     }
 
     // Audit log
+    const platformInfo = isMultiPlatform
+      ? ` [${Object.keys(platformAmounts).join(", ")}]`
+      : platform_override ? ` [${platform_override}]` : "";
+
+    const rateInfo = typeof exchangeRateSnapshot === "object"
+      ? ` (Rates: ${Object.entries(exchangeRateSnapshot).map(([p, r]) => `${p}:${r}`).join(", ")})`
+      : ` (Rate: ${exchangeRateSnapshot})`;
+
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action_type: "payment_approved",
-      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd} (Rate: ${exchangeRate}) for client ${pr.client_id}${platformAmounts ? ` [${Object.keys(platformAmounts).join(", ")}]` : ""}`,
+      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}`,
     });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        action: "approved",
-        final_amount_usd: finalUsd,
-        exchange_rate: exchangeRate,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return jsonRes({
+      success: true,
+      action: "approved",
+      final_amount_usd: finalUsd,
+      exchange_rate: exchangeRateSnapshot,
     });
+  } catch (err) {
+    return jsonRes({ error: String(err) }, 500);
   }
 });
+
+async function getFallbackRate(adminClient: any, clientId: string, platform: string): Promise<number> {
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("pricing_config")
+    .eq("user_id", clientId)
+    .single();
+
+  const pricingConfig = profile?.pricing_config as any;
+  const rates = pricingConfig?.flat_rates || pricingConfig?.platform_rates;
+  if (rates && rates[platform]) return Number(rates[platform]);
+  if (rates?.meta) return Number(rates.meta);
+  return 120;
+}
