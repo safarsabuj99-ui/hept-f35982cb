@@ -14,6 +14,7 @@ import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
 import { usePrefetch } from "@/hooks/usePrefetch";
+import { useOrgFeatures, type FeatureKey } from "@/hooks/useOrgFeatures";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +35,7 @@ interface NavItem {
   icon: any;
   label: string;
   permKey?: PermissionKey;
+  featureKey?: FeatureKey;
 }
 
 interface NavSection {
@@ -53,7 +55,7 @@ const allSections: NavSection[] = [
     title: "Clients",
     items: [
       { to: "/admin/clients", icon: Users, label: "Client List", permKey: "can_manage_clients" },
-      { to: "/admin/client-notices", icon: BellIcon, label: "Notices", permKey: "can_manage_clients" },
+      { to: "/admin/client-notices", icon: BellIcon, label: "Notices", permKey: "can_manage_clients", featureKey: "client_notices" },
       { to: "/admin/team", icon: UserCog, label: "Team", permKey: "can_manage_team" },
     ],
   },
@@ -67,9 +69,9 @@ const allSections: NavSection[] = [
   {
     title: "Finance",
     items: [
-      { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance" },
+      { to: "/admin/finance", icon: TrendingUp, label: "Finance", permKey: "can_manage_finance", featureKey: "expense_tracking" },
       { to: "/admin/payment-requests", icon: Banknote, label: "Payments", permKey: "can_approve_payments" },
-      { to: "/admin/orders", icon: Megaphone, label: "Campaign Requests", permKey: "can_manage_campaigns" },
+      { to: "/admin/orders", icon: Megaphone, label: "Campaign Requests", permKey: "can_manage_campaigns", featureKey: "campaign_requests" },
     ],
   },
   {
@@ -84,6 +86,7 @@ const allSections: NavSection[] = [
 function AdminSidebarContent() {
   const { hasPermission } = usePermissions();
   const { signOut } = useAuth();
+  const { hasFeature } = useOrgFeatures();
   const location = useLocation();
   const { brandName, logoUrl } = useBranding();
   const { pendingPayments, pendingOrders } = usePendingCounts();
@@ -105,10 +108,14 @@ function AdminSidebarContent() {
       allSections
         .map((section) => ({
           ...section,
-          items: section.items.filter((item) => !item.permKey || hasPermission(item.permKey)),
+          items: section.items.filter((item) => {
+            if (item.permKey && !hasPermission(item.permKey)) return false;
+            if (item.featureKey && !hasFeature(item.featureKey)) return false;
+            return true;
+          }),
         }))
         .filter((section) => section.items.length > 0),
-    [hasPermission]
+    [hasPermission, hasFeature]
   );
 
   const isActive = (path: string) => location.pathname === path;

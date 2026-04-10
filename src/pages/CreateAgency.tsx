@@ -44,6 +44,18 @@ export default function CreateAgency() {
 
   const selectedPlan = plans.find((p) => p.key === plan);
 
+  // Fetch full plan data including feature_flags
+  const fetchPlanFeatureFlags = async (planKey: string): Promise<Record<string, boolean>> => {
+    const { data } = await supabase
+      .from("platform_plans")
+      .select("feature_flags")
+      .eq("key", planKey)
+      .single();
+    return (data?.feature_flags && typeof data.feature_flags === "object") 
+      ? data.feature_flags as Record<string, boolean> 
+      : {};
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -58,12 +70,13 @@ export default function CreateAgency() {
       const adminUserId = data?.user_id;
       if (!adminUserId) throw new Error("Failed to create admin user");
 
-      // Get plan limits
+      // Get plan limits and feature flags
       const maxClients = selectedPlan?.max_clients ?? 5;
       const maxAdAccounts = selectedPlan?.max_ad_accounts ?? 10;
       const maxManagers = selectedPlan?.max_managers ?? 2;
+      const featureFlags = await fetchPlanFeatureFlags(plan);
 
-      // Create organization with plan limits
+      // Create organization with plan limits + allowed_features
       const { data: org, error: orgError } = await supabase.from("organizations").insert({
         name,
         slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
@@ -74,6 +87,7 @@ export default function CreateAgency() {
         max_clients: maxClients,
         max_ad_accounts: maxAdAccounts,
         max_managers: maxManagers,
+        allowed_features: featureFlags as any,
       }).select().single();
 
       if (orgError) throw orgError;
@@ -83,7 +97,7 @@ export default function CreateAgency() {
 
       // Auto-create subscription record
       const periodStart = new Date().toISOString().slice(0, 10);
-      const periodEnd = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10); // trial end
+      const periodEnd = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
       const monthlyPrice = selectedPlan?.price_bdt_monthly ?? 0;
 
       await supabase.from("organization_subscriptions").insert({
