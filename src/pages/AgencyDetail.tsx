@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard, Check, X } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard, Check, X, Settings2, Save } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
-import { ALL_FEATURE_KEYS, FEATURE_LABELS } from "@/hooks/useOrgFeatures";
+import { ALL_FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/hooks/useOrgFeatures";
 
 interface UsageStats {
   clientsUsed: number;
@@ -29,6 +30,8 @@ interface PlanOption {
   max_ad_accounts: number;
   max_managers: number;
   price_bdt_monthly: number;
+  price_bdt_yearly: number;
+  feature_flags: Record<string, boolean>;
 }
 
 export default function AgencyDetail() {
@@ -44,12 +47,16 @@ export default function AgencyDetail() {
   const [saving, setSaving] = useState(false);
   const [suspendDialog, setSuspendDialog] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
+  const [featureOverrideOpen, setFeatureOverrideOpen] = useState(false);
+  const [overrideFeatures, setOverrideFeatures] = useState<Record<string, boolean>>({});
+  const [subEditing, setSubEditing] = useState(false);
+  const [subForm, setSubForm] = useState<any>({});
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!agencyId) return;
-    const fetch = async () => {
+    const fetchData = async () => {
       const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }, { data: subData }, { data: planData }] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", agencyId).single(),
         supabase.from("profiles").select("*").eq("org_id", agencyId),
@@ -57,23 +64,35 @@ export default function AgencyDetail() {
         supabase.from("platform_invoices" as any).select("*").eq("org_id", agencyId).order("created_at", { ascending: false }),
         supabase.from("audit_logs").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(50),
         supabase.from("organization_subscriptions").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(1),
-        supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly").eq("is_active", true).order("sort_order"),
+        supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly, price_bdt_yearly, feature_flags").eq("is_active", true).order("sort_order"),
       ]);
 
       setOrg(orgData as any);
       setSubscription(subData?.[0] ?? null);
       if (planData?.length) setPlans(planData as PlanOption[]);
 
-      const clients = profiles?.filter((p) => !p.is_super_admin && p.user_id !== orgData?.owner_user_id) ?? [];
-      const managers = profiles?.filter((p) => {
-        // Check user_roles for manager role — approximate by checking permissions
-        return p.permissions && typeof p.permissions === "object" && Object.keys(p.permissions as any).length > 0 && !p.is_super_admin;
-      }) ?? [];
+      // --- Accurate usage counting via user_roles ---
+      const profileUserIds = profiles?.map((p) => p.user_id) ?? [];
+      let clientCount = 0;
+      let managerCount = 0;
+
+      if (profileUserIds.length > 0) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("user_id", profileUserIds);
+
+        if (roles) {
+          const orgUserIdSet = new Set(profileUserIds);
+          clientCount = roles.filter((r) => r.role === "client" && orgUserIdSet.has(r.user_id)).length;
+          managerCount = roles.filter((r) => r.role === "manager" && orgUserIdSet.has(r.user_id)).length;
+        }
+      }
 
       setUsage({
-        clientsUsed: clients.length,
+        clientsUsed: clientCount,
         adAccountsUsed: adAccounts?.length ?? 0,
-        managersUsed: managers.length,
+        managersUsed: managerCount,
       });
 
       const admin = profiles?.find((p) => p.user_id === orgData?.owner_user_id);
@@ -82,7 +101,7 @@ export default function AgencyDetail() {
       setAuditLogs(logs ?? []);
       setLoading(false);
     };
-    fetch();
+    fetchData();
   }, [agencyId]);
 
   const updateField = async (field: string, value: any) => {
@@ -99,16 +118,9 @@ export default function AgencyDetail() {
     setSaving(true);
     const planInfo = plans.find((p) => p.key === newPlan);
 
-    // Fetch feature_flags from the plan
-    const { data: planData } = await supabase
-      .from("platform_plans")
-      .select("feature_flags")
-      .eq("key", newPlan)
-      .single();
-    const featureFlags = (planData?.feature_flags && typeof planData.feature_flags === "object")
-      ? planData.feature_flags : {};
+    const featureFlags = planInfo?.feature_flags && typeof planInfo.feature_flags === "object"
+      ? planInfo.feature_flags : {};
 
-    // Update org plan + resource limits + allowed_features
     const updates: any = { plan: newPlan, allowed_features: featureFlags };
     if (planInfo) {
       updates.max_clients = planInfo.max_clients;
@@ -122,13 +134,13 @@ export default function AgencyDetail() {
     } else {
       setOrg((prev) => prev ? { ...prev, ...updates } : prev);
 
-      // Update subscription record too
       if (subscription && planInfo) {
+        const amount = subscription.billing_cycle === "yearly" ? planInfo.price_bdt_yearly : planInfo.price_bdt_monthly;
         await supabase
           .from("organization_subscriptions")
-          .update({ plan: newPlan as any, amount_bdt: planInfo.price_bdt_monthly, updated_at: new Date().toISOString() })
+          .update({ plan: newPlan as any, amount_bdt: amount, updated_at: new Date().toISOString() })
           .eq("id", subscription.id);
-        setSubscription((prev: any) => prev ? { ...prev, plan: newPlan, amount_bdt: planInfo.price_bdt_monthly } : prev);
+        setSubscription((prev: any) => prev ? { ...prev, plan: newPlan, amount_bdt: amount } : prev);
       }
 
       toast({ title: "Plan updated", description: `Plan changed to ${planInfo?.name ?? newPlan}. Resource limits & features synced.` });
@@ -150,6 +162,89 @@ export default function AgencyDetail() {
     window.open("/admin", "_blank");
   };
 
+  // --- Subscription editor ---
+  const startSubEdit = () => {
+    if (!subscription) return;
+    setSubForm({
+      billing_cycle: subscription.billing_cycle || "monthly",
+      payment_status: subscription.payment_status || "pending",
+      current_period_start: subscription.current_period_start || "",
+      current_period_end: subscription.current_period_end || "",
+      amount_bdt: subscription.amount_bdt || 0,
+      payment_method: subscription.payment_method || "",
+      transaction_reference: subscription.transaction_reference || "",
+    });
+    setSubEditing(true);
+  };
+
+  const handleSubCycleChange = (cycle: string) => {
+    const currentPlan = plans.find((p) => p.key === org?.plan);
+    const newAmount = cycle === "yearly" ? currentPlan?.price_bdt_yearly : currentPlan?.price_bdt_monthly;
+    setSubForm((prev: any) => ({ ...prev, billing_cycle: cycle, ...(newAmount !== undefined ? { amount_bdt: newAmount } : {}) }));
+  };
+
+  const saveSubscription = async () => {
+    if (!subscription) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("organization_subscriptions")
+      .update({
+        billing_cycle: subForm.billing_cycle,
+        payment_status: subForm.payment_status,
+        current_period_start: subForm.current_period_start,
+        current_period_end: subForm.current_period_end,
+        amount_bdt: Number(subForm.amount_bdt),
+        payment_method: subForm.payment_method || null,
+        transaction_reference: subForm.transaction_reference || null,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", subscription.id);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setSubscription((prev: any) => ({ ...prev, ...subForm, amount_bdt: Number(subForm.amount_bdt) }));
+      toast({ title: "Subscription updated" });
+      setSubEditing(false);
+    }
+    setSaving(false);
+  };
+
+  // --- Feature override ---
+  const openFeatureOverride = () => {
+    const current = (org as any)?.allowed_features || {};
+    const flags: Record<string, boolean> = {};
+    ALL_FEATURE_KEYS.forEach((k) => { flags[k] = current[k] === true; });
+    setOverrideFeatures(flags);
+    setFeatureOverrideOpen(true);
+  };
+
+  const saveFeatureOverride = async () => {
+    if (!agencyId) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("organizations")
+      .update({ allowed_features: overrideFeatures } as any)
+      .eq("id", agencyId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setOrg((prev) => prev ? { ...prev, allowed_features: overrideFeatures as any } : prev);
+      toast({ title: "Features updated" });
+      setFeatureOverrideOpen(false);
+    }
+    setSaving(false);
+  };
+
+  const isCustomFeatures = () => {
+    if (!org) return false;
+    const planInfo = plans.find((p) => p.key === org.plan);
+    if (!planInfo?.feature_flags) return false;
+    const planFlags = planInfo.feature_flags as Record<string, boolean>;
+    const orgFlags = (org as any).allowed_features || {};
+    return ALL_FEATURE_KEYS.some((k) => (planFlags[k] === true) !== (orgFlags[k] === true));
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!org) return <p className="text-muted-foreground">Agency not found</p>;
 
@@ -159,7 +254,6 @@ export default function AgencyDetail() {
   };
 
   const usagePct = (used: number, max: number) => max > 0 ? Math.round((used / max) * 100) : 0;
-
   const trialDays = org.trial_ends_at ? Math.max(0, Math.ceil((new Date(org.trial_ends_at).getTime() - Date.now()) / 86400000)) : null;
 
   return (
@@ -223,36 +317,113 @@ export default function AgencyDetail() {
             ))}
           </div>
 
-          {/* Subscription Info */}
+          {/* Subscription Info — Editable */}
           {subscription && (
             <Card>
-              <CardHeader className="pb-2 flex flex-row items-center gap-2">
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-base">Subscription</CardTitle>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Subscription</CardTitle>
+                </div>
+                {!subEditing && (
+                  <Button variant="outline" size="sm" onClick={startSubEdit} className="gap-1.5">
+                    <Settings2 className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
-                <div className="grid gap-2 sm:grid-cols-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Amount</p>
-                    <p className="font-medium">৳{subscription.amount_bdt?.toLocaleString()}/{subscription.billing_cycle === "yearly" ? "yr" : "mo"}</p>
+                {!subEditing ? (
+                  <div className="grid gap-2 sm:grid-cols-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Amount</p>
+                      <p className="font-medium">৳{subscription.amount_bdt?.toLocaleString()}/{subscription.billing_cycle === "yearly" ? "yr" : "mo"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Payment</p>
+                      <Badge className={
+                        subscription.payment_status === "paid" ? "bg-success/10 text-success" :
+                        subscription.payment_status === "overdue" ? "bg-destructive/10 text-destructive" :
+                        "bg-warning/10 text-warning"
+                      }>{subscription.payment_status}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Period</p>
+                      <p className="font-medium">{subscription.current_period_start} → {subscription.current_period_end}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Cycle</p>
+                      <p className="font-medium capitalize">{subscription.billing_cycle}</p>
+                    </div>
+                    {subscription.payment_method && (
+                      <div>
+                        <p className="text-muted-foreground">Payment Method</p>
+                        <p className="font-medium">{subscription.payment_method}</p>
+                      </div>
+                    )}
+                    {subscription.transaction_reference && (
+                      <div>
+                        <p className="text-muted-foreground">Transaction Ref</p>
+                        <p className="font-medium font-mono text-xs">{subscription.transaction_reference}</p>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Payment</p>
-                    <Badge className={
-                      subscription.payment_status === "paid" ? "bg-success/10 text-success" :
-                      subscription.payment_status === "overdue" ? "bg-destructive/10 text-destructive" :
-                      "bg-warning/10 text-warning"
-                    }>{subscription.payment_status}</Badge>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Billing Cycle</Label>
+                        <Select value={subForm.billing_cycle} onValueChange={handleSubCycleChange}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Payment Status</Label>
+                        <Select value={subForm.payment_status} onValueChange={(v) => setSubForm((p: any) => ({ ...p, payment_status: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="paid">Paid</SelectItem>
+                            <SelectItem value="overdue">Overdue</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <Label>Amount (৳)</Label>
+                        <Input type="number" value={subForm.amount_bdt} onChange={(e) => setSubForm((p: any) => ({ ...p, amount_bdt: e.target.value }))} />
+                      </div>
+                      <div>
+                        <Label>Period Start</Label>
+                        <Input type="date" value={subForm.current_period_start} onChange={(e) => setSubForm((p: any) => ({ ...p, current_period_start: e.target.value }))} />
+                      </div>
+                      <div>
+                        <Label>Period End</Label>
+                        <Input type="date" value={subForm.current_period_end} onChange={(e) => setSubForm((p: any) => ({ ...p, current_period_end: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Payment Method</Label>
+                        <Input value={subForm.payment_method} onChange={(e) => setSubForm((p: any) => ({ ...p, payment_method: e.target.value }))} placeholder="bKash, Bank Transfer, etc." />
+                      </div>
+                      <div>
+                        <Label>Transaction Reference</Label>
+                        <Input value={subForm.transaction_reference} onChange={(e) => setSubForm((p: any) => ({ ...p, transaction_reference: e.target.value }))} placeholder="TXN-123456" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" onClick={() => setSubEditing(false)}>Cancel</Button>
+                      <Button onClick={saveSubscription} disabled={saving} className="gap-1.5">
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Period End</p>
-                    <p className="font-medium">{subscription.current_period_end}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Cycle</p>
-                    <p className="font-medium capitalize">{subscription.billing_cycle}</p>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -276,7 +447,15 @@ export default function AgencyDetail() {
 
           {/* Enabled Features */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Plan Features</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">Plan Features</CardTitle>
+                {isCustomFeatures() && <Badge variant="outline" className="text-xs">Custom</Badge>}
+              </div>
+              <Button variant="outline" size="sm" onClick={openFeatureOverride} className="gap-1.5">
+                <Settings2 className="h-3.5 w-3.5" /> Override
+              </Button>
+            </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {ALL_FEATURE_KEYS.map((key) => {
@@ -451,6 +630,33 @@ export default function AgencyDetail() {
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Confirm Suspension
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feature Override Dialog */}
+      <Dialog open={featureOverrideOpen} onOpenChange={setFeatureOverrideOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Override Features — {org.name}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Toggle features for this agency independent of the plan defaults.</p>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {ALL_FEATURE_KEYS.map((key) => (
+              <div key={key} className="flex items-center justify-between">
+                <Label className="text-sm font-normal">{FEATURE_LABELS[key]}</Label>
+                <Switch
+                  checked={overrideFeatures[key] === true}
+                  onCheckedChange={(checked) => setOverrideFeatures((prev) => ({ ...prev, [key]: checked }))}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeatureOverrideOpen(false)}>Cancel</Button>
+            <Button onClick={saveFeatureOverride} disabled={saving} className="gap-1.5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
