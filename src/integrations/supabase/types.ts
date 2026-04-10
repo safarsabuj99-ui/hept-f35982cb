@@ -1890,6 +1890,72 @@ export type Database = {
           },
         ]
       }
+      subscription_payments: {
+        Row: {
+          admin_note: string | null
+          amount_bdt: number
+          created_at: string
+          gateway_payment_id: string | null
+          gateway_provider: string | null
+          id: string
+          invoice_id: string | null
+          org_id: string
+          payment_method: string
+          proof_image_url: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          transaction_reference: string | null
+        }
+        Insert: {
+          admin_note?: string | null
+          amount_bdt: number
+          created_at?: string
+          gateway_payment_id?: string | null
+          gateway_provider?: string | null
+          id?: string
+          invoice_id?: string | null
+          org_id: string
+          payment_method?: string
+          proof_image_url?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          transaction_reference?: string | null
+        }
+        Update: {
+          admin_note?: string | null
+          amount_bdt?: number
+          created_at?: string
+          gateway_payment_id?: string | null
+          gateway_provider?: string | null
+          id?: string
+          invoice_id?: string | null
+          org_id?: string
+          payment_method?: string
+          proof_image_url?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          transaction_reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "platform_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_payments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_logs: {
         Row: {
           ad_account_id: string
