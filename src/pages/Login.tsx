@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useBranding } from "@/hooks/useBranding";
 import { BarChart3, Loader2, ArrowRight } from "lucide-react";
 
 export default function Login() {
@@ -15,6 +16,7 @@ export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { brandName, logoUrl } = useBranding();
 
   useEffect(() => {
     setMounted(true);
@@ -124,11 +126,15 @@ export default function Login() {
                 : "none",
             }}
           >
-            <BarChart3 className="h-8 w-8 text-white" />
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-8 w-8 object-contain" />
+            ) : (
+              <BarChart3 className="h-8 w-8 text-white" />
+            )}
           </div>
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-white">
-              HEPT Portal
+              {brandName} Portal
             </h1>
             <p className="text-sm text-white/50">
               Sign in to manage your ad campaigns
@@ -202,7 +208,7 @@ export default function Login() {
         {/* Bottom accent */}
         <div className="mt-8 text-center">
           <p className="text-xs text-white/20">
-            Powered by HEPT • Secure Login
+            Powered by {brandName} • Secure Login
           </p>
         </div>
       </div>

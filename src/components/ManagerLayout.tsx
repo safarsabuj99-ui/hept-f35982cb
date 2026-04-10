@@ -135,6 +135,20 @@ function ManagerSidebarContent() {
   );
 }
 
+function ManagerMobileHeader() {
+  const { brandName, logoUrl } = useBranding();
+  return (
+    <div className="flex items-center gap-2 lg:hidden">
+      {logoUrl ? (
+        <img src={logoUrl} alt={brandName} className="h-5 w-5 object-contain" />
+      ) : (
+        <BarChart3 className="h-5 w-5 text-primary" />
+      )}
+      <span className="text-base font-bold">{brandName}</span>
+    </div>
+  );
+}
+
 export function ManagerLayout() {
   return (
     <SidebarProvider>
@@ -144,10 +158,7 @@ export function ManagerLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/80 backdrop-blur-xl px-4 lg:px-6">
             <SidebarTrigger className="press-effect" />
-            <div className="flex items-center gap-2 lg:hidden">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              <span className="text-base font-bold">HEPT</span>
-            </div>
+            <ManagerMobileHeader />
             <div className="ml-auto flex items-center gap-2">
               <NotificationBell allNotificationsPath="/manager/notifications" />
               <div className="lg:hidden"><ThemeToggle /></div>
