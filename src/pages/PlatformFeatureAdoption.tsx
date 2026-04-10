@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Grid3X3 } from "lucide-react";
 import { useMemo } from "react";
@@ -50,10 +51,7 @@ export default function PlatformFeatureAdoption() {
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Feature Adoption</h1>
-        <p className="text-muted-foreground">Track which features each agency uses</p>
-      </div>
+      <PageHeader title="Feature Adoption" subtitle="Track which features each agency uses" icon={<Grid3X3 className="h-6 w-6 text-primary" />} />
 
       <div>
         <p className="section-label mb-3">Adoption Rates</p>
@@ -80,11 +78,11 @@ export default function PlatformFeatureAdoption() {
                 </TableHeader>
                 <TableBody>
                   {heatmapData.map((d) => (
-                    <TableRow key={d.org.id}>
+                    <TableRow key={d.org.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{d.org.name}</TableCell>
                       {FEATURES.map((f) => (
                         <TableCell key={f} className="text-center">
-                          <span className={`inline-flex items-center justify-center w-10 h-8 rounded text-xs font-mono ${getIntensityClass(d.counts[f], maxCounts[f])}`}>{d.counts[f]}</span>
+                          <span className={`inline-flex items-center justify-center w-10 h-8 rounded-md text-xs font-mono transition-colors ${getIntensityClass(d.counts[f], maxCounts[f])}`}>{d.counts[f]}</span>
                         </TableCell>
                       ))}
                     </TableRow>

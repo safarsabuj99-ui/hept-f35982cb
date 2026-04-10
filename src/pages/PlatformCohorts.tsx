@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Users, TrendingUp, BarChart3 } from "lucide-react";
 import { format, differenceInMonths, startOfMonth, parseISO } from "date-fns";
@@ -35,10 +36,10 @@ export default function PlatformCohorts() {
   }, [orgs, subs]);
 
   const getRetentionColor = (pct: number) => {
-    if (pct >= 80) return "bg-emerald-500/20 text-emerald-400";
-    if (pct >= 60) return "bg-yellow-500/20 text-yellow-400";
-    if (pct >= 40) return "bg-orange-500/20 text-orange-400";
-    return "bg-red-500/20 text-red-400";
+    if (pct >= 80) return "bg-success/20 text-success border-success/30";
+    if (pct >= 60) return "bg-warning/20 text-warning border-warning/30";
+    if (pct >= 40) return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+    return "bg-destructive/20 text-destructive border-destructive/30";
   };
 
   const totalOrgs = orgs.length;
@@ -47,10 +48,7 @@ export default function PlatformCohorts() {
 
   return (
     <div className="space-y-8">
-      <div className="animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <h1 className="text-2xl font-bold text-foreground">Cohort Analysis</h1>
-        <p className="text-muted-foreground">Track agency retention and revenue by signup month</p>
-      </div>
+      <PageHeader title="Cohort Analysis" subtitle="Track agency retention and revenue by signup month" icon={<Users className="h-6 w-6 text-primary" />} />
 
       <div>
         <p className="section-label mb-3">Overview</p>
@@ -78,11 +76,11 @@ export default function PlatformCohorts() {
                 </TableHeader>
                 <TableBody>
                   {cohortData.map((c) => (
-                    <TableRow key={c.month}>
+                    <TableRow key={c.month} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{format(parseISO(c.month + "-01"), "MMM yyyy")}</TableCell>
                       <TableCell className="text-right font-mono">{c.total}</TableCell>
                       <TableCell className="text-right font-mono">{c.active}</TableCell>
-                      <TableCell className="text-right"><Badge className={getRetentionColor(c.retention)}>{c.retention}%</Badge></TableCell>
+                      <TableCell className="text-right"><Badge className={`rounded-md ${getRetentionColor(c.retention)}`}>{c.retention}%</Badge></TableCell>
                       <TableCell className="text-right font-mono">৳{c.revenue.toLocaleString()}</TableCell>
                       <TableCell className="text-right font-mono">{c.months}</TableCell>
                     </TableRow>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AlertTriangle, Brain, Loader2, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +18,6 @@ export default function PlatformChurnPrediction() {
   const [analyzing, setAnalyzing] = useState(false);
 
   const { data: orgs = [] } = useQuery({ queryKey: ["churn-orgs"], queryFn: async () => { const { data } = await supabase.from("organizations").select("id, name, status, plan, created_at, status_changed_at"); return data || []; } });
-  const { data: invoices = [] } = useQuery({ queryKey: ["churn-invoices"], queryFn: async () => { const { data } = await supabase.from("platform_invoices").select("org_id, status, due_date, payment_date"); return data || []; } });
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
@@ -30,7 +30,17 @@ export default function PlatformChurnPrediction() {
   };
 
   const getRiskBadge = (level: string) => {
-    switch (level) { case "high": return <Badge variant="destructive">High Risk</Badge>; case "medium": return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Medium</Badge>; default: return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Low</Badge>; }
+    switch (level) {
+      case "high": return <Badge className="bg-destructive/15 text-destructive border-destructive/20">High Risk</Badge>;
+      case "medium": return <Badge className="bg-warning/15 text-warning border-warning/20">Medium</Badge>;
+      default: return <Badge className="bg-success/15 text-success border-success/20">Low</Badge>;
+    }
+  };
+
+  const getRiskBarColor = (score: number) => {
+    if (score >= 70) return "bg-destructive";
+    if (score >= 40) return "bg-warning";
+    return "bg-success";
   };
 
   const highRisk = results.filter((r) => r.risk_level === "high").length;
@@ -38,16 +48,17 @@ export default function PlatformChurnPrediction() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Churn Prediction</h1>
-          <p className="text-muted-foreground">AI-powered risk scoring for all agencies</p>
-        </div>
-        <Button onClick={handleAnalyze} disabled={analyzing || orgs.length === 0}>
-          {analyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
-          {analyzing ? "Analyzing..." : "Analyze All"}
-        </Button>
-      </div>
+      <PageHeader
+        title="Churn Prediction"
+        subtitle="AI-powered risk scoring for all agencies"
+        icon={<Brain className="h-6 w-6 text-primary" />}
+        actions={
+          <Button onClick={handleAnalyze} disabled={analyzing || orgs.length === 0} className="press-effect">
+            {analyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
+            {analyzing ? "Analyzing..." : "Analyze All"}
+          </Button>
+        }
+      />
 
       {results.length > 0 && (
         <div>
@@ -74,12 +85,12 @@ export default function PlatformChurnPrediction() {
                 <TableHeader><TableRow><TableHead>Agency</TableHead><TableHead>Risk Score</TableHead><TableHead>Risk Level</TableHead><TableHead>Key Factors</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {results.sort((a, b) => b.risk_score - a.risk_score).map((r) => (
-                    <TableRow key={r.org_id}>
+                    <TableRow key={r.org_id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium">{r.org_name}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
-                            <div className={`h-full rounded-full ${r.risk_score >= 70 ? "bg-destructive" : r.risk_score >= 40 ? "bg-yellow-500" : "bg-emerald-500"}`} style={{ width: `${r.risk_score}%` }} />
+                            <div className={`h-full rounded-full ${getRiskBarColor(r.risk_score)}`} style={{ width: `${r.risk_score}%` }} />
                           </div>
                           <span className="text-sm font-mono">{r.risk_score}</span>
                         </div>
