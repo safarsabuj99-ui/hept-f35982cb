@@ -563,7 +563,7 @@ export default function PlatformBilling() {
           </div>
         </TabsContent>
 
-
+        <TabsContent value="timeline">
           <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader><CardTitle className="text-sm">Billed vs Collected (Last 6 Months)</CardTitle></CardHeader>
