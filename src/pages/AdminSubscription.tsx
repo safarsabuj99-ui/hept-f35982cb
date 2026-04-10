@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useProfile } from "@/hooks/useProfile";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +85,6 @@ function UsageGauge({ label, icon: Icon, used, max }: { label: string; icon: any
 
 export default function AdminSubscription() {
   const { session } = useAuth();
-  const { profile } = useProfile();
   const [org, setOrg] = useState<OrgData | null>(null);
   const [sub, setSub] = useState<SubData | null>(null);
   const [invoices, setInvoices] = useState<InvoiceData[]>([]);
@@ -95,11 +93,18 @@ export default function AdminSubscription() {
   const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {
-    if (!profile?.org_id) return;
-    const orgId = profile.org_id;
+    if (!session?.user?.id) return;
 
     async function load() {
       setLoading(true);
+      // Get org_id from profile
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("org_id")
+        .eq("user_id", session!.user.id)
+        .single();
+      const orgId = prof?.org_id;
+      if (!orgId) { setLoading(false); return; }
       const [orgRes, subRes, invRes, clientRes, adRes, mgrRes] = await Promise.all([
         supabase.from("organizations").select("id,name,plan,status,trial_ends_at,max_clients,max_ad_accounts,max_managers,allowed_features").eq("id", orgId).single(),
         supabase.from("organization_subscriptions").select("id,plan,billing_cycle,amount_bdt,payment_status,current_period_start,current_period_end").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -120,7 +125,7 @@ export default function AdminSubscription() {
       setLoading(false);
     }
     load();
-  }, [profile?.org_id]);
+  }, [session?.user?.id]);
 
   const handleRenewalRequest = async () => {
     if (!session?.user?.id || !org) return;
