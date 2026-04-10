@@ -64,6 +64,7 @@ const PlatformForecasting = lazy(() => import("@/pages/PlatformForecasting"));
 const PlatformCostAnalytics = lazy(() => import("@/pages/PlatformCostAnalytics"));
 const PlatformHealthScores = lazy(() => import("@/pages/PlatformHealthScores"));
 const PlatformBenchmarks = lazy(() => import("@/pages/PlatformBenchmarks"));
+const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -162,6 +163,7 @@ const App = () => (
                   <Route path="/admin/orders" element={<OrderManagement />} />
                   <Route path="/admin/client-notices" element={<ClientNotices />} />
                   <Route path="/admin/notifications" element={<Notifications />} />
+                  <Route path="/admin/subscription" element={<AdminSubscription />} />
                 </Route>
 
                 {/* Manager routes */}
