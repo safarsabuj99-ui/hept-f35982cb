@@ -1,20 +1,14 @@
 
 
-## Fix: Update Existing Organization Row to Blue Theme
+## Remove "New Client" from Sidebar & Add to Client List Page
 
-### Problem
-The migration only changed the **default** for new rows. The existing organization row still has `primary_color = '#6d28d9'` (purple) and `accent_color = '#f59e0b'` (amber). The `useBranding` hook reads these values and overrides the CSS variables, making the sidebar purple.
+### Changes
 
-### Fix
-One migration to update the existing data:
+**`src/components/AdminLayout.tsx`**
+- Remove the `{ to: "/admin/clients/new", icon: PlusCircle, label: "New Client", permKey: "can_manage_clients" }` entry from the sidebar navigation items (line 56).
 
-```sql
-UPDATE public.organizations
-SET primary_color = '#2655cc',
-    accent_color = '#e8eef8'
-WHERE primary_color = '#6d28d9'
-   OR accent_color = '#f59e0b';
-```
+**`src/pages/ClientList.tsx`**
+- Add a "New Client" button next to the client count badge in the page header (around line 288). The button links to `/admin/clients/new` with a `Plus` icon, matching the existing design pattern.
 
-This updates all existing organizations that still have the old purple/amber values to the correct blue theme. One migration, no code changes needed.
+No database or backend changes needed.
 
