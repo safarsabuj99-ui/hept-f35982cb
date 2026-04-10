@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import {
   Accordion,
   AccordionContent,
@@ -11,24 +10,18 @@ import {
 } from "@/components/ui/accordion";
 import {
   BarChart3,
-  Users,
-  Monitor,
-  DollarSign,
-  Shield,
-  Zap,
-  Paintbrush,
-  Layout,
+  FileText,
+  Wallet,
+  TrendingUp,
   ArrowRight,
   CheckCircle2,
   XCircle,
-  TrendingUp,
-  FileSpreadsheet,
   Clock,
-  Send,
+  Users,
+  Layers,
+  Zap,
+  Star,
   ChevronRight,
-  Globe,
-  Wallet,
-  Bot,
   Menu,
   X,
 } from "lucide-react";
@@ -40,147 +33,282 @@ function useReveal() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVisible(true); io.disconnect(); } },
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } },
       { threshold: 0.15 }
     );
-    io.observe(el);
-    return () => io.disconnect();
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
   return { ref, visible };
 }
 
-function Section({ children, className = "", id }: { children: React.ReactNode; className?: string; id?: string }) {
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
   const { ref, visible } = useReveal();
   return (
-    <section
+    <div
       ref={ref}
-      id={id}
-      className={`transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"} ${className}`}
+      className={`transition-all duration-700 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+      } ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
     >
       {children}
-    </section>
+    </div>
   );
 }
 
 /* ─── data ─── */
 const painPoints = [
-  { icon: FileSpreadsheet, title: "Tracking Spend on Spreadsheets", desc: "Copy-pasting ad spend from Meta, TikTok & Google into Excel every single day." },
-  { icon: DollarSign, title: "Manual Client Billing", desc: "Calculating each client's invoice by hand, converting currencies, chasing payments." },
-  { icon: TrendingUp, title: "Zero Profit Visibility", desc: "No idea which client is profitable until end-of-month when it's too late." },
-  { icon: Send, title: "Sending Reports Manually", desc: "Screenshotting dashboards and emailing PDF reports to every client, every week." },
+  {
+    icon: Layers,
+    title: "Account Chaos",
+    desc: "Juggling dozens of Meta, TikTok & Google ad accounts across clients. Copy-pasting IDs, losing track of which account belongs to whom.",
+  },
+  {
+    icon: FileText,
+    title: "Report Slavery",
+    desc: "Spending 2-3 hours every morning pulling numbers from each platform, formatting Excel sheets, and emailing reports to every client.",
+  },
+  {
+    icon: Wallet,
+    title: "Balance Blindness",
+    desc: "Manually tracking how much each client deposited vs. how much was actually spent. One miscalculation = angry client or lost profit.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Profit Guesswork",
+    desc: "No clear picture of your agency's real margins. How much USD was bought, at what rate, how much is left — it's all in scattered spreadsheets.",
+  },
 ];
 
-const featureCategories = [
+const features = [
   {
-    icon: BarChart3, title: "Dashboard & Analytics",
-    features: ["Real-time KPI cards with live spend data", "Spend trend charts across all platforms", "Profit/loss widgets per client", "Revenue vs cost comparison charts", "Attention alerts for anomalies"],
-    color: "from-blue-500/20 to-indigo-500/20",
+    icon: FileText,
+    title: "Automated Daily Reporting",
+    desc: "Generate polished performance reports for every client with one click. Spend, impressions, clicks, conversions — all pulled automatically from Meta, TikTok & Google.",
   },
   {
-    icon: Users, title: "Client Management",
-    features: ["Complete client database with balances", "Per-client platform pricing rates", "Wallet health & runway prediction", "Client assignment to managers", "Deposit & payment request workflows"],
-    color: "from-emerald-500/20 to-teal-500/20",
+    icon: BarChart3,
+    title: "Smart Ad Account Organization",
+    desc: "Map each client to their specific ad accounts across platforms. See at a glance which accounts belong to whom and switch context in seconds.",
   },
   {
-    icon: Monitor, title: "Ad Account Management",
-    features: ["Multi-platform accounts (Meta, TikTok, Google)", "Auto-sync spend from ad platforms via API", "Campaign mapping to clients", "Deep-dive campaign analytics", "Account-level spending limits & alerts"],
-    color: "from-purple-500/20 to-pink-500/20",
+    icon: Wallet,
+    title: "Client Balance Tracker",
+    desc: "Real-time dashboard showing every client's deposits, daily ad spend, and remaining dollar balance. No more spreadsheets, no more errors.",
   },
   {
-    icon: DollarSign, title: "Finance & Billing",
-    features: ["USD wallet inventory (WAC method)", "BDT-to-USD conversion with live rates", "Expense tracking by category", "Cash flow management & withdrawals", "Payment approval workflow with proof upload"],
-    color: "from-amber-500/20 to-orange-500/20",
+    icon: TrendingUp,
+    title: "Agency Profit & Dollar Management",
+    desc: "Track USD purchase costs, calculate your actual profit margins automatically, and forecast how many dollars you need to buy next. Your CFO in a dashboard.",
   },
-  {
-    icon: Layout, title: "Client Portal",
-    features: ["Branded self-service dashboard", "Real-time spend & performance reports", "Wallet balance & deposit requests", "Campaign request system", "Notice board & announcements"],
-    color: "from-cyan-500/20 to-sky-500/20",
-  },
-  {
-    icon: Shield, title: "Team & Permissions",
-    features: ["Role-based access (Admin, Manager, Client)", "Granular manager permissions", "Full audit log for every action", "Team member detail views", "Secure authentication system"],
-    color: "from-rose-500/20 to-red-500/20",
-  },
-  {
-    icon: Zap, title: "Automation Engine",
-    features: ["Auto-import ad accounts from APIs", "Auto-snapshot USD exchange rates", "Sync orchestrator for all platforms", "Billing radar alerts (threshold warnings)", "Auto-pause campaigns on low balance"],
-    color: "from-yellow-500/20 to-lime-500/20",
-  },
-  {
-    icon: Paintbrush, title: "White-Label Branding",
-    features: ["Custom logo & brand name", "Primary & accent color theming", "Branded client-facing portal", "Custom domain support", "Full agency identity, zero HEPT branding"],
-    color: "from-fuchsia-500/20 to-violet-500/20",
-  },
+];
+
+const stats = [
+  { value: "10+", label: "Hours Saved / Week", icon: Clock },
+  { value: "50+", label: "Clients Managed Easily", icon: Users },
+  { value: "3", label: "Platforms Connected", icon: Layers },
+  { value: "0", label: "Spreadsheets Needed", icon: Zap },
 ];
 
 const steps = [
-  { num: "01", title: "Connect Your Ad Platforms", desc: "Link your Meta, TikTok & Google Ads accounts. Our API sync pulls spend data automatically — no manual entry ever again.", icon: Globe },
-  { num: "02", title: "Add Clients & Set Pricing", desc: "Create client profiles, assign ad accounts, set per-platform pricing rates. The system calculates billable amounts automatically.", icon: Users },
-  { num: "03", title: "Everything Auto-Syncs", desc: "Spend tracking, billing, profit calculation, client reports — all updated in real-time. Your clients see their own branded portal.", icon: Bot },
+  {
+    num: "01",
+    title: "Connect Your Ad Accounts",
+    desc: "Link your Meta, TikTok & Google Ads accounts in minutes. We handle the API complexity.",
+  },
+  {
+    num: "02",
+    title: "Organize Clients & Accounts",
+    desc: "Map each client to their ad accounts. Set budgets, deposit amounts, and pricing rules.",
+  },
+  {
+    num: "03",
+    title: "Automate Everything",
+    desc: "Reports go out automatically. Balances update in real-time. Profits calculate themselves.",
+  },
+];
+
+const testimonials = [
+  {
+    name: "Rakib Hasan",
+    role: "Agency Owner, 35 Clients",
+    quote:
+      "I used to spend 3 hours every morning on reports. Now it takes 2 minutes. HEPT literally gave me my mornings back.",
+    rating: 5,
+  },
+  {
+    name: "Nusrat Jahan",
+    role: "Freelance Media Buyer",
+    quote:
+      "The client balance tracker alone is worth it. No more awkward conversations about 'how much is left' — clients can see it themselves.",
+    rating: 5,
+  },
+  {
+    name: "Tanvir Ahmed",
+    role: "Digital Marketing Agency, 50+ Clients",
+    quote:
+      "We scaled from 20 to 50 clients without hiring a single extra person for reporting or finance tracking. HEPT handles it all.",
+    rating: 5,
+  },
 ];
 
 const faqs = [
-  { q: "Which ad platforms do you support?", a: "HEPT currently supports Meta (Facebook & Instagram), TikTok, and Google Ads. We auto-sync spend data via official APIs so you never have to manually enter numbers again." },
-  { q: "How does client billing work?", a: "You set per-platform pricing rates for each client (e.g., $1.05 per $1 spent). HEPT automatically calculates billable amounts based on actual ad spend, converts currencies, and generates invoices. Clients can submit payment proofs through their portal." },
-  { q: "Can my clients see their own dashboard?", a: "Yes! Each client gets a branded self-service portal where they can view real-time spend reports, check wallet balance, request deposits, submit campaign requests, and download reports — eliminating manual reporting entirely." },
-  { q: "Is my data secure?", a: "Absolutely. HEPT uses enterprise-grade security with row-level access controls, encrypted API tokens, full audit logging of every action, and role-based permissions. Your clients can only see their own data." },
-  { q: "How does the USD wallet system work?", a: "HEPT uses a Weighted Average Cost (WAC) method for USD inventory management. When you buy USD at different rates, the system calculates a blended rate. This ensures accurate profit/loss tracking even with fluctuating exchange rates." },
-  { q: "Can I white-label the platform?", a: "Yes. You can set your own brand name, logo, and color scheme. Your clients will see your agency branding — not HEPT. It's your platform, your brand." },
-  { q: "What happens if a client's balance runs low?", a: "HEPT's Ad Guard system monitors client balances in real-time. When a balance drops below the threshold you set, it can automatically pause their campaigns to prevent overspend, and sends alerts to both you and the client." },
-  { q: "Do you offer a free trial?", a: "Yes! You can start with a free trial to explore all features. No credit card required. Once you're ready, choose a plan that fits your agency size." },
+  {
+    q: "Which ad platforms does HEPT support?",
+    a: "HEPT currently supports Meta (Facebook & Instagram Ads), TikTok Ads, and Google Ads. We're adding more platforms based on user demand.",
+  },
+  {
+    q: "How does the automated reporting work?",
+    a: "HEPT pulls performance data from your connected ad accounts daily, calculates key metrics (spend, impressions, clicks, conversions, ROAS), and generates beautiful client-ready reports you can share with one click.",
+  },
+  {
+    q: "Can my clients see their own balance and reports?",
+    a: "Yes! Each client gets their own branded portal where they can view their remaining balance, daily spend breakdown, and performance reports — all under your agency brand.",
+  },
+  {
+    q: "How is client billing calculated?",
+    a: "You set your own pricing rules per client (markup percentage, flat fee, or custom rates). HEPT tracks actual ad spend in USD, applies your pricing, and shows you the exact profit on every dollar spent.",
+  },
+  {
+    q: "Is my data secure?",
+    a: "Absolutely. We use bank-grade encryption, row-level security policies, and your data is isolated per organization. We never share or access your client data.",
+  },
+  {
+    q: "Can I try before I pay?",
+    a: "Yes — every plan starts with a 14-day free trial. No credit card required upfront. You'll have full access to all features during the trial.",
+  },
 ];
 
-const comparisonRows = [
-  { feature: "Ad spend tracking", without: "Manual copy-paste from each platform daily", with: "Auto-synced every hour from Meta, TikTok & Google" },
-  { feature: "Client billing", without: "Excel formulas, manual currency conversion", with: "Automatic calculation with per-client pricing rates" },
-  { feature: "Profit visibility", without: "End-of-month surprise (maybe a loss)", with: "Real-time P&L per client, per platform" },
-  { feature: "Client reporting", without: "Screenshot dashboards, email PDFs weekly", with: "Clients see their own live portal 24/7" },
-  { feature: "Payment tracking", without: "WhatsApp messages & mental notes", with: "Payment requests with proof upload & approval workflow" },
-  { feature: "Exchange rates", without: "Google search & calculator", with: "Auto-snapshot USD rates with WAC inventory" },
+const beforeAfter = [
+  { before: "3 hours daily on manual reports", after: "Auto-generated in 2 minutes" },
+  { before: "Scattered Excel spreadsheets", after: "One unified dashboard" },
+  { before: "Client balance errors & disputes", after: "Real-time balance tracking" },
+  { before: "Guessing agency profit margins", after: "Automated profit calculation" },
+  { before: "Searching across 3 platform dashboards", after: "All platforms in one view" },
+  { before: "Manual USD purchase tracking", after: "Dollar inventory forecasting" },
 ];
 
-/* ─── component ─── */
+/* ─── mock dashboard component ─── */
+function DashboardMockup() {
+  return (
+    <div className="relative w-full max-w-4xl mx-auto">
+      <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-destructive/60" />
+            <div className="w-3 h-3 rounded-full bg-warning/60" />
+            <div className="w-3 h-3 rounded-full bg-success/60" />
+          </div>
+          <div className="flex-1 text-center">
+            <div className="inline-block bg-background rounded px-3 py-0.5 text-xs text-muted-foreground">
+              app.heptbd.com/dashboard
+            </div>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-4 gap-3">
+            {["Total Clients", "Active Spend", "Revenue", "Profit"].map((label) => (
+              <div key={label} className="bg-muted/40 rounded-lg p-3 space-y-1">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
+                <div className="h-5 bg-primary/20 rounded w-2/3" />
+              </div>
+            ))}
+          </div>
+          <div className="bg-muted/30 rounded-lg p-4 h-32 flex items-end gap-1">
+            {[40, 65, 50, 80, 60, 90, 75, 85, 70, 95, 80, 88].map((h, i) => (
+              <div key={i} className="flex-1 bg-primary/30 rounded-t" style={{ height: `${h}%` }} />
+            ))}
+          </div>
+          <div className="space-y-2">
+            {[1, 2, 3].map((r) => (
+              <div key={r} className="flex items-center gap-3 bg-muted/20 rounded-lg p-3">
+                <div className="w-8 h-8 rounded-full bg-primary/20" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 bg-muted-foreground/15 rounded w-1/3" />
+                  <div className="h-2 bg-muted-foreground/10 rounded w-1/2" />
+                </div>
+                <div className="h-6 w-16 bg-success/20 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="absolute -inset-4 bg-primary/5 rounded-2xl blur-3xl -z-10" />
+    </div>
+  );
+}
+
+/* ─── platform badges ─── */
+function PlatformBadges() {
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Works with</span>
+      {[
+        { name: "Meta Ads", color: "bg-[hsl(var(--chart-meta))]" },
+        { name: "TikTok Ads", color: "bg-[hsl(var(--chart-tiktok))]" },
+        { name: "Google Ads", color: "bg-[hsl(var(--chart-google))]" },
+      ].map((p) => (
+        <span key={p.name} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-xs font-medium text-foreground">
+          <span className={`w-2 h-2 rounded-full ${p.color}`} />
+          {p.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════ MAIN COMPONENT ═══════════ */
 export default function LandingPage() {
-  const [mobileNav, setMobileNav] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const scrollTo = (id: string) => {
-    setMobileNav(false);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  };
+  const navLinks = [
+    { href: "#problems", label: "Problems" },
+    { href: "#features", label: "Features" },
+    { href: "#how-it-works", label: "How It Works" },
+    { href: "#testimonials", label: "Testimonials" },
+    { href: "#faq", label: "FAQ" },
+  ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground antialiased">
       {/* ── NAVBAR ── */}
-      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
-          <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-            HEPT
-          </span>
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
-            <button onClick={() => scrollTo("pain")} className="hover:text-foreground transition-colors">Problems</button>
-            <button onClick={() => scrollTo("features")} className="hover:text-foreground transition-colors">Features</button>
-            <button onClick={() => scrollTo("how")} className="hover:text-foreground transition-colors">How It Works</button>
-            <button onClick={() => scrollTo("compare")} className="hover:text-foreground transition-colors">Compare</button>
-            <button onClick={() => scrollTo("faq")} className="hover:text-foreground transition-colors">FAQ</button>
+      <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+          <Link to="/" className="text-xl font-bold tracking-tight text-foreground">HEPT</Link>
+
+          <div className="hidden md:flex items-center gap-8">
+            {navLinks.map((l) => (
+              <a key={l.href} href={l.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">{l.label}</a>
+            ))}
           </div>
+
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild><Link to="/login">Login</Link></Button>
-            <Button size="sm" asChild><Link to="/signup">Get Started Free <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
+            <Button variant="ghost" size="sm" asChild><Link to="/login">Log In</Link></Button>
+            <Button size="sm" asChild><Link to="/signup">Automate My Agency</Link></Button>
           </div>
-          <button className="md:hidden" onClick={() => setMobileNav(!mobileNav)}>
-            {mobileNav ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+
+          <button className="md:hidden p-2 text-muted-foreground" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-        {mobileNav && (
-          <div className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur-xl px-4 py-4 space-y-3 text-sm">
-            <button onClick={() => scrollTo("pain")} className="block w-full text-left py-1">Problems</button>
-            <button onClick={() => scrollTo("features")} className="block w-full text-left py-1">Features</button>
-            <button onClick={() => scrollTo("how")} className="block w-full text-left py-1">How It Works</button>
-            <button onClick={() => scrollTo("compare")} className="block w-full text-left py-1">Compare</button>
-            <button onClick={() => scrollTo("faq")} className="block w-full text-left py-1">FAQ</button>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-2">
+            {navLinks.map((l) => (
+              <a key={l.href} href={l.href} className="block py-2 text-sm text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
+            ))}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">Login</Link></Button>
+              <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">Log In</Link></Button>
               <Button size="sm" className="flex-1" asChild><Link to="/signup">Get Started</Link></Button>
             </div>
           </div>
@@ -188,292 +316,311 @@ export default function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <header className="relative pt-32 pb-20 md:pt-44 md:pb-32 overflow-hidden">
-        {/* bg glow */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-[-30%] left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-primary/15 blur-[120px]" />
-          <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-blue-400/10 blur-[100px]" />
+      <section className="relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16 lg:pt-28 lg:pb-24">
+          <div className="max-w-3xl mx-auto text-center space-y-6">
+            <Reveal>
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold tracking-wide">
+                <Zap className="w-3.5 h-3.5" /> Built for Media Buying Agencies
+              </span>
+            </Reveal>
+            <Reveal delay={100}>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
+                Automate Your Agency.{" "}
+                <span className="text-primary">Scale Your Clients.</span>
+              </h1>
+            </Reveal>
+            <Reveal delay={200}>
+              <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Stop wasting hours on manual reports, spreadsheet tracking, and balance calculations.
+                HEPT automates ad spend reporting, client billing, and profit analytics — so you can
+                manage 50+ clients as easily as 5.
+              </p>
+            </Reveal>
+            <Reveal delay={300}>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Button size="lg" className="text-base px-8" asChild>
+                  <Link to="/signup">Automate My Agency <ArrowRight className="w-4 h-4 ml-1" /></Link>
+                </Button>
+                <Button variant="outline" size="lg" className="text-base px-8" asChild>
+                  <a href="#features">See How It Works</a>
+                </Button>
+              </div>
+            </Reveal>
+            <Reveal delay={400}>
+              <div className="flex justify-center"><PlatformBadges /></div>
+            </Reveal>
+          </div>
+
+          <Reveal delay={500} className="mt-16">
+            <DashboardMockup />
+          </Reveal>
         </div>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent -z-10 rounded-full blur-3xl" />
+      </section>
 
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
-          <Badge variant="secondary" className="mb-6 text-xs font-medium px-3 py-1">
-            Built for Digital Marketing Agencies 🚀
-          </Badge>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.1] tracking-tight mb-6">
-            Stop Managing Ad Spend{" "}
-            <span className="bg-gradient-to-r from-primary via-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              on Spreadsheets
-            </span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            HEPT auto-syncs your Meta, TikTok & Google ad spend, calculates client billing, tracks profit in real-time,
-            and gives every client their own branded portal — so you can stop copy-pasting and start scaling.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Button size="lg" className="text-base px-8 h-12 shadow-lg shadow-primary/25" asChild>
-              <Link to="/signup">Start Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
-            </Button>
-            <Button size="lg" variant="outline" className="text-base px-8 h-12" onClick={() => scrollTo("features")}>
-              See All Features
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> No credit card</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> 14-day free trial</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Cancel anytime</span>
-          </div>
+      {/* ── PAIN / AGITATION ── */}
+      <section id="problems" className="py-20 lg:py-28 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Problem</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Running an agency shouldn't feel like this</h2>
+              <p className="mt-4 text-muted-foreground text-lg">If you manage paid campaigns for multiple clients, you know these daily struggles too well.</p>
+            </div>
+          </Reveal>
 
-          {/* platform badges */}
-          <div className="mt-14 flex items-center justify-center gap-8 opacity-60">
-            <div className="flex items-center gap-2 text-sm font-medium"><div className="w-8 h-8 rounded-lg bg-[hsl(214,80%,52%)] flex items-center justify-center text-white text-xs font-bold">f</div> Meta Ads</div>
-            <div className="flex items-center gap-2 text-sm font-medium"><div className="w-8 h-8 rounded-lg bg-[hsl(340,75%,55%)] flex items-center justify-center text-white text-xs font-bold">T</div> TikTok Ads</div>
-            <div className="flex items-center gap-2 text-sm font-medium"><div className="w-8 h-8 rounded-lg bg-[hsl(142,60%,45%)] flex items-center justify-center text-white text-xs font-bold">G</div> Google Ads</div>
-          </div>
-        </div>
-      </header>
-
-      {/* ── PAIN POINTS ── */}
-      <Section id="pain" className="py-20 md:py-28">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <Badge variant="outline" className="mb-4">Sound Familiar?</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">The Daily Chaos of Running an Ad Agency</h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">If you're still doing any of this manually, you're losing hours every day — and money every month.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 gap-6 mb-16">
             {painPoints.map((p, i) => (
-              <Card key={i} className="border-destructive/20 bg-destructive/[0.03] hover:border-destructive/40 transition-colors group">
-                <CardContent className="pt-6">
-                  <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center mb-4 group-hover:bg-destructive/20 transition-colors">
-                    <p.icon className="h-5 w-5 text-destructive" />
+              <Reveal key={p.title} delay={i * 100}>
+                <Card className="p-6 hover:shadow-lg transition-shadow border-border/60 h-full">
+                  <div className="flex gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+                      <p.icon className="w-5 h-5 text-destructive" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg mb-1">{p.title}</h3>
+                      <p className="text-muted-foreground text-sm leading-relaxed">{p.desc}</p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold mb-2">{p.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{p.desc}</p>
-                </CardContent>
-              </Card>
+                </Card>
+              </Reveal>
             ))}
           </div>
+
+          <Reveal>
+            <div className="max-w-3xl mx-auto">
+              <h3 className="text-center text-xl font-bold mb-6">Before HEPT vs. After HEPT</h3>
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="grid grid-cols-2 text-sm font-semibold border-b border-border">
+                  <div className="px-6 py-3 bg-destructive/5 text-destructive">❌ Before</div>
+                  <div className="px-6 py-3 bg-success/5 text-[hsl(var(--success))]">✅ After</div>
+                </div>
+                {beforeAfter.map((row, i) => (
+                  <div key={i} className={`grid grid-cols-2 text-sm ${i < beforeAfter.length - 1 ? "border-b border-border/50" : ""}`}>
+                    <div className="px-6 py-3 flex items-center gap-2 text-muted-foreground">
+                      <XCircle className="w-4 h-4 text-destructive/60 flex-shrink-0" />{row.before}
+                    </div>
+                    <div className="px-6 py-3 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[hsl(var(--success))] flex-shrink-0" />{row.after}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
         </div>
-      </Section>
+      </section>
 
       {/* ── FEATURES ── */}
-      <Section id="features" className="py-20 md:py-28 bg-muted/30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <Badge variant="outline" className="mb-4">All-In-One Platform</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Everything Your Agency Needs, Under One Roof</h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">From ad spend tracking to client billing to white-label portals — HEPT replaces your entire spreadsheet stack.</p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-5">
-            {featureCategories.map((cat, i) => (
-              <Card key={i} className="overflow-hidden hover:shadow-lg transition-shadow group">
-                <CardContent className="pt-6">
-                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${cat.color} flex items-center justify-center mb-4`}>
-                    <cat.icon className="h-5 w-5 text-foreground" />
+      <section id="features" className="py-20 lg:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Solution</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Everything you need to run a profitable agency</h2>
+              <p className="mt-4 text-muted-foreground text-lg">Four powerful modules that replace your spreadsheets, manual reports, and guesswork.</p>
+            </div>
+          </Reveal>
+
+          <div className="space-y-20">
+            {features.map((f, i) => (
+              <Reveal key={f.title} delay={100}>
+                <div className={`flex flex-col lg:flex-row gap-10 items-center ${i % 2 === 1 ? "lg:flex-row-reverse" : ""}`}>
+                  <div className="flex-1 space-y-4">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <f.icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <h3 className="text-2xl font-bold">{f.title}</h3>
+                    <p className="text-muted-foreground leading-relaxed text-base">{f.desc}</p>
+                    <Link to="/signup" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                      Try it free <ChevronRight className="w-4 h-4" />
+                    </Link>
                   </div>
-                  <h3 className="text-lg font-semibold mb-3">{cat.title}</h3>
-                  <ul className="space-y-2">
-                    {cat.features.map((f, j) => (
-                      <li key={j} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+                  <div className="flex-1 w-full">
+                    <div className="bg-card border border-border rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center gap-1.5 mb-4">
+                        <div className="w-2.5 h-2.5 rounded-full bg-destructive/50" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-success/50" />
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded bg-primary/15" />
+                          <div className="flex-1 h-3 bg-muted rounded" />
+                          <div className="w-16 h-6 bg-success/15 rounded" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded bg-primary/10" />
+                          <div className="flex-1 h-3 bg-muted rounded w-3/4" />
+                          <div className="w-16 h-6 bg-primary/15 rounded" />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded bg-primary/10" />
+                          <div className="flex-1 h-3 bg-muted rounded w-5/6" />
+                          <div className="w-16 h-6 bg-warning/15 rounded" />
+                        </div>
+                        <div className="h-24 bg-muted/40 rounded-lg mt-3 flex items-end gap-1 p-3">
+                          {[30, 55, 45, 70, 50, 80, 65].map((h, j) => (
+                            <div key={j} className="flex-1 bg-primary/25 rounded-t" style={{ height: `${h}%` }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
-      </Section>
+      </section>
+
+      {/* ── TIME SAVING ── */}
+      <section className="py-20 lg:py-28 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Impact</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Manage 50 clients as easily as 5</h2>
+              <p className="mt-4 text-muted-foreground text-lg">Agencies using HEPT reclaim hours every week and scale without hiring extra staff.</p>
+            </div>
+          </Reveal>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map((s, i) => (
+              <Reveal key={s.label} delay={i * 100}>
+                <Card className="p-6 text-center hover:shadow-lg transition-shadow border-border/60">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <s.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-extrabold text-foreground">{s.value}</div>
+                  <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+                </Card>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ── HOW IT WORKS ── */}
-      <Section id="how" className="py-20 md:py-28">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <Badge variant="outline" className="mb-4">Simple Setup</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Up and Running in 3 Steps</h2>
-            <p className="text-muted-foreground max-w-lg mx-auto">No complex onboarding. Connect your platforms, add clients, and let HEPT handle the rest.</p>
-          </div>
+      <section id="how-it-works" className="py-20 lg:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">How It Works</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Up and running in under 10 minutes</h2>
+            </div>
+          </Reveal>
           <div className="grid md:grid-cols-3 gap-8">
             {steps.map((s, i) => (
-              <div key={i} className="relative text-center md:text-left">
-                <div className="text-5xl font-black text-primary/10 mb-2">{s.num}</div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 mx-auto md:mx-0">
-                  <s.icon className="h-6 w-6 text-primary" />
+              <Reveal key={s.num} delay={i * 150}>
+                <div className="relative text-center space-y-4">
+                  <div className="text-5xl font-extrabold text-primary/15">{s.num}</div>
+                  <h3 className="text-xl font-bold">{s.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
+                  {i < steps.length - 1 && (
+                    <div className="hidden md:block absolute top-8 -right-4 text-primary/20">
+                      <ArrowRight className="w-8 h-8" />
+                    </div>
+                  )}
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{s.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-                {i < 2 && <ChevronRight className="hidden md:block absolute top-14 -right-4 h-5 w-5 text-muted-foreground/40" />}
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
-      </Section>
+      </section>
 
-      {/* ── COMPARISON TABLE ── */}
-      <Section id="compare" className="py-20 md:py-28 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <Badge variant="outline" className="mb-4">Before & After</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Your Agency Without HEPT vs. With HEPT</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 font-semibold w-1/4">Task</th>
-                  <th className="text-left py-3 px-4 font-semibold text-destructive">Without HEPT 😩</th>
-                  <th className="text-left py-3 px-4 font-semibold text-primary">With HEPT ✨</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonRows.map((r, i) => (
-                  <tr key={i} className="border-b border-border/50">
-                    <td className="py-3 px-4 font-medium">{r.feature}</td>
-                    <td className="py-3 px-4 text-muted-foreground"><span className="flex items-start gap-1.5"><XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />{r.without}</span></td>
-                    <td className="py-3 px-4 text-muted-foreground"><span className="flex items-start gap-1.5"><CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />{r.with}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── CLIENT PORTAL PREVIEW ── */}
-      <Section className="py-20 md:py-28">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <Badge variant="outline" className="mb-4">Client Portal</Badge>
-              <h2 className="text-3xl font-bold mb-4">Your Clients Get Their Own Branded Portal</h2>
-              <p className="text-muted-foreground mb-6 leading-relaxed">
-                No more screenshotting dashboards or emailing PDF reports. Each client gets a white-labeled portal with their own login — branded with your agency's name, logo, and colors.
-              </p>
-              <ul className="space-y-3">
-                {["Real-time ad spend & performance dashboard", "Wallet balance & deposit request system", "Campaign request submission", "Downloadable reports & analytics", "Notice board for agency announcements"].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-primary shrink-0" />{item}</li>
-                ))}
-              </ul>
+      {/* ── TESTIMONIALS ── */}
+      <section id="testimonials" className="py-20 lg:py-28 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">Testimonials</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Trusted by agencies across Bangladesh</h2>
             </div>
-            <div className="relative">
-              <div className="rounded-2xl border border-border bg-card p-6 shadow-xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-3 h-3 rounded-full bg-destructive/60" />
-                  <div className="w-3 h-3 rounded-full bg-warning/60" />
-                  <div className="w-3 h-3 rounded-full bg-success/60" />
-                  <span className="text-xs text-muted-foreground ml-2">client-portal.youragency.com</span>
-                </div>
-                <div className="space-y-3">
-                  <div className="h-8 rounded bg-primary/10 w-2/3" />
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="h-16 rounded bg-muted" />
-                    <div className="h-16 rounded bg-muted" />
-                    <div className="h-16 rounded bg-muted" />
+          </Reveal>
+          <div className="grid md:grid-cols-3 gap-6">
+            {testimonials.map((t, i) => (
+              <Reveal key={t.name} delay={i * 100}>
+                <Card className="p-6 h-full flex flex-col border-border/60 hover:shadow-lg transition-shadow">
+                  <div className="flex gap-1 mb-4">
+                    {Array.from({ length: t.rating }).map((_, j) => (
+                      <Star key={j} className="w-4 h-4 fill-warning text-warning" />
+                    ))}
                   </div>
-                  <div className="h-24 rounded bg-muted/60" />
-                  <div className="h-12 rounded bg-muted/40" />
-                </div>
-              </div>
-              <div className="absolute -bottom-4 -right-4 w-32 h-32 rounded-full bg-primary/5 blur-[60px] -z-10" />
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── STATS ── */}
-      <Section className="py-16 bg-primary/[0.03]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { val: "3", label: "Ad Platforms Supported" },
-              { val: "∞", label: "Clients & Ad Accounts" },
-              { val: "24/7", label: "Auto-Sync Engine" },
-              { val: "100%", label: "White-Label Ready" },
-            ].map((s, i) => (
-              <div key={i}>
-                <div className="text-3xl sm:text-4xl font-extrabold text-primary mb-1">{s.val}</div>
-                <div className="text-sm text-muted-foreground">{s.label}</div>
-              </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed flex-1 italic">"{t.quote}"</p>
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-sm font-bold text-primary">
+                      {t.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">{t.name}</div>
+                      <div className="text-xs text-muted-foreground">{t.role}</div>
+                    </div>
+                  </div>
+                </Card>
+              </Reveal>
             ))}
           </div>
         </div>
-      </Section>
-
-      {/* ── PRICING CTA ── */}
-      <Section className="py-20 md:py-28">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <Badge variant="outline" className="mb-4">Flexible Plans</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">Plans for Every Agency Size</h2>
-          <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-            From solo freelancers to large agencies — pick a plan that matches your client count, ad accounts, and team size. Upgrade anytime as you grow.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-4 mb-8">
-            {[
-              { name: "Starter", desc: "For freelancers just getting started", highlight: false },
-              { name: "Growth", desc: "For growing agencies with multiple clients", highlight: true },
-              { name: "Agency Pro", desc: "For large teams managing 50+ clients", highlight: false },
-            ].map((plan, i) => (
-              <Card key={i} className={`${plan.highlight ? "border-primary shadow-lg shadow-primary/10 ring-1 ring-primary/20" : ""}`}>
-                <CardContent className="pt-6 text-center">
-                  <h3 className="font-bold text-lg mb-1">{plan.name}</h3>
-                  <p className="text-xs text-muted-foreground mb-4">{plan.desc}</p>
-                  <Button variant={plan.highlight ? "default" : "outline"} size="sm" className="w-full" asChild>
-                    <Link to="/signup">Get Started</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">All plans include a 14-day free trial. No credit card required.</p>
-        </div>
-      </Section>
+      </section>
 
       {/* ── FAQ ── */}
-      <Section id="faq" className="py-20 md:py-28 bg-muted/30">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <Badge variant="outline" className="mb-4">FAQ</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
-          </div>
-          <Accordion type="single" collapsible className="space-y-2">
-            {faqs.map((f, i) => (
-              <AccordionItem key={i} value={`faq-${i}`} className="border rounded-lg px-4 bg-card">
-                <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">{f.q}</AccordionTrigger>
-                <AccordionContent className="text-sm text-muted-foreground leading-relaxed">{f.a}</AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
+      <section id="faq" className="py-20 lg:py-28">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-12">
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">FAQ</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Frequently asked questions</h2>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <Accordion type="single" collapsible className="w-full">
+              {faqs.map((f, i) => (
+                <AccordionItem key={i} value={`faq-${i}`}>
+                  <AccordionTrigger className="text-left text-base">{f.q}</AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground leading-relaxed">{f.a}</AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Reveal>
         </div>
-      </Section>
+      </section>
 
       {/* ── FINAL CTA ── */}
-      <section className="py-24 md:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-primary/10 blur-[100px]" />
-        </div>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">Ready to Automate Your Agency?</h2>
-          <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-            Join digital marketing agencies who have ditched spreadsheets and automated their entire ad spend management workflow.
-          </p>
-          <Button size="lg" className="text-base px-10 h-12 shadow-lg shadow-primary/25" asChild>
-            <Link to="/signup">Start Your Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
-          </Button>
-          <p className="text-xs text-muted-foreground mt-4">Free 14-day trial · No credit card required · Cancel anytime</p>
+      <section className="py-20 lg:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="relative rounded-2xl bg-primary p-12 lg:p-16 text-center overflow-hidden">
+              <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">Ready to automate your agency?</h2>
+              <p className="text-primary-foreground/80 text-lg max-w-xl mx-auto mb-8">
+                Join hundreds of media buying agencies who've stopped drowning in spreadsheets and started scaling with HEPT.
+              </p>
+              <Button size="lg" variant="secondary" className="text-base px-8" asChild>
+                <Link to="/signup">Start Free 14-Day Trial <ArrowRight className="w-4 h-4 ml-1" /></Link>
+              </Button>
+              <p className="text-primary-foreground/60 text-xs mt-4">No credit card required • Full access during trial</p>
+              <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-primary-foreground/5" />
+              <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-primary-foreground/5" />
+            </div>
+          </Reveal>
         </div>
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-border py-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">HEPT</span>
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} HEPT — Built for digital marketing agencies</p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <a href="https://heptbd.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">heptbd.com</a>
-            <Link to="/login" className="hover:text-foreground transition-colors">Login</Link>
+      <footer className="border-t border-border py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div>
+              <div className="text-lg font-bold">HEPT</div>
+              <div className="text-sm text-muted-foreground mt-1">Agency automation platform for digital marketers.</div>
+            </div>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <a href="https://heptbd.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">heptbd.com</a>
+              <Link to="/login" className="hover:text-foreground transition-colors">Log In</Link>
+              <Link to="/signup" className="hover:text-foreground transition-colors">Sign Up</Link>
+            </div>
           </div>
+          <div className="mt-8 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} HEPT. All rights reserved.</div>
         </div>
       </footer>
     </div>
