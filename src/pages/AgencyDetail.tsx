@@ -49,15 +49,19 @@ export default function AgencyDetail() {
   useEffect(() => {
     if (!agencyId) return;
     const fetch = async () => {
-      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }] = await Promise.all([
+      const [{ data: orgData }, { data: profiles }, { data: adAccounts }, { data: invData }, { data: logs }, { data: subData }, { data: planData }] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", agencyId).single(),
         supabase.from("profiles").select("*").eq("org_id", agencyId),
         supabase.from("ad_accounts").select("id").eq("org_id", agencyId),
         supabase.from("platform_invoices" as any).select("*").eq("org_id", agencyId).order("created_at", { ascending: false }),
         supabase.from("audit_logs").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("organization_subscriptions").select("*").eq("org_id", agencyId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly").eq("is_active", true).order("sort_order"),
       ]);
 
       setOrg(orgData as any);
+      setSubscription(subData?.[0] ?? null);
+      if (planData?.length) setPlans(planData as PlanOption[]);
 
       const clients = profiles?.filter((p) => !p.is_super_admin && p.user_id !== orgData?.owner_user_id) ?? [];
       const managers = profiles?.filter((p) => {
@@ -86,6 +90,39 @@ export default function AgencyDetail() {
     const { error } = await supabase.from("organizations").update({ [field]: value } as any).eq("id", agencyId);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else { setOrg((prev) => prev ? { ...prev, [field]: value } : prev); toast({ title: "Updated" }); }
+    setSaving(false);
+  };
+
+  const handlePlanChange = async (newPlan: string) => {
+    if (!agencyId) return;
+    setSaving(true);
+    const planInfo = plans.find((p) => p.key === newPlan);
+
+    // Update org plan + resource limits
+    const updates: any = { plan: newPlan };
+    if (planInfo) {
+      updates.max_clients = planInfo.max_clients;
+      updates.max_ad_accounts = planInfo.max_ad_accounts;
+      updates.max_managers = planInfo.max_managers;
+    }
+
+    const { error } = await supabase.from("organizations").update(updates).eq("id", agencyId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setOrg((prev) => prev ? { ...prev, ...updates } : prev);
+
+      // Update subscription record too
+      if (subscription && planInfo) {
+        await supabase
+          .from("organization_subscriptions")
+          .update({ plan: newPlan as any, amount_bdt: planInfo.price_bdt_monthly, updated_at: new Date().toISOString() })
+          .eq("id", subscription.id);
+        setSubscription((prev: any) => prev ? { ...prev, plan: newPlan, amount_bdt: planInfo.price_bdt_monthly } : prev);
+      }
+
+      toast({ title: "Plan updated", description: `Plan changed to ${planInfo?.name ?? newPlan}. Resource limits synced.` });
+    }
     setSaving(false);
   };
 
