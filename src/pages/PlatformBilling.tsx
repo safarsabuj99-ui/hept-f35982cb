@@ -495,6 +495,34 @@ export default function PlatformBilling() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reject Payment Dialog */}
+      <Dialog open={!!reviewingPayment} onOpenChange={(o) => !o && setReviewingPayment(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Payment — ৳{reviewingPayment?.amount_bdt.toLocaleString()}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">From: <strong className="text-foreground">{reviewingPayment?.org_name}</strong></p>
+            <div>
+              <Label>Rejection Reason</Label>
+              <Textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Explain why this payment is being rejected..." rows={3} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReviewingPayment(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reviewingPayment && rejectPayment(reviewingPayment)} disabled={saving || !rejectNote.trim()}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Reject Payment
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proof Preview Dialog */}
+      <Dialog open={!!proofPreview} onOpenChange={(o) => !o && setProofPreview(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ImageIcon className="h-4 w-4" /> Payment Proof</DialogTitle></DialogHeader>
+          {proofPreview && <img src={proofPreview} alt="Payment proof" className="w-full rounded-lg border" />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
