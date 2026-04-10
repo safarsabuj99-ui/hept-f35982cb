@@ -62,15 +62,17 @@ export default function PlatformBilling() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: invData }, { data: orgData }, { data: payData }] = await Promise.all([
+    const [{ data: invData }, { data: orgData }, { data: payData }, { data: upgradeData }] = await Promise.all([
       supabase.from("platform_invoices" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("organizations").select("id, name"),
       supabase.from("subscription_payments").select("*").order("created_at", { ascending: false }),
+      supabase.from("plan_upgrade_requests").select("*").order("created_at", { ascending: false }),
     ]);
     const orgMap = new Map((orgData ?? []).map((o) => [o.id, o.name]));
     setInvoices(((invData as any[]) ?? []).map((inv: any) => ({ ...inv, org_name: orgMap.get(inv.org_id) || "Unknown" })));
     setOrgs(orgData ?? []);
     setPendingPayments(((payData as any[]) ?? []).map((p: any) => ({ ...p, org_name: orgMap.get(p.org_id) || "Unknown" })));
+    setUpgradeRequests(((upgradeData as any[]) ?? []).map((u: any) => ({ ...u, org_name: orgMap.get(u.org_id) || "Unknown" })));
     setLoading(false);
   };
 
