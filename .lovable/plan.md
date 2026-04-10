@@ -1,93 +1,46 @@
 
 
-## Full Operational SaaS Plan — Feature-Based Plan Enforcement
+## Fix Agency Detail: Accurate Usage Stats & Full Subscription Management
 
-### Problem
-Currently, plan "features" (like "Basic Analytics", "API Access", "White Label") are just display text. Agencies get **no real enforcement** — every agency can use every feature regardless of plan. Also, the subscription for "MD SABUJ MIAH Agency" shows plan `starter` while the org shows `agency_pro` — a data mismatch.
+### Problem 1: Usage Stats Are Wrong
+The current code counts clients and managers using **broken heuristics** — it filters `profiles` by checking if `permissions` has keys (for managers) and excludes the owner (for clients). This never matches actual roles because roles live in `user_roles`, not `profiles.permissions`.
 
-### What Changes
+**Fix:** Query `user_roles` joined with `profiles` to get accurate counts by role:
+- Clients = profiles in this org with `user_roles.role = 'client'`
+- Managers = profiles in this org with `user_roles.role = 'manager'`
+- Ad Accounts = already correct (counts `ad_accounts` by `org_id`)
 
-#### 1. Structured Feature Flags on Plans (Database)
-Add a `feature_flags` JSONB column to `platform_plans` with boolean toggles for every real feature the platform offers. Replace the current free-text `features` with structured, enforceable flags.
+### Problem 2: Subscription Not Editable
+Currently you can only change the plan dropdown. No way to edit billing cycle, payment status, period dates, amount, or payment method.
 
-Feature flags to support:
-- `ad_guard` — Auto-pause on low balance
-- `advanced_analytics` — Deep-dive campaign analytics
-- `api_access` — API integrations (Meta/TikTok/Google)
-- `white_label` — Custom branding (logo, colors)
-- `campaign_requests` — Client self-service campaign submissions
-- `multi_manager` — More than 1 manager
-- `priority_support` — Priority support badge
-- `expense_tracking` — Agency expense manager
-- `cash_flow` — Cash flow & withdrawal management
-- `usd_inventory` — USD inventory tracking
-- `custom_exchange_rate` — Per-client exchange rates
-- `client_notices` — Dashboard notice banners
+**Fix:** Add a full subscription editor in the Overview tab:
+- Editable fields: billing cycle (monthly/yearly), payment status (pending/paid/overdue), current period start/end, amount, payment method, transaction reference
+- When switching billing cycle, auto-recalculate amount from `platform_plans` (monthly vs yearly price)
+- Per-feature override toggles — allow customizing `allowed_features` per agency beyond the plan defaults
 
-#### 2. Sync Feature Flags to Organizations (Database)
-Add `allowed_features` JSONB column to `organizations`. When a plan is assigned or changed, the org's `allowed_features` is synced from the plan's `feature_flags`.
+### Implementation
 
-#### 3. Fix Data Mismatch
-Update MD SABUJ MIAH Agency's subscription record to match the org plan (`agency_pro`).
+**File: `src/pages/AgencyDetail.tsx`**
 
-#### 4. Enhanced Plan Management UI
-Replace the free-text features textarea in `PlatformPlans.tsx` with a structured toggle grid. Each feature gets a switch with a clear label. The free-text list is auto-generated from enabled flags for display on plan cards.
+1. **Fix usage counting (lines 53-77):**
+   - Add a query: `supabase.from("user_roles").select("user_id, role").in("user_id", profileUserIds)`
+   - Count clients = user_roles where role='client' AND user_id is in org profiles
+   - Count managers = user_roles where role='manager' AND user_id is in org profiles
 
-#### 5. Plan Change Syncs Features
-Update `AgencyDetail.tsx` and `CreateAgency.tsx` to also sync `allowed_features` from the plan's `feature_flags` when assigning/changing plans.
+2. **Add subscription editor section:**
+   - Replace the read-only subscription card with an editable form
+   - Add fields for: billing_cycle (Select), payment_status (Select), current_period_start/end (Input date), amount_bdt (Input number), payment_method (Input text), transaction_reference (Input text)
+   - Save button updates `organization_subscriptions` record
+   - When billing cycle changes between monthly/yearly, auto-update amount from the plan's `price_bdt_monthly` or `price_bdt_yearly`
 
-#### 6. Feature Gate Hook
-Create `src/hooks/useOrgFeatures.ts` — reads the org's `allowed_features` and exposes a `hasFeature(key)` helper. Agency admin UI components can use this to show/hide features based on the plan.
+3. **Add per-agency feature override:**
+   - Below the Plan Features card, add an "Override Features" button
+   - Opens a dialog with toggle switches for each feature flag
+   - Saves directly to `organizations.allowed_features` without changing the plan
+   - Shows a badge "Custom" when features differ from the plan defaults
 
-#### 7. Gate Key Features in Agency Admin UI
-Add feature gates to:
-- `AdminLayout.tsx` sidebar — hide nav items for features not in plan
-- `BrandingTab.tsx` — gate behind `white_label`
-- `ExpenseManager.tsx` — gate behind `expense_tracking`
-- `CashFlowManagement.tsx` — gate behind `cash_flow`
-- `WalletInventory.tsx` — gate behind `usd_inventory`
-- `AutomationConfigTab.tsx` — gate behind `ad_guard`
-- Campaign request pages — gate behind `campaign_requests`
+4. **Fetch `price_bdt_yearly` in plan query** — currently only fetches `price_bdt_monthly`
 
-When a feature is gated, show an upgrade prompt instead of hiding completely (better UX and upsell opportunity).
-
-### Files Modified/Created
-
-- **Database migration**: Add `feature_flags` to `platform_plans`, `allowed_features` to `organizations`
-- **Data fix**: Sync subscription plan for MD SABUJ MIAH Agency
-- `src/pages/PlatformPlans.tsx` — structured feature toggle grid
-- `src/pages/CreateAgency.tsx` — sync `allowed_features` on creation
-- `src/pages/AgencyDetail.tsx` — sync `allowed_features` on plan change; show enabled features
-- `src/hooks/useOrgFeatures.ts` — new hook for feature gating
-- `src/components/AdminLayout.tsx` — gate sidebar nav items
-- Key feature pages — add upgrade prompts for gated features
-
-### Technical Details
-
-```text
-platform_plans.feature_flags (JSONB):
-{
-  "ad_guard": true,
-  "advanced_analytics": false,
-  "api_access": false,
-  "white_label": false,
-  "campaign_requests": true,
-  "multi_manager": false,
-  "expense_tracking": false,
-  "cash_flow": false,
-  "usd_inventory": false,
-  "custom_exchange_rate": false,
-  "client_notices": true,
-  "priority_support": false
-}
-
-organizations.allowed_features (JSONB):
--- Copied from plan's feature_flags on plan assignment
--- Platform owner can override per-agency
-```
-
-Default feature_flags per existing plan:
-- **Starter**: ad_guard, campaign_requests, client_notices
-- **Growth**: + advanced_analytics, multi_manager, api_access, expense_tracking, custom_exchange_rate
-- **Agency Pro**: All features enabled
+### Files Changed
+- `src/pages/AgencyDetail.tsx` — fix usage counting, add subscription editor, add feature override
 
