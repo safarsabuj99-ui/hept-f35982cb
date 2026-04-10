@@ -55,6 +55,9 @@ Deno.serve(async (req) => {
 
     // Update profile with extra fields
     const profileUpdate: any = { phone, business_name, full_name };
+    if (org_id) {
+      profileUpdate.org_id = org_id;
+    }
     if (role === "client" && manager_id && manager_id !== "none") {
       profileUpdate.manager_id = manager_id;
     }
