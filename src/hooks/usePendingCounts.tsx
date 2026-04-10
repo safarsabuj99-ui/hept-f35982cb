@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export function usePendingCounts() {
+  const { user } = useAuth();
   const { data } = useQuery({
     queryKey: ["pending-counts"],
     queryFn: async () => {
@@ -15,6 +17,7 @@ export function usePendingCounts() {
         pendingOrders: orders.count ?? 0,
       };
     },
+    enabled: !!user,
     refetchInterval: 30000,
   });
 

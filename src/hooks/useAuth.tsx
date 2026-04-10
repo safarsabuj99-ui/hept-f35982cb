@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 export type AppRole = "admin" | "manager" | "client" | "platform_owner" | null;
 
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole>(null);
   const [loading, setLoading] = useState(true);
   const initializedRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const fetchRole = useCallback(async (userId: string) => {
     try {
@@ -76,8 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(newSession?.user ?? null);
 
         if (!initializedRef.current) {
-          // Skip — getSession path handles the initial load
           return;
+        }
+
+        if (_event === 'SIGNED_IN' && newSession?.user) {
+          queryClient.invalidateQueries();
         }
 
         if (newSession?.user) {
