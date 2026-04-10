@@ -47,7 +47,7 @@ export default function PlatformDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       const [{ data: orgs }, { data: subs }, { data: clientRoles }, { data: invoices }] = await Promise.all([
-        supabase.from("organizations").select("id, status, plan, created_at"),
+        supabase.from("organizations").select("id, name, status, plan, created_at"),
         supabase.from("organization_subscriptions").select("org_id, amount_bdt, payment_status, billing_cycle, current_period_end"),
         supabase.from("user_roles").select("id").eq("role", "client"),
         supabase.from("platform_invoices" as any).select("id, org_id, amount_bdt, status, period_end").eq("status", "overdue"),
@@ -82,7 +82,10 @@ export default function PlatformDashboard() {
 
       const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
       const today = new Date().toISOString().slice(0, 10);
-      const upcomingRenewals = subs?.filter((s) => s.current_period_end >= today && s.current_period_end <= in30Days) ?? [];
+      const orgNameMap = new Map<string, string>();
+      orgs?.forEach((o: any) => orgNameMap.set(o.id, o.name));
+      const upcomingRenewals = (subs?.filter((s) => s.current_period_end >= today && s.current_period_end <= in30Days) ?? [])
+        .map((r) => ({ ...r, org_name: orgNameMap.get(r.org_id) ?? r.org_id.slice(0, 8) }));
 
       setStats({
         totalAgencies, activeAgencies, trialAgencies, suspendedAgencies, cancelledAgencies,
@@ -210,7 +213,7 @@ export default function PlatformDashboard() {
                   <div className="space-y-2">
                     {stats!.upcomingRenewals.map((r: any, i: number) => (
                       <div key={i} className="flex justify-between items-center text-sm border-b border-border/40 pb-2 last:border-0">
-                        <span className="text-foreground">{r.org_id?.slice(0, 8)}...</span>
+                        <span className="text-foreground font-medium">{r.org_name}</span>
                         <span className="text-muted-foreground font-mono">৳{r.amount_bdt?.toLocaleString()}</span>
                         <Badge variant="outline">{r.current_period_end}</Badge>
                       </div>
