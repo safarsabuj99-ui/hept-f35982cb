@@ -1,88 +1,93 @@
 
 
-## Premium UI/UX Redesign — All SaaS Management Pages
+## Subscription Payment Gateway — Manual + Automatic
 
-### Current State
-16 platform pages exist with inconsistent styling. Some use `glass-card glow-border`, others use plain `Card`. Headers are inconsistent — some use raw `h1` tags, others have custom layouts. Loading states vary. The design system (`PageHeader`, `glass-card`, `glow-border`, `section-label`, `animate-slide-up-fade`, `KpiCard`) exists but is applied unevenly.
+### Overview
+Add a complete payment system so agency owners can pay for their subscriptions directly from their Plan & Billing page. Two methods: manual payment with proof upload (verified by platform owner) and automatic gateway (Stripe).
 
-### Design Principles
-1. **Consistency** — Every page uses `PageHeader` with icon, `section-label` dividers, `glass-card glow-border` containers, staggered animations
-2. **Glassmorphism everywhere** — All cards/tables wrapped in `glass-card glow-border` with `Card border-0 bg-transparent shadow-none` inside
-3. **Premium loading** — Skeleton shimmer grids instead of lone spinners
-4. **Micro-interactions** — Staggered `animate-slide-up-fade` with incrementing delays, `press-effect` on action buttons
+### Database Changes
 
-### Shared Page Structure
-```text
-┌──────────────────────────────────────┐
-│ PageHeader (icon + title + actions)  │
-├──────────────────────────────────────┤
-│ section-label: "Key Metrics"         │
-│ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐    │
-│ │ KPI │ │ KPI │ │ KPI │ │ KPI │    │
-│ └─────┘ └─────┘ └─────┘ └─────┘    │
-├──────────────────────────────────────┤
-│ section-label: "Details"             │
-│ ┌────────────────────────────────┐   │
-│ │ glass-card glow-border         │   │
-│ │   Card border-0 bg-transparent │   │
-│ └────────────────────────────────┘   │
-└──────────────────────────────────────┘
+**New table: `subscription_payments`**
+Tracks all payment submissions for subscriptions.
+
+```sql
+CREATE TABLE public.subscription_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL,
+  invoice_id uuid,
+  amount_bdt numeric NOT NULL,
+  payment_method text NOT NULL DEFAULT 'manual',
+  gateway_provider text,           -- 'stripe' | null
+  gateway_payment_id text,         -- Stripe payment intent ID
+  transaction_reference text,      -- manual: bKash/bank ref
+  proof_image_url text,            -- manual: uploaded receipt
+  status text NOT NULL DEFAULT 'pending',  -- pending | approved | rejected | completed
+  admin_note text,
+  reviewed_by uuid,
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+-- RLS: org admin CRUD own, platform_owner ALL
 ```
 
-### Pages to Redesign (14 pages — Dashboard and Plans already done)
+**New storage bucket: `subscription-proofs`** for receipt uploads.
 
-**Batch 1 — Core Pages**
+### Stripe Integration
+Use Lovable's built-in Stripe integration for automatic payments:
+- Enable Stripe via the Stripe tool
+- Create Stripe products/prices matching each `platform_plan`
+- New edge function `create-subscription-checkout` that creates a Stripe Checkout Session for the selected plan
+- Webhook edge function `stripe-subscription-webhook` to handle `checkout.session.completed` and `invoice.paid` events — auto-updates `organization_subscriptions.payment_status` and inserts into `subscription_payments` with `status: completed`
 
-1. **AgencyList** — Replace plain table with glass-card agency cards (name, plan badge, status dot, mini usage bars, renewal date). Add search + status filter pills. Table as alternate view toggle.
+### Frontend Changes
 
-2. **PlatformBilling** — Add `PageHeader` with icon. Wrap aging buckets in `glass-card`. Row hover glow on invoice table. Status dot indicators.
+**1. `src/pages/AdminSubscription.tsx` — Add "Pay Now" dialog**
+- "Pay Now" button on pending/overdue invoices
+- Dialog with two tabs:
+  - **Online Payment** tab: Shows plan price, "Pay with Card" button that redirects to Stripe Checkout. After success, redirects back with confirmation.
+  - **Manual Payment** tab: Payment method dropdown (bKash/Nagad/Bank Transfer), transaction reference input, amount field, proof image upload (using `compressImage`), submit button
+- Payment history section showing all `subscription_payments` for the org with status badges
+- On manual submit: inserts into `subscription_payments`, notifies platform owner
 
-3. **PlatformRevenue** — Add `PageHeader`. Gradient area fills on charts. Animated KPI counters.
+**2. `src/pages/PlatformBilling.tsx` — Add "Payment Verifications" tab**
+- New tab listing all `subscription_payments` with `status = 'pending'`
+- Shows: agency name, amount, method, proof image (clickable preview), date
+- Approve button: updates payment status to `approved`, marks invoice as `paid`, updates subscription `payment_status`, notifies agency admin
+- Reject button: updates to `rejected` with admin note, notifies agency admin
 
-4. **TenantLifecycle** — Add `PageHeader`. Pipeline columns with colored top borders and gradient backgrounds per status.
+**3. `src/pages/AgencyDetail.tsx` — Payment history section**
+- Show recent `subscription_payments` for the specific agency in the subscription tab
 
-5. **TenantUsageMetering** — Add `PageHeader`. Gradient progress bars. Better table styling.
+### Edge Functions
+- `create-subscription-checkout/index.ts` — Creates Stripe Checkout Session for the org's plan
+- `stripe-subscription-webhook/index.ts` — Handles Stripe webhook events to auto-confirm payments
 
-**Batch 2 — Intelligence Pages**
+### Flow Summary
 
-6. **PlatformCohorts** — Add `PageHeader`. Better heatmap cells with rounded corners and hover tooltips.
+```text
+Agency Admin                    Platform Owner
+    │                                │
+    ├─ Click "Pay Now"               │
+    │                                │
+    ├─ Option A: Stripe ────────────►│ (auto-confirmed via webhook)
+    │   → Redirect to Checkout       │
+    │   → Webhook confirms payment   │
+    │                                │
+    ├─ Option B: Manual ────────────►│
+    │   → Upload proof + ref         │ ← Reviews in "Verifications" tab
+    │   → Status: pending            │ → Approve/Reject
+    │   ← Notification               │
+    │                                │
+```
 
-7. **PlatformChurnPrediction** — Add `PageHeader`. Risk cards with colored left-accent borders. Risk gauge visuals.
+### Files Changed
+- 1 database migration (new table + RLS + storage bucket)
+- `src/pages/AdminSubscription.tsx` — Pay Now dialog with Stripe + manual tabs
+- `src/pages/PlatformBilling.tsx` — Payment Verifications tab
+- `src/pages/AgencyDetail.tsx` — Payment history in subscription section
+- `supabase/functions/create-subscription-checkout/index.ts` — new
+- `supabase/functions/stripe-subscription-webhook/index.ts` — new
 
-8. **PlatformFeatureAdoption** — Add `PageHeader`. Enhanced heatmap color scales and hover states.
-
-9. **PlatformForecasting** — Add `PageHeader`. Gradient area fill on forecast chart with styled confidence bands.
-
-10. **PlatformCostAnalytics** — Add `PageHeader`. Gradient bar fills on cost breakdown.
-
-11. **PlatformHealthScores** — Add `PageHeader`. Circular score gauges with color-coded health tiers.
-
-12. **PlatformBenchmarks** — Add `PageHeader`. Dual-tone comparison bars.
-
-**Batch 3 — System Pages**
-
-13. **PlatformAnnouncements** — Add `PageHeader`. Type-colored left borders on cards (info=blue, warning=amber, critical=red).
-
-14. **PlatformAudit** — Add `PageHeader`. Severity-colored row indicators with timeline dots.
-
-### Layout Enhancement
-- **PlatformLayout** — Add `NotificationBell` to header (currently missing). Add user avatar in footer.
-
-### Files Changed (16 files, no database changes)
-- `src/components/PlatformLayout.tsx` — add NotificationBell, user info
-- `src/pages/AgencyList.tsx` — full premium redesign with card/table toggle
-- `src/pages/PlatformBilling.tsx` — premium wrapper upgrade
-- `src/pages/PlatformRevenue.tsx` — premium wrapper upgrade
-- `src/pages/TenantLifecycle.tsx` — premium styling upgrade
-- `src/pages/TenantUsageMetering.tsx` — premium wrapper upgrade
-- `src/pages/PlatformCohorts.tsx` — premium wrapper upgrade
-- `src/pages/PlatformChurnPrediction.tsx` — premium wrapper upgrade
-- `src/pages/PlatformFeatureAdoption.tsx` — premium wrapper upgrade
-- `src/pages/PlatformForecasting.tsx` — premium wrapper upgrade
-- `src/pages/PlatformCostAnalytics.tsx` — premium wrapper upgrade
-- `src/pages/PlatformHealthScores.tsx` — premium wrapper upgrade
-- `src/pages/PlatformBenchmarks.tsx` — premium wrapper upgrade
-- `src/pages/PlatformAnnouncements.tsx` — premium wrapper upgrade
-- `src/pages/PlatformAudit.tsx` — premium wrapper upgrade
-- `src/pages/CreateAgency.tsx` — premium form styling
+### Prerequisites
+- Stripe must be enabled via the Stripe integration tool (will prompt for secret key)
 
