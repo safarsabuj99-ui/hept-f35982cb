@@ -1,45 +1,42 @@
 
 
-## Redesign Landing Page — High-Converting B2B SaaS Sales Page
+## Unique Feature Mockups for Landing Page
 
-### What Changes
-Complete rewrite of `src/pages/LandingPage.tsx` with a modern, Stripe/Linear-inspired design that's laser-focused on conversion for digital marketers managing 20-50+ clients.
+### Problem
+All 4 feature sections currently share the same generic dashboard wireframe mockup (3 rows + bar chart). The user wants each feature to have a distinct, contextually relevant visual that matches what that feature actually does.
 
-### Key Differences from Current Page
-- **New headline & copy** aligned exactly to the 4 pain points and 4 solutions specified
-- **Time-saving section** (new) — "Save 10+ hours/week" with concrete metrics
-- **Dashboard mockup placeholders** — visual wireframes showing the actual software UI (client balance tracker, profit dashboard, reporting view)
-- **Testimonial/social proof section** (new) — placeholder cards for future reviews
-- **Cleaner Stripe/Linear aesthetic** — more whitespace, subtle gradients, sharper typography hierarchy, fewer colors
-- **Streamlined features** — 4 focused feature cards (Reporting, Account Mgmt, Client Balances, Agency Profit) instead of 8 categories
-- **Stronger CTAs** — "Automate My Agency" primary CTA, repeated strategically
+### Solution
+Replace the shared mockup (lines 441-469) with 4 unique inline mockup components, each visually representing the actual feature.
 
-### Page Structure
+### Mockup Designs (all CSS-only, no images)
 
-1. **Sticky Navbar** — HEPT logo, nav links (Problems, Features, How It Works, Testimonials, FAQ), Login + "Automate My Agency" CTA
-2. **Hero** — "Automate Your Agency. Scale Your Clients. Stop Wasting Hours on Manual Reports." + subheadline + CTA + platform badges (Meta/TikTok/Google) + dashboard mockup wireframe
-3. **Pain/Agitation** — 4 pain point cards matching the exact problems specified + "Before vs After" comparison table
-4. **Features** — 4 solution cards with icons: Automated Reporting, Smart Ad Account Organization, Client Balance Tracker, Agency Profit & Dollar Management. Each with a mini dashboard mockup placeholder
-5. **Time-Saving** — "Manage 50 clients as easily as 5" with stat counters (10+ hrs saved/week, 50+ clients, 3 platforms, 0 spreadsheets)
-6. **How It Works** — 3 steps (Connect → Organize → Automate)
-7. **Testimonials** — 3 placeholder review cards with avatar, name, role, quote
-8. **FAQ** — Accordion with relevant questions
-9. **Final CTA** — Strong closing with gradient background
-10. **Footer** — Links, copyright, heptbd.com
+**1. Automated Daily Reporting Mockup**
+- Tabbed header showing "Meta | TikTok | Google" with one active
+- 4 mini KPI cards in a row (Spend, Impressions, Clicks, ROAS) with colored values
+- A data table with 3-4 rows showing campaign names, spend bars, and status badges
+- A "Send Report" button wireframe at bottom
 
-### Design Details
-- Clean white background with subtle gray sections alternating
-- Dark mode compatible using existing CSS variables
-- Primary blue gradient accents (existing design system)
-- Large typography with tight tracking for headlines
-- Generous whitespace between sections
-- Subtle hover animations on cards
-- Dashboard wireframe mockups built with divs/gradients (no images needed)
-- Fully responsive, mobile-first
+**2. Smart Ad Account Organization Mockup**
+- Tree/hierarchy view: Client name → branching to 2-3 platform icons with account IDs
+- Color-coded platform badges (blue=Meta, cyan=TikTok, multicolor=Google)
+- 2-3 client rows showing the mapping visually
+- A small "drag-to-assign" indicator
+
+**3. Client Balance Tracker Mockup**
+- Table-style layout: Client name | Deposited | Spent | Remaining
+- 3 client rows with progress bars showing spend vs. deposit ratio
+- Color coding: green for healthy balance, amber for low, red for critical
+- A total summary bar at the bottom
+
+**4. Agency Profit & Dollar Management Mockup**
+- Top row: 3 KPI boxes (USD Purchased, WAC Rate, Profit Margin %)
+- A mini area/line chart showing profit trend
+- A row showing "Forecast: Need $X,XXX by next week"
+- Green/red indicators for profit/loss
 
 ### Files Changed
-- `src/pages/LandingPage.tsx` — full rewrite with new structure, copy, and design
+- `src/pages/LandingPage.tsx` — Replace the generic mockup block (lines 440-470) with a conditional renderer that picks the right mockup component based on feature index. Add 4 new inline components: `ReportingMockup`, `AccountOrgMockup`, `BalanceTrackerMockup`, `ProfitMockup`.
 
 ### No Database Changes
-No backend or routing changes needed — only the landing page content/design.
+Visual-only update to the landing page.
 
