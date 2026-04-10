@@ -60,6 +60,7 @@ export default function PlatformBilling() {
     const orgMap = new Map((orgData ?? []).map((o) => [o.id, o.name]));
     setInvoices(((invData as any[]) ?? []).map((inv: any) => ({ ...inv, org_name: orgMap.get(inv.org_id) || "Unknown" })));
     setOrgs(orgData ?? []);
+    setPendingPayments(((payData as any[]) ?? []).map((p: any) => ({ ...p, org_name: orgMap.get(p.org_id) || "Unknown" })));
     setLoading(false);
   };
 
