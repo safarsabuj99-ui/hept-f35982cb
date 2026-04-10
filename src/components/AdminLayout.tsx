@@ -86,6 +86,7 @@ const allSections: NavSection[] = [
 function AdminSidebarContent() {
   const { hasPermission } = usePermissions();
   const { signOut } = useAuth();
+  const { hasFeature } = useOrgFeatures();
   const location = useLocation();
   const { brandName, logoUrl } = useBranding();
   const { pendingPayments, pendingOrders } = usePendingCounts();
@@ -107,10 +108,14 @@ function AdminSidebarContent() {
       allSections
         .map((section) => ({
           ...section,
-          items: section.items.filter((item) => !item.permKey || hasPermission(item.permKey)),
+          items: section.items.filter((item) => {
+            if (item.permKey && !hasPermission(item.permKey)) return false;
+            if (item.featureKey && !hasFeature(item.featureKey)) return false;
+            return true;
+          }),
         }))
         .filter((section) => section.items.length > 0),
-    [hasPermission]
+    [hasPermission, hasFeature]
   );
 
   const isActive = (path: string) => location.pathname === path;
