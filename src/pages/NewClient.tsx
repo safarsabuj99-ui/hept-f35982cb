@@ -82,6 +82,7 @@ export default function NewClient() {
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
         pricing_config: pricingConfig,
         data_fetch_start_date: role === "client" ? format(syncStartDate, "yyyy-MM-dd") : null,
+        org_id: adminOrgId,
       },
     });
 
