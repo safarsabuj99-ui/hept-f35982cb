@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Menu,
   X,
+  Send,
+  ArrowUpDown,
 } from "lucide-react";
 
 /* ─── scroll-reveal hook ─── */
