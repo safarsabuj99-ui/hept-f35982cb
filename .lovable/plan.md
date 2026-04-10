@@ -1,33 +1,41 @@
 
 
-## Fix: Ad Accounts Not Visible on Agency Detail (RLS Gap)
+## Add Plan Information & Renewal to Agency Admin Side
 
-### Root Cause
+### What's Missing
+Agency admins currently have zero visibility into their subscription plan. They can't see what plan they're on, what features are included, usage limits, billing cycle, or when renewal is due. All subscription management is only on the platform owner side.
 
-The `ad_accounts` and `ad_account_clients` tables have **no RLS policy for the `platform_owner` role**. When the platform owner views the Agency Detail page, the query `supabase.from("ad_accounts").select("id").eq("org_id", agencyId)` returns zero rows because RLS silently filters them out.
+### Implementation
 
-The data is correct — all 9+ ad accounts have `org_id = 'a1b2c3d4-...'` — but the platform owner simply cannot read them.
+**1. New Page: `src/pages/AdminSubscription.tsx`**
+A dedicated "Plan & Billing" page for agency admins showing:
+- **Current Plan Card** — plan name, status (Trial/Active/Suspended), trial end date if applicable
+- **Usage Gauges** — clients used vs max_clients, ad accounts used vs max_ad_accounts, managers used vs max_managers (with progress bars)
+- **Included Features** — list of feature flags from `organizations.allowed_features` with enabled/disabled indicators
+- **Billing Info** — current period start/end, billing cycle, amount, payment status from `organization_subscriptions`
+- **Invoice History** — list of `platform_invoices` for the org (read-only)
+- **Renewal Action** — if payment_status is "pending" or "overdue", show a prominent "Request Renewal" button that creates a notification to the platform owner requesting renewal/payment processing
 
-### Fix
-
-**Database migration** — Add `platform_owner` ALL policies to both tables:
-
-```sql
-CREATE POLICY "platform_owner_all_ad_accounts"
-  ON public.ad_accounts FOR ALL
-  TO authenticated
-  USING (has_role(auth.uid(), 'platform_owner'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'platform_owner'::app_role));
-
-CREATE POLICY "platform_owner_all_ad_account_clients"
-  ON public.ad_account_clients FOR ALL
-  TO authenticated
-  USING (has_role(auth.uid(), 'platform_owner'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'platform_owner'::app_role));
+**2. Update `src/components/AdminLayout.tsx`**
+Add a new nav item under the "System" section:
+```
+{ to: "/admin/subscription", icon: CreditCard, label: "Plan & Billing", permKey: "can_configure_system" }
 ```
 
-No frontend code changes needed — the existing query already works correctly, it's just blocked by RLS.
+**3. Update `src/App.tsx`**
+Add route: `/admin/subscription` → `AdminSubscription`
+
+**4. Data Queries (all read-only, existing RLS supports this)**
+- `organizations` — `org_admin_read_own_org` policy already grants SELECT
+- `organization_subscriptions` — `org_admin_read_own_subscriptions` policy already grants SELECT
+- `platform_invoices` — `org_admin_read_own_invoices` policy already grants SELECT
+- `profiles` count by org_id — `admin_all_profiles` already grants access
+- `ad_accounts` count by org_id — `admin_all_ad_accounts` already grants access
+
+No database migration needed — all required RLS policies already exist.
 
 ### Files Changed
-- 1 database migration (two CREATE POLICY statements)
+- `src/pages/AdminSubscription.tsx` — new page
+- `src/components/AdminLayout.tsx` — add nav item
+- `src/App.tsx` — add route
 
