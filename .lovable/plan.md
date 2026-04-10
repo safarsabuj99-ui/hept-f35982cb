@@ -1,54 +1,54 @@
 
 
-## Smart Multi-Platform Payment Approval & History
+## Fix: Data Not Loading After Login (Auth Race Condition)
 
-### Problem
-When a client deposits for 3 platforms (Meta, TikTok, Google), the approval dialog shows only 1 platform selector and 1 rate picker. The admin must pick a single rate for the entire payment, even though each platform has a different billing rate. Payment history also doesn't show which platforms were paid for.
+### Root Cause
 
-### Changes
+When you log in, here's what happens:
 
-**1. Approval Dialog — Per-Platform Rate Selection (PaymentRequests.tsx)**
+1. `signIn()` completes and triggers `onAuthStateChange`
+2. The app navigates to `/admin` (or other dashboard)
+3. Dashboard queries (`useAdminDashboardData`, `usePendingCounts`, etc.) fire **immediately**
+4. But `fetchRole()` is still running — and more critically, the Supabase session token may not be fully propagated yet
+5. Queries hit the database with no valid auth token → RLS blocks them → **empty results get cached**
+6. React Query caches these empty results for 60 seconds, so the dashboard stays blank
+7. Manual browser reload works because the session is already stored in `localStorage` by then
 
-When `platform_amounts` exists on a payment request, replace the current single-platform/single-rate UI with:
+The auth logs confirm this: repeated "missing sub claim" / `bad_jwt` errors from `client-spend-hub.lovable.app`.
 
-- Show a breakdown table: each platform row with its BDT amount, auto-matched rate, and calculated USD
-- Each platform's rate is auto-selected from the client's `pricing_config` (Meta Rate for Meta, TikTok Rate for TikTok, etc.)
-- Admin can override any individual rate if needed
-- Show per-platform USD + grand total USD at the bottom
-- Remove the single "Platform" dropdown and single "Select Dollar Rate" radio group for multi-platform payments (keep them for legacy single-platform payments)
+### Solution: Gate All Authenticated Queries on Auth Readiness
 
-**2. Edge Function — Per-Platform Rates (approve-payment/index.ts)**
+**1. Add `session` to the `useAuth` context export** (already available internally, just needs to be used)
 
-Update to accept `platform_rates` (e.g. `{ meta: 145, tiktok: 150, google: 155 }`) instead of a single `selected_rate`. When `platform_amounts` exists:
-- Use each platform's specific rate for USD conversion
-- Calculate `final_amount_usd` as the sum of all per-platform USD amounts
-- Store the rate map in `exchange_rate_snapshot` as JSON
-- Each transaction gets its own exchange rate
+No change needed — `session` is already exposed via `useAuth()`.
 
-**3. Payment Request Interface — Add `platform_amounts` to display**
+**2. Gate `useAdminDashboardData` on auth session** (`src/hooks/useAdminDashboardData.ts`)
 
-Update the PaymentRequest interface and table/card views to:
-- Fetch and display `platform_amounts` from the payment request
-- Show platform badges (e.g. "Meta ৳5,000 · TikTok ৳5,000 · Google ৳5,000") in the Platform column instead of a single platform name
-- In payment history, show the per-platform breakdown with rates used
+Add `enabled: !!session` to the query options. Import and use `useAuth()` to get the session. This prevents the query from firing before the auth token is ready.
 
-**4. Data Flow Summary**
+**3. Gate `usePendingCounts` on auth session** (`src/hooks/usePendingCounts.tsx`)
 
-```text
-Client deposits ৳15,000 for Meta + TikTok + Google
-  └─ platform_amounts: { meta: 5000, tiktok: 5000, google: 5000 }
+Same pattern — add `useAuth()` and `enabled: !!user` to prevent unauthenticated queries.
 
-Admin opens approval:
-  ├─ Meta:   ৳5,000 ÷ ৳145 = $34.48  (auto-matched)
-  ├─ TikTok: ৳5,000 ÷ ৳150 = $33.33  (auto-matched)
-  ├─ Google: ৳5,000 ÷ ৳155 = $32.26  (auto-matched)
-  └─ Total Credit: $100.07
+**4. Invalidate stale caches on login** (`src/hooks/useAuth.tsx`)
 
-Edge function creates 3 transactions, each with correct rate.
-Payment history shows: "Meta · TikTok · Google" with breakdown.
-```
+In the `onAuthStateChange` handler, when a `SIGNED_IN` event fires after initialization, call `queryClient.invalidateQueries()` to clear any stale/empty cached results from before auth was ready. This requires importing `useQueryClient`.
+
+**5. Gate page-level queries in major dashboard pages**
+
+Several pages (e.g., platform pages like `PlatformChurnPrediction`, `PlatformFeatureAdoption`, `PlatformHealthScores`, etc.) also have ungated queries. Since these are behind `ProtectedRoute`, they're less likely to hit the race condition, but for robustness we'll add `enabled: !!user` where missing.
 
 ### Files Modified
-- `src/pages/PaymentRequests.tsx` — Revamp approval dialog UI for multi-platform; update history display
-- `supabase/functions/approve-payment/index.ts` — Accept per-platform rates map; use per-platform conversion
+
+- `src/hooks/useAdminDashboardData.ts` — add `enabled: !!session`
+- `src/hooks/usePendingCounts.tsx` — add `enabled: !!user`
+- `src/hooks/useAuth.tsx` — invalidate all queries on `SIGNED_IN` event
+- `src/pages/Login.tsx` — no changes needed (already watches `user && role`)
+
+### Why This Works
+
+- Queries won't fire until the auth token is valid → no empty cached results
+- On login, stale caches are cleared → fresh data loads immediately
+- No changes to routing, layouts, or existing components → zero risk of side effects
+- Manual reload behavior is preserved since session is already in localStorage
 
