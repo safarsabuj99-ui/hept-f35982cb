@@ -20,7 +20,7 @@ import { compressImage } from "@/lib/compressImage";
 import {
   CreditCard, Crown, Users, Monitor, UserCog, Check, X,
   CalendarDays, Receipt, AlertTriangle, Loader2, Upload,
-  Clock, CheckCircle, XCircle, Wifi,
+  Clock, CheckCircle, XCircle, Wifi, ArrowUpRight, Sparkles,
 } from "lucide-react";
 
 interface OrgData {
@@ -46,6 +46,20 @@ interface PaymentRecord {
   transaction_reference: string | null; proof_image_url: string | null;
   status: string; admin_note: string | null; created_at: string;
   invoice_id: string | null;
+}
+
+interface PlanData {
+  id: string; key: string; name: string; sort_order: number;
+  price_bdt_monthly: number; price_bdt_yearly: number;
+  max_clients: number; max_ad_accounts: number; max_managers: number;
+  feature_flags: Record<string, boolean>; features: any[];
+  is_popular: boolean;
+}
+
+interface UpgradeRequest {
+  id: string; org_id: string; current_plan: string; requested_plan: string;
+  requested_billing_cycle: string; status: string; admin_note: string | null;
+  created_at: string;
 }
 
 function statusColor(s: string) {
@@ -112,6 +126,13 @@ export default function AdminSubscription() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Upgrade dialog
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [plans, setPlans] = useState<PlanData[]>([]);
+  const [upgradeCycle, setUpgradeCycle] = useState<"monthly" | "yearly">("monthly");
+  const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([]);
+  const [pendingUpgrade, setPendingUpgrade] = useState<UpgradeRequest | null>(null);
+
   useEffect(() => {
     if (!session?.user?.id) return;
 
@@ -125,7 +146,7 @@ export default function AdminSubscription() {
       const orgId = prof?.org_id;
       if (!orgId) { setLoading(false); return; }
 
-      const [orgRes, subRes, invRes, clientRes, adRes, mgrRes, payRes] = await Promise.all([
+      const [orgRes, subRes, invRes, clientRes, adRes, mgrRes, payRes, planRes, upgradeRes] = await Promise.all([
         supabase.from("organizations").select("id,name,plan,status,trial_ends_at,max_clients,max_ad_accounts,max_managers,allowed_features").eq("id", orgId).single(),
         supabase.from("organization_subscriptions").select("id,plan,billing_cycle,amount_bdt,payment_status,current_period_start,current_period_end").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("platform_invoices").select("id,invoice_number,amount_bdt,status,period_start,period_end,due_date,payment_date").eq("org_id", orgId).order("created_at", { ascending: false }).limit(20),
@@ -133,12 +154,20 @@ export default function AdminSubscription() {
         supabase.from("ad_accounts").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("is_active", true),
         supabase.from("profiles").select("user_id", { count: "exact", head: true }).eq("org_id", orgId).in("user_id", (await supabase.from("user_roles" as any).select("user_id").eq("role", "manager")).data?.map((r: any) => r.user_id) || []),
         supabase.from("subscription_payments").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("platform_plans").select("*").eq("is_active", true).order("sort_order"),
+        supabase.from("plan_upgrade_requests").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(20),
       ]);
 
       if (orgRes.data) setOrg(orgRes.data as any);
       if (subRes.data) setSub(subRes.data as any);
       setInvoices((invRes.data || []) as any);
       setPayments((payRes.data || []) as any);
+      setPlans((planRes.data || []) as any);
+
+      const reqs = (upgradeRes.data || []) as any as UpgradeRequest[];
+      setUpgradeRequests(reqs);
+      setPendingUpgrade(reqs.find((r) => r.status === "pending") || null);
+
       setCounts({
         clients: clientRes.count || 0,
         adAccounts: adRes.count || 0,
@@ -165,7 +194,6 @@ export default function AdminSubscription() {
 
     setSubmitting(true);
     try {
-      // Upload proof image
       const compressed = await compressImage(proofFile);
       const fileName = `${org.id}/${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
@@ -177,7 +205,6 @@ export default function AdminSubscription() {
         .from("subscription-proofs")
         .getPublicUrl(fileName);
 
-      // Insert payment record
       const { error: insertError } = await supabase
         .from("subscription_payments")
         .insert({
@@ -191,7 +218,6 @@ export default function AdminSubscription() {
         } as any);
       if (insertError) throw insertError;
 
-      // Notify platform owner
       const { data: owners } = await supabase.from("user_roles" as any).select("user_id").eq("role", "platform_owner");
       for (const owner of (owners || [])) {
         await supabase.from("notifications").insert({
@@ -207,7 +233,6 @@ export default function AdminSubscription() {
       toast.success("Payment submitted! Awaiting admin verification.");
       setPayDialogOpen(false);
 
-      // Refresh payments
       const { data: newPayments } = await supabase
         .from("subscription_payments")
         .select("*")
@@ -217,6 +242,59 @@ export default function AdminSubscription() {
       setPayments((newPayments || []) as any);
     } catch (err: any) {
       toast.error(err.message || "Failed to submit payment");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpgradeRequest = async (plan: PlanData) => {
+    if (!org || !session?.user?.id) return;
+    if (pendingUpgrade) {
+      toast.error("You already have a pending upgrade request. Please wait for it to be reviewed.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("plan_upgrade_requests")
+        .insert({
+          org_id: org.id,
+          current_plan: org.plan,
+          requested_plan: plan.key,
+          requested_billing_cycle: upgradeCycle,
+          status: "pending",
+        } as any);
+      if (error) throw error;
+
+      // Notify platform owner
+      const { data: owners } = await supabase.from("user_roles" as any).select("user_id").eq("role", "platform_owner");
+      for (const owner of (owners || [])) {
+        await supabase.from("notifications").insert({
+          user_id: (owner as any).user_id,
+          title: "Plan Upgrade Request",
+          body: `${org.name} requested upgrade from ${org.plan} → ${plan.name} (${upgradeCycle})`,
+          type: "system" as any,
+          priority: "high",
+          link: "/platform/billing",
+        });
+      }
+
+      toast.success("Upgrade request submitted! The platform admin will review it shortly.");
+      setUpgradeOpen(false);
+
+      // Refresh upgrade requests
+      const { data: newReqs } = await supabase
+        .from("plan_upgrade_requests")
+        .select("*")
+        .eq("org_id", org.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const reqs = (newReqs || []) as any as UpgradeRequest[];
+      setUpgradeRequests(reqs);
+      setPendingUpgrade(reqs.find((r) => r.status === "pending") || null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit upgrade request");
     } finally {
       setSubmitting(false);
     }
@@ -241,6 +319,8 @@ export default function AdminSubscription() {
 
   const features = (org.allowed_features || {}) as Record<string, boolean>;
   const needsRenewal = sub && (sub.payment_status === "pending" || sub.payment_status === "overdue");
+  const currentPlanData = plans.find((p) => p.key === org.plan);
+  const currentSortOrder = currentPlanData?.sort_order ?? 0;
 
   return (
     <div className="space-y-6">
@@ -264,6 +344,25 @@ export default function AdminSubscription() {
         </Card>
       )}
 
+      {/* Pending Upgrade Banner */}
+      {pendingUpgrade && (
+        <Card className="border-primary/50 bg-primary/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <Sparkles className="h-5 w-5 text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Upgrade Request Pending</p>
+              <p className="text-xs text-muted-foreground">
+                Your request to upgrade from <span className="font-medium capitalize">{pendingUpgrade.current_plan}</span> to{" "}
+                <span className="font-medium capitalize">{pendingUpgrade.requested_plan}</span> ({pendingUpgrade.requested_billing_cycle}) is under review.
+              </p>
+            </div>
+            <Badge className="bg-warning/15 text-warning border-warning/20 gap-1">
+              <Clock className="h-3 w-3" /> Pending
+            </Badge>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         {/* Current Plan */}
         <Card>
@@ -273,7 +372,14 @@ export default function AdminSubscription() {
                 <Crown className="h-5 w-5 text-primary" />
                 Current Plan
               </CardTitle>
-              <Badge variant={statusColor(org.status)} className="capitalize">{org.status}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={statusColor(org.status)} className="capitalize">{org.status}</Badge>
+                {plans.some((p) => p.sort_order > currentSortOrder) && !pendingUpgrade && (
+                  <Button size="sm" variant="outline" onClick={() => { setUpgradeCycle(sub?.billing_cycle as any || "monthly"); setUpgradeOpen(true); }} className="gap-1.5 text-xs">
+                    <ArrowUpRight className="h-3 w-3" /> Upgrade
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -431,6 +537,46 @@ export default function AdminSubscription() {
         </Card>
       )}
 
+      {/* Upgrade Request History */}
+      {upgradeRequests.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ArrowUpRight className="h-5 w-5 text-muted-foreground" />
+              Upgrade Request History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-4">Date</th>
+                    <th className="pb-2 pr-4">From</th>
+                    <th className="pb-2 pr-4">To</th>
+                    <th className="pb-2 pr-4">Cycle</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upgradeRequests.map((r) => (
+                    <tr key={r.id} className="border-b last:border-0">
+                      <td className="py-2.5 pr-4">{format(new Date(r.created_at), "MMM dd, yy")}</td>
+                      <td className="py-2.5 pr-4 capitalize">{r.current_plan}</td>
+                      <td className="py-2.5 pr-4 capitalize font-medium">{r.requested_plan}</td>
+                      <td className="py-2.5 pr-4 capitalize">{r.requested_billing_cycle}</td>
+                      <td className="py-2.5 pr-4">{paymentStatusBadge(r.status)}</td>
+                      <td className="py-2.5 text-xs text-muted-foreground max-w-[200px] truncate">{r.admin_note || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Pay Now Dialog */}
       <Dialog open={payDialogOpen} onOpenChange={(o) => !o && setPayDialogOpen(false)}>
         <DialogContent className="max-w-md">
@@ -454,12 +600,7 @@ export default function AdminSubscription() {
             <TabsContent value="manual" className="space-y-4 mt-4">
               <div>
                 <Label>Amount (৳)</Label>
-                <Input
-                  type="number"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  placeholder="Enter amount"
-                />
+                <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="Enter amount" />
               </div>
               <div>
                 <Label>Payment Method</Label>
@@ -476,11 +617,7 @@ export default function AdminSubscription() {
               </div>
               <div>
                 <Label>Transaction Reference / ID</Label>
-                <Input
-                  value={payRef}
-                  onChange={(e) => setPayRef(e.target.value)}
-                  placeholder="e.g. TXN-123456789"
-                />
+                <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="e.g. TXN-123456789" />
               </div>
               <div>
                 <Label>Payment Proof (Screenshot / Receipt)</Label>
@@ -497,21 +634,12 @@ export default function AdminSubscription() {
                     <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 cursor-pointer hover:border-primary/40 transition-colors">
                       <Upload className="h-6 w-6 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">Click to upload proof image</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                      />
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => setProofFile(e.target.files?.[0] || null)} />
                     </label>
                   )}
                 </div>
               </div>
-              <Button
-                onClick={handleManualSubmit}
-                disabled={submitting || !payRef.trim() || !proofFile || !payAmount}
-                className="w-full gap-2"
-              >
+              <Button onClick={handleManualSubmit} disabled={submitting || !payRef.trim() || !proofFile || !payAmount} className="w-full gap-2">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Submit for Verification
               </Button>
@@ -533,6 +661,124 @@ export default function AdminSubscription() {
               </div>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upgrade Plan Dialog */}
+      <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Upgrade Your Plan
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Billing cycle toggle */}
+          <div className="flex items-center justify-center gap-3 py-2">
+            <span className={`text-sm font-medium ${upgradeCycle === "monthly" ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
+            <button
+              onClick={() => setUpgradeCycle(upgradeCycle === "monthly" ? "yearly" : "monthly")}
+              className={`relative h-6 w-11 rounded-full transition-colors ${upgradeCycle === "yearly" ? "bg-primary" : "bg-muted"}`}
+            >
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform ${upgradeCycle === "yearly" ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+            <span className={`text-sm font-medium ${upgradeCycle === "yearly" ? "text-foreground" : "text-muted-foreground"}`}>
+              Yearly
+              <Badge className="ml-1.5 text-[10px] bg-success/15 text-success border-success/20">Save up to 20%</Badge>
+            </span>
+          </div>
+
+          {/* Plan comparison cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.map((plan) => {
+              const isCurrent = plan.key === org.plan;
+              const isLower = plan.sort_order <= currentSortOrder;
+              const price = upgradeCycle === "yearly" ? plan.price_bdt_yearly : plan.price_bdt_monthly;
+              const featureFlags = (plan.feature_flags || {}) as Record<string, boolean>;
+
+              return (
+                <Card key={plan.id} className={`relative ${isCurrent ? "border-primary ring-2 ring-primary/20" : isLower && !isCurrent ? "opacity-60" : ""} ${plan.is_popular ? "border-primary/50" : ""}`}>
+                  {isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground text-xs">Current Plan</Badge>
+                    </div>
+                  )}
+                  {plan.is_popular && !isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-success text-success-foreground text-xs">Popular</Badge>
+                    </div>
+                  )}
+                  <CardHeader className="pb-2 pt-5">
+                    <CardTitle className="text-lg">{plan.name}</CardTitle>
+                    <div className="mt-1">
+                      <span className="text-2xl font-bold">৳{price.toLocaleString()}</span>
+                      <span className="text-sm text-muted-foreground">/{upgradeCycle === "yearly" ? "yr" : "mo"}</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Resource limits */}
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{plan.max_clients} Clients</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{plan.max_ad_accounts} Ad Accounts</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <UserCog className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{plan.max_managers} Managers</span>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Features */}
+                    <div className="space-y-1 text-xs">
+                      {(Object.keys(FEATURE_LABELS) as FeatureKey[]).map((key) => {
+                        const enabled = featureFlags[key] === true;
+                        return (
+                          <div key={key} className="flex items-center gap-1.5">
+                            {enabled ? (
+                              <Check className="h-3 w-3 text-success shrink-0" />
+                            ) : (
+                              <X className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                            )}
+                            <span className={enabled ? "" : "text-muted-foreground/50"}>{FEATURE_LABELS[key]}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {isCurrent ? (
+                      <Button disabled className="w-full" variant="outline">Current Plan</Button>
+                    ) : isLower ? (
+                      <Button disabled className="w-full" variant="outline">
+                        <X className="h-3.5 w-3.5 mr-1" /> Downgrade N/A
+                      </Button>
+                    ) : (
+                      <Button
+                        className="w-full gap-1.5"
+                        onClick={() => handleUpgradeRequest(plan)}
+                        disabled={submitting || !!pendingUpgrade}
+                      >
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+                        Request Upgrade
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {pendingUpgrade && (
+            <p className="text-sm text-center text-warning">
+              You have a pending upgrade request. Please wait for it to be reviewed before submitting a new one.
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </div>

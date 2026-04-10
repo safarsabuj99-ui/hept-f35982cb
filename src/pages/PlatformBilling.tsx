@@ -26,6 +26,13 @@ interface SubscriptionPayment {
   org_name?: string;
 }
 
+interface UpgradeRequest {
+  id: string; org_id: string; current_plan: string; requested_plan: string;
+  requested_billing_cycle: string; status: string; admin_note: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  org_name?: string;
+}
+
 interface Invoice {
   id: string; org_id: string; invoice_number: string; amount_bdt: number;
   period_start: string; period_end: string; status: string; payment_date: string | null;
