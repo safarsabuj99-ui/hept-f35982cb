@@ -166,7 +166,7 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild><Link to="/login">Login</Link></Button>
-            <Button size="sm" asChild><Link to="/login">Get Started Free <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
+            <Button size="sm" asChild><Link to="/signup">Get Started Free <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
           </div>
           <button className="md:hidden" onClick={() => setMobileNav(!mobileNav)}>
             {mobileNav ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -181,7 +181,7 @@ export default function LandingPage() {
             <button onClick={() => scrollTo("faq")} className="block w-full text-left py-1">FAQ</button>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">Login</Link></Button>
-              <Button size="sm" className="flex-1" asChild><Link to="/login">Get Started</Link></Button>
+              <Button size="sm" className="flex-1" asChild><Link to="/signup">Get Started</Link></Button>
             </div>
           </div>
         )}
@@ -211,7 +211,7 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
             <Button size="lg" className="text-base px-8 h-12 shadow-lg shadow-primary/25" asChild>
-              <Link to="/login">Start Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
+              <Link to="/signup">Start Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
             <Button size="lg" variant="outline" className="text-base px-8 h-12" onClick={() => scrollTo("features")}>
               See All Features
@@ -420,7 +420,7 @@ export default function LandingPage() {
                   <h3 className="font-bold text-lg mb-1">{plan.name}</h3>
                   <p className="text-xs text-muted-foreground mb-4">{plan.desc}</p>
                   <Button variant={plan.highlight ? "default" : "outline"} size="sm" className="w-full" asChild>
-                    <Link to="/login">Get Started</Link>
+                    <Link to="/signup">Get Started</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -459,7 +459,7 @@ export default function LandingPage() {
             Join digital marketing agencies who have ditched spreadsheets and automated their entire ad spend management workflow.
           </p>
           <Button size="lg" className="text-base px-10 h-12 shadow-lg shadow-primary/25" asChild>
-            <Link to="/login">Start Your Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
+            <Link to="/signup">Start Your Free Trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
           </Button>
           <p className="text-xs text-muted-foreground mt-4">Free 14-day trial · No credit card required · Cancel anytime</p>
         </div>
