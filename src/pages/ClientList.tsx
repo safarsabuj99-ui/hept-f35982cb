@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Users, ChevronRight, Plus, TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Save } from "lucide-react";
+import { Search, Users, ChevronRight, Plus, PlusCircle, TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Save } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
