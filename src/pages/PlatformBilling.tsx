@@ -9,32 +9,21 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/PageHeader";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, CheckCircle, Download, Clock, AlertTriangle, DollarSign } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2 } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
 interface Invoice {
-  id: string;
-  org_id: string;
-  invoice_number: string;
-  amount_bdt: number;
-  period_start: string;
-  period_end: string;
-  status: string;
-  payment_date: string | null;
-  payment_method: string | null;
-  notes: string | null;
-  created_at: string;
-  due_date: string | null;
-  org_name?: string;
+  id: string; org_id: string; invoice_number: string; amount_bdt: number;
+  period_start: string; period_end: string; status: string; payment_date: string | null;
+  payment_method: string | null; notes: string | null; created_at: string; due_date: string | null; org_name?: string;
 }
 
-function daysSince(dateStr: string | null) {
-  if (!dateStr) return null;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-}
+function daysSince(dateStr: string | null) { if (!dateStr) return null; return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000); }
 
 export default function PlatformBilling() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -64,14 +53,9 @@ export default function PlatformBilling() {
 
   const filtered = statusFilter === "all" ? invoices : invoices.filter((i) => i.status === statusFilter);
 
-  // Aging bucket calculations
   const agingBuckets = useMemo(() => {
     const unpaid = invoices.filter((i) => ["draft", "sent", "overdue"].includes(i.status));
-    const current: Invoice[] = [];
-    const days30: Invoice[] = [];
-    const days60: Invoice[] = [];
-    const days90: Invoice[] = [];
-
+    const current: Invoice[] = []; const days30: Invoice[] = []; const days60: Invoice[] = []; const days90: Invoice[] = [];
     unpaid.forEach((inv) => {
       const age = daysSince(inv.due_date || inv.period_end);
       if (age === null || age <= 0) current.push(inv);
@@ -79,11 +63,9 @@ export default function PlatformBilling() {
       else if (age <= 60) days60.push(inv);
       else days90.push(inv);
     });
-
     return { current, days30, days60, days90 };
   }, [invoices]);
 
-  // Payment timeline (last 6 months)
   const paymentTimeline = useMemo(() => {
     const months: Record<string, { billed: number; collected: number }> = {};
     const now = new Date();
@@ -103,23 +85,16 @@ export default function PlatformBilling() {
     return Object.entries(months).map(([month, data]) => ({ month, ...data }));
   }, [invoices]);
 
-  // Agency payment health
   const agencyHealth = useMemo(() => {
     const orgMap = new Map<string, { name: string; billed: number; paid: number; outstanding: number; lastPayment: string | null }>();
     invoices.forEach((inv) => {
-      if (!orgMap.has(inv.org_id)) {
-        orgMap.set(inv.org_id, { name: inv.org_name || "Unknown", billed: 0, paid: 0, outstanding: 0, lastPayment: null });
-      }
+      if (!orgMap.has(inv.org_id)) orgMap.set(inv.org_id, { name: inv.org_name || "Unknown", billed: 0, paid: 0, outstanding: 0, lastPayment: null });
       const entry = orgMap.get(inv.org_id)!;
       entry.billed += inv.amount_bdt;
       if (inv.status === "paid") {
         entry.paid += inv.amount_bdt;
-        if (!entry.lastPayment || inv.payment_date! > entry.lastPayment) {
-          entry.lastPayment = inv.payment_date;
-        }
-      } else if (inv.status !== "void") {
-        entry.outstanding += inv.amount_bdt;
-      }
+        if (!entry.lastPayment || inv.payment_date! > entry.lastPayment) entry.lastPayment = inv.payment_date;
+      } else if (inv.status !== "void") entry.outstanding += inv.amount_bdt;
     });
     return Array.from(orgMap.entries()).map(([id, data]) => ({ id, ...data }));
   }, [invoices]);
@@ -133,10 +108,7 @@ export default function PlatformBilling() {
     setSaving(true);
     const today = new Date().toISOString().slice(0, 10);
     await supabase.from("platform_invoices" as any).update({ status: "paid", payment_date: today, payment_method: paymentMethod } as any).eq("id", recordingInvoice.id);
-    toast({ title: "Payment recorded" });
-    setSaving(false);
-    setRecordingInvoice(null);
-    fetchData();
+    toast({ title: "Payment recorded" }); setSaving(false); setRecordingInvoice(null); fetchData();
   };
 
   const createInvoice = async () => {
@@ -145,12 +117,9 @@ export default function PlatformBilling() {
     const payload: any = { ...newInvoice, invoice_number: invNum, status: "draft" };
     if (!payload.due_date) delete payload.due_date;
     const { error } = await supabase.from("platform_invoices" as any).insert(payload as any);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
-    else { toast({ title: "Invoice created" }); }
-    setSaving(false);
-    setCreatingInvoice(false);
-    setNewInvoice({ org_id: "", amount_bdt: 0, period_start: "", period_end: "", due_date: "" });
-    fetchData();
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else toast({ title: "Invoice created" });
+    setSaving(false); setCreatingInvoice(false); setNewInvoice({ org_id: "", amount_bdt: 0, period_start: "", period_end: "", due_date: "" }); fetchData();
   };
 
   const autoGenerate = async () => {
@@ -165,15 +134,10 @@ export default function PlatformBilling() {
         : new Date(new Date(periodStart).setMonth(new Date(periodStart).getMonth() + 1)).toISOString().slice(0, 10);
       const dueDate = new Date(new Date(periodStart).setDate(new Date(periodStart).getDate() + 15)).toISOString().slice(0, 10);
       const invNum = `INV-${new Date().getFullYear()}-${String(invoices.length + count + 1).padStart(3, "0")}`;
-      await supabase.from("platform_invoices" as any).insert({
-        org_id: sub.org_id, invoice_number: invNum, amount_bdt: sub.amount_bdt,
-        period_start: periodStart, period_end: periodEnd, status: "sent", due_date: dueDate,
-      } as any);
+      await supabase.from("platform_invoices" as any).insert({ org_id: sub.org_id, invoice_number: invNum, amount_bdt: sub.amount_bdt, period_start: periodStart, period_end: periodEnd, status: "sent", due_date: dueDate } as any);
       count++;
     }
-    toast({ title: `${count} invoice(s) generated` });
-    setSaving(false);
-    fetchData();
+    toast({ title: `${count} invoice(s) generated` }); setSaving(false); fetchData();
   };
 
   const exportCSV = () => {
@@ -182,34 +146,47 @@ export default function PlatformBilling() {
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
   };
 
   const statusBadge = (status: string) => {
-    const map: Record<string, string> = { draft: "secondary", sent: "outline", paid: "default", overdue: "destructive", void: "secondary" };
-    return <Badge variant={map[status] as any || "secondary"}>{status}</Badge>;
+    const cls: Record<string, string> = {
+      draft: "bg-muted text-muted-foreground",
+      sent: "bg-blue-500/15 text-blue-400 border-blue-500/20",
+      paid: "bg-success/15 text-success border-success/20",
+      overdue: "bg-destructive/15 text-destructive border-destructive/20",
+      void: "bg-muted text-muted-foreground",
+    };
+    return <Badge className={cls[status] ?? ""}>{status}</Badge>;
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-4 grid-cols-3"><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-24 rounded-xl" /></div>
+        <Skeleton className="h-96 rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Revenue & Invoicing</h1>
-          <p className="text-sm text-muted-foreground">Manage platform billing, payments, and collection health</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={autoGenerate} disabled={saving}>Auto-Generate</Button>
-          <Button onClick={() => setCreatingInvoice(true)} className="gap-2"><Plus className="h-4 w-4" /> New Invoice</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Revenue & Invoicing"
+        subtitle="Manage platform billing, payments, and collection health"
+        icon={<CreditCard className="h-6 w-6 text-primary" />}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={autoGenerate} disabled={saving} className="press-effect">Auto-Generate</Button>
+            <Button onClick={() => setCreatingInvoice(true)} className="press-effect gap-2"><Plus className="h-4 w-4" /> New Invoice</Button>
+          </div>
+        }
+      />
 
-      {/* Revenue Summary */}
       <div>
         <p className="section-label mb-3">Revenue Summary</p>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <KpiCard title="Collected" value={`৳${totalCollected.toLocaleString()}`} icon={CheckCircle} accentColor="hsl(var(--success))" staggerIndex={0} />
           <KpiCard title="Outstanding" value={`৳${totalOutstanding.toLocaleString()}`} icon={Clock} accentColor="hsl(var(--warning))" staggerIndex={1} />
           <KpiCard title="Overdue" value={String(overdueCount)} icon={AlertTriangle} accentColor="hsl(var(--destructive))" staggerIndex={2} />
@@ -217,35 +194,26 @@ export default function PlatformBilling() {
       </div>
 
       {/* Aging Buckets */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        <Card className="border-emerald-500/30">
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Current</p>
-            <p className="text-lg font-bold text-emerald-500">৳{agingBuckets.current.reduce((s, i) => s + i.amount_bdt, 0).toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{agingBuckets.current.length} invoices</p>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-500/30">
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">30 Days</p>
-            <p className="text-lg font-bold text-amber-500">৳{agingBuckets.days30.reduce((s, i) => s + i.amount_bdt, 0).toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{agingBuckets.days30.length} invoices</p>
-          </CardContent>
-        </Card>
-        <Card className="border-orange-500/30">
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">60 Days</p>
-            <p className="text-lg font-bold text-orange-500">৳{agingBuckets.days60.reduce((s, i) => s + i.amount_bdt, 0).toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{agingBuckets.days60.length} invoices</p>
-          </CardContent>
-        </Card>
-        <Card className="border-destructive/30">
-          <CardContent className="p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">90+ Days</p>
-            <p className="text-lg font-bold text-destructive">৳{agingBuckets.days90.reduce((s, i) => s + i.amount_bdt, 0).toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{agingBuckets.days90.length} invoices</p>
-          </CardContent>
-        </Card>
+      <div>
+        <p className="section-label mb-3">Aging Buckets</p>
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+          {[
+            { label: "Current", data: agingBuckets.current, color: "text-success" },
+            { label: "30 Days", data: agingBuckets.days30, color: "text-warning" },
+            { label: "60 Days", data: agingBuckets.days60, color: "text-orange-500" },
+            { label: "90+ Days", data: agingBuckets.days90, color: "text-destructive" },
+          ].map((bucket, i) => (
+            <div key={bucket.label} className="glass-card glow-border animate-slide-up-fade" style={{ animationDelay: `${i * 80}ms`, animationFillMode: "forwards" }}>
+              <Card className="border-0 bg-transparent shadow-none">
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">{bucket.label}</p>
+                  <p className={`text-lg font-bold ${bucket.color}`}>৳{bucket.data.reduce((s, i) => s + i.amount_bdt, 0).toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">{bucket.data.length} invoices</p>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -256,7 +224,6 @@ export default function PlatformBilling() {
         </TabsList>
 
         <TabsContent value="invoices" className="space-y-4">
-          {/* Filters */}
           <div className="flex gap-3 items-center">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -269,131 +236,104 @@ export default function PlatformBilling() {
                 <SelectItem value="void">Void</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2 ml-auto"><Download className="h-4 w-4" /> Export CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2 ml-auto press-effect"><Download className="h-4 w-4" /> Export CSV</Button>
           </div>
 
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Agency</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Paid On</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-mono text-sm">{inv.invoice_number}</TableCell>
-                      <TableCell>{inv.org_name}</TableCell>
-                      <TableCell className="font-medium">৳{inv.amount_bdt.toLocaleString()}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{inv.period_start} → {inv.period_end}</TableCell>
-                      <TableCell className="text-sm">
-                        {inv.due_date ? (
-                          <span className={daysSince(inv.due_date)! > 0 && inv.status !== "paid" ? "text-destructive" : ""}>
-                            {inv.due_date}
-                          </span>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell>{statusBadge(inv.status)}</TableCell>
-                      <TableCell className="text-sm">{inv.payment_date || "—"}</TableCell>
-                      <TableCell>
-                        {inv.status !== "paid" && inv.status !== "void" && (
-                          <Button variant="ghost" size="sm" onClick={() => { setRecordingInvoice(inv); setPaymentMethod("Bank"); }}>
-                            <CheckCircle className="h-4 w-4 mr-1" /> Record
-                          </Button>
-                        )}
-                      </TableCell>
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead><TableHead>Agency</TableHead><TableHead>Amount</TableHead>
+                      <TableHead>Period</TableHead><TableHead>Due Date</TableHead><TableHead>Status</TableHead>
+                      <TableHead>Paid On</TableHead><TableHead></TableHead>
                     </TableRow>
-                  ))}
-                  {filtered.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No invoices found</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((inv) => (
+                      <TableRow key={inv.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-mono text-sm">{inv.invoice_number}</TableCell>
+                        <TableCell>{inv.org_name}</TableCell>
+                        <TableCell className="font-medium">৳{inv.amount_bdt.toLocaleString()}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{inv.period_start} → {inv.period_end}</TableCell>
+                        <TableCell className="text-sm">
+                          {inv.due_date ? (
+                            <span className={daysSince(inv.due_date)! > 0 && inv.status !== "paid" ? "text-destructive" : ""}>{inv.due_date}</span>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell>{statusBadge(inv.status)}</TableCell>
+                        <TableCell className="text-sm">{inv.payment_date || "—"}</TableCell>
+                        <TableCell>
+                          {inv.status !== "paid" && inv.status !== "void" && (
+                            <Button variant="ghost" size="sm" onClick={() => { setRecordingInvoice(inv); setPaymentMethod("Bank"); }}>
+                              <CheckCircle className="h-4 w-4 mr-1" /> Record
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No invoices found</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="timeline">
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Billed vs Collected (Last 6 Months)</CardTitle></CardHeader>
-            <CardContent>
-              <ChartContainer
-                config={{
-                  billed: { label: "Billed", color: "hsl(var(--muted-foreground))" },
-                  collected: { label: "Collected", color: "hsl(var(--primary))" },
-                }}
-                className="h-[300px]"
-              >
-                <BarChart data={paymentTimeline}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="billed" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="collected" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader><CardTitle className="text-sm">Billed vs Collected (Last 6 Months)</CardTitle></CardHeader>
+              <CardContent>
+                <ChartContainer config={{ billed: { label: "Billed", color: "hsl(var(--muted-foreground))" }, collected: { label: "Collected", color: "hsl(var(--primary))" } }} className="h-[300px]">
+                  <BarChart data={paymentTimeline}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="billed" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="collected" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="health">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Agency</TableHead>
-                    <TableHead>Total Billed</TableHead>
-                    <TableHead>Total Paid</TableHead>
-                    <TableHead>Outstanding</TableHead>
-                    <TableHead>Last Payment</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agencyHealth.map((agency) => {
-                    const daysSincePayment = daysSince(agency.lastPayment);
-                    let healthStatus: "good" | "warning" | "critical" = "good";
-                    if (!agency.lastPayment) healthStatus = "critical";
-                    else if (daysSincePayment! > 60) healthStatus = "critical";
-                    else if (daysSincePayment! > 30) healthStatus = "warning";
-
-                    return (
-                      <TableRow key={agency.id}>
-                        <TableCell className="font-medium">{agency.name}</TableCell>
-                        <TableCell>৳{agency.billed.toLocaleString()}</TableCell>
-                        <TableCell className="text-emerald-500">৳{agency.paid.toLocaleString()}</TableCell>
-                        <TableCell className={agency.outstanding > 0 ? "text-destructive font-medium" : ""}>
-                          ৳{agency.outstanding.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {agency.lastPayment || "Never"}
-                          {daysSincePayment !== null && <span className="ml-1 text-xs">({daysSincePayment}d ago)</span>}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={healthStatus === "good" ? "default" : healthStatus === "warning" ? "secondary" : "destructive"}>
-                            {healthStatus === "good" ? "Healthy" : healthStatus === "warning" ? "At Risk" : "Critical"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {agencyHealth.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No billing data</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Agency</TableHead><TableHead>Total Billed</TableHead><TableHead>Total Paid</TableHead><TableHead>Outstanding</TableHead><TableHead>Last Payment</TableHead><TableHead>Status</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agencyHealth.map((agency) => {
+                      const daysSincePayment = daysSince(agency.lastPayment);
+                      let healthStatus: "good" | "warning" | "critical" = "good";
+                      if (!agency.lastPayment) healthStatus = "critical";
+                      else if (daysSincePayment! > 60) healthStatus = "critical";
+                      else if (daysSincePayment! > 30) healthStatus = "warning";
+                      const cls = { good: "bg-success/15 text-success", warning: "bg-warning/15 text-warning", critical: "bg-destructive/15 text-destructive" };
+                      return (
+                        <TableRow key={agency.id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="font-medium">{agency.name}</TableCell>
+                          <TableCell>৳{agency.billed.toLocaleString()}</TableCell>
+                          <TableCell className="text-success">৳{agency.paid.toLocaleString()}</TableCell>
+                          <TableCell className={agency.outstanding > 0 ? "text-destructive font-medium" : ""}>৳{agency.outstanding.toLocaleString()}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{agency.lastPayment || "Never"}{daysSincePayment !== null && <span className="ml-1 text-xs">({daysSincePayment}d ago)</span>}</TableCell>
+                          <TableCell><Badge className={cls[healthStatus]}>{healthStatus === "good" ? "Healthy" : healthStatus === "warning" ? "At Risk" : "Critical"}</Badge></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {agencyHealth.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No billing data</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -414,9 +354,7 @@ export default function PlatformBilling() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={recordPayment} disabled={saving} className="w-full">
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Confirm Payment
-            </Button>
+            <Button onClick={recordPayment} disabled={saving} className="w-full">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Confirm Payment</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -438,9 +376,7 @@ export default function PlatformBilling() {
               <div><Label>Period End</Label><Input type="date" value={newInvoice.period_end} onChange={(e) => setNewInvoice({ ...newInvoice, period_end: e.target.value })} /></div>
             </div>
             <div><Label>Due Date</Label><Input type="date" value={newInvoice.due_date} onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })} /></div>
-            <Button onClick={createInvoice} disabled={saving || !newInvoice.org_id} className="w-full">
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Invoice
-            </Button>
+            <Button onClick={createInvoice} disabled={saving || !newInvoice.org_id} className="w-full">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Invoice</Button>
           </div>
         </DialogContent>
       </Dialog>
