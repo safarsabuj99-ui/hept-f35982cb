@@ -1,47 +1,88 @@
 
 
-## Redesign: Premium Plan Management Page
+## Premium UI/UX Redesign — All SaaS Management Pages
 
-### Current Issues
-- Plain cards with no visual hierarchy or glassmorphism
-- Feature list is a flat wall of text — hard to scan
-- No monthly/yearly pricing toggle for visual comparison
-- Missing the premium design system (glass-card, glow-border, staggered animations)
-- No subscriber count per plan (useful context)
-- Dialog editor feels basic
+### Current State
+16 platform pages exist with inconsistent styling. Some use `glass-card glow-border`, others use plain `Card`. Headers are inconsistent — some use raw `h1` tags, others have custom layouts. Loading states vary. The design system (`PageHeader`, `glass-card`, `glow-border`, `section-label`, `animate-slide-up-fade`, `KpiCard`) exists but is applied unevenly.
 
-### Redesign Approach
+### Design Principles
+1. **Consistency** — Every page uses `PageHeader` with icon, `section-label` dividers, `glass-card glow-border` containers, staggered animations
+2. **Glassmorphism everywhere** — All cards/tables wrapped in `glass-card glow-border` with `Card border-0 bg-transparent shadow-none` inside
+3. **Premium loading** — Skeleton shimmer grids instead of lone spinners
+4. **Micro-interactions** — Staggered `animate-slide-up-fade` with incrementing delays, `press-effect` on action buttons
 
-**Single file change: `src/pages/PlatformPlans.tsx`** — full rewrite with premium aesthetics.
+### Shared Page Structure
+```text
+┌──────────────────────────────────────┐
+│ PageHeader (icon + title + actions)  │
+├──────────────────────────────────────┤
+│ section-label: "Key Metrics"         │
+│ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐    │
+│ │ KPI │ │ KPI │ │ KPI │ │ KPI │    │
+│ └─────┘ └─────┘ └─────┘ └─────┘    │
+├──────────────────────────────────────┤
+│ section-label: "Details"             │
+│ ┌────────────────────────────────┐   │
+│ │ glass-card glow-border         │   │
+│ │   Card border-0 bg-transparent │   │
+│ └────────────────────────────────┘   │
+└──────────────────────────────────────┘
+```
 
-#### Visual Upgrades
-1. **PageHeader** component with icon and gradient accent
-2. **Monthly/Yearly toggle** at the top — switches displayed price across all cards
-3. **Glass-card plan cards** with `glow-border` and staggered `animate-slide-up-fade` entry
-4. **Popular plan** gets a gradient border highlight and "Most Popular" ribbon
-5. **Pricing** — large prominent price with yearly savings badge (e.g., "Save 20%")
-6. **Limits** shown as icon-bubble stat pills (Users, Accounts, Managers) with subtle backgrounds
-7. **Features** — compact two-column grid with green check / muted X icons, only showing enabled features prominently (disabled collapsed under "Show all")
-8. **Active subscriber count** per plan — query `organization_subscriptions` grouped by plan_id
-9. **Card actions** — subtle hover-reveal edit/delete buttons in top-right corner
-10. **Inactive plans** get a grayscale overlay with "Archived" badge
+### Pages to Redesign (14 pages — Dashboard and Plans already done)
 
-#### Dialog Upgrades
-- **Tabs inside dialog**: "Details" | "Limits" | "Features" — instead of one long scroll
-- Glass background on dialog
-- Feature flags grid with category grouping (Analytics, Operations, Branding)
-- Live preview card in the dialog sidebar showing how the plan will look
+**Batch 1 — Core Pages**
 
-#### Loading State
-- Use `KpiSkeletonGrid` + card skeletons with shimmer
+1. **AgencyList** — Replace plain table with glass-card agency cards (name, plan badge, status dot, mini usage bars, renewal date). Add search + status filter pills. Table as alternate view toggle.
 
-### Technical Details
-- Fetch subscriber counts: `supabase.from("organization_subscriptions").select("plan_id").then(group by plan_id)`
-- Monthly/yearly toggle is local state only — just switches which price field is displayed
-- All existing CRUD logic stays the same, just wrapped in premium UI
-- Uses existing `PageHeader`, `glass-card`, `glow-border`, `animate-slide-up-fade` classes from the design system
-- Tabs component from shadcn for dialog sections
+2. **PlatformBilling** — Add `PageHeader` with icon. Wrap aging buckets in `glass-card`. Row hover glow on invoice table. Status dot indicators.
 
-### Files Changed
-- `src/pages/PlatformPlans.tsx` — full redesign
+3. **PlatformRevenue** — Add `PageHeader`. Gradient area fills on charts. Animated KPI counters.
+
+4. **TenantLifecycle** — Add `PageHeader`. Pipeline columns with colored top borders and gradient backgrounds per status.
+
+5. **TenantUsageMetering** — Add `PageHeader`. Gradient progress bars. Better table styling.
+
+**Batch 2 — Intelligence Pages**
+
+6. **PlatformCohorts** — Add `PageHeader`. Better heatmap cells with rounded corners and hover tooltips.
+
+7. **PlatformChurnPrediction** — Add `PageHeader`. Risk cards with colored left-accent borders. Risk gauge visuals.
+
+8. **PlatformFeatureAdoption** — Add `PageHeader`. Enhanced heatmap color scales and hover states.
+
+9. **PlatformForecasting** — Add `PageHeader`. Gradient area fill on forecast chart with styled confidence bands.
+
+10. **PlatformCostAnalytics** — Add `PageHeader`. Gradient bar fills on cost breakdown.
+
+11. **PlatformHealthScores** — Add `PageHeader`. Circular score gauges with color-coded health tiers.
+
+12. **PlatformBenchmarks** — Add `PageHeader`. Dual-tone comparison bars.
+
+**Batch 3 — System Pages**
+
+13. **PlatformAnnouncements** — Add `PageHeader`. Type-colored left borders on cards (info=blue, warning=amber, critical=red).
+
+14. **PlatformAudit** — Add `PageHeader`. Severity-colored row indicators with timeline dots.
+
+### Layout Enhancement
+- **PlatformLayout** — Add `NotificationBell` to header (currently missing). Add user avatar in footer.
+
+### Files Changed (16 files, no database changes)
+- `src/components/PlatformLayout.tsx` — add NotificationBell, user info
+- `src/pages/AgencyList.tsx` — full premium redesign with card/table toggle
+- `src/pages/PlatformBilling.tsx` — premium wrapper upgrade
+- `src/pages/PlatformRevenue.tsx` — premium wrapper upgrade
+- `src/pages/TenantLifecycle.tsx` — premium styling upgrade
+- `src/pages/TenantUsageMetering.tsx` — premium wrapper upgrade
+- `src/pages/PlatformCohorts.tsx` — premium wrapper upgrade
+- `src/pages/PlatformChurnPrediction.tsx` — premium wrapper upgrade
+- `src/pages/PlatformFeatureAdoption.tsx` — premium wrapper upgrade
+- `src/pages/PlatformForecasting.tsx` — premium wrapper upgrade
+- `src/pages/PlatformCostAnalytics.tsx` — premium wrapper upgrade
+- `src/pages/PlatformHealthScores.tsx` — premium wrapper upgrade
+- `src/pages/PlatformBenchmarks.tsx` — premium wrapper upgrade
+- `src/pages/PlatformAnnouncements.tsx` — premium wrapper upgrade
+- `src/pages/PlatformAudit.tsx` — premium wrapper upgrade
+- `src/pages/CreateAgency.tsx` — premium form styling
 
