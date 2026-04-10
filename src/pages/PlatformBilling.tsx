@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2, ShieldCheck, XCircle, Eye, ImageIcon } from "lucide-react";
+import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2, ShieldCheck, XCircle, Eye, ImageIcon, ArrowUpRight } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -22,6 +22,13 @@ interface SubscriptionPayment {
   id: string; org_id: string; invoice_id: string | null; amount_bdt: number;
   payment_method: string; transaction_reference: string | null;
   proof_image_url: string | null; status: string; admin_note: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string;
+  org_name?: string;
+}
+
+interface UpgradeRequest {
+  id: string; org_id: string; current_plan: string; requested_plan: string;
+  requested_billing_cycle: string; status: string; admin_note: string | null;
   reviewed_by: string | null; reviewed_at: string | null; created_at: string;
   org_name?: string;
 }
@@ -46,21 +53,26 @@ export default function PlatformBilling() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
   const [pendingPayments, setPendingPayments] = useState<SubscriptionPayment[]>([]);
+  const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([]);
   const [reviewingPayment, setReviewingPayment] = useState<SubscriptionPayment | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [reviewingUpgrade, setReviewingUpgrade] = useState<UpgradeRequest | null>(null);
+  const [upgradeRejectNote, setUpgradeRejectNote] = useState("");
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: invData }, { data: orgData }, { data: payData }] = await Promise.all([
+    const [{ data: invData }, { data: orgData }, { data: payData }, { data: upgradeData }] = await Promise.all([
       supabase.from("platform_invoices" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("organizations").select("id, name"),
       supabase.from("subscription_payments").select("*").order("created_at", { ascending: false }),
+      supabase.from("plan_upgrade_requests").select("*").order("created_at", { ascending: false }),
     ]);
     const orgMap = new Map((orgData ?? []).map((o) => [o.id, o.name]));
     setInvoices(((invData as any[]) ?? []).map((inv: any) => ({ ...inv, org_name: orgMap.get(inv.org_id) || "Unknown" })));
     setOrgs(orgData ?? []);
     setPendingPayments(((payData as any[]) ?? []).map((p: any) => ({ ...p, org_name: orgMap.get(p.org_id) || "Unknown" })));
+    setUpgradeRequests(((upgradeData as any[]) ?? []).map((u: any) => ({ ...u, org_name: orgMap.get(u.org_id) || "Unknown" })));
     setLoading(false);
   };
 
@@ -183,6 +195,97 @@ export default function PlatformBilling() {
     toast({ title: "Payment rejected" }); setSaving(false); setReviewingPayment(null); setRejectNote(""); fetchData();
   };
 
+  const approveUpgrade = async (req: UpgradeRequest) => {
+    setSaving(true);
+    try {
+      // Update request status
+      await supabase.from("plan_upgrade_requests").update({ status: "approved", reviewed_at: new Date().toISOString() } as any).eq("id", req.id);
+
+      // Fetch the target plan details
+      const { data: planData } = await supabase.from("platform_plans").select("*").eq("key", req.requested_plan).single();
+      if (planData) {
+        const featureFlags = (planData as any).feature_flags || {};
+        // Update organization plan, limits, features
+        await supabase.from("organizations").update({
+          plan: req.requested_plan as any,
+          max_clients: (planData as any).max_clients,
+          max_ad_accounts: (planData as any).max_ad_accounts,
+          max_managers: (planData as any).max_managers,
+          allowed_features: featureFlags,
+        }).eq("id", req.org_id);
+
+        // Update subscription
+        const amount = req.requested_billing_cycle === "yearly" ? (planData as any).price_bdt_yearly : (planData as any).price_bdt_monthly;
+        await supabase.from("organization_subscriptions").update({
+          plan: req.requested_plan as any,
+          billing_cycle: req.requested_billing_cycle as any,
+          amount_bdt: amount,
+          updated_at: new Date().toISOString(),
+        } as any).eq("org_id", req.org_id);
+
+        // Create a new invoice for the upgraded plan
+        const invNum = `INV-UPG-${Date.now().toString(36).toUpperCase()}`;
+        const today = new Date().toISOString().slice(0, 10);
+        const periodEnd = req.requested_billing_cycle === "yearly"
+          ? new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().slice(0, 10)
+          : new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().slice(0, 10);
+        const dueDate = new Date(new Date().setDate(new Date().getDate() + 15)).toISOString().slice(0, 10);
+
+        await supabase.from("platform_invoices" as any).insert({
+          org_id: req.org_id,
+          invoice_number: invNum,
+          amount_bdt: amount,
+          period_start: today,
+          period_end: periodEnd,
+          status: "sent",
+          due_date: dueDate,
+        } as any);
+      }
+
+      // Notify agency admin
+      const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id, name").eq("id", req.org_id).single();
+      if (orgOwner) {
+        await supabase.from("notifications").insert({
+          user_id: orgOwner.owner_user_id,
+          title: "Plan Upgrade Approved ✅",
+          body: `Your upgrade to ${req.requested_plan} plan has been approved! Your new limits and features are now active.`,
+          type: "system" as any,
+          priority: "normal",
+          link: "/admin/subscription",
+        });
+      }
+
+      toast({ title: "Upgrade approved", description: `${req.org_name} upgraded to ${req.requested_plan}` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSaving(false);
+    fetchData();
+  };
+
+  const rejectUpgrade = async (req: UpgradeRequest) => {
+    if (!upgradeRejectNote.trim()) { toast({ title: "Please provide a rejection reason", variant: "destructive" }); return; }
+    setSaving(true);
+    await supabase.from("plan_upgrade_requests").update({
+      status: "rejected",
+      admin_note: upgradeRejectNote.trim(),
+      reviewed_at: new Date().toISOString(),
+    } as any).eq("id", req.id);
+
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", req.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({
+        user_id: orgOwner.owner_user_id,
+        title: "Plan Upgrade Rejected ❌",
+        body: `Your upgrade request to ${req.requested_plan} was rejected. Reason: ${upgradeRejectNote.trim()}`,
+        type: "system" as any,
+        priority: "high",
+        link: "/admin/subscription",
+      });
+    }
+    toast({ title: "Upgrade rejected" }); setSaving(false); setReviewingUpgrade(null); setUpgradeRejectNote(""); fetchData();
+  };
+
   const exportCSV = () => {
     const headers = ["Invoice #", "Agency", "Amount (BDT)", "Period Start", "Period End", "Due Date", "Status", "Payment Date", "Payment Method"];
     const rows = filtered.map((i) => [i.invoice_number, i.org_name, i.amount_bdt, i.period_start, i.period_end, i.due_date || "", i.status, i.payment_date || "", i.payment_method || ""]);
@@ -267,6 +370,14 @@ export default function PlatformBilling() {
             {pendingPayments.filter(p => p.status === "pending").length > 0 && (
               <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
                 {pendingPayments.filter(p => p.status === "pending").length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="upgrades" className="gap-1.5">
+            <ArrowUpRight className="h-3.5 w-3.5" /> Upgrades
+            {upgradeRequests.filter(u => u.status === "pending").length > 0 && (
+              <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                {upgradeRequests.filter(u => u.status === "pending").length}
               </span>
             )}
           </TabsTrigger>
@@ -388,6 +499,62 @@ export default function PlatformBilling() {
                     ))}
                     {pendingPayments.length === 0 && (
                       <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No payment submissions yet</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="upgrades" className="space-y-4">
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader>
+                <CardTitle className="text-sm">Plan Upgrade Requests</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agency</TableHead><TableHead>Current Plan</TableHead><TableHead>Requested Plan</TableHead>
+                      <TableHead>Cycle</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {upgradeRequests.map((req) => (
+                      <TableRow key={req.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{req.org_name}</TableCell>
+                        <TableCell className="capitalize">{req.current_plan}</TableCell>
+                        <TableCell className="capitalize font-medium">{req.requested_plan}</TableCell>
+                        <TableCell className="capitalize">{req.requested_billing_cycle}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{req.created_at.slice(0, 10)}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            req.status === "pending" ? "bg-warning/15 text-warning" :
+                            req.status === "approved" ? "bg-success/15 text-success" :
+                            "bg-destructive/15 text-destructive"
+                          }>{req.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {req.status === "pending" && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => approveUpgrade(req)} disabled={saving} className="text-success hover:text-success gap-1 text-xs">
+                                <CheckCircle className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setReviewingUpgrade(req); setUpgradeRejectNote(""); }} className="text-destructive hover:text-destructive gap-1 text-xs">
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                          {req.status === "rejected" && req.admin_note && (
+                            <span className="text-xs text-muted-foreground" title={req.admin_note}>Note: {req.admin_note.slice(0, 30)}{req.admin_note.length > 30 ? "…" : ""}</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {upgradeRequests.length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No upgrade requests yet</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -521,6 +688,28 @@ export default function PlatformBilling() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><ImageIcon className="h-4 w-4" /> Payment Proof</DialogTitle></DialogHeader>
           {proofPreview && <img src={proofPreview} alt="Payment proof" className="w-full rounded-lg border" />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Upgrade Dialog */}
+      <Dialog open={!!reviewingUpgrade} onOpenChange={(o) => !o && setReviewingUpgrade(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Upgrade — {reviewingUpgrade?.org_name}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Request: <strong className="text-foreground capitalize">{reviewingUpgrade?.current_plan}</strong> → <strong className="text-foreground capitalize">{reviewingUpgrade?.requested_plan}</strong>
+            </p>
+            <div>
+              <Label>Rejection Reason</Label>
+              <Textarea value={upgradeRejectNote} onChange={(e) => setUpgradeRejectNote(e.target.value)} placeholder="Explain why this upgrade is being rejected..." rows={3} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReviewingUpgrade(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reviewingUpgrade && rejectUpgrade(reviewingUpgrade)} disabled={saving || !upgradeRejectNote.trim()}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Reject Upgrade
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
