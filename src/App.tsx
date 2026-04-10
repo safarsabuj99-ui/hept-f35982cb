@@ -66,6 +66,7 @@ const PlatformHealthScores = lazy(() => import("@/pages/PlatformHealthScores"));
 const PlatformBenchmarks = lazy(() => import("@/pages/PlatformBenchmarks"));
 const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
