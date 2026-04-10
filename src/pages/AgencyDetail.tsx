@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface UsageStats {
@@ -21,11 +21,22 @@ interface UsageStats {
   managersUsed: number;
 }
 
+interface PlanOption {
+  key: string;
+  name: string;
+  max_clients: number;
+  max_ad_accounts: number;
+  max_managers: number;
+  price_bdt_monthly: number;
+}
+
 export default function AgencyDetail() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const [org, setOrg] = useState<(Tables<"organizations"> & { suspension_reason?: string; notes?: string }) | null>(null);
   const [usage, setUsage] = useState<UsageStats>({ clientsUsed: 0, adAccountsUsed: 0, managersUsed: 0 });
   const [adminProfile, setAdminProfile] = useState<Tables<"profiles"> | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
