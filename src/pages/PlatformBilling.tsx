@@ -690,6 +690,28 @@ export default function PlatformBilling() {
           {proofPreview && <img src={proofPreview} alt="Payment proof" className="w-full rounded-lg border" />}
         </DialogContent>
       </Dialog>
+
+      {/* Reject Upgrade Dialog */}
+      <Dialog open={!!reviewingUpgrade} onOpenChange={(o) => !o && setReviewingUpgrade(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Upgrade — {reviewingUpgrade?.org_name}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Request: <strong className="text-foreground capitalize">{reviewingUpgrade?.current_plan}</strong> → <strong className="text-foreground capitalize">{reviewingUpgrade?.requested_plan}</strong>
+            </p>
+            <div>
+              <Label>Rejection Reason</Label>
+              <Textarea value={upgradeRejectNote} onChange={(e) => setUpgradeRejectNote(e.target.value)} placeholder="Explain why this upgrade is being rejected..." rows={3} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReviewingUpgrade(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reviewingUpgrade && rejectUpgrade(reviewingUpgrade)} disabled={saving || !upgradeRejectNote.trim()}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Reject Upgrade
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
