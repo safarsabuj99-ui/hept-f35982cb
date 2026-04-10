@@ -444,28 +444,159 @@ export default function LandingPage() {
                         <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
                         <div className="w-2.5 h-2.5 rounded-full bg-success/50" />
                       </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-primary/15" />
-                          <div className="flex-1 h-3 bg-muted rounded" />
-                          <div className="w-16 h-6 bg-success/15 rounded" />
+                      {i === 0 && (
+                        /* Reporting Mockup */
+                        <div className="space-y-3">
+                          <div className="flex gap-1 text-[10px] font-semibold">
+                            <span className="px-2.5 py-1 rounded bg-primary text-primary-foreground">Meta</span>
+                            <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">TikTok</span>
+                            <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">Google</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { label: "Spend", val: "$1,240", color: "text-primary" },
+                              { label: "Impressions", val: "124K", color: "text-foreground" },
+                              { label: "Clicks", val: "3,821", color: "text-foreground" },
+                              { label: "ROAS", val: "3.8x", color: "text-[hsl(var(--success))]" },
+                            ].map((kpi) => (
+                              <div key={kpi.label} className="bg-muted/50 rounded-lg p-2 text-center">
+                                <div className="text-[9px] text-muted-foreground uppercase">{kpi.label}</div>
+                                <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="border border-border/50 rounded-lg overflow-hidden text-[10px]">
+                            <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 bg-muted/40 font-semibold text-muted-foreground">
+                              <span>Campaign</span><span>Spend</span><span>Status</span>
+                            </div>
+                            {[
+                              { name: "Summer Sale - Conv", spend: "$420", pct: 75, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                              { name: "Brand Awareness Q2", spend: "$380", pct: 60, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                              { name: "Retargeting - DPA", spend: "$280", pct: 45, status: "Learning", sColor: "bg-warning/15 text-warning" },
+                              { name: "Lead Gen - Form", spend: "$160", pct: 30, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                            ].map((r) => (
+                              <div key={r.name} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 border-t border-border/30 items-center">
+                                <span className="truncate text-foreground">{r.name}</span>
+                                <div className="flex items-center gap-1">
+                                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${r.pct}%` }} /></div>
+                                  <span className="text-muted-foreground">{r.spend}</span>
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-medium ${r.sColor}`}>{r.status}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex justify-end">
+                            <div className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-semibold rounded-md flex items-center gap-1">
+                              <Send className="w-3 h-3" /> Send Report
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-primary/10" />
-                          <div className="flex-1 h-3 bg-muted rounded w-3/4" />
-                          <div className="w-16 h-6 bg-primary/15 rounded" />
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-primary/10" />
-                          <div className="flex-1 h-3 bg-muted rounded w-5/6" />
-                          <div className="w-16 h-6 bg-warning/15 rounded" />
-                        </div>
-                        <div className="h-24 bg-muted/40 rounded-lg mt-3 flex items-end gap-1 p-3">
-                          {[30, 55, 45, 70, 50, 80, 65].map((h, j) => (
-                            <div key={j} className="flex-1 bg-primary/25 rounded-t" style={{ height: `${h}%` }} />
+                      )}
+                      {i === 1 && (
+                        /* Account Organization Mockup */
+                        <div className="space-y-3">
+                          {[
+                            { client: "FashionHub", accounts: [{ platform: "Meta", id: "act_8821", color: "bg-blue-500" }, { platform: "TikTok", id: "adv_7741", color: "bg-cyan-500" }] },
+                            { client: "TechNova", accounts: [{ platform: "Meta", id: "act_3302", color: "bg-blue-500" }, { platform: "Google", id: "ads_9910", color: "bg-amber-500" }, { platform: "TikTok", id: "adv_5523", color: "bg-cyan-500" }] },
+                            { client: "GreenLife", accounts: [{ platform: "Google", id: "ads_4415", color: "bg-amber-500" }] },
+                          ].map((c) => (
+                            <div key={c.client} className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0 mt-0.5">
+                                {c.client[0]}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-semibold text-foreground mb-1">{c.client}</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {c.accounts.map((a) => (
+                                    <div key={a.id} className="flex items-center gap-1 bg-muted/60 rounded px-2 py-0.5">
+                                      <div className={`w-1.5 h-1.5 rounded-full ${a.color}`} />
+                                      <span className="text-[9px] font-medium text-muted-foreground">{a.platform}</span>
+                                      <span className="text-[9px] text-foreground/70 font-mono">{a.id}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="text-[8px] text-muted-foreground/50 flex-shrink-0 mt-1">⋮⋮</div>
+                            </div>
                           ))}
+                          <div className="border-t border-dashed border-border/50 pt-2 flex items-center justify-center gap-1 text-[9px] text-muted-foreground">
+                            <ArrowUpDown className="w-3 h-3" /> Drag to reassign accounts
+                          </div>
                         </div>
-                      </div>
+                      )}
+                      {i === 2 && (
+                        /* Balance Tracker Mockup */
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-[1fr_70px_70px_70px] gap-1 text-[9px] font-semibold text-muted-foreground px-2 pb-1 border-b border-border/40">
+                            <span>Client</span><span className="text-right">Deposited</span><span className="text-right">Spent</span><span className="text-right">Balance</span>
+                          </div>
+                          {[
+                            { name: "FashionHub", dep: "$2,000", spent: "$980", bal: "$1,020", pct: 49, color: "bg-[hsl(var(--success))]" },
+                            { name: "TechNova", dep: "$1,500", spent: "$1,200", bal: "$300", pct: 80, color: "bg-warning" },
+                            { name: "GreenLife", dep: "$800", spent: "$750", bal: "$50", pct: 94, color: "bg-destructive" },
+                          ].map((c) => (
+                            <div key={c.name} className="grid grid-cols-[1fr_70px_70px_70px] gap-1 items-center px-2 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{c.name[0]}</div>
+                                <span className="text-xs font-medium text-foreground truncate">{c.name}</span>
+                              </div>
+                              <span className="text-[10px] text-foreground text-right font-mono">{c.dep}</span>
+                              <span className="text-[10px] text-muted-foreground text-right font-mono">{c.spent}</span>
+                              <span className="text-[10px] text-foreground text-right font-bold font-mono">{c.bal}</span>
+                            </div>
+                          ))}
+                          <div className="pt-1">
+                            {[
+                              { pct: 49, color: "bg-[hsl(var(--success))]", label: "FashionHub" },
+                              { pct: 80, color: "bg-warning", label: "TechNova" },
+                              { pct: 94, color: "bg-destructive", label: "GreenLife" },
+                            ].map((b) => (
+                              <div key={b.label} className="flex items-center gap-2 px-2 py-0.5">
+                                <span className="text-[8px] text-muted-foreground w-16 truncate">{b.label}</span>
+                                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${b.color} transition-all`} style={{ width: `${b.pct}%` }} />
+                                </div>
+                                <span className="text-[8px] text-muted-foreground">{b.pct}%</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="border-t border-border/50 mt-1 pt-2 flex justify-between px-2 text-[10px] font-semibold">
+                            <span className="text-muted-foreground">Total Balance</span>
+                            <span className="text-foreground font-mono">$1,370</span>
+                          </div>
+                        </div>
+                      )}
+                      {i === 3 && (
+                        /* Profit & Dollar Management Mockup */
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { label: "USD Purchased", val: "$5,200", sub: "This month", color: "text-primary" },
+                              { label: "WAC Rate", val: "৳121.5", sub: "Avg cost", color: "text-foreground" },
+                              { label: "Margin", val: "18.2%", sub: "+2.1% MoM", color: "text-[hsl(var(--success))]" },
+                            ].map((kpi) => (
+                              <div key={kpi.label} className="bg-muted/40 rounded-lg p-2.5 text-center">
+                                <div className="text-[8px] text-muted-foreground uppercase">{kpi.label}</div>
+                                <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
+                                <div className="text-[7px] text-muted-foreground mt-0.5">{kpi.sub}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="h-20 bg-muted/30 rounded-lg p-2 flex items-end gap-0.5 relative">
+                            <div className="absolute top-1.5 left-2.5 text-[8px] text-muted-foreground font-medium">Profit Trend</div>
+                            {[35, 42, 38, 55, 48, 62, 58, 70, 65, 75, 68, 80].map((h, j) => (
+                              <div key={j} className="flex-1 rounded-t transition-all" style={{ height: `${h}%`, background: h > 50 ? 'hsl(var(--success) / 0.4)' : 'hsl(var(--primary) / 0.25)' }} />
+                            ))}
+                          </div>
+                          <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 flex items-center justify-between">
+                            <div>
+                              <div className="text-[9px] text-muted-foreground">Next Week Forecast</div>
+                              <div className="text-xs font-bold text-foreground">Need <span className="text-primary">$3,400</span> USD</div>
+                            </div>
+                            <TrendingUp className="w-4 h-4 text-primary" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
