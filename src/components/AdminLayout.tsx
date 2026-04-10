@@ -9,6 +9,7 @@ import {
   UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useBranding } from "@/hooks/useBranding";
 import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { usePendingCounts } from "@/hooks/usePendingCounts";
@@ -85,6 +86,7 @@ function AdminSidebarContent() {
   const { hasPermission } = usePermissions();
   const { signOut } = useAuth();
   const location = useLocation();
+  const { brandName, logoUrl } = useBranding();
   const { pendingPayments, pendingOrders } = usePendingCounts();
   const { state, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
@@ -117,13 +119,17 @@ function AdminSidebarContent() {
       {/* Premium Header */}
       <SidebarHeader className="sidebar-header-premium">
         <div className="flex h-16 items-center gap-3 px-4">
-          <div className="sidebar-logo-orb">
-            <BarChart3 className="h-5 w-5 text-white relative z-10" />
+          <div className="sidebar-logo-orb overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-full w-full object-contain p-0.5 relative z-10" />
+            ) : (
+              <BarChart3 className="h-5 w-5 text-white relative z-10" />
+            )}
           </div>
           {!collapsed && (
             <div className="flex items-center gap-2 animate-slide-up-fade">
               <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                HEPT
+                {brandName}
               </span>
               <span className="sidebar-version-tag">v2.0</span>
             </div>
@@ -215,6 +221,20 @@ function AdminSidebarContent() {
   );
 }
 
+function MobileHeaderBrand() {
+  const { brandName, logoUrl } = useBranding();
+  return (
+    <div className="flex items-center gap-2 lg:hidden">
+      {logoUrl ? (
+        <img src={logoUrl} alt={brandName} className="h-5 w-5 object-contain" />
+      ) : (
+        <BarChart3 className="h-5 w-5 text-primary" />
+      )}
+      <span className="text-base font-bold">{brandName}</span>
+    </div>
+  );
+}
+
 export function AdminLayout() {
   return (
     <SidebarProvider>
@@ -224,10 +244,7 @@ export function AdminLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/80 backdrop-blur-xl px-4 lg:px-6">
             <SidebarTrigger className="press-effect" />
-            <div className="flex items-center gap-2 lg:hidden">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              <span className="text-base font-bold">HEPT</span>
-            </div>
+            <MobileHeaderBrand />
             <div className="ml-auto flex items-center gap-2">
               <NotificationBell allNotificationsPath="/admin/notifications" />
               <div className="lg:hidden"><ThemeToggle /></div>

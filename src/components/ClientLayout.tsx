@@ -2,12 +2,13 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { useProfile } from "@/hooks/useProfile";
+import { useBranding } from "@/hooks/useBranding";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
-  BarChart3, LogOut, Megaphone, LayoutDashboard, FileBarChart,
-  ArrowLeft, Wallet
+  LogOut, Megaphone, LayoutDashboard, FileBarChart,
+  ArrowLeft, Wallet, BarChart3
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ export function ClientLayout() {
   const location = useLocation();
   const { isImpersonating, stopImpersonating } = useImpersonation();
   const { profile } = useProfile();
+  const { brandName, logoUrl } = useBranding();
 
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
@@ -48,10 +50,14 @@ export function ClientLayout() {
       <header className="client-header sticky top-0 z-50 flex h-14 md:h-16 items-center justify-between px-4 md:px-8">
         {/* Left: Logo */}
         <div className="flex items-center gap-2.5">
-          <div className="client-logo-orb">
-            <BarChart3 className="h-4 w-4 text-primary-foreground relative z-10" />
+          <div className="client-logo-orb overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-full w-full object-contain p-0.5 relative z-10" />
+            ) : (
+              <BarChart3 className="h-4 w-4 text-primary-foreground relative z-10" />
+            )}
           </div>
-          <span className="text-base font-bold tracking-tight hidden sm:inline">HEPT</span>
+          <span className="text-base font-bold tracking-tight hidden sm:inline">{brandName}</span>
         </div>
 
         {/* Center: Desktop pill nav */}

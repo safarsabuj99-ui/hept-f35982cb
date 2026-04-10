@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useNotificationNavigator } from "@/hooks/useNotifications";
 import { CurrencyProvider } from "@/hooks/useCurrency";
+import { BrandingProvider } from "@/hooks/useBranding";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLayout } from "@/components/AdminLayout";
 import { ManagerLayout } from "@/components/ManagerLayout";
@@ -89,6 +90,7 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <AuthProvider>
+          <BrandingProvider>
           <CurrencyProvider>
             <Toaster />
             <Sonner />
@@ -195,6 +197,7 @@ const App = () => (
               </Routes>
             </Suspense>
           </CurrencyProvider>
+          </BrandingProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

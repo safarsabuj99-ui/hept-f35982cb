@@ -1416,6 +1416,8 @@ export type Database = {
       }
       organizations: {
         Row: {
+          accent_color: string
+          brand_name: string
           created_at: string
           grace_period_days: number
           id: string
@@ -1427,6 +1429,7 @@ export type Database = {
           notes: string | null
           owner_user_id: string
           plan: Database["public"]["Enums"]["org_plan"]
+          primary_color: string
           slug: string
           status: Database["public"]["Enums"]["org_status"]
           status_changed_at: string
@@ -1434,6 +1437,8 @@ export type Database = {
           trial_ends_at: string | null
         }
         Insert: {
+          accent_color?: string
+          brand_name?: string
           created_at?: string
           grace_period_days?: number
           id?: string
@@ -1445,6 +1450,7 @@ export type Database = {
           notes?: string | null
           owner_user_id: string
           plan?: Database["public"]["Enums"]["org_plan"]
+          primary_color?: string
           slug: string
           status?: Database["public"]["Enums"]["org_status"]
           status_changed_at?: string
@@ -1452,6 +1458,8 @@ export type Database = {
           trial_ends_at?: string | null
         }
         Update: {
+          accent_color?: string
+          brand_name?: string
           created_at?: string
           grace_period_days?: number
           id?: string
@@ -1463,6 +1471,7 @@ export type Database = {
           notes?: string | null
           owner_user_id?: string
           plan?: Database["public"]["Enums"]["org_plan"]
+          primary_color?: string
           slug?: string
           status?: Database["public"]["Enums"]["org_status"]
           status_changed_at?: string
