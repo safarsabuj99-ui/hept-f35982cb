@@ -554,9 +554,42 @@ export default function AgencyDetail() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Activity Tab */}
+          {/* Payment Submissions */}
+          {subPayments.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader><CardTitle className="text-base">Payment Submissions</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead>
+                      <TableHead>Reference</TableHead><TableHead>Proof</TableHead><TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {subPayments.map((p: any) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="text-sm">{p.created_at?.slice(0, 10)}</TableCell>
+                        <TableCell className="font-medium">৳{p.amount_bdt?.toLocaleString()}</TableCell>
+                        <TableCell className="capitalize">{p.payment_method}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.transaction_reference || "—"}</TableCell>
+                        <TableCell>
+                          {p.proof_image_url ? (
+                            <a href={p.proof_image_url} target="_blank" rel="noopener noreferrer" className="text-primary text-xs underline">View</a>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"} className="capitalize text-xs">{p.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
         <TabsContent value="activity">
           <Card>
             <CardContent className="p-0">
