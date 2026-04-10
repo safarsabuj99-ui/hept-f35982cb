@@ -100,6 +100,7 @@ export default function AgencyDetail() {
       const admin = profiles?.find((p) => p.user_id === orgData?.owner_user_id);
       setAdminProfile(admin ?? null);
       setInvoices((invData as any[]) ?? []);
+      setSubPayments((spData as any[]) ?? []);
       setAuditLogs(logs ?? []);
       setLoading(false);
     };
