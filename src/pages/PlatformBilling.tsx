@@ -507,7 +507,63 @@ export default function PlatformBilling() {
           </div>
         </TabsContent>
 
-        <TabsContent value="timeline">
+        <TabsContent value="upgrades" className="space-y-4">
+          <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader>
+                <CardTitle className="text-sm">Plan Upgrade Requests</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agency</TableHead><TableHead>Current Plan</TableHead><TableHead>Requested Plan</TableHead>
+                      <TableHead>Cycle</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {upgradeRequests.map((req) => (
+                      <TableRow key={req.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium">{req.org_name}</TableCell>
+                        <TableCell className="capitalize">{req.current_plan}</TableCell>
+                        <TableCell className="capitalize font-medium">{req.requested_plan}</TableCell>
+                        <TableCell className="capitalize">{req.requested_billing_cycle}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{req.created_at.slice(0, 10)}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            req.status === "pending" ? "bg-warning/15 text-warning" :
+                            req.status === "approved" ? "bg-success/15 text-success" :
+                            "bg-destructive/15 text-destructive"
+                          }>{req.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {req.status === "pending" && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => approveUpgrade(req)} disabled={saving} className="text-success hover:text-success gap-1 text-xs">
+                                <CheckCircle className="h-3.5 w-3.5" /> Approve
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setReviewingUpgrade(req); setUpgradeRejectNote(""); }} className="text-destructive hover:text-destructive gap-1 text-xs">
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          )}
+                          {req.status === "rejected" && req.admin_note && (
+                            <span className="text-xs text-muted-foreground" title={req.admin_note}>Note: {req.admin_note.slice(0, 30)}{req.admin_note.length > 30 ? "…" : ""}</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {upgradeRequests.length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No upgrade requests yet</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+
           <div className="glass-card glow-border animate-slide-up-fade" style={{ animationFillMode: "forwards" }}>
             <Card className="border-0 bg-transparent shadow-none">
               <CardHeader><CardTitle className="text-sm">Billed vs Collected (Last 6 Months)</CardTitle></CardHeader>
