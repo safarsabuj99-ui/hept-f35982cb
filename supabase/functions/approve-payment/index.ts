@@ -176,12 +176,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update payment request
+    // Update payment request — exchange_rate_snapshot is jsonb, wrap numeric as object
+    const snapshotValue = typeof exchangeRateSnapshot === "number"
+      ? exchangeRateSnapshot
+      : exchangeRateSnapshot;
+
     const { error: updateErr } = await adminClient
       .from("payment_requests")
       .update({
         status: "approved",
-        exchange_rate_snapshot: exchangeRateSnapshot,
+        exchange_rate_snapshot: snapshotValue,
         final_amount_usd: finalUsd,
         admin_note: admin_note || null,
         received_in_account_id: received_in_account_id || null,
@@ -189,7 +193,10 @@ Deno.serve(async (req) => {
       .eq("id", request_id)
       .eq("status", "pending");
 
-    if (updateErr) return jsonRes({ error: "Failed to update request" }, 500);
+    if (updateErr) {
+      console.error("Update payment request error:", JSON.stringify(updateErr));
+      return jsonRes({ error: "Failed to update request", details: updateErr.message }, 500);
+    }
 
     // Insert transactions
     const { error: txErr } = await adminClient.from("transactions").insert(transactions);
