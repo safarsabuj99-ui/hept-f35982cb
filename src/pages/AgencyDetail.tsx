@@ -592,6 +592,37 @@ export default function AgencyDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Upgrade Request History */}
+          {upgradeRequests.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader><CardTitle className="text-base">Upgrade Requests</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead><TableHead>From</TableHead><TableHead>To</TableHead>
+                      <TableHead>Cycle</TableHead><TableHead>Status</TableHead><TableHead>Note</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {upgradeRequests.map((r: any) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-sm">{r.created_at?.slice(0, 10)}</TableCell>
+                        <TableCell className="capitalize">{r.current_plan}</TableCell>
+                        <TableCell className="capitalize font-medium">{r.requested_plan}</TableCell>
+                        <TableCell className="capitalize">{r.requested_billing_cycle}</TableCell>
+                        <TableCell>
+                          <Badge variant={r.status === "approved" ? "default" : r.status === "rejected" ? "destructive" : "secondary"} className="capitalize text-xs">{r.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{r.admin_note || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
         <TabsContent value="activity">
           <Card>
