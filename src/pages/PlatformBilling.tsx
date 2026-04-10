@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2, ShieldCheck, XCircle, Eye, ImageIcon } from "lucide-react";
+import { Plus, CheckCircle, Download, Clock, AlertTriangle, CreditCard, Loader2, ShieldCheck, XCircle, Eye, ImageIcon, ArrowUpRight } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -53,9 +53,12 @@ export default function PlatformBilling() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
   const [pendingPayments, setPendingPayments] = useState<SubscriptionPayment[]>([]);
+  const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([]);
   const [reviewingPayment, setReviewingPayment] = useState<SubscriptionPayment | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [reviewingUpgrade, setReviewingUpgrade] = useState<UpgradeRequest | null>(null);
+  const [upgradeRejectNote, setUpgradeRejectNote] = useState("");
   const { toast } = useToast();
 
   const fetchData = async () => {
