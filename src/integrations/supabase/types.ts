@@ -1486,7 +1486,7 @@ export type Database = {
           amount_bdt: number
           client_id: string
           created_at: string
-          exchange_rate_snapshot: number | null
+          exchange_rate_snapshot: Json | null
           final_amount_usd: number | null
           id: string
           org_id: string | null
@@ -1505,7 +1505,7 @@ export type Database = {
           amount_bdt: number
           client_id: string
           created_at?: string
-          exchange_rate_snapshot?: number | null
+          exchange_rate_snapshot?: Json | null
           final_amount_usd?: number | null
           id?: string
           org_id?: string | null
@@ -1524,7 +1524,7 @@ export type Database = {
           amount_bdt?: number
           client_id?: string
           created_at?: string
-          exchange_rate_snapshot?: number | null
+          exchange_rate_snapshot?: Json | null
           final_amount_usd?: number | null
           id?: string
           org_id?: string | null

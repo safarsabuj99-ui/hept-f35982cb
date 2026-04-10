@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_requests ALTER COLUMN exchange_rate_snapshot TYPE jsonb USING CASE WHEN exchange_rate_snapshot IS NOT NULL THEN to_jsonb(exchange_rate_snapshot) ELSE NULL END;
