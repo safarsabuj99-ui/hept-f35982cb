@@ -155,7 +155,34 @@ export default function PlatformBilling() {
     toast({ title: `${count} invoice(s) generated` }); setSaving(false); fetchData();
   };
 
-  const exportCSV = () => {
+  const approvePayment = async (payment: SubscriptionPayment) => {
+    setSaving(true);
+    await supabase.from("subscription_payments").update({ status: "approved", reviewed_at: new Date().toISOString() } as any).eq("id", payment.id);
+    // Mark invoice as paid if linked
+    if (payment.invoice_id) {
+      await supabase.from("platform_invoices" as any).update({ status: "paid", payment_date: new Date().toISOString().slice(0, 10), payment_method: "manual" } as any).eq("id", payment.invoice_id);
+    }
+    // Update subscription payment_status
+    await supabase.from("organization_subscriptions").update({ payment_status: "paid", updated_at: new Date().toISOString() } as any).eq("org_id", payment.org_id);
+    // Notify agency admin
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", payment.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Approved", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} has been verified and approved.`, type: "system" as any, priority: "normal" });
+    }
+    toast({ title: "Payment approved" }); setSaving(false); setReviewingPayment(null); fetchData();
+  };
+
+  const rejectPayment = async (payment: SubscriptionPayment) => {
+    if (!rejectNote.trim()) { toast({ title: "Please provide a rejection reason", variant: "destructive" }); return; }
+    setSaving(true);
+    await supabase.from("subscription_payments").update({ status: "rejected", admin_note: rejectNote.trim(), reviewed_at: new Date().toISOString() } as any).eq("id", payment.id);
+    const { data: orgOwner } = await supabase.from("organizations").select("owner_user_id").eq("id", payment.org_id).single();
+    if (orgOwner) {
+      await supabase.from("notifications").insert({ user_id: orgOwner.owner_user_id, title: "Payment Rejected", body: `Your payment of ৳${payment.amount_bdt.toLocaleString()} was rejected. Reason: ${rejectNote.trim()}`, type: "system" as any, priority: "high" });
+    }
+    toast({ title: "Payment rejected" }); setSaving(false); setReviewingPayment(null); setRejectNote(""); fetchData();
+  };
+
     const headers = ["Invoice #", "Agency", "Amount (BDT)", "Period Start", "Period End", "Due Date", "Status", "Payment Date", "Payment Method"];
     const rows = filtered.map((i) => [i.invoice_number, i.org_name, i.amount_bdt, i.period_start, i.period_end, i.due_date || "", i.status, i.payment_date || "", i.payment_method || ""]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
