@@ -183,6 +183,7 @@ export default function PlatformBilling() {
     toast({ title: "Payment rejected" }); setSaving(false); setReviewingPayment(null); setRejectNote(""); fetchData();
   };
 
+  const exportCSV = () => {
     const headers = ["Invoice #", "Agency", "Amount (BDT)", "Period Start", "Period End", "Due Date", "Status", "Payment Date", "Payment Method"];
     const rows = filtered.map((i) => [i.invoice_number, i.org_name, i.amount_bdt, i.period_start, i.period_end, i.due_date || "", i.status, i.payment_date || "", i.payment_method || ""]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
