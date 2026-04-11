@@ -301,6 +301,52 @@ export default function CampaignMapping() {
             </Popover>
           </div>
         )}
+        {/* Ad Account Filter */}
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Ad Account</Label>
+          <Popover open={adAccountPopoverOpen} onOpenChange={setAdAccountPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={adAccountPopoverOpen}
+                className="w-full sm:w-52 h-9 text-sm justify-between font-normal"
+              >
+                {adAccountFilter === "all"
+                  ? "All Ad Accounts"
+                  : filteredAdAccounts.find((a: any) => a.id === adAccountFilter)?.account_name ?? "All Ad Accounts"}
+                <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search accounts..." className="h-9" />
+                <CommandList className="max-h-[280px]" style={{ scrollBehavior: "smooth", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+                  <CommandEmpty>No account found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="all"
+                      onSelect={() => { setAdAccountFilter("all"); setAdAccountPopoverOpen(false); }}
+                    >
+                      <Check className={cn("mr-2 h-3.5 w-3.5", adAccountFilter === "all" ? "opacity-100" : "opacity-0")} />
+                      All Ad Accounts
+                    </CommandItem>
+                    {filteredAdAccounts.map((a: any) => (
+                      <CommandItem
+                        key={a.id}
+                        value={a.account_name || a.ad_account_id}
+                        onSelect={() => { setAdAccountFilter(a.id); setAdAccountPopoverOpen(false); }}
+                      >
+                        <Check className={cn("mr-2 h-3.5 w-3.5", adAccountFilter === a.id ? "opacity-100" : "opacity-0")} />
+                        <span className="truncate">{a.account_name || a.ad_account_id}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
         <div className="space-y-1 flex-1 min-w-0 overflow-hidden">
           <Label className="text-xs text-muted-foreground">Date Range</Label>
           <div className="flex items-center gap-2">
