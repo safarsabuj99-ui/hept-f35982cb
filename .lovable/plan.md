@@ -1,20 +1,26 @@
 
 
-## Fix: Overflow Text in Client & Ad Account Filter Controls
+## Fix: Overflow on Client & Ad Account Filter Labels and Boxes
 
-**Problem:** The label text ("Client", "Ad Account") and the filter button text overflow on the campaigns page, especially when long client names or ad account names are selected.
+**Problem:** The "Client" label and "Ad Account" label text plus the select boxes overflow their containers on desktop/tablet views, as shown in the red-marked areas of the screenshot.
+
+**Root cause:** The wrapper divs have `min-w-0` but lack `overflow-hidden`. The buttons use `w-full sm:w-48` / `sm:w-52` which can still overflow when the parent flex container is tight. The label + button need to be constrained within a max-width container.
 
 ### File: `src/pages/CampaignMapping.tsx`
 
 **Changes:**
 
-1. **Client filter button (line 266):** Add `truncate` and `min-w-0` classes so long client names get ellipsized instead of overflowing. Wrap the text in a `<span className="truncate">` to ensure it clips properly while the chevron icon stays visible.
+1. **Client filter wrapper div (line 258):** Change from `"space-y-1 min-w-0"` to `"space-y-1 min-w-0 overflow-hidden shrink-0 sm:max-w-[200px]"` — constrains the entire filter block and clips any overflow.
 
-2. **Ad Account filter button (line 313):** Same treatment — add `truncate` on the text span and `min-w-0` on the button container so long account names don't push the layout.
+2. **Ad Account filter wrapper div (line 307):** Change from `"space-y-1 min-w-0"` to `"space-y-1 min-w-0 overflow-hidden shrink-0 sm:max-w-[220px]"` — same treatment for ad account filter.
 
-3. **Filter container divs (lines 258, 305):** Add `min-w-0` to both wrapper divs so they respect the flex parent's boundaries and don't overflow.
+3. **Client filter button (line 266):** Change `className` to add `overflow-hidden` alongside existing `min-w-0`: `"w-full sm:w-[192px] h-9 text-sm justify-between font-normal min-w-0 overflow-hidden"`
 
-4. **Button text spans:** Wrap the dynamic text (client name / ad account name) in `<span className="truncate block">` so CSS text-overflow ellipsis works correctly, keeping the chevron icon always visible at the right edge.
+4. **Ad Account filter button (line 315):** Same — add `overflow-hidden`: `"w-full sm:w-[208px] h-9 text-sm justify-between font-normal min-w-0 overflow-hidden"`
 
-### No backend or database changes needed — purely CSS/layout fix.
+5. **Date Range wrapper div (line 353 area):** Add `min-w-0` to ensure it doesn't push filters to overflow.
+
+These fixed-width values (`192px` = w-48, `208px` = w-52) match the current responsive widths but use explicit pixel values to prevent any flex expansion. Combined with `shrink-0` on the wrappers, the filters maintain their size without overflowing.
+
+### No backend changes needed.
 
