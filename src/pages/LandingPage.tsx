@@ -225,7 +225,7 @@ function DashboardMockup() {
 
   return (
     <div className="relative w-full max-w-4xl mx-auto">
-      <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      <div className="ios-glass-card rounded-xl overflow-hidden">
         {/* Browser chrome */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
           <div className="flex gap-1.5">
@@ -341,7 +341,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
       {/* ── NAVBAR ── */}
-      <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
+      <nav className="sticky top-0 z-50 ios-glass-nav">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <Link to="/" className="text-xl font-bold tracking-tight text-foreground">HEPT</Link>
 
@@ -379,7 +379,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16 lg:pt-28 lg:pb-24">
           <div className="max-w-3xl mx-auto text-center space-y-6">
             <Reveal>
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold tracking-wide">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full ios-glass-pill text-primary text-xs font-semibold tracking-wide">
                 <Zap className="w-3.5 h-3.5" /> Built for Media Buying Agencies
               </span>
             </Reveal>
@@ -432,7 +432,7 @@ export default function LandingPage() {
           <div className="grid sm:grid-cols-2 gap-6 mb-16">
             {painPoints.map((p, i) => (
               <Reveal key={p.title} delay={i * 100}>
-                <Card className="p-6 hover:shadow-lg transition-shadow border-border/60 h-full">
+                <Card className="p-6 ios-glass rounded-xl transition-shadow border-none h-full">
                   <div className="flex gap-4">
                     <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
                       <p.icon className="w-5 h-5 text-destructive" />
@@ -450,7 +450,7 @@ export default function LandingPage() {
           <Reveal>
             <div className="max-w-3xl mx-auto">
               <h3 className="text-center text-xl font-bold mb-6">Before HEPT vs. After HEPT</h3>
-              <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <div className="ios-glass-card rounded-xl overflow-hidden">
                 <div className="grid grid-cols-2 text-sm font-semibold border-b border-border">
                   <div className="px-6 py-3 bg-destructive/5 text-destructive">❌ Before</div>
                   <div className="px-6 py-3 bg-success/5 text-[hsl(var(--success))]">✅ After</div>
@@ -497,7 +497,7 @@ export default function LandingPage() {
                     </Link>
                   </div>
                   <div className="flex-1 w-full">
-                    <div className="bg-card border border-border rounded-xl p-5 shadow-lg">
+                    <div className="ios-glass-card rounded-xl p-5">
                       <div className="flex items-center gap-1.5 mb-4">
                         <div className="w-2.5 h-2.5 rounded-full bg-destructive/50" />
                         <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
@@ -678,7 +678,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map((s, i) => (
               <Reveal key={s.label} delay={i * 100}>
-                <Card className="p-6 text-center hover:shadow-lg transition-shadow border-border/60">
+                <Card className="p-6 text-center ios-glass rounded-xl transition-all border-none">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <s.icon className="w-6 h-6 text-primary" />
                   </div>
@@ -703,7 +703,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             {steps.map((s, i) => (
               <Reveal key={s.num} delay={i * 150}>
-                <div className="relative text-center space-y-4">
+                <div className="relative text-center space-y-4 ios-glass rounded-xl p-6">
                   <div className="text-5xl font-extrabold text-primary/15">{s.num}</div>
                   <h3 className="text-xl font-bold">{s.title}</h3>
                   <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
@@ -731,7 +731,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-6">
             {testimonials.map((t, i) => (
               <Reveal key={t.name} delay={i * 100}>
-                <Card className="p-6 h-full flex flex-col border-border/60 hover:shadow-lg transition-shadow">
+                <Card className="p-6 h-full flex flex-col ios-glass rounded-xl border-none transition-all">
                   <div className="flex gap-1 mb-4">
                     {Array.from({ length: t.rating }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 fill-warning text-warning" />
@@ -780,7 +780,7 @@ export default function LandingPage() {
       <section className="py-20 lg:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <div className="relative rounded-2xl bg-primary p-12 lg:p-16 text-center overflow-hidden">
+            <div className="relative rounded-2xl bg-primary p-12 lg:p-16 text-center overflow-hidden" style={{ boxShadow: 'inset 0 1px 0 0 hsl(0 0% 100% / 0.1), 0 12px 40px -8px hsl(0 0% 0% / 0.2)' }}>
               <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">Ready to automate your agency?</h2>
               <p className="text-primary-foreground/80 text-lg max-w-xl mx-auto mb-8">
                 Join hundreds of media buying agencies who've stopped drowning in spreadsheets and started scaling with HEPT.
