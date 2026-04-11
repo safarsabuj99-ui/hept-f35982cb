@@ -10,16 +10,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame, CalendarCheck, RotateCcw } from "lucide-react";
+import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame, CalendarCheck, RotateCcw, MinusCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface UsdOverview {
   carryForward: number;
   boughtSince: number;
   spentSince: number;
+  manualSpend: number;
   availableBalance: number;
   dailyBurn: number;
   runwayDays: number;
@@ -39,11 +41,34 @@ interface UsdPurchase {
   created_at: string;
 }
 
+interface ManualSpend {
+  id: string;
+  date: string;
+  amount_usd: number;
+  category: string;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+const SPEND_CATEGORIES = [
+  "Subscription",
+  "Tools/Software",
+  "Hosting",
+  "Domain",
+  "Transfer",
+  "Refund",
+  "Other",
+];
+
 export default function WalletInventory() {
   const [purchases, setPurchases] = useState<UsdPurchase[]>([]);
+  const [manualSpends, setManualSpends] = useState<ManualSpend[]>([]);
   const [loading, setLoading] = useState(true);
+  const [manualSpendLoading, setManualSpendLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [spendDialogOpen, setSpendDialogOpen] = useState(false);
   const [openingBalanceDialogOpen, setOpeningBalanceDialogOpen] = useState(false);
   const [closePeriodDialogOpen, setClosePeriodDialogOpen] = useState(false);
   const [openingBalance, setOpeningBalance] = useState("");
@@ -60,8 +85,18 @@ export default function WalletInventory() {
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [spendCurrentPage, setSpendCurrentPage] = useState(1);
+  const [spendPageSize, setSpendPageSize] = useState(20);
+
+  // Spend USD form state
+  const [spendDate, setSpendDate] = useState(getDhakaDateString());
+  const [spendAmount, setSpendAmount] = useState("");
+  const [spendCategory, setSpendCategory] = useState("Other");
+  const [spendDescription, setSpendDescription] = useState("");
+  const [spendNotes, setSpendNotes] = useState("");
+
   const [overview, setOverview] = useState<UsdOverview>({
-    carryForward: 0, boughtSince: 0, spentSince: 0, availableBalance: 0,
+    carryForward: 0, boughtSince: 0, spentSince: 0, manualSpend: 0, availableBalance: 0,
     dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0,
     snapshotDate: null, loading: true,
   });
@@ -79,10 +114,20 @@ export default function WalletInventory() {
     setLoading(false);
   }, []);
 
+  const fetchManualSpends = useCallback(async (range: DateRange | null) => {
+    setManualSpendLoading(true);
+    let query = supabase.from("usd_manual_spends").select("*").order("date", { ascending: false });
+    if (range) {
+      query = query.gte("date", toISODate(range.from)).lte("date", toISODate(range.to));
+    }
+    const { data } = await query;
+    setManualSpends((data as any[]) ?? []);
+    setManualSpendLoading(false);
+  }, []);
+
   const fetchOverview = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
 
-    // Single query — all metrics precomputed by the edge function
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
@@ -96,6 +141,7 @@ export default function WalletInventory() {
       carryForward: metrics.carry_forward ?? (snap ? Number(snap.balance_usd) : 0),
       boughtSince: metrics.bought_since ?? 0,
       spentSince: metrics.spent_since ?? 0,
+      manualSpend: metrics.manual_spend ?? 0,
       availableBalance: snap ? Number(snap.balance_usd) : 0,
       dailyBurn: metrics.daily_burn ?? 0,
       runwayDays: metrics.runway_days ?? 0,
@@ -120,6 +166,7 @@ export default function WalletInventory() {
 
   useEffect(() => {
     fetchPurchases(dateRange);
+    fetchManualSpends(dateRange);
     fetchOverview();
     supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
   }, []);
@@ -129,9 +176,10 @@ export default function WalletInventory() {
       .channel("wallet-inventory-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, () => { fetchManualSpends(dateRange); fetchOverview(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPurchases, fetchOverview, dateRange]);
+  }, [fetchPurchases, fetchOverview, fetchManualSpends, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -141,7 +189,9 @@ export default function WalletInventory() {
     };
     setPeriodLabel(labels[preset]);
     fetchPurchases(range);
+    fetchManualSpends(range);
     setCurrentPage(1);
+    setSpendCurrentPage(1);
   };
 
   const calculateWAC = () => {
@@ -156,6 +206,7 @@ export default function WalletInventory() {
 
   const totalUsdPurchased = purchases.reduce((s, p) => s + Number(p.usd_received), 0);
   const totalBdtSpent = purchases.reduce((s, p) => s + Number(p.bdt_amount_paid), 0);
+  const totalManualSpendInRange = manualSpends.reduce((s, m) => s + Number(m.amount_usd), 0);
   const wac = calculateWAC();
 
   const chargeNum = chargePercent ? Number(chargePercent) : 0;
@@ -195,6 +246,32 @@ export default function WalletInventory() {
       setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
+      fetchOverview();
+    }
+  };
+
+  const handleSpendSubmit = async () => {
+    if (!spendAmount || Number(spendAmount) <= 0) {
+      toast({ title: "Error", description: "Please enter a valid USD amount", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("usd_manual_spends").insert({
+      date: spendDate,
+      amount_usd: Number(spendAmount),
+      category: spendCategory,
+      description: spendDescription || null,
+      notes: spendNotes || null,
+      created_by: user?.id,
+    } as any);
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: `$${Number(spendAmount).toLocaleString()} manual spend recorded` });
+      setSpendAmount(""); setSpendCategory("Other"); setSpendDescription(""); setSpendNotes("");
+      setSpendDialogOpen(false);
+      fetchManualSpends(dateRange);
       fetchOverview();
     }
   };
@@ -247,10 +324,64 @@ export default function WalletInventory() {
 
   const hasSnapshot = overview.snapshotDate !== null;
 
+  const getCategoryBadgeVariant = (cat: string) => {
+    switch (cat) {
+      case "Subscription": return "default";
+      case "Tools/Software": return "secondary";
+      case "Hosting": return "outline";
+      case "Domain": return "outline";
+      case "Transfer": return "secondary";
+      case "Refund": return "destructive";
+      default: return "outline";
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
         <div className="flex items-center gap-2">
+          <Dialog open={spendDialogOpen} onOpenChange={setSpendDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto"><MinusCircle className="mr-2 h-4 w-4" /> Spend USD</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Record Manual USD Spend</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Date</Label>
+                  <Input type="date" value={spendDate} onChange={e => setSpendDate(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>USD Amount</Label>
+                    <Input type="number" placeholder="e.g. 29.99" value={spendAmount} onChange={e => setSpendAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={spendCategory} onValueChange={setSpendCategory}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {SPEND_CATEGORIES.map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Input placeholder="e.g. ChatGPT Plus monthly" value={spendDescription} onChange={e => setSpendDescription(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Notes (optional)</Label>
+                  <Textarea value={spendNotes} onChange={e => setSpendNotes(e.target.value)} placeholder="Additional details..." />
+                </div>
+                <Button className="w-full" onClick={handleSpendSubmit} disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Spend
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Buy USD</Button>
@@ -411,7 +542,7 @@ export default function WalletInventory() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-6">
                 {/* Available Balance */}
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Available USD</p>
@@ -444,12 +575,22 @@ export default function WalletInventory() {
                   )}
                 </div>
 
-                {/* Spent Since */}
+                {/* Ad Spend */}
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Spent (Since)</p>
+                  <p className="text-xs text-muted-foreground">Ad Spend</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
                     <p className="text-xl sm:text-2xl font-bold font-mono text-destructive">
                       -${overview.spentSince.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Manual Spends */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MinusCircle className="h-3 w-3" /> Manual Spends</p>
+                  {overview.loading ? <Skeleton className="h-8 w-24" /> : (
+                    <p className="text-xl sm:text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
+                      -${overview.manualSpend.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
                 </div>
@@ -539,11 +680,11 @@ export default function WalletInventory() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="hidden sm:block rounded-lg bg-accent p-2"><Package className="h-5 w-5 text-accent-foreground" /></div>
+              <div className="hidden sm:block rounded-lg bg-orange-500/10 p-2"><MinusCircle className="h-5 w-5 text-orange-600" /></div>
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground truncate">Purchases ({periodLabel})</p>
-                {loading ? <Skeleton className="h-7 w-16" /> : (
-                  <p className="text-xl sm:text-2xl font-bold font-mono">{purchases.length}</p>
+                <p className="text-xs text-muted-foreground truncate">Manual Spends ({periodLabel})</p>
+                {manualSpendLoading ? <Skeleton className="h-7 w-24" /> : (
+                  <p className="text-xl sm:text-2xl font-bold font-mono">${totalManualSpendInRange.toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -551,75 +692,146 @@ export default function WalletInventory() {
         </Card>
       </div>
 
-      {/* Purchase History */}
+      {/* Purchase & Manual Spend History */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Purchase History</CardTitle></CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-          ) : purchases.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No purchases in this period. Click "Buy USD" to get started.</p>
-          ) : (
-            <>
-              {/* Mobile card view */}
-              <div className="flex flex-col gap-3 md:hidden">
-                {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
-                  <div key={p.id} className="rounded-xl border p-4 space-y-2 bg-card">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-sm text-muted-foreground">{p.date}</span>
-                      <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <p className="text-xs text-muted-foreground">BDT Paid</p>
-                        <p className="font-mono font-medium">৳{Number(p.bdt_amount_paid).toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">USD Received</p>
-                        <p className="font-mono font-medium">${Number(p.usd_received).toLocaleString()}</p>
-                      </div>
-                    </div>
-                    {p.notes && <p className="text-xs text-muted-foreground truncate">{p.notes}</p>}
-                  </div>
-                ))}
-              </div>
+        <CardContent className="pt-6">
+          <Tabs defaultValue="purchases">
+            <TabsList className="mb-4">
+              <TabsTrigger value="purchases">Purchase History ({purchases.length})</TabsTrigger>
+              <TabsTrigger value="manual-spends">Manual Spends ({manualSpends.length})</TabsTrigger>
+            </TabsList>
 
-              {/* Desktop table */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">BDT Paid</TableHead>
-                      <TableHead className="text-right">USD Received</TableHead>
-                      <TableHead className="text-right">Rate</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+            <TabsContent value="purchases">
+              {loading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : purchases.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No purchases in this period. Click "Buy USD" to get started.</p>
+              ) : (
+                <>
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
                     {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-mono text-sm">{p.date}</TableCell>
-                        <TableCell className="text-right font-mono">৳{Number(p.bdt_amount_paid).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono">${Number(p.usd_received).toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
+                      <div key={p.id} className="rounded-xl border p-4 space-y-2 bg-card">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-sm text-muted-foreground">{p.date}</span>
                           <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{p.notes || "—"}</TableCell>
-                      </TableRow>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">BDT Paid</p>
+                            <p className="font-mono font-medium">৳{Number(p.bdt_amount_paid).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">USD Received</p>
+                            <p className="font-mono font-medium">${Number(p.usd_received).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        {p.notes && <p className="text-xs text-muted-foreground truncate">{p.notes}</p>}
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination
-                totalItems={purchases.length}
-                pageSize={pageSize}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onPageSizeChange={setPageSize}
-              />
-            </>
-          )}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">BDT Paid</TableHead>
+                          <TableHead className="text-right">USD Received</TableHead>
+                          <TableHead className="text-right">Rate</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {purchases.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(p => (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-mono text-sm">{p.date}</TableCell>
+                            <TableCell className="text-right font-mono">৳{Number(p.bdt_amount_paid).toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono">${Number(p.usd_received).toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant="secondary" className="font-mono">{Number(p.calculated_rate).toFixed(2)}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{p.notes || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={purchases.length}
+                    pageSize={pageSize}
+                    currentPage={currentPage}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                  />
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="manual-spends">
+              {manualSpendLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : manualSpends.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No manual spends in this period. Click "Spend USD" to record one.</p>
+              ) : (
+                <>
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {manualSpends.slice((spendCurrentPage - 1) * spendPageSize, spendCurrentPage * spendPageSize).map(m => (
+                      <div key={m.id} className="rounded-xl border p-4 space-y-2 bg-card">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-sm text-muted-foreground">{m.date}</span>
+                          <Badge variant={getCategoryBadgeVariant(m.category) as any}>{m.category}</Badge>
+                        </div>
+                        <div className="text-sm">
+                          <p className="text-xs text-muted-foreground">Amount</p>
+                          <p className="font-mono font-medium text-orange-600 dark:text-orange-400">-${Number(m.amount_usd).toLocaleString()}</p>
+                        </div>
+                        {m.description && <p className="text-sm font-medium">{m.description}</p>}
+                        {m.notes && <p className="text-xs text-muted-foreground truncate">{m.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">USD Amount</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {manualSpends.slice((spendCurrentPage - 1) * spendPageSize, spendCurrentPage * spendPageSize).map(m => (
+                          <TableRow key={m.id}>
+                            <TableCell className="font-mono text-sm">{m.date}</TableCell>
+                            <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">-${Number(m.amount_usd).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge variant={getCategoryBadgeVariant(m.category) as any}>{m.category}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[200px] truncate">{m.description || "—"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{m.notes || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={manualSpends.length}
+                    pageSize={spendPageSize}
+                    currentPage={spendCurrentPage}
+                    onPageChange={setSpendCurrentPage}
+                    onPageSizeChange={setSpendPageSize}
+                  />
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

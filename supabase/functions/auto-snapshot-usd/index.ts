@@ -19,14 +19,16 @@ Deno.serve(async (req) => {
     const today = new Date()
       .toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
-    // 1. Full recomputation — sum ALL purchases and ALL spend from source tables
-    const [purchasesRes, spendRes] = await Promise.all([
+    // 1. Full recomputation — sum ALL purchases, ALL ad spend, and ALL manual spends
+    const [purchasesRes, spendRes, manualSpendRes] = await Promise.all([
       supabase.from("usd_purchases").select("usd_received"),
       supabase.from("daily_metrics").select("spend"),
+      supabase.from("usd_manual_spends").select("amount_usd"),
     ]);
 
     if (purchasesRes.error) throw purchasesRes.error;
     if (spendRes.error) throw spendRes.error;
+    if (manualSpendRes.error) throw manualSpendRes.error;
 
     const totalPurchased = (purchasesRes.data ?? []).reduce(
       (s: number, r: any) => s + Number(r.usd_received || 0), 0
@@ -34,7 +36,10 @@ Deno.serve(async (req) => {
     const totalSpend = (spendRes.data ?? []).reduce(
       (s: number, r: any) => s + Number(r.spend || 0), 0
     );
-    const balance = totalPurchased - totalSpend;
+    const totalManualSpend = (manualSpendRes.data ?? []).reduce(
+      (s: number, r: any) => s + Number(r.amount_usd || 0), 0
+    );
+    const balance = totalPurchased - totalSpend - totalManualSpend;
 
     // 2. 7-day burn rate
     const sevenDaysAgo = new Date();
@@ -79,6 +84,7 @@ Deno.serve(async (req) => {
     const metrics = {
       total_purchased: Math.round(totalPurchased * 100) / 100,
       total_spend: Math.round(totalSpend * 100) / 100,
+      manual_spend: Math.round(totalManualSpend * 100) / 100,
       daily_burn: Math.round(dailyBurn * 100) / 100,
       runway_days: runwayDays,
       client_obligations: Math.round(clientObligations * 100) / 100,
@@ -107,7 +113,7 @@ Deno.serve(async (req) => {
 
     if (upsertErr) throw upsertErr;
 
-    console.log(`Auto snapshot upserted: $${balance.toFixed(2)} on ${today}`);
+    console.log(`Auto snapshot upserted: $${balance.toFixed(2)} on ${today} (manual spend: $${totalManualSpend.toFixed(2)})`);
 
     return new Response(
       JSON.stringify({ success: true, balance, metrics, snapshot_date: today }),
