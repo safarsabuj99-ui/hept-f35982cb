@@ -202,9 +202,31 @@ const beforeAfter = [
 
 /* ─── mock dashboard component ─── */
 function DashboardMockup() {
+  const kpis = [
+    { label: "Total Clients", value: "24", sub: "+3 this week", color: "text-primary" },
+    { label: "Active Spend", value: "$12,840", sub: "across 3 platforms", color: "text-primary" },
+    { label: "Revenue", value: "$18,200", sub: "+12% MoM", color: "text-primary" },
+    { label: "Profit", value: "$5,360", sub: "18.2% margin", color: "text-success" },
+  ];
+  const barData = [
+    { month: "Jul", spend: 38, revenue: 52 },
+    { month: "Aug", spend: 55, revenue: 70 },
+    { month: "Sep", spend: 45, revenue: 62 },
+    { month: "Oct", spend: 68, revenue: 82 },
+    { month: "Nov", spend: 58, revenue: 78 },
+    { month: "Dec", spend: 75, revenue: 92 },
+  ];
+  const clients = [
+    { initials: "FA", name: "Fashion Avenue", platforms: ["#1877F2", "#E4405F"], spend: "$3,240", status: "Active", statusColor: "bg-success/20 text-success" },
+    { initials: "TC", name: "TechCorp BD", platforms: ["#1877F2", "#000000"], spend: "$4,180", status: "Scaling", statusColor: "bg-warning/20 text-warning" },
+    { initials: "GS", name: "GreenShop", platforms: ["#E4405F"], spend: "$1,920", status: "New", statusColor: "bg-primary/20 text-primary" },
+  ];
+  const avatarColors = ["bg-primary/70", "bg-accent/70", "bg-success/70"];
+
   return (
     <div className="relative w-full max-w-4xl mx-auto">
       <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+        {/* Browser chrome */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
           <div className="flex gap-1.5">
             <div className="w-3 h-3 rounded-full bg-destructive/60" />
@@ -217,29 +239,64 @@ function DashboardMockup() {
             </div>
           </div>
         </div>
+
         <div className="p-6 space-y-4">
+          {/* KPI Row */}
           <div className="grid grid-cols-4 gap-3">
-            {["Total Clients", "Active Spend", "Revenue", "Profit"].map((label) => (
-              <div key={label} className="bg-muted/40 rounded-lg p-3 space-y-1">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
-                <div className="h-5 bg-primary/20 rounded w-2/3" />
+            {kpis.map((kpi) => (
+              <div key={kpi.label} className="bg-muted/40 rounded-lg p-3 space-y-0.5">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</div>
+                <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                <div className="text-[9px] text-muted-foreground">{kpi.sub}</div>
               </div>
             ))}
           </div>
-          <div className="bg-muted/30 rounded-lg p-4 h-32 flex items-end gap-1">
-            {[40, 65, 50, 80, 60, 90, 75, 85, 70, 95, 80, 88].map((h, i) => (
-              <div key={i} className="flex-1 bg-primary/30 rounded-t" style={{ height: `${h}%` }} />
-            ))}
+
+          {/* Bar Chart */}
+          <div className="bg-muted/30 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Spend vs Revenue</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-primary/40" /><span className="text-[9px] text-muted-foreground">Spend</span></div>
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-primary" /><span className="text-[9px] text-muted-foreground">Revenue</span></div>
+              </div>
+            </div>
+            <div className="relative h-28">
+              {/* Grid lines */}
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="absolute w-full border-t border-border/30" style={{ bottom: `${i * 33}%` }} />
+              ))}
+              <div className="flex items-end gap-2 h-full relative z-10">
+                {barData.map((d) => (
+                  <div key={d.month} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div className="w-full flex items-end justify-center gap-0.5" style={{ height: "88px" }}>
+                      <div className="w-[40%] bg-primary/30 rounded-t transition-all" style={{ height: `${d.spend}%` }} />
+                      <div className="w-[40%] bg-primary rounded-t transition-all" style={{ height: `${d.revenue}%` }} />
+                    </div>
+                    <span className="text-[8px] text-muted-foreground mt-1">{d.month}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
+
+          {/* Client List */}
           <div className="space-y-2">
-            {[1, 2, 3].map((r) => (
-              <div key={r} className="flex items-center gap-3 bg-muted/20 rounded-lg p-3">
-                <div className="w-8 h-8 rounded-full bg-primary/20" />
-                <div className="flex-1 space-y-1">
-                  <div className="h-3 bg-muted-foreground/15 rounded w-1/3" />
-                  <div className="h-2 bg-muted-foreground/10 rounded w-1/2" />
+            {clients.map((c, i) => (
+              <div key={c.name} className="flex items-center gap-3 bg-muted/20 rounded-lg p-3">
+                <div className={`w-8 h-8 rounded-lg ${avatarColors[i]} flex items-center justify-center text-[10px] font-bold text-primary-foreground`}>
+                  {c.initials}
                 </div>
-                <div className="h-6 w-16 bg-success/20 rounded" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">{c.name}</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {c.platforms.map((color, pi) => (
+                      <div key={pi} className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                    ))}
+                  </div>
+                </div>
+                <div className="text-xs font-semibold text-foreground">{c.spend}</div>
+                <div className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${c.statusColor}`}>{c.status}</div>
               </div>
             ))}
           </div>
