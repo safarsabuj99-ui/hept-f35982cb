@@ -2,7 +2,7 @@
   "name": "HEPT - Ad Management Platform",
   "short_name": "HEPT",
   "description": "Manage ad spending, payments, and campaigns in one place",
-  "start_url": "/",
+  "start_url": "/login",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#6366f1",

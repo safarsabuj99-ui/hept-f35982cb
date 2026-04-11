@@ -88,6 +88,23 @@ function PageLoader() {
   );
 }
 
+function SmartHome() {
+  const { user, role, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (user && role) {
+    const home = roleHomeMap[role] || "/login";
+    return <Navigate to={home} replace />;
+  }
+  return <LandingPage />;
+}
+
+const roleHomeMap: Record<string, string> = {
+  admin: "/admin",
+  manager: "/manager",
+  client: "/dashboard",
+  platform_owner: "/platform",
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -102,7 +119,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
-                <Route path="/" element={<LandingPage />} />
+                <Route path="/" element={<SmartHome />} />
 
                 {/* Platform Owner routes */}
                 <Route
