@@ -20,10 +20,13 @@ export default function CampaignMapping() {
   const [metrics, setMetrics] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
+  const [mappedAssignments, setMappedAssignments] = useState<any[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clientFilter, setClientFilter] = useState("all");
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
+  const [adAccountFilter, setAdAccountFilter] = useState("all");
+  const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
 
   const fetchData = useCallback(async () => {
