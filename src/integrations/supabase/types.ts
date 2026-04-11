@@ -2185,6 +2185,50 @@ export type Database = {
           },
         ]
       }
+      usd_manual_spends: {
+        Row: {
+          amount_usd: number
+          category: string
+          created_at: string
+          created_by: string
+          date: string
+          description: string | null
+          id: string
+          notes: string | null
+          org_id: string | null
+        }
+        Insert: {
+          amount_usd: number
+          category?: string
+          created_at?: string
+          created_by: string
+          date?: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          category?: string
+          created_at?: string
+          created_by?: string
+          date?: string
+          description?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usd_manual_spends_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usd_purchases: {
         Row: {
           bdt_amount_paid: number
