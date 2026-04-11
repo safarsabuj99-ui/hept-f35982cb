@@ -37,6 +37,7 @@ export default function CampaignMapping() {
       .select("ad_account_id, client_id, mapping_keyword")
       .neq("mapping_keyword", "");
 
+    setMappedAssignments(mappedAssignments ?? []);
     const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
 
     if (mappedAccountIds.length === 0) {
@@ -191,14 +192,39 @@ export default function CampaignMapping() {
     );
   }, [metrics, campaigns, adAccountNameMap]);
 
-  // Apply client filter
+  // Derived ad account list based on client filter
+  const filteredAdAccounts = useMemo(() => {
+    if (clientFilter === "all") return adAccounts;
+    const accountIdsForClient = new Set(
+      mappedAssignments.filter((m: any) => m.client_id === clientFilter).map((m: any) => m.ad_account_id)
+    );
+    return adAccounts.filter((a: any) => accountIdsForClient.has(a.id));
+  }, [adAccounts, clientFilter, mappedAssignments]);
+
+  // Reset ad account filter when client changes
+  const handleClientChange = useCallback((value: string) => {
+    setClientFilter(value);
+    setAdAccountFilter("all");
+    setClientPopoverOpen(false);
+  }, []);
+
+  // Apply client + ad account filter
   const filteredRows = useMemo(() => {
-    if (clientFilter === "all") return campaignRows;
-    return campaignRows.filter((r) => {
-      const campaign = campaigns.find((c: any) => c.id === r.campaign_id);
-      return campaign && campaign.client_id === clientFilter;
-    });
-  }, [campaignRows, clientFilter, campaigns]);
+    let rows = campaignRows;
+    if (clientFilter !== "all") {
+      rows = rows.filter((r) => {
+        const campaign = campaigns.find((c: any) => c.id === r.campaign_id);
+        return campaign && campaign.client_id === clientFilter;
+      });
+    }
+    if (adAccountFilter !== "all") {
+      rows = rows.filter((r) => {
+        const campaign = campaigns.find((c: any) => c.id === r.campaign_id);
+        return campaign && campaign.ad_account_id === adAccountFilter;
+      });
+    }
+    return rows;
+  }, [campaignRows, clientFilter, adAccountFilter, campaigns]);
 
   if (initialLoading) {
     return (
