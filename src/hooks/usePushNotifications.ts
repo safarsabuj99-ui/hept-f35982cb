@@ -27,24 +27,59 @@ export function usePushNotifications() {
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
     "PushManager" in window &&
-    // Don't register in iframes (Lovable editor preview)
     window.self === window.top;
-
-  // Check existing subscription on mount
-  useEffect(() => {
-    if (!isSupported || !user?.id) return;
-
-    navigator.serviceWorker.ready.then(async (reg) => {
-      const sub = await reg.pushManager.getSubscription();
-      setIsSubscribed(!!sub);
-    });
-  }, [isSupported, user?.id]);
 
   // Register service worker once
   useEffect(() => {
     if (!isSupported) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, [isSupported]);
+
+  // Check existing subscription on mount + auto-resubscribe if permission granted
+  useEffect(() => {
+    if (!isSupported || !user?.id) return;
+
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+
+        if (sub) {
+          // Ensure DB has this subscription (refresh on every login)
+          const subJson = sub.toJSON();
+          await supabase.from("push_subscriptions").upsert(
+            {
+              user_id: user.id,
+              endpoint: sub.endpoint,
+              keys_p256dh: subJson.keys?.p256dh ?? "",
+              keys_auth: subJson.keys?.auth ?? "",
+            },
+            { onConflict: "user_id,endpoint" }
+          );
+          setIsSubscribed(true);
+        } else if (Notification.permission === "granted") {
+          // Permission granted but no subscription — auto-resubscribe
+          const newSub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
+          });
+          const subJson = newSub.toJSON();
+          await supabase.from("push_subscriptions").upsert(
+            {
+              user_id: user.id,
+              endpoint: newSub.endpoint,
+              keys_p256dh: subJson.keys?.p256dh ?? "",
+              keys_auth: subJson.keys?.auth ?? "",
+            },
+            { onConflict: "user_id,endpoint" }
+          );
+          setIsSubscribed(true);
+        }
+      } catch (err) {
+        console.error("Push auto-subscribe check failed:", err);
+      }
+    })();
+  }, [isSupported, user?.id]);
 
   const subscribe = useCallback(async () => {
     if (!isSupported || !user?.id) return false;
@@ -70,7 +105,6 @@ export function usePushNotifications() {
 
       const subJson = sub.toJSON();
 
-      // Upsert to DB
       await supabase.from("push_subscriptions").upsert(
         {
           user_id: user.id,
