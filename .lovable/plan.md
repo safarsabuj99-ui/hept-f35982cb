@@ -1,34 +1,27 @@
 
 
-## Upgrade Hero Dashboard Mockup to Realistic Style
+## Fix Duplicate Payment Notifications
 
-### Problem
-The hero section's `DashboardMockup` (lines 204-251) uses generic gray placeholder bars for KPI values, a plain bar chart, and featureless list rows — it looks like a wireframe while the 4 feature mockups below have realistic data, labels, colors, and badges.
+### Root Cause
+There are **duplicate triggers** on the `payment_requests` table — likely from two different migrations creating triggers with slightly different names but calling the same function:
 
-### Changes
-Rewrite the `DashboardMockup` component to match the realistic detail level of the feature mockups:
+| Function | Trigger 1 | Trigger 2 |
+|----------|-----------|-----------|
+| `notify_on_payment_request_created` | `trg_notify_payment_request` | `trg_notify_payment_request_created` |
+| `notify_on_payment_status_change` | `trg_notify_payment_status` | `trg_notify_payment_status_change` |
 
-**KPI Cards Row** — Replace gray placeholder bars with actual values:
-- Total Clients: **24** (with "+3 this week" subtitle)
-- Active Spend: **$12,840** (with "across 3 platforms")
-- Revenue: **$18,200** (with "+12% MoM")
-- Profit: **$5,360** (in green, with "18.2% margin")
+Every payment INSERT fires 2 notifications instead of 1. Same for status updates.
 
-**Bar Chart** — Keep the same bar layout but add:
-- X-axis month labels (Jul–Dec)
-- Two-tone bars (spend vs revenue) with a mini legend
-- Subtle grid lines
+### Fix
+One database migration to drop the duplicate triggers:
 
-**Client List Rows** — Replace generic circle+gray bars with:
-- Client initials in colored avatar squares
-- Client names + platform badges (Meta/TikTok/Google colored dots)
-- Spend amount on the right
-- Status badge (Active/Scaling/New) with appropriate colors
+```sql
+DROP TRIGGER IF EXISTS trg_notify_payment_request ON public.payment_requests;
+DROP TRIGGER IF EXISTS trg_notify_payment_status ON public.payment_requests;
+```
 
-**URL Bar** — Already has `app.heptbd.com/dashboard` — keep as-is.
+This keeps the correctly-named triggers (`trg_notify_payment_request_created` and `trg_notify_payment_status_change`) and removes the duplicates.
 
-### File Changed
-- `src/pages/LandingPage.tsx` — Rewrite lines 204-251 (`DashboardMockup` function)
-
-### No Database Changes
+### Files Changed
+- **Database migration only** — no code changes needed
 
