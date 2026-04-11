@@ -1,6 +1,14 @@
 // Service Worker for Web Push Notifications
 // Does NOT cache anything — purely for push notification handling
 
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -11,14 +19,22 @@ self.addEventListener("push", (event) => {
     data = { title: "New Notification", body: event.data.text() };
   }
 
+  const isUrgent = data.tag === "guard" || data.priority === "urgent" || data.priority === "high";
+  const uniqueTag = (data.tag || "hept") + "-" + Date.now();
+
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: data.tag || "hept-notification",
+    tag: uniqueTag,
     data: { link: data.link || "/" },
     vibrate: [200, 100, 200],
     renotify: true,
+    requireInteraction: isUrgent,
+    actions: [
+      { action: "view", title: "View" },
+      { action: "dismiss", title: "Dismiss" },
+    ],
   };
 
   event.waitUntil(self.registration.showNotification(data.title || "HEPT", options));
@@ -26,6 +42,9 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  if (event.action === "dismiss") return;
+
   const link = event.notification.data?.link || "/";
 
   event.waitUntil(

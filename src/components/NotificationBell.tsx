@@ -42,7 +42,7 @@ interface NotificationBellProps {
 
 export function NotificationBell({ allNotificationsPath = "/admin/notifications" }: NotificationBellProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
-  const { isSupported, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
+  const { isSupported, permission, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread" | "urgent">("all");
@@ -126,6 +126,17 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 md:w-[420px] p-0 glass-card" sideOffset={8}>
+        {/* Push prompt for new users */}
+        {isSupported && !isSubscribed && permission === "default" && (
+          <div className="border-b px-4 py-2.5 bg-primary/5 flex items-center gap-2">
+            <BellRing className="h-4 w-4 text-primary shrink-0" />
+            <p className="text-xs text-muted-foreground flex-1">Enable push notifications to stay updated</p>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={handleTogglePush} disabled={pushLoading}>
+              Enable
+            </Button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="border-b px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
