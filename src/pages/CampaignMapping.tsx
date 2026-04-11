@@ -279,7 +279,7 @@ export default function CampaignMapping() {
                     <CommandGroup>
                       <CommandItem
                         value="all"
-                        onSelect={() => { setClientFilter("all"); setClientPopoverOpen(false); }}
+                        onSelect={() => handleClientChange("all")}
                       >
                         <Check className={cn("mr-2 h-3.5 w-3.5", clientFilter === "all" ? "opacity-100" : "opacity-0")} />
                         All Clients
@@ -288,7 +288,7 @@ export default function CampaignMapping() {
                         <CommandItem
                           key={c.user_id}
                           value={c.full_name}
-                          onSelect={() => { setClientFilter(c.user_id); setClientPopoverOpen(false); }}
+                          onSelect={() => handleClientChange(c.user_id)}
                         >
                           <Check className={cn("mr-2 h-3.5 w-3.5", clientFilter === c.user_id ? "opacity-100" : "opacity-0")} />
                           {c.full_name}
