@@ -1,42 +1,34 @@
 
 
-## Unique Feature Mockups for Landing Page
+## Upgrade Hero Dashboard Mockup to Realistic Style
 
 ### Problem
-All 4 feature sections currently share the same generic dashboard wireframe mockup (3 rows + bar chart). The user wants each feature to have a distinct, contextually relevant visual that matches what that feature actually does.
+The hero section's `DashboardMockup` (lines 204-251) uses generic gray placeholder bars for KPI values, a plain bar chart, and featureless list rows — it looks like a wireframe while the 4 feature mockups below have realistic data, labels, colors, and badges.
 
-### Solution
-Replace the shared mockup (lines 441-469) with 4 unique inline mockup components, each visually representing the actual feature.
+### Changes
+Rewrite the `DashboardMockup` component to match the realistic detail level of the feature mockups:
 
-### Mockup Designs (all CSS-only, no images)
+**KPI Cards Row** — Replace gray placeholder bars with actual values:
+- Total Clients: **24** (with "+3 this week" subtitle)
+- Active Spend: **$12,840** (with "across 3 platforms")
+- Revenue: **$18,200** (with "+12% MoM")
+- Profit: **$5,360** (in green, with "18.2% margin")
 
-**1. Automated Daily Reporting Mockup**
-- Tabbed header showing "Meta | TikTok | Google" with one active
-- 4 mini KPI cards in a row (Spend, Impressions, Clicks, ROAS) with colored values
-- A data table with 3-4 rows showing campaign names, spend bars, and status badges
-- A "Send Report" button wireframe at bottom
+**Bar Chart** — Keep the same bar layout but add:
+- X-axis month labels (Jul–Dec)
+- Two-tone bars (spend vs revenue) with a mini legend
+- Subtle grid lines
 
-**2. Smart Ad Account Organization Mockup**
-- Tree/hierarchy view: Client name → branching to 2-3 platform icons with account IDs
-- Color-coded platform badges (blue=Meta, cyan=TikTok, multicolor=Google)
-- 2-3 client rows showing the mapping visually
-- A small "drag-to-assign" indicator
+**Client List Rows** — Replace generic circle+gray bars with:
+- Client initials in colored avatar squares
+- Client names + platform badges (Meta/TikTok/Google colored dots)
+- Spend amount on the right
+- Status badge (Active/Scaling/New) with appropriate colors
 
-**3. Client Balance Tracker Mockup**
-- Table-style layout: Client name | Deposited | Spent | Remaining
-- 3 client rows with progress bars showing spend vs. deposit ratio
-- Color coding: green for healthy balance, amber for low, red for critical
-- A total summary bar at the bottom
+**URL Bar** — Already has `app.heptbd.com/dashboard` — keep as-is.
 
-**4. Agency Profit & Dollar Management Mockup**
-- Top row: 3 KPI boxes (USD Purchased, WAC Rate, Profit Margin %)
-- A mini area/line chart showing profit trend
-- A row showing "Forecast: Need $X,XXX by next week"
-- Green/red indicators for profit/loss
-
-### Files Changed
-- `src/pages/LandingPage.tsx` — Replace the generic mockup block (lines 440-470) with a conditional renderer that picks the right mockup component based on feature index. Add 4 new inline components: `ReportingMockup`, `AccountOrgMockup`, `BalanceTrackerMockup`, `ProfitMockup`.
+### File Changed
+- `src/pages/LandingPage.tsx` — Rewrite lines 204-251 (`DashboardMockup` function)
 
 ### No Database Changes
-Visual-only update to the landing page.
 
