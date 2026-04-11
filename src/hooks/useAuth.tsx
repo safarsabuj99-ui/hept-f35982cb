@@ -81,6 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Skip role re-fetch on token refresh — role doesn't change, only the JWT does.
+        // This prevents unnecessary DB queries and state churn when switching browser tabs.
+        if (_event === 'TOKEN_REFRESHED') {
+          return;
+        }
+
         if (_event === 'SIGNED_IN' && newSession?.user) {
           queryClient.invalidateQueries();
         }

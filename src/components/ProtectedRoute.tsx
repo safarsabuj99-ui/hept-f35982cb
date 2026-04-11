@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth, AppRole } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,10 +23,15 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   const { user, role, loading, signOut } = useAuth();
   const [orgStatus, setOrgStatus] = useState<string | null>(null);
   const [checkingOrg, setCheckingOrg] = useState(false);
+  const lastCheckedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || role !== "admin") return;
+    // Skip re-check if we already fetched org status for this exact user
+    if (lastCheckedUserIdRef.current === user.id) return;
+
     setCheckingOrg(true);
+    lastCheckedUserIdRef.current = user.id;
     supabase
       .from("profiles")
       .select("org_id")
