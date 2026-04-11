@@ -255,7 +255,7 @@ export default function CampaignMapping() {
       {/* Admin Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3 sm:gap-4">
         {isAdmin && (
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0">
             <Label className="text-xs text-muted-foreground">Client</Label>
             <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
               <PopoverTrigger asChild>
@@ -263,11 +263,13 @@ export default function CampaignMapping() {
                   variant="outline"
                   role="combobox"
                   aria-expanded={clientPopoverOpen}
-                  className="w-full sm:w-48 h-9 text-sm justify-between font-normal"
+                  className="w-full sm:w-48 h-9 text-sm justify-between font-normal min-w-0"
                 >
-                  {clientFilter === "all"
-                    ? "All Clients"
-                    : clients.find((c) => c.user_id === clientFilter)?.full_name ?? "All Clients"}
+                  <span className="truncate">
+                    {clientFilter === "all"
+                      ? "All Clients"
+                      : clients.find((c) => c.user_id === clientFilter)?.full_name ?? "All Clients"}
+                  </span>
                   <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -302,7 +304,7 @@ export default function CampaignMapping() {
           </div>
         )}
         {/* Ad Account Filter */}
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <Label className="text-xs text-muted-foreground">Ad Account</Label>
           <Popover open={adAccountPopoverOpen} onOpenChange={setAdAccountPopoverOpen}>
             <PopoverTrigger asChild>
@@ -310,11 +312,13 @@ export default function CampaignMapping() {
                 variant="outline"
                 role="combobox"
                 aria-expanded={adAccountPopoverOpen}
-                className="w-full sm:w-52 h-9 text-sm justify-between font-normal"
+                className="w-full sm:w-52 h-9 text-sm justify-between font-normal min-w-0"
               >
-                {adAccountFilter === "all"
-                  ? "All Ad Accounts"
-                  : filteredAdAccounts.find((a: any) => a.id === adAccountFilter)?.account_name ?? "All Ad Accounts"}
+                <span className="truncate">
+                  {adAccountFilter === "all"
+                    ? "All Ad Accounts"
+                    : filteredAdAccounts.find((a: any) => a.id === adAccountFilter)?.account_name ?? "All Ad Accounts"}
+                </span>
                 <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
