@@ -1,62 +1,63 @@
 
 
-## iOS-Style Glassmorphism Overhaul for Landing Page
+## Add Manual USD Spend Tracking
 
-**Goal:** Replace the current flat/muted card styling with realistic iOS-style glass effects — layered translucency, subtle noise texture, luminous borders, and depth-creating blur layers.
+**Problem:** Currently, the USD inventory only tracks ad spend (from `daily_metrics`). When you spend USD on subscriptions, tools, or other non-ad expenses, there's no way to record it — so the inventory balance doesn't reflect your actual USD on hand.
 
-### What makes iOS glass feel real
-iOS glassmorphism uses multiple layers: a heavily blurred background, a subtle noise/grain texture overlay, thin luminous border highlights (brighter on top/left edges), and careful use of saturation-boosted backdrop filters. The current landing page uses basic `backdrop-blur(16px)` with `bg-card/0.6` — this lacks the noise, saturation boost, and multi-edge highlight that create the "real glass" illusion.
+**Solution:** Create a `usd_manual_spends` table and add a "Spend USD" button alongside the existing "Buy USD" button on the Wallet Inventory page. The auto-snapshot edge function will subtract these manual spends from the balance.
 
 ### Changes
 
-#### 1. `src/index.css` — New glass utility classes
+#### 1. New database table: `usd_manual_spends`
 
-Add these new CSS utilities:
+```sql
+CREATE TABLE public.usd_manual_spends (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  date date NOT NULL DEFAULT CURRENT_DATE,
+  amount_usd numeric NOT NULL,
+  category text NOT NULL DEFAULT 'other',
+  description text,
+  notes text,
+  created_by uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  org_id uuid
+);
 
-- **`.ios-glass`** — The core glass class: `backdrop-filter: blur(40px) saturate(180%);` with `bg-card/0.45` (dark) / `bg-card/0.55` (light), a subtle CSS noise texture via inline SVG `background-image`, and a `::before` pseudo-element creating a top-to-bottom luminous gradient border (bright white/5% on top edge fading to transparent).
+ALTER TABLE public.usd_manual_spends ENABLE ROW LEVEL SECURITY;
+-- RLS: admin-only access
+CREATE POLICY "Admins can manage manual spends"
+  ON public.usd_manual_spends FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
 
-- **`.ios-glass-nav`** — Navbar variant: thinner glass with `blur(24px) saturate(150%)`, `bg-background/0.72`, and a bottom `border-b` with subtle luminous edge. Higher opacity for readability.
+-- Enable realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE public.usd_manual_spends;
+```
 
-- **`.ios-glass-card`** — Card variant: same as `.ios-glass` plus `box-shadow` with multiple layers (inner white glow + outer soft shadow) and `transition: box-shadow 0.3s`. Hover state adds a brighter glow.
+#### 2. Update `auto-snapshot-usd` edge function
 
-- **`.ios-noise`** — Reusable noise overlay using an SVG `<filter>` turbulence pattern as a `background-image`, set to `opacity: 0.03` (light) / `0.06` (dark) with `pointer-events: none`.
+Add a third data source to the balance calculation:
 
-#### 2. `src/pages/LandingPage.tsx` — Apply glass effects
+```
+balance = SUM(usd_purchases.usd_received) - SUM(daily_metrics.spend) - SUM(usd_manual_spends.amount_usd)
+```
 
-- **Navbar (line 344):** Replace `bg-background/80 backdrop-blur-lg` with the new `ios-glass-nav` class.
+Also include `manual_spend` total in the `metrics` JSONB for the UI to display.
 
-- **Pain point cards (line 435):** Add `ios-glass` class to each `<Card>` in the problems section, replacing the plain `hover:shadow-lg` with the glass card styling.
+#### 3. Update `src/pages/WalletInventory.tsx`
 
-- **Feature mockup cards (line 500):** Replace `bg-card border border-border rounded-xl shadow-lg` with `ios-glass-card` for the feature wireframe containers.
+- **New "Spend USD" button** next to "Buy USD" — opens a dialog with fields: Date, USD Amount, Category (dropdown: Subscription, Tools, Hosting, Transfer, Other), Description, Notes.
+- **New state and fetch** for manual spends list, displayed in a second table tab or section below purchases ("Manual Spends" history).
+- **Inventory overview** — add a new metric row showing "Manual Spends" total alongside existing "Spent (Since)" which only covers ad spend. The "Available USD" will automatically reflect the correct balance from the snapshot.
+- **Realtime subscription** — listen to `usd_manual_spends` changes.
+- Mobile card view and desktop table view for the manual spends history, matching existing purchase history styling.
 
-- **Stats cards (line 681):** Apply `ios-glass` to the impact/stats `<Card>` elements.
+#### 4. Spend categories
 
-- **Testimonial cards (line 734):** Apply `ios-glass` to testimonial `<Card>` elements.
-
-- **How It Works steps (line 706):** Wrap each step in an `ios-glass` container.
-
-- **Before/After table (line 453):** Apply `ios-glass` to the comparison table container.
-
-- **Hero badge (line 382):** Apply glass effect to the "Built for Media Buying Agencies" pill.
-
-- **Dashboard mockup (line 228):** Apply `ios-glass-card` to the browser-chrome container with enhanced shadow layering for depth.
-
-- **CTA section (line 783):** Add a glass overlay layer on the primary-colored CTA block.
-
-#### 3. Dark mode tuning in `src/index.css`
-
-- In `.dark`, glass backgrounds use lower opacity (`bg-card/0.35`) with higher blur (`blur(48px)`) and stronger saturation (`saturate(200%)`) for that deep iOS dark mode translucency.
-- Noise texture opacity increases to `0.06` in dark mode for visible grain.
-- Border highlights use `white/8%` instead of `white/5%` for better visibility against dark backgrounds.
-
-### Technical details
-
-- Noise texture is a pure CSS SVG data URI (no external files needed): `url("data:image/svg+xml,<svg ...><filter><feTurbulence .../></filter><rect .../></svg>")`
-- `backdrop-filter: blur(40px) saturate(180%)` with `-webkit-backdrop-filter` prefix for Safari
-- Multi-layer box shadows: `inset 0 1px 0 0 rgba(255,255,255,0.05), 0 4px 24px -4px rgba(0,0,0,0.12)`
-- No external dependencies or images needed — pure CSS
+Predefined categories: `Subscription`, `Tools/Software`, `Hosting`, `Domain`, `Transfer`, `Refund`, `Other` — stored as plain text for flexibility.
 
 ### Files changed
-- `src/index.css` — add `.ios-glass`, `.ios-glass-nav`, `.ios-glass-card`, `.ios-noise` utilities
-- `src/pages/LandingPage.tsx` — apply new glass classes to all sections
+- Database migration (new `usd_manual_spends` table + RLS + realtime)
+- `supabase/functions/auto-snapshot-usd/index.ts` — include manual spends in balance
+- `src/pages/WalletInventory.tsx` — add Spend USD dialog, manual spend history, updated overview metrics
 
