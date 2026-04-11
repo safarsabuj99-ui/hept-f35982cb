@@ -1,25 +1,20 @@
 
 
-## Add Ad Account Filter to Campaigns Page
+## Fix: Overflow Text in Client & Ad Account Filter Controls
 
-**What changes:** Add a searchable ad account dropdown filter next to the existing client filter. When a client is selected, the ad account dropdown narrows to only show ad accounts assigned to that client. When an ad account is selected, campaigns are filtered to only that account.
+**Problem:** The label text ("Client", "Ad Account") and the filter button text overflow on the campaigns page, especially when long client names or ad account names are selected.
 
 ### File: `src/pages/CampaignMapping.tsx`
 
-1. **New state**: `adAccountFilter` (default `"all"`) and `adAccountPopoverOpen`
+**Changes:**
 
-2. **Derived ad account list**: Compute a filtered list of ad accounts based on the selected client. Uses `ad_account_clients` mapping data (already fetched as `mappedAssignments`) to filter accounts when a client is selected.
+1. **Client filter button (line 266):** Add `truncate` and `min-w-0` classes so long client names get ellipsized instead of overflowing. Wrap the text in a `<span className="truncate">` to ensure it clips properly while the chevron icon stays visible.
 
-3. **New UI control**: Add a searchable Popover/Command dropdown (same pattern as the client filter) labeled "Ad Account" between the client filter and date range filter. Shows account name + platform badge.
+2. **Ad Account filter button (line 313):** Same treatment — add `truncate` on the text span and `min-w-0` on the button container so long account names don't push the layout.
 
-4. **Cascading behavior**:
-   - Client = "All" → Ad Account dropdown shows all mapped ad accounts
-   - Client = specific → Ad Account dropdown shows only that client's ad accounts
-   - Changing client resets ad account filter to "All"
+3. **Filter container divs (lines 258, 305):** Add `min-w-0` to both wrapper divs so they respect the flex parent's boundaries and don't overflow.
 
-5. **Filter logic**: Update `filteredRows` memo to also filter by `ad_account_id` when an ad account is selected (matching via campaign's `ad_account_id`).
+4. **Button text spans:** Wrap the dynamic text (client name / ad account name) in `<span className="truncate block">` so CSS text-overflow ellipsis works correctly, keeping the chevron icon always visible at the right edge.
 
-6. **Store `mappedAssignments` in state** so it's available for the cascading filter logic (currently it's only a local variable inside `fetchData`).
-
-### No database or backend changes needed — purely client-side filtering of already-fetched data.
+### No backend or database changes needed — purely CSS/layout fix.
 
