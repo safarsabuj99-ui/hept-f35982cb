@@ -255,7 +255,7 @@ export default function CampaignMapping() {
       {/* Admin Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-3 sm:gap-4">
         {isAdmin && (
-          <div className="space-y-1 min-w-0">
+          <div className="space-y-1 min-w-0 overflow-hidden shrink-0 sm:max-w-[200px]">
             <Label className="text-xs text-muted-foreground">Client</Label>
             <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
               <PopoverTrigger asChild>
@@ -263,7 +263,7 @@ export default function CampaignMapping() {
                   variant="outline"
                   role="combobox"
                   aria-expanded={clientPopoverOpen}
-                  className="w-full sm:w-48 h-9 text-sm justify-between font-normal min-w-0"
+                  className="w-full sm:w-[192px] h-9 text-sm justify-between font-normal min-w-0 overflow-hidden"
                 >
                   <span className="truncate">
                     {clientFilter === "all"
@@ -304,7 +304,7 @@ export default function CampaignMapping() {
           </div>
         )}
         {/* Ad Account Filter */}
-        <div className="space-y-1 min-w-0">
+        <div className="space-y-1 min-w-0 overflow-hidden shrink-0 sm:max-w-[220px]">
           <Label className="text-xs text-muted-foreground">Ad Account</Label>
           <Popover open={adAccountPopoverOpen} onOpenChange={setAdAccountPopoverOpen}>
             <PopoverTrigger asChild>
@@ -312,7 +312,7 @@ export default function CampaignMapping() {
                 variant="outline"
                 role="combobox"
                 aria-expanded={adAccountPopoverOpen}
-                className="w-full sm:w-52 h-9 text-sm justify-between font-normal min-w-0"
+                className="w-full sm:w-[208px] h-9 text-sm justify-between font-normal min-w-0 overflow-hidden"
               >
                 <span className="truncate">
                   {adAccountFilter === "all"
