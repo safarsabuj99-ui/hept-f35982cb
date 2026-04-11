@@ -1,42 +1,24 @@
 
 
-## Fix: Infinite Loading When Switching Browser Tabs
+## Fix: PWA Opens to Dashboard Instead of Landing Page
 
-### Root Cause
+**Problem:** When the app is installed as a PWA and opened, it goes to the landing page (`/`) instead of the user's dashboard.
 
-Two compounding bugs cause the infinite spinner when returning to the tab:
+**Root cause:** The `manifest.json` has `"start_url": "/"`, which maps to `LandingPage`. Logged-in users should be redirected to their role-based dashboard.
 
-1. **`useAuth` re-fetches role on every `TOKEN_REFRESHED` event.** When you switch tabs and come back, Supabase auto-refreshes the token, firing `TOKEN_REFRESHED` via `onAuthStateChange`. This creates a new `session` object reference, triggering downstream re-renders — even though the role never changes on a token refresh.
+**Solution — two changes:**
 
-2. **`ProtectedRoute` re-runs the org status check on every `user`/`role` change.** The `useEffect` depends on `[user, role]`. When `onAuthStateChange` sets a new `user` object (same user, new reference), the effect fires again, setting `checkingOrg = true`, which shows the full-screen spinner. If the DB query is slow or the network hiccups, the user is stuck on a spinner indefinitely.
+### 1. Update `manifest.json`
+Change `start_url` from `"/"` to `"/login"`. The login page already redirects authenticated users to their dashboard.
 
-### Fix (2 files)
+### 2. Update the `/` route in `App.tsx`
+Replace the static `<LandingPage />` with a smart redirect component that:
+- If the user is **logged in** → redirects to their role-based dashboard (`/admin`, `/manager`, `/dashboard`, `/platform`)
+- If the user is **not logged in** → shows the landing page as usual
 
-**`src/hooks/useAuth.tsx`**
-- Skip `fetchRole` for `TOKEN_REFRESHED` events — the role doesn't change on token refresh, only the JWT does.
-- Only call `fetchRole` on `SIGNED_IN`, `USER_UPDATED`, and `INITIAL_SESSION` events.
-- This prevents unnecessary role queries and avoids creating new state references on tab-switch.
+This ensures that when the PWA opens, authenticated users go straight to their dashboard without seeing the landing page flash.
 
-**`src/components/ProtectedRoute.tsx`**
-- Track the user ID that was last checked for org status using a ref.
-- Only re-run the org check if the actual `user.id` changes (not just the object reference).
-- Once org status is fetched for a user, don't re-fetch on token refreshes.
-
-### Technical Details
-
-```text
-Tab switch flow (BEFORE fix):
-  Tab visible → Supabase refreshes token → TOKEN_REFRESHED event
-  → setSession(newObj) + setUser(newObj) → fetchRole() fires
-  → ProtectedRoute effect fires → checkingOrg=true → SPINNER
-  → DB queries for role + org status → finally renders page
-
-Tab switch flow (AFTER fix):
-  Tab visible → Supabase refreshes token → TOKEN_REFRESHED event
-  → setSession(newObj) + setUser(newObj) → fetchRole SKIPPED
-  → ProtectedRoute: user.id unchanged → org check SKIPPED
-  → No spinner, page stays rendered
-```
-
-### No Database Changes
+### Files changed
+- `public/manifest.json` — update `start_url`
+- `src/App.tsx` — add auth-aware root route logic
 
