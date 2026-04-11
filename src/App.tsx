@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useNotificationNavigator } from "@/hooks/useNotifications";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import { BrandingProvider } from "@/hooks/useBranding";
@@ -88,6 +88,23 @@ function PageLoader() {
   );
 }
 
+function SmartHome() {
+  const { user, role, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (user && role) {
+    const home = roleHomeMap[role] || "/login";
+    return <Navigate to={home} replace />;
+  }
+  return <LandingPage />;
+}
+
+const roleHomeMap: Record<string, string> = {
+  admin: "/admin",
+  manager: "/manager",
+  client: "/dashboard",
+  platform_owner: "/platform",
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -102,7 +119,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
-                <Route path="/" element={<LandingPage />} />
+                <Route path="/" element={<SmartHome />} />
 
                 {/* Platform Owner routes */}
                 <Route
