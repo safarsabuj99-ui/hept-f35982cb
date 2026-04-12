@@ -169,6 +169,206 @@ export type Database = {
           },
         ]
       }
+      affiliate_conversions: {
+        Row: {
+          affiliate_id: string
+          commission_bdt: number | null
+          created_at: string
+          first_payment_at: string | null
+          id: string
+          link_id: string | null
+          paid_at: string | null
+          payment_amount_bdt: number | null
+          qualified_at: string | null
+          referred_org_id: string | null
+          referred_org_name: string | null
+          signup_at: string
+          status: string
+        }
+        Insert: {
+          affiliate_id: string
+          commission_bdt?: number | null
+          created_at?: string
+          first_payment_at?: string | null
+          id?: string
+          link_id?: string | null
+          paid_at?: string | null
+          payment_amount_bdt?: number | null
+          qualified_at?: string | null
+          referred_org_id?: string | null
+          referred_org_name?: string | null
+          signup_at?: string
+          status?: string
+        }
+        Update: {
+          affiliate_id?: string
+          commission_bdt?: number | null
+          created_at?: string
+          first_payment_at?: string | null
+          id?: string
+          link_id?: string | null
+          paid_at?: string | null
+          payment_amount_bdt?: number | null
+          qualified_at?: string | null
+          referred_org_id?: string | null
+          referred_org_name?: string | null
+          signup_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_conversions_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_conversions_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_conversions_referred_org_id_fkey"
+            columns: ["referred_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_links: {
+        Row: {
+          affiliate_id: string
+          clicks: number
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+        }
+        Insert: {
+          affiliate_id: string
+          clicks?: number
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+        }
+        Update: {
+          affiliate_id?: string
+          clicks?: number
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_links_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_payouts: {
+        Row: {
+          admin_note: string | null
+          affiliate_id: string
+          amount_bdt: number
+          id: string
+          payment_details: Json | null
+          payment_method: string | null
+          processed_at: string | null
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          admin_note?: string | null
+          affiliate_id: string
+          amount_bdt: number
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          admin_note?: string | null
+          affiliate_id?: string
+          amount_bdt?: number
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_payouts_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliates: {
+        Row: {
+          commission_rate: number
+          commission_type: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          payment_details: Json | null
+          payment_method: string | null
+          phone: string | null
+          status: string
+          total_earnings_bdt: number
+          total_paid_bdt: number
+          user_id: string
+        }
+        Insert: {
+          commission_rate?: number
+          commission_type?: string
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          phone?: string | null
+          status?: string
+          total_earnings_bdt?: number
+          total_paid_bdt?: number
+          user_id: string
+        }
+        Update: {
+          commission_rate?: number
+          commission_type?: string
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          phone?: string | null
+          status?: string
+          total_earnings_bdt?: number
+          total_paid_bdt?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       agency_accounts: {
         Row: {
           account_number: string | null
@@ -1904,6 +2104,7 @@ export type Database = {
           owner_user_id: string
           plan: Database["public"]["Enums"]["org_plan"]
           primary_color: string
+          referred_by_affiliate_id: string | null
           referred_by_code: string | null
           slug: string
           status: Database["public"]["Enums"]["org_status"]
@@ -1927,6 +2128,7 @@ export type Database = {
           owner_user_id: string
           plan?: Database["public"]["Enums"]["org_plan"]
           primary_color?: string
+          referred_by_affiliate_id?: string | null
           referred_by_code?: string | null
           slug: string
           status?: Database["public"]["Enums"]["org_status"]
@@ -1950,6 +2152,7 @@ export type Database = {
           owner_user_id?: string
           plan?: Database["public"]["Enums"]["org_plan"]
           primary_color?: string
+          referred_by_affiliate_id?: string | null
           referred_by_code?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["org_status"]
@@ -1957,7 +2160,15 @@ export type Database = {
           suspension_reason?: string | null
           trial_ends_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "organizations_referred_by_affiliate_id_fkey"
+            columns: ["referred_by_affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       overage_charges: {
         Row: {
@@ -3454,7 +3665,7 @@ export type Database = {
       ad_platform: "meta" | "tiktok" | "google"
       agency_account_type: "Cash" | "Bank" | "MFS"
       announcement_type: "info" | "warning" | "maintenance"
-      app_role: "admin" | "client" | "manager" | "platform_owner"
+      app_role: "admin" | "client" | "manager" | "platform_owner" | "affiliate"
       billing_cycle: "monthly" | "yearly"
       billing_type: "prepaid" | "threshold_postpaid" | "credit_card"
       campaign_objective:
@@ -3659,7 +3870,7 @@ export const Constants = {
       ad_platform: ["meta", "tiktok", "google"],
       agency_account_type: ["Cash", "Bank", "MFS"],
       announcement_type: ["info", "warning", "maintenance"],
-      app_role: ["admin", "client", "manager", "platform_owner"],
+      app_role: ["admin", "client", "manager", "platform_owner", "affiliate"],
       billing_cycle: ["monthly", "yearly"],
       billing_type: ["prepaid", "threshold_postpaid", "credit_card"],
       campaign_objective: [
