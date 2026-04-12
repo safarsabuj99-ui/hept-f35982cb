@@ -16,6 +16,7 @@ import { Plus, Loader2, Trash2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -65,9 +66,14 @@ export default function ExpenseManager() {
     setLoading(false);
   }, []);
 
+  const fetchAgencyAccounts = useCallback(async () => {
+    const { data } = await supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name");
+    setAgencyAccounts(data ?? []);
+  }, []);
+
   useEffect(() => {
     fetchExpenses(dateRange);
-    supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
+    fetchAgencyAccounts();
   }, []);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
@@ -97,12 +103,7 @@ export default function ExpenseManager() {
     } as any);
 
     if (!error && paidFromAccountId) {
-      const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
-      if (acc) {
-        await supabase.from("agency_accounts" as any)
-          .update({ current_balance_bdt: Number(acc.current_balance_bdt) - Number(amount) } as any)
-          .eq("id", paidFromAccountId);
-      }
+      await adjustAccountBalance(paidFromAccountId, -Number(amount));
     }
     setSubmitting(false);
     if (error) {
@@ -112,15 +113,23 @@ export default function ExpenseManager() {
       setAmount(""); setDescription(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchExpenses(dateRange);
+      fetchAgencyAccounts();
     }
   };
 
   const handleDelete = async (id: string) => {
+    // Fetch expense details first to restore balance
+    const { data: expense } = await supabase.from("agency_expenses").select("amount_bdt, paid_from_account_id").eq("id", id).single();
     const { error } = await supabase.from("agency_expenses").delete().eq("id", id);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      // Restore balance to the account if expense was paid from one
+      if (expense && (expense as any).paid_from_account_id) {
+        await adjustAccountBalance((expense as any).paid_from_account_id, Number((expense as any).amount_bdt));
+      }
       fetchExpenses(dateRange);
+      fetchAgencyAccounts();
     }
   };
 
