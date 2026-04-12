@@ -65,6 +65,19 @@ const PlatformCostAnalytics = lazy(() => import("@/pages/PlatformCostAnalytics")
 const PlatformHealthScores = lazy(() => import("@/pages/PlatformHealthScores"));
 const PlatformBenchmarks = lazy(() => import("@/pages/PlatformBenchmarks"));
 const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
+const AgencySupport = lazy(() => import("@/pages/AgencySupport"));
+const PlatformPaymentGateway = lazy(() => import("@/pages/PlatformPaymentGateway"));
+const PlatformDunning = lazy(() => import("@/pages/PlatformDunning"));
+const PlatformEmailTemplates = lazy(() => import("@/pages/PlatformEmailTemplates"));
+const PlatformEmailLog = lazy(() => import("@/pages/PlatformEmailLog"));
+const PlatformFinancialReports = lazy(() => import("@/pages/PlatformFinancialReports"));
+const PlatformCurrencyRates = lazy(() => import("@/pages/PlatformCurrencyRates"));
+const PlatformReferrals = lazy(() => import("@/pages/PlatformReferrals"));
+const PlatformSupport = lazy(() => import("@/pages/PlatformSupport"));
+const PlatformLegal = lazy(() => import("@/pages/PlatformLegal"));
+const PlatformDataExports = lazy(() => import("@/pages/PlatformDataExports"));
+const PaymentSuccess = lazy(() => import("@/pages/PaymentSuccess"));
+const PaymentFailed = lazy(() => import("@/pages/PaymentFailed"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const Signup = lazy(() => import("@/pages/Signup"));
@@ -148,6 +161,16 @@ const App = () => (
                   <Route path="/platform/costs" element={<PlatformCostAnalytics />} />
                   <Route path="/platform/health-scores" element={<PlatformHealthScores />} />
                   <Route path="/platform/benchmarks" element={<PlatformBenchmarks />} />
+                  <Route path="/platform/payment-gateway" element={<PlatformPaymentGateway />} />
+                  <Route path="/platform/dunning" element={<PlatformDunning />} />
+                  <Route path="/platform/email-templates" element={<PlatformEmailTemplates />} />
+                  <Route path="/platform/email-log" element={<PlatformEmailLog />} />
+                  <Route path="/platform/financial-reports" element={<PlatformFinancialReports />} />
+                  <Route path="/platform/currency-rates" element={<PlatformCurrencyRates />} />
+                  <Route path="/platform/referrals" element={<PlatformReferrals />} />
+                  <Route path="/platform/support" element={<PlatformSupport />} />
+                  <Route path="/platform/legal" element={<PlatformLegal />} />
+                  <Route path="/platform/data-exports" element={<PlatformDataExports />} />
                 </Route>
 
                 {/* Super Admin routes */}
@@ -184,7 +207,12 @@ const App = () => (
                   <Route path="/admin/client-notices" element={<ClientNotices />} />
                   <Route path="/admin/notifications" element={<Notifications />} />
                   <Route path="/admin/subscription" element={<AdminSubscription />} />
+                  <Route path="/admin/support" element={<AgencySupport />} />
                 </Route>
+
+                {/* Public payment callback routes */}
+                <Route path="/payment-success" element={<PaymentSuccess />} />
+                <Route path="/payment-failed" element={<PaymentFailed />} />
 
                 {/* Manager routes */}
                 <Route
