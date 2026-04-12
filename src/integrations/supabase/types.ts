@@ -2226,6 +2226,36 @@ export type Database = {
           },
         ]
       }
+      platform_accounts: {
+        Row: {
+          account_number: string | null
+          created_at: string
+          current_balance_bdt: number
+          id: string
+          is_active: boolean
+          name: string
+          type: string
+        }
+        Insert: {
+          account_number?: string | null
+          created_at?: string
+          current_balance_bdt?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          type?: string
+        }
+        Update: {
+          account_number?: string | null
+          created_at?: string
+          current_balance_bdt?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          type?: string
+        }
+        Relationships: []
+      }
       platform_announcements: {
         Row: {
           body: string
@@ -2309,6 +2339,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          paid_from_account_id: string | null
         }
         Insert: {
           amount_bdt?: number
@@ -2318,6 +2349,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          paid_from_account_id?: string | null
         }
         Update: {
           amount_bdt?: number
@@ -2327,8 +2359,62 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          paid_from_account_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "platform_expenses_paid_from_account_id_fkey"
+            columns: ["paid_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "platform_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_fund_transfers: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          from_account_id: string
+          id: string
+          note: string | null
+          to_account_id: string
+        }
+        Insert: {
+          amount_bdt: number
+          created_at?: string
+          created_by: string
+          from_account_id: string
+          id?: string
+          note?: string | null
+          to_account_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          from_account_id?: string
+          id?: string
+          note?: string | null
+          to_account_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fund_transfers_from_account_id_fkey"
+            columns: ["from_account_id"]
+            isOneToOne: false
+            referencedRelation: "platform_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fund_transfers_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "platform_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_invoices: {
         Row: {
