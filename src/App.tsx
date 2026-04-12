@@ -55,6 +55,7 @@ const PlatformAnnouncements = lazy(() => import("@/pages/PlatformAnnouncements")
 const PlatformAudit = lazy(() => import("@/pages/PlatformAudit"));
 const TenantLifecycle = lazy(() => import("@/pages/TenantLifecycle"));
 const PlatformRevenue = lazy(() => import("@/pages/PlatformRevenue"));
+const PlatformFinanceHub = lazy(() => import("@/pages/PlatformFinanceHub"));
 const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
 const AgencySupport = lazy(() => import("@/pages/AgencySupport"));
 const PaymentSuccess = lazy(() => import("@/pages/PaymentSuccess"));
@@ -125,7 +126,8 @@ const App = () => (
                 >
                   <Route path="/platform" element={<PlatformDashboard />} />
                   <Route path="/platform/lifecycle" element={<TenantLifecycle />} />
-                  <Route path="/platform/revenue" element={<PlatformRevenue />} />
+                  <Route path="/platform/finance" element={<PlatformFinanceHub />} />
+                  <Route path="/platform/revenue" element={<Navigate to="/platform/finance?tab=revenue" replace />} />
                   <Route path="/platform/agencies" element={<AgencyList />} />
                   <Route path="/platform/agencies/new" element={<CreateAgency />} />
                   <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
