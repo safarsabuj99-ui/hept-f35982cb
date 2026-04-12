@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,15 +46,16 @@ interface ProfitabilityTableProps {
 
 export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
   const { hasPermission } = usePermissions();
+  const { authReady } = useAuth();
   const canViewProfit = hasPermission("can_view_profit");
   const [rows, setRows] = useState<ProfitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
-    if (!canViewProfit) return;
+    if (!authReady || !canViewProfit) return;
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, authReady]);
 
   const fetchData = async () => {
     setLoading(true);

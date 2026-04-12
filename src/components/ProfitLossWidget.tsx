@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,10 +25,12 @@ interface ProfitLossWidgetProps {
 
 export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
   const { hasPermission } = usePermissions();
+  const { authReady } = useAuth();
   const [data, setData] = useState<ProfitData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authReady) return;
     const fetchData = async () => {
       setLoading(true);
 
@@ -171,7 +174,7 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
       setLoading(false);
     };
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, authReady]);
 
   const fmt = (n: number) => `৳${n.toLocaleString("en-US")}`;
   const netMarginPct = data && data.totalRevenueBdt > 0 ? ((data.netProfitBdt / data.totalRevenueBdt) * 100).toFixed(1) : "0";

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,10 +16,12 @@ interface Activity {
 }
 
 export function RecentActivityFeed() {
+  const { authReady } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authReady) return;
     const fetchData = async () => {
       const [txnRes, syncRes] = await Promise.all([
         supabase.from("transactions").select("id, type, amount, description, created_at, status").order("created_at", { ascending: false }).limit(10),
@@ -51,7 +54,7 @@ export function RecentActivityFeed() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [authReady]);
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);
