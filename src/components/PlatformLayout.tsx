@@ -24,7 +24,7 @@ const allSections: NavSection[] = [
     { to: "/platform/lifecycle", icon: GitBranch, label: "Lifecycle" },
   ]},
   { title: "Revenue", items: [
-    { to: "/platform/revenue", icon: TrendingUp, label: "Revenue" },
+    { to: "/platform/finance", icon: TrendingUp, label: "Finance" },
     { to: "/platform/billing", icon: CreditCard, label: "Billing" },
     { to: "/platform/plans", icon: Settings, label: "Plans" },
   ]},
