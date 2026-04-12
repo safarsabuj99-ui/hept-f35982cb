@@ -957,6 +957,12 @@
   animation: notif-slide-in 0.3s ease-out both;
 }
 
+/* content-visibility for below-fold sections */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
