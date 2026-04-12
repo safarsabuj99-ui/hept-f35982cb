@@ -116,7 +116,6 @@ export const ROLE_PRESETS: RolePresetConfig[] = [
   },
 ];
 
-/** Given a permissions map, detect which preset matches (or "custom") */
 export function detectPreset(perms: Record<string, boolean>): RolePreset {
   const enabledKeys = ALL_PERMISSION_KEYS.filter((k) => perms[k] === true);
   for (const preset of ROLE_PRESETS) {
@@ -130,7 +129,6 @@ export function detectPreset(perms: Record<string, boolean>): RolePreset {
   return "custom";
 }
 
-/** Build a permissions map from a preset */
 export function presetToPermissions(presetId: RolePreset): Record<string, boolean> {
   const preset = ROLE_PRESETS.find((p) => p.id === presetId);
   if (!preset) return {};
@@ -142,13 +140,13 @@ export function presetToPermissions(presetId: RolePreset): Record<string, boolea
 }
 
 export function usePermissions() {
-  const { user, role } = useAuth();
+  const { user, role, authReady } = useAuth();
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!authReady || !user) {
       setPermissions({});
       setIsSuperAdmin(false);
       setLoading(false);
@@ -169,7 +167,7 @@ export function usePermissions() {
       setLoading(false);
     };
     fetchPerms();
-  }, [user]);
+  }, [authReady, user]);
 
   const hasPermission = useCallback(
     (key: PermissionKey): boolean => {

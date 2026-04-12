@@ -44,14 +44,13 @@ function hexToHsl(hex: string): string | null {
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: org, isLoading } = useQuery({
     queryKey: ["branding", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      // Get user's org_id from profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("org_id")
@@ -67,11 +66,10 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id,
+    enabled: authReady && !!user?.id,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Apply CSS custom properties when branding changes
   useEffect(() => {
     if (!org) return;
     const root = document.documentElement;

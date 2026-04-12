@@ -29,7 +29,6 @@ export function setNotifSoundEnabled(v: boolean) {
   localStorage.setItem(NOTIFICATION_SOUND_KEY, v ? "true" : "false");
 }
 
-// Play a subtle chime for urgent/high priority notifications
 function playNotifSound() {
   if (!getNotifSoundEnabled()) return;
   try {
@@ -53,7 +52,7 @@ function vibrate() {
 }
 
 export function useNotifications() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -84,7 +83,6 @@ export function useNotifications() {
         pageRef.current = page + 1;
       }
       setHasMore(typed.length === PAGE_SIZE);
-      // Count unread separately for accuracy
       if (reset) {
         const { count } = await supabase
           .from("notifications")
@@ -101,13 +99,22 @@ export function useNotifications() {
     if (hasMore) fetchNotifications(false);
   }, [hasMore, fetchNotifications]);
 
+  // Only fetch when authReady and user exists
   useEffect(() => {
+    if (!authReady || !user?.id) {
+      if (authReady) {
+        setNotifications([]);
+        setUnreadCount(0);
+        setLoading(false);
+      }
+      return;
+    }
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [authReady, user?.id, fetchNotifications]);
 
   // Realtime subscription
   useEffect(() => {
-    if (!user?.id) return;
+    if (!authReady || !user?.id) return;
 
     const channel = supabase
       .channel("notifications-realtime")
@@ -126,7 +133,6 @@ export function useNotifications() {
 
           const priority = newNotif.priority || "normal";
 
-          // Priority-aware toast
           if (priority === "urgent") {
             toast.error(newNotif.title, {
               description: newNotif.body,
@@ -166,7 +172,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [authReady, user?.id]);
 
   const markAsRead = useCallback(async (id: string) => {
     await supabase.from("notifications").update({ is_read: true } as any).eq("id", id);
@@ -225,7 +231,6 @@ export function useNotifications() {
   };
 }
 
-// Hook to listen for toast action navigations
 export function useNotificationNavigator() {
   const navigate = useNavigate();
   useEffect(() => {

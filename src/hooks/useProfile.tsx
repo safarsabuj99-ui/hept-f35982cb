@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCallback } from "react";
 
 export function useProfile() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: profile, isLoading: loading } = useQuery({
@@ -19,7 +19,7 @@ export function useProfile() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user?.id,
+    enabled: authReady && !!user?.id,
   });
 
   const refetch = useCallback(() => {

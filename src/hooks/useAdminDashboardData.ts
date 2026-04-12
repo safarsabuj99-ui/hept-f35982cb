@@ -68,7 +68,7 @@ async function fetchDashboardData(dateRange: DateRange | null): Promise<Dashboar
 }
 
 export function useAdminDashboardData(dateRange: DateRange | null) {
-  const { session } = useAuth();
+  const { session, authReady } = useAuth();
   const queryClient = useQueryClient();
 
   const dateKey = dateRange
@@ -78,7 +78,7 @@ export function useAdminDashboardData(dateRange: DateRange | null) {
   const query = useQuery({
     queryKey: ["admin-dashboard", dateKey],
     queryFn: () => fetchDashboardData(dateRange),
-    enabled: !!session,
+    enabled: authReady && !!session,
     staleTime: 60_000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -86,6 +86,7 @@ export function useAdminDashboardData(dateRange: DateRange | null) {
 
   // Realtime invalidation
   useEffect(() => {
+    if (!authReady || !session) return;
     const channel = supabase
       .channel("admin-dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
@@ -96,7 +97,7 @@ export function useAdminDashboardData(dateRange: DateRange | null) {
       .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [queryClient]);
+  }, [queryClient, authReady, session]);
 
   return query;
 }

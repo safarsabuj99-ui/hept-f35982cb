@@ -13,7 +13,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, user, role, authReady } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { brandName, logoUrl } = useBranding();
@@ -21,6 +21,13 @@ export default function Login() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Redirect once auth is fully ready and we have a user+role
+  useEffect(() => {
+    if (!authReady || !user || !role) return;
+    const dest = role === "platform_owner" ? "/platform" : role === "admin" ? "/admin" : role === "manager" ? "/manager" : "/dashboard";
+    navigate(dest, { replace: true });
+  }, [authReady, user, role, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,19 +44,10 @@ export default function Login() {
       setIsLoading(false);
       return;
     }
-    // Success — role useEffect in useAuth will trigger, then Login's useEffect navigates
-    // Reset loading in case navigation takes a moment
-    setIsLoading(false);
+    // Success — onAuthStateChange will fire SIGNED_IN, role will be fetched,
+    // and the useEffect above will navigate once authReady + role are set.
+    // Keep loading state until navigation happens.
   };
-
-  const { role, user } = useAuth();
-
-  useEffect(() => {
-    if (user && role) {
-      const dest = role === "platform_owner" ? "/platform" : role === "admin" ? "/admin" : role === "manager" ? "/manager" : "/dashboard";
-      navigate(dest, { replace: true });
-    }
-  }, [user, role, navigate]);
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
