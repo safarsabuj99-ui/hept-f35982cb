@@ -109,7 +109,7 @@ export default function AffiliateLinks() {
           </DialogContent>
         </Dialog>
       } />
-      </PageHeader>
+      
 
       <Card>
         <CardContent className="p-0">
