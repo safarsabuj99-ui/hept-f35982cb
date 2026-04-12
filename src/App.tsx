@@ -13,6 +13,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { ManagerLayout } from "@/components/ManagerLayout";
 import { ClientLayout } from "@/components/ClientLayout";
 import { PlatformLayout } from "@/components/PlatformLayout";
+import { AffiliateLayout } from "@/components/AffiliateLayout";
 import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages
@@ -63,6 +64,14 @@ const PaymentFailed = lazy(() => import("@/pages/PaymentFailed"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const Signup = lazy(() => import("@/pages/Signup"));
+const AffiliateRegister = lazy(() => import("@/pages/AffiliateRegister"));
+const AffiliateLogin = lazy(() => import("@/pages/AffiliateLogin"));
+const AffiliateDashboard = lazy(() => import("@/pages/AffiliateDashboard"));
+const AffiliateLinks = lazy(() => import("@/pages/AffiliateLinks"));
+const AffiliateEarnings = lazy(() => import("@/pages/AffiliateEarnings"));
+const AffiliatePayouts = lazy(() => import("@/pages/AffiliatePayouts"));
+const AffiliateProfile = lazy(() => import("@/pages/AffiliateProfile"));
+const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,6 +107,7 @@ const roleHomeMap: Record<string, string> = {
   manager: "/manager",
   client: "/dashboard",
   platform_owner: "/platform",
+  affiliate: "/affiliate",
 };
 
 const App = () => (
@@ -114,6 +124,9 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/affiliate/register" element={<AffiliateRegister />} />
+                <Route path="/affiliate/login" element={<AffiliateLogin />} />
+                <Route path="/" element={<SmartHome />} />
                 <Route path="/" element={<SmartHome />} />
 
                 {/* Platform Owner routes */}
@@ -134,6 +147,7 @@ const App = () => (
                   <Route path="/platform/billing" element={<PlatformBilling />} />
                   <Route path="/platform/plans" element={<PlatformPlans />} />
                   <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
+                  <Route path="/platform/affiliates" element={<PlatformAffiliates />} />
                   <Route path="/platform/audit" element={<PlatformAudit />} />
                 </Route>
 
