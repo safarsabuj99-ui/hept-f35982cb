@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield,
-  GitBranch, TrendingUp,
+  GitBranch, TrendingUp, Gem,
 } from "lucide-react";
 
 interface NavItem { to: string; icon: any; label: string; }
@@ -30,6 +30,7 @@ const allSections: NavSection[] = [
   ]},
   { title: "Agencies", items: [
     { to: "/platform/agencies", icon: Building2, label: "Agencies" },
+    { to: "/platform/affiliates", icon: Gem, label: "Affiliates" },
     { to: "/platform/announcements", icon: Megaphone, label: "Announcements" },
   ]},
   { title: "System", items: [

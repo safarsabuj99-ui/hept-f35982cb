@@ -84,7 +84,7 @@ export default function AffiliateLinks() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Referral Links" subtitle="Generate and manage your tracking links">
+      <PageHeader title="My Referral Links" subtitle="Generate and manage your tracking links" actions={
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Link</Button>
@@ -108,6 +108,7 @@ export default function AffiliateLinks() {
             </div>
           </DialogContent>
         </Dialog>
+      } />
       </PageHeader>
 
       <Card>

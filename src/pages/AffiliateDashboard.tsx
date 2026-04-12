@@ -58,9 +58,7 @@ export default function AffiliateDashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`Welcome, ${affiliate?.full_name || "Affiliate"}`} subtitle="Your affiliate performance overview">
-        <Badge variant={statusColor} className="capitalize">{affiliate?.status}</Badge>
-      </PageHeader>
+      <PageHeader title={`Welcome, ${affiliate?.full_name || "Affiliate"}`} subtitle="Your affiliate performance overview" actions={<Badge variant={statusColor} className="capitalize">{affiliate?.status}</Badge>} />
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpis.map((kpi) => (

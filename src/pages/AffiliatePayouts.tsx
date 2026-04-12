@@ -84,7 +84,7 @@ export default function AffiliatePayouts() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payouts" subtitle="Request withdrawals and track payout history">
+      <PageHeader title="Payouts" subtitle="Request withdrawals and track payout history" actions={
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" disabled={availableBalance <= 0}><Wallet className="h-4 w-4 mr-1" /> Request Payout</Button>
@@ -107,6 +107,7 @@ export default function AffiliatePayouts() {
             </div>
           </DialogContent>
         </Dialog>
+      } />
       </PageHeader>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
