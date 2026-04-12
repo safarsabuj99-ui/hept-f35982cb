@@ -1,122 +1,107 @@
 
 
-## Plan: Advanced Affiliate System with Independent Dashboard
+## Plan: Operational Subscription Lifecycle — Trial Expiry, Payment Gates, Auto-Upgrade
 
-### What We're Building
+### Current State
+- `ProtectedRoute` only blocks `pending_payment` status (shows "Payment Under Review")
+- `subscription-lifecycle` edge function auto-suspends overdue agencies but the frontend doesn't show blocking screens for `trial` expired, `suspended`, or `overdue` states
+- Agency can pay manually via `AdminSubscription.tsx` but there's no forced upgrade/payment flow when trial ends
+- No auto-payment gateway integration exists
+- The `org_status` enum has: `active`, `trial`, `suspended`, `cancelled`, `pending_payment`
 
-A completely standalone affiliate system where external marketers (not agencies) can register, log in, get unique tracking links, and earn commissions when clients sign up and purchase through their links. Platform owner controls commission rates per affiliate.
+### What We'll Build
 
-### Architecture
-
-```text
-┌─────────────────────────────────────────────┐
-│  Public                                      │
-│  /affiliate/register  → Affiliate signup     │
-│  /affiliate/login     → Affiliate login      │
-│  /signup?ref=CODE     → Tracked client signup│
-├─────────────────────────────────────────────┤
-│  Affiliate Portal (/affiliate/*)             │
-│  /affiliate           → Dashboard (KPIs)     │
-│  /affiliate/links     → Generate/manage links│
-│  /affiliate/earnings  → Commission history   │
-│  /affiliate/payouts   → Payout requests      │
-│  /affiliate/profile   → Edit profile/bank    │
-├─────────────────────────────────────────────┤
-│  Platform Owner (/platform/affiliates)       │
-│  - View all affiliates                       │
-│  - Set per-affiliate commission rate         │
-│  - Approve/reject payout requests            │
-│  - View performance analytics                │
-└─────────────────────────────────────────────┘
-```
-
-### Database Changes (Migration)
-
-**New tables:**
-
-1. **`affiliates`** — Affiliate accounts (linked to auth.users)
-   - `id`, `user_id` (FK auth.users), `full_name`, `email`, `phone`, `payment_method` (bKash/Nagad/Bank), `payment_details` (JSONB), `commission_rate` (percentage, default 10, individually settable), `commission_type` (percentage/fixed), `status` (pending/active/suspended), `created_at`
-
-2. **`affiliate_links`** — Tracking links
-   - `id`, `affiliate_id` (FK affiliates), `code` (unique slug), `label` (custom name), `clicks` (counter), `is_active`, `created_at`
-
-3. **`affiliate_conversions`** — Tracks signups + purchases
-   - `id`, `affiliate_id`, `link_id`, `referred_org_id` (FK organizations), `signup_at`, `first_payment_at`, `payment_amount_bdt`, `commission_bdt`, `status` (pending/qualified/paid/rejected), `qualified_at`, `paid_at`
-
-4. **`affiliate_payouts`** — Payout requests from affiliates
-   - `id`, `affiliate_id`, `amount_bdt`, `status` (pending/approved/paid/rejected), `payment_method`, `payment_details`, `admin_note`, `requested_at`, `processed_at`
-
-**New role:** Add `'affiliate'` to `app_role` enum.
-
-**Modify:** `organizations` table — add `referred_by_affiliate_id` column.
-
-### New Edge Function
-
-**`affiliate-signup`** — Creates auth user + affiliate profile + assigns affiliate role. No agency/org creation needed.
-
-### Frontend Pages
-
-| File | Purpose |
-|------|---------|
-| `src/pages/AffiliateRegister.tsx` | Public signup form (name, email, password, phone, payment info) |
-| `src/pages/AffiliateLogin.tsx` | Login page for affiliates |
-| `src/pages/AffiliateDashboard.tsx` | KPIs: Total earnings, pending, clicks, conversions, conversion rate |
-| `src/pages/AffiliateLinks.tsx` | Generate links with custom labels, copy URL, see click counts |
-| `src/pages/AffiliateEarnings.tsx` | Conversion history table with status badges |
-| `src/pages/AffiliatePayouts.tsx` | Request payout, view payout history |
-| `src/pages/AffiliateProfile.tsx` | Edit name, phone, payment details |
-| `src/components/AffiliateLayout.tsx` | Sidebar layout for affiliate portal |
-| `src/pages/PlatformAffiliates.tsx` | Platform owner: manage affiliates, set rates, approve payouts |
-
-### Conversion Tracking Flow
-
-1. Affiliate generates link → `https://yoursite.com/signup?ref=ABC123`
-2. Client visits link → click counter increments (edge function or client-side)
-3. Client signs up → `organizations.referred_by_affiliate_id` is set
-4. Client makes first payment (subscription approved) → conversion marked `qualified`, commission calculated using that affiliate's individual `commission_rate`
-5. Affiliate requests payout → Platform owner approves → status becomes `paid`
-
-### Commission Logic
-
-- Each affiliate has their own `commission_rate` and `commission_type` (percentage or fixed)
-- Platform owner can edit per-affiliate from the management page
-- Default rate set when affiliate is approved
-- Commission calculated on first subscription payment of referred agency
-
-### Routing Updates (App.tsx)
+A complete operational lifecycle where every org status maps to a specific user experience:
 
 ```text
-/affiliate/register   → Public
-/affiliate/login      → Public  
-/affiliate/*          → ProtectedRoute (role: affiliate) + AffiliateLayout
-/platform/affiliates  → Platform owner page
+Trial (active access)
+  │
+  ├─ Trial expires → status = "suspended" (reason: "Trial expired")
+  │   │
+  │   └─ Admin logs in → BLOCKED → "Trial Ended" screen
+  │       ├─ "Upgrade Now" button → Payment flow
+  │       │   ├─ Manual Payment → Submit proof → status = "pending_payment"
+  │       │   │   └─ Platform approves → status = "active" ✅
+  │       │   └─ Auto Payment (gateway) → Success → status = "active" ✅
+  │       └─ Sign Out
+  │
+  ├─ Subscription overdue → status = "suspended" (reason: "Payment overdue")
+  │   └─ Same blocked screen with "Renew Now" 
+  │
+  └─ Cancelled → "Account Cancelled" screen (contact support)
 ```
 
-### Signup Page Update
+### Changes
 
-Modify `src/pages/Signup.tsx` to read `?ref=CODE` from URL, store in state, and pass to the `self-signup` edge function which saves `referred_by_affiliate_id` on the organization.
+#### 1. ProtectedRoute.tsx — Add Blocking Screens for All Statuses
+Currently only handles `pending_payment`. Add:
+- **`suspended` + trial expired** → "Trial Ended — Upgrade to Continue" screen with plan selection and payment
+- **`suspended` + payment overdue** → "Subscription Overdue — Renew Now" screen  
+- **`cancelled`** → "Account Cancelled" screen with support contact
+- Each screen has contextual messaging, upgrade/pay buttons, and sign-out option
 
-### Platform Sidebar Update
+#### 2. New Component: `SubscriptionGate.tsx`
+A full-page component shown inside ProtectedRoute when org is blocked. Contains:
+- Status-aware messaging (trial ended vs overdue vs cancelled)
+- Plan selection cards (fetched from `platform_plans`)
+- Payment method choice: **Manual** (bKash/Nagad/Bank proof upload) OR **Auto** (payment gateway)
+- Manual flow: upload proof → creates `subscription_payments` record → org goes to `pending_payment` → platform owner approves
+- Auto flow: calls `payment-gateway` edge function → on success → auto-activates org
 
-Add "Affiliates" nav item under Agencies section in `PlatformLayout.tsx`.
+#### 3. Edge Function: `payment-gateway/index.ts` (Update)
+Add logic to handle subscription payments:
+- Accept `org_id`, `plan_key`, `billing_cycle`, `amount_bdt`
+- On successful payment: update org status to `active`, create/update subscription, generate paid invoice, sync plan limits
+- This enables the "auto-activate on payment success" flow
+
+#### 4. `tenant-lifecycle-check` Edge Function (Update)
+Currently only suspends expired trials. Add:
+- Set `suspension_reason = 'Trial expired'` (already does this)
+- Send notification to agency owner with upgrade link
+
+#### 5. `subscription-lifecycle` Edge Function (Already Handles Overdue)
+No changes needed — it already marks overdue and suspends after grace period.
+
+### User Journey Examples
+
+**Example 1: Trial Ends**
+1. Agency signs up → 14-day trial → `status = trial`
+2. Day 15: `tenant-lifecycle-check` runs → `status = suspended`, `suspension_reason = "Trial expired"`
+3. Agency admin logs in → ProtectedRoute detects `suspended` → Shows "Trial Ended" gate
+4. Admin selects Growth plan → Chooses bKash → Uploads proof → `status = pending_payment`
+5. Platform owner approves in Billing tab → `status = active`, subscription created
+
+**Example 2: Auto-Payment**
+1. Same as above, but admin clicks "Pay with Gateway"
+2. Payment gateway processes → Success callback → `status = active` automatically
+3. No manual approval needed
+
+**Example 3: Subscription Overdue**
+1. Active agency's period ends → Payment not received
+2. `subscription-lifecycle` marks overdue → After grace period → `status = suspended`
+3. Admin logs in → Sees "Subscription Overdue" gate → Pays → Reactivated
 
 ### Files Changed/Created
 
-| Action | File |
-|--------|------|
-| Create | `src/pages/AffiliateRegister.tsx` |
-| Create | `src/pages/AffiliateLogin.tsx` |
-| Create | `src/pages/AffiliateDashboard.tsx` |
-| Create | `src/pages/AffiliateLinks.tsx` |
-| Create | `src/pages/AffiliateEarnings.tsx` |
-| Create | `src/pages/AffiliatePayouts.tsx` |
-| Create | `src/pages/AffiliateProfile.tsx` |
-| Create | `src/components/AffiliateLayout.tsx` |
-| Create | `src/pages/PlatformAffiliates.tsx` |
-| Create | `supabase/functions/affiliate-signup/index.ts` |
-| Modify | `src/App.tsx` — Add affiliate routes |
-| Modify | `src/components/PlatformLayout.tsx` — Add Affiliates nav |
-| Modify | `src/hooks/useAuth.tsx` — Add `affiliate` to AppRole |
-| Modify | `src/pages/Signup.tsx` — Read `?ref=` param |
-| Migration | New tables + enum update + RLS policies |
+| Action | File | Purpose |
+|--------|------|---------|
+| Create | `src/components/SubscriptionGate.tsx` | Full-page blocked screen with plan selection + payment |
+| Modify | `src/components/ProtectedRoute.tsx` | Check `suspended`/`cancelled` status, render SubscriptionGate |
+| Modify | `supabase/functions/payment-gateway/index.ts` | Add subscription payment + auto-activation logic |
+| Modify | `supabase/functions/tenant-lifecycle-check/index.ts` | Add notification to owner on trial expiry |
+
+### Technical Details
+
+**ProtectedRoute logic update:**
+```text
+if orgStatus === "pending_payment" → existing "Payment Under Review" screen
+if orgStatus === "suspended" → <SubscriptionGate reason={suspension_reason} />
+if orgStatus === "cancelled" → <SubscriptionGate cancelled />
+```
+
+**SubscriptionGate payment flow:**
+- Manual: Insert into `subscription_payments` → Update org to `pending_payment` → Wait for approval
+- Auto (gateway): POST to `payment-gateway` → On 200 → Org auto-activated → Refresh page
+
+No new database tables needed. Uses existing `subscription_payments`, `organization_subscriptions`, `platform_invoices`, and `platform_plans` tables.
 
