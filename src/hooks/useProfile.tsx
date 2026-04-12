@@ -13,7 +13,7 @@ export function useProfile() {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, business_name, email, phone, preferred_timezone")
+        .select("full_name, business_name, email, phone, preferred_timezone, org_id")
         .eq("user_id", user.id)
         .maybeSingle();
       if (error) throw error;

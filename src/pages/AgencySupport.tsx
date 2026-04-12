@@ -101,7 +101,7 @@ export default function AgencySupport() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold capitalize">{tier.priority_level} Support</h3>
-                <p className="text-sm text-muted-foreground">Response: {tier.response_time_hours}h | Resolution: {tier.resolution_time_hours}h | Channels: {(tier.channels || []).join(", ")}</p>
+                <p className="text-sm text-muted-foreground">Response: {tier.response_time_hours}h | Resolution: {tier.resolution_time_hours}h | Channels: {Array.isArray(tier.channels) ? tier.channels.join(", ") : String(tier.channels || "")}</p>
               </div>
               <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4 mr-2" />New Ticket</Button>
             </div>
