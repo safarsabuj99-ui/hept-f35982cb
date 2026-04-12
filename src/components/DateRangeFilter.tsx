@@ -19,13 +19,13 @@ interface DateRangeFilterProps {
 }
 
 const presets: { label: string; value: DatePreset }[] = [
-  { label: "All Time", value: "all_time" },
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
   { label: "This Week", value: "this_week" },
   { label: "Last Week", value: "last_week" },
   { label: "This Month", value: "this_month" },
   { label: "Last Month", value: "last_month" },
+  { label: "All Time", value: "all_time" },
   { label: "Custom", value: "custom" },
 ];
 
