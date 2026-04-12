@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +48,8 @@ export default function Signup() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get("ref") || "";
 
   useEffect(() => {
     supabase.from("platform_plans").select("*").eq("is_active", true).order("sort_order").then(({ data }) => {
@@ -134,6 +136,7 @@ export default function Signup() {
           payment_method: paymentMethod,
           transaction_reference: transactionRef.trim(),
           proof_image_url: proofUrl,
+          ref_code: refCode || undefined,
         },
       });
 
