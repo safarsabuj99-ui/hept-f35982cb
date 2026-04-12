@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { full_name, email, password, agency_name, plan_key, billing_cycle, payment_method, transaction_reference, proof_image_url } = body;
+    const { full_name, email, password, agency_name, plan_key, billing_cycle, payment_method, transaction_reference, proof_image_url, ref_code } = body;
 
     // Validate required fields
     if (!full_name?.trim() || !email?.trim() || !password || !agency_name?.trim() || !plan_key || !billing_cycle || !payment_method || !transaction_reference?.trim()) {
@@ -78,6 +78,18 @@ Deno.serve(async (req) => {
     const slug = agency_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Date.now().toString(36);
     const amount = billing_cycle === "yearly" ? plan.price_bdt_yearly : plan.price_bdt_monthly;
 
+    // Resolve affiliate from ref_code
+    let affiliateId: string | null = null;
+    if (ref_code) {
+      const { data: linkData } = await supabaseAdmin.from("affiliate_links")
+        .select("id, affiliate_id, clicks").eq("code", ref_code).eq("is_active", true).single();
+      if (linkData) {
+        affiliateId = linkData.affiliate_id;
+        // Increment click count
+        await supabaseAdmin.from("affiliate_links").update({ clicks: (linkData.clicks || 0) + 1 }).eq("id", linkData.id);
+      }
+    }
+
     // 2. Create organization
     const { data: org, error: orgError } = await supabaseAdmin
       .from("organizations")
@@ -92,6 +104,7 @@ Deno.serve(async (req) => {
         max_managers: plan.max_managers,
         allowed_features: plan.feature_flags || {},
         brand_name: agency_name.trim(),
+        ...(affiliateId ? { referred_by_affiliate_id: affiliateId } : {}),
       })
       .select("id")
       .single();
