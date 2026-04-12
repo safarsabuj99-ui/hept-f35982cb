@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -164,11 +165,16 @@ export default function WalletInventory() {
     }
   }, [fetchOverview, toast]);
 
+  const fetchAgencyAccounts = useCallback(async () => {
+    const { data } = await supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name");
+    setAgencyAccounts(data ?? []);
+  }, []);
+
   useEffect(() => {
     fetchPurchases(dateRange);
     fetchManualSpends(dateRange);
     fetchOverview();
-    supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name").then(({ data }) => setAgencyAccounts(data ?? []));
+    fetchAgencyAccounts();
   }, []);
 
   useEffect(() => {
@@ -177,9 +183,10 @@ export default function WalletInventory() {
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, () => { fetchManualSpends(dateRange); fetchOverview(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, () => fetchAgencyAccounts())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPurchases, fetchOverview, fetchManualSpends, dateRange]);
+  }, [fetchPurchases, fetchOverview, fetchManualSpends, fetchAgencyAccounts, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);
@@ -231,12 +238,7 @@ export default function WalletInventory() {
     } as any);
     
     if (!error && paidFromAccountId) {
-      const acc = agencyAccounts.find(a => a.id === paidFromAccountId);
-      if (acc) {
-        await supabase.from("agency_accounts" as any)
-          .update({ current_balance_bdt: Number(acc.current_balance_bdt) - Number(bdtPaid) } as any)
-          .eq("id", paidFromAccountId);
-      }
+      await adjustAccountBalance(paidFromAccountId, -Number(bdtPaid));
     }
     setSubmitting(false);
     if (error) {
@@ -247,6 +249,7 @@ export default function WalletInventory() {
       setDialogOpen(false);
       fetchPurchases(dateRange);
       fetchOverview();
+      fetchAgencyAccounts();
     }
   };
 
