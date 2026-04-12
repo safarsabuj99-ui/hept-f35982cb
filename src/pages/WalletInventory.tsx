@@ -340,9 +340,9 @@ export default function WalletInventory() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex justify-end">
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
           <Dialog open={spendDialogOpen} onOpenChange={setSpendDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full sm:w-auto"><MinusCircle className="mr-2 h-4 w-4" /> Spend USD</Button>
@@ -456,21 +456,23 @@ export default function WalletInventory() {
         "border-emerald-500/50 bg-emerald-500/5"
       }`}>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              USD Inventory
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                <DollarSign className="h-4 w-4" />
+                USD Inventory
+              </CardTitle>
               {overview.snapshotDate && (
-                <>
-                  <Badge variant="outline" className="ml-1 text-[10px] font-normal">
+                <div className="flex flex-wrap items-center gap-1 mt-1">
+                  <Badge variant="outline" className="text-[10px] font-normal">
                     Since {overview.snapshotDate}
                   </Badge>
-                  <Badge variant="secondary" className="ml-1 text-[10px] font-normal gap-1">
-                    <Clock className="h-2.5 w-2.5" /> Auto: Every 5 min
+                  <Badge variant="secondary" className="text-[10px] font-normal gap-1">
+                    <Clock className="h-2.5 w-2.5" /> Auto: 5 min
                   </Badge>
-                </>
+                </div>
               )}
-            </CardTitle>
+            </div>
             <div className="flex items-center gap-2">
               {!overview.loading && hasSnapshot && (
                 <Button size="sm" variant="ghost" onClick={handleRefreshNow} disabled={overview.loading}>
@@ -545,12 +547,12 @@ export default function WalletInventory() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 grid-cols-2 lg:grid-cols-6">
+              <div className="grid gap-2 sm:gap-4 grid-cols-3 lg:grid-cols-6">
                 {/* Available Balance */}
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Available USD</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                    <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                    <p className={`text-lg sm:text-2xl font-bold font-mono ${
                       overview.availableBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
                     }`}>
                       ${overview.availableBalance.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -562,7 +564,7 @@ export default function WalletInventory() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Carry Forward</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                    <p className="text-xl sm:text-2xl font-bold font-mono">
+                    <p className="text-lg sm:text-2xl font-bold font-mono">
                       ${overview.carryForward.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
@@ -572,7 +574,7 @@ export default function WalletInventory() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Bought (Since)</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                    <p className="text-xl sm:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                    <p className="text-lg sm:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                       +${overview.boughtSince.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
@@ -582,7 +584,7 @@ export default function WalletInventory() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Ad Spend</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                    <p className="text-xl sm:text-2xl font-bold font-mono text-destructive">
+                    <p className="text-lg sm:text-2xl font-bold font-mono text-destructive">
                       -${overview.spentSince.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
@@ -592,7 +594,7 @@ export default function WalletInventory() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground flex items-center gap-1"><MinusCircle className="h-3 w-3" /> Manual Spends</p>
                   {overview.loading ? <Skeleton className="h-8 w-24" /> : (
-                    <p className="text-xl sm:text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
+                    <p className="text-lg sm:text-2xl font-bold font-mono text-orange-600 dark:text-orange-400">
                       -${overview.manualSpend.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
@@ -606,7 +608,7 @@ export default function WalletInventory() {
                       <p className="text-sm font-mono text-muted-foreground">
                         ${overview.dailyBurn.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/d
                       </p>
-                      <p className={`text-xl sm:text-2xl font-bold font-mono ${
+                      <p className={`text-lg sm:text-2xl font-bold font-mono ${
                         overview.runwayDays < 3 ? "text-destructive" :
                         overview.runwayDays <= 7 ? "text-yellow-600 dark:text-yellow-400" :
                         "text-emerald-600 dark:text-emerald-400"
@@ -620,7 +622,7 @@ export default function WalletInventory() {
 
               {/* Bottom row: obligations & needed */}
               {!overview.loading && (
-                <div className="mt-3 pt-3 border-t flex flex-wrap items-center gap-4 text-sm">
+                <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm">
                   <span className="text-muted-foreground">
                     Client Obligations: <span className="font-mono font-medium text-foreground">${overview.clientObligations.toLocaleString()}</span>
                   </span>
