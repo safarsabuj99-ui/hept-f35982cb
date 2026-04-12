@@ -1,33 +1,33 @@
 
 
-## Plan: Optimize Wallet & USD Tab + Cash Flow Mobile Buttons
+## Plan: Optimize Wallet & USD Page for Mobile View
 
-### Issues Identified
+### Issues (visible in screenshot at 390px)
 
-**1. Wallet & USD Tab (`WalletInventory.tsx`)**
-- **Stale balance bug (line 233-239)**: "Buy USD" deducts from `paidFromAccountId` using stale local `agencyAccounts` state — same bug pattern we just fixed in ExpenseManager. Uses `acc.current_balance_bdt` from mount-time state instead of fresh DB read.
-- **No account state refresh**: After recording a purchase, `agencyAccounts` is never re-fetched, so subsequent purchases overwrite each other's deductions.
-- **Realtime channel doesn't refresh accounts**: The realtime subscription watches `usd_purchases` and `usd_inventory_snapshots` but never refreshes `agencyAccounts`.
+1. **USD Inventory Card header is cluttered** — "Since 2026-04-12" badge, "Auto: Every 5 min" badge, and "Refresh" / "Close Period" buttons all sit in a single horizontal row, causing overflow and text clipping on mobile.
 
-**2. Cash Flow Mobile Buttons (`CashFlowManagement.tsx`)**
-- Lines 495-690: Four action buttons (Withdraw, Add Fund, Transfer, Add Account) are stacked as `flex-col` with `w-full` on mobile — each button takes full width, pushing content far down the page. This is clunky on a 390px viewport.
-- The buttons should be a compact 2x2 grid on mobile instead of a tall vertical stack.
+2. **Overview grid `grid-cols-2 lg:grid-cols-6`** — 6 metric boxes crammed into 2 columns on mobile with large `text-xl sm:text-2xl` fonts creates a tall, hard-to-scan card. The "Burn / Runway" box has two lines stacked awkwardly.
+
+3. **Action buttons ("Spend USD" / "Buy USD")** at the top use `flex items-center gap-2` with no wrapping — they can clip on narrow screens.
+
+4. **DateRangeFilter presets** — "Today / Yesterday / This Week" pill row clips off-screen (visible in screenshot: "day" is cut).
+
+5. **Bottom obligations row** — `flex flex-wrap` with long text can still overflow on 390px.
 
 ### Changes
 
 **File: `src/pages/WalletInventory.tsx`**
 
-1. **Fix stale balance deduction** — Replace lines 233-239 (the `handleSubmit` account deduction) with `adjustAccountBalance(paidFromAccountId, -Number(bdtPaid))` to use fresh DB reads, matching the pattern already applied in ExpenseManager and CashFlowManagement.
+1. **Card header — stack on mobile**: Wrap the title + badges and the action buttons into `flex flex-col sm:flex-row`. Badges wrap below the title on mobile. Buttons (`Refresh`, `Close Period`) go full-width below on mobile.
 
-2. **Add account refresh function** — Extract `agencyAccounts` fetch into a `fetchAgencyAccounts` callback. Call it after `handleSubmit` succeeds (after purchase recorded).
+2. **Overview grid — use `grid-cols-3` on mobile instead of `grid-cols-2`**: Change `grid-cols-2 lg:grid-cols-6` → `grid-cols-3 lg:grid-cols-6`. This fits all 6 metrics in 2 rows of 3, reducing card height. Reduce font sizes on mobile: `text-lg sm:text-2xl` instead of `text-xl sm:text-2xl`.
 
-3. **Add `agency_accounts` to realtime channel** — Subscribe to changes on `agency_accounts` table so the UI stays fresh if balances change from other tabs (e.g., CashFlow).
+3. **Top action buttons** — change to `grid grid-cols-2 sm:flex` so they sit side-by-side compactly on mobile with equal widths.
 
-**File: `src/pages/CashFlowManagement.tsx`**
+4. **Obligations row** — use `flex-col sm:flex-row` so each metric sits on its own line on mobile.
 
-4. **Optimize mobile button layout** — Change the action buttons container from `flex flex-col sm:flex-row` to `grid grid-cols-2 sm:flex sm:flex-row` so on mobile the 4 buttons form a compact 2×2 grid instead of a tall vertical stack. Each button text will be shorter on mobile (icon + short label).
+5. **Minor spacing** — reduce `space-y-6` → `space-y-4` on the root container for tighter mobile layout.
 
 ### Files Changed
-- `src/pages/WalletInventory.tsx` — fix stale balance bug, add account refresh, add realtime for accounts
-- `src/pages/CashFlowManagement.tsx` — mobile 2×2 grid for action buttons
+- `src/pages/WalletInventory.tsx` — responsive layout fixes for mobile
 
