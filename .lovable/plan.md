@@ -1,63 +1,77 @@
 
 
-## Plan: Advanced SaaS Finance Hub for Platform Owner
+## Plan: Upgrade Platform Finance Hub to Match Agency Finance System
 
-### Current State
-You have **Revenue** (MRR/ARR analytics), **Billing** (invoices, payment verification, upgrades), and **Plans** as separate pages. Finance is scattered — no unified view, no P&L, no cash flow tracking, no expense management at the SaaS level.
+The agency finance system has rich operational features (date filters, account management, USD inventory, cash flow tracking, withdrawals/loans, activity feeds). The platform finance currently has only basic charts and tables. Here's the upgrade plan to bring parity.
 
-### What We'll Build
+### Tab 1: P&L Overview — Add Date Filtering & Richer Layout
+**Current**: Static totals from all subscriptions, no date filtering, no WAC concept.
+**Upgrade**:
+- Add `DateRangeFilter` component (same as agency P&L)
+- Filter invoices and expenses by date range
+- Add period-aware KPI labels ("Today", "This Month", etc.)
+- Add P&L Summary card (Revenue / Expenses / Gross Profit in 3-column layout)
+- Keep existing Monthly P&L chart and Revenue by Plan chart
 
-A new **Finance Hub** page at `/platform/finance` with 4 tabs, replacing the current separate Revenue page and adding powerful new capabilities:
+**File**: `src/components/platform-finance/FinanceOverview.tsx`
 
-#### Tab 1: Financial Overview (P&L)
-- **KPI row**: Total Revenue (BDT), Total Expenses, Net Profit, Profit Margin %
-- **Monthly P&L table**: Revenue vs Expenses vs Net Profit per month (last 12 months)
-- **Revenue breakdown chart**: By plan tier (Starter / Growth / Agency Pro)
-- Data sources: `organization_subscriptions`, `platform_invoices`, new `platform_expenses` table
+### Tab 2: Revenue Analytics — No Changes Needed
+Already comprehensive with MRR/ARR/ARPA/Churn/NRR/MRR Trend/Churned Agencies. Stays as-is.
 
-#### Tab 2: Revenue Analytics (enhanced current Revenue page)
-- MRR/ARR/ARPA/Churn KPIs (existing logic moved here)
-- MRR trend chart with waterfall (New, Expansion, Churn)
-- Net Revenue Retention (NRR) gauge
-- Revenue by plan breakdown
-- Churned agency list with lost MRR
+### Tab 3: Expenses — Add Date Filter, Pie Chart, Pagination, Account Integration
+**Current**: Basic add/delete with trend chart and category pie. No date filter, no pagination, no "paid from account" tracking.
+**Upgrade**:
+- Add `DateRangeFilter` for filtering by period
+- Add summary KPI cards (Total / OpEx / Owner's Draw style) at top
+- Add `TablePagination` for the expense list
+- Add mobile card view (same pattern as agency ExpenseManager)
+- Add "Paid From Account" concept — requires new `paid_from_account_id` column on `platform_expenses`
+- Realtime subscription for live updates
 
-#### Tab 3: Expenses
-- Track SaaS operating costs: Server/hosting, tools, marketing, salaries, payment gateway fees
-- Add/edit/delete expenses with category, date, amount, description
-- Monthly expense trend chart
-- Category-wise breakdown (pie chart)
-- New table: `platform_expenses` (id, category, amount_bdt, description, date, created_by, created_at)
+**File**: `src/components/platform-finance/ExpensesTab.tsx`
+**Migration**: Add `paid_from_account_id` column to `platform_expenses`
 
-#### Tab 4: Cash Flow
-- **Collections timeline**: Money received from agencies (paid invoices + subscription payments)
-- **Outflows**: Platform expenses
-- **Net cash flow** per month
-- **Outstanding receivables**: Unpaid invoices with aging (0-30, 31-60, 60+ days)
-- **Upcoming renewals** with expected revenue
+### Tab 4: Cash Flow — Full Rebuild to Match Agency Cash Flow
+**Current**: Basic collections vs outflows chart, receivable aging, upcoming renewals. No accounts, no transfers, no activity feed, no withdrawals.
+**Upgrade**: Complete rebuild matching agency `CashFlowManagement.tsx`:
+- **Platform Accounts**: Add/manage platform-level bank/MFS/cash accounts (new `platform_accounts` table)
+- **Fund Transfers**: Transfer BDT between platform accounts (new `platform_fund_transfers` table)
+- **Activity Feed**: Unified feed of invoice payments, expenses, transfers (with pagination)
+- **Account Balance Cards**: Show all accounts with type icons and balances
+- Keep existing Receivable Aging and Upcoming Renewals sections
+- Add Liquid Fund support for platform (reuse pattern)
 
-### Sidebar Update
-- Replace "Revenue" nav item with "Finance" (single entry point)
-- Keep Billing and Plans as separate pages (they have operational workflows)
-
-### Database Changes
-One new table:
+**New Tables**:
 ```sql
-CREATE TABLE platform_expenses (
+CREATE TABLE platform_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  category TEXT NOT NULL DEFAULT 'other',
-  amount_bdt NUMERIC NOT NULL DEFAULT 0,
-  description TEXT,
-  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'Bank',
+  account_number TEXT,
+  current_balance_bdt NUMERIC NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- RLS: platform_owner only
+
+CREATE TABLE platform_fund_transfers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  from_account_id UUID NOT NULL,
+  to_account_id UUID NOT NULL,
+  amount_bdt NUMERIC NOT NULL,
+  note TEXT,
   created_by UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- RLS: platform_owner only
 ```
 
+**File**: `src/components/platform-finance/CashFlowTab.tsx` (full rewrite)
+
 ### Files Changed
-- `src/pages/PlatformFinanceHub.tsx` — New unified finance page with 4 tabs
-- `src/components/PlatformLayout.tsx` — Replace "Revenue" with "Finance" nav item
-- `src/App.tsx` — Add route for `/platform/finance`, keep `/platform/revenue` redirecting
-- **Migration** — Create `platform_expenses` table with RLS
+- `src/components/platform-finance/FinanceOverview.tsx` — Add date filter, richer KPI layout
+- `src/components/platform-finance/ExpensesTab.tsx` — Add date filter, pagination, mobile view, account tracking
+- `src/components/platform-finance/CashFlowTab.tsx` — Full rebuild with accounts, transfers, activity feed
+- `src/lib/adjustPlatformAccountBalance.ts` — New utility (mirrors `adjustAccountBalance` for platform accounts)
+- **Migration** — Add `paid_from_account_id` to `platform_expenses`, create `platform_accounts` and `platform_fund_transfers` tables with RLS
 
