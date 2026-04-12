@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
+import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
 interface AgencyAccount {
   id: string;
@@ -288,35 +289,28 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: "Select different accounts and a valid amount", variant: "destructive" });
       return;
     }
-    const fromAcc = accounts.find(a => a.id === fromAccId);
-    if (fromAcc && Number(fromAcc.current_balance_bdt) < amt) {
-      toast({ title: "Insufficient Balance", description: `${fromAcc.name} has only ৳${Number(fromAcc.current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+    // Fresh balance check
+    const { data: freshFrom } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", fromAccId).single();
+    if (freshFrom && Number((freshFrom as any).current_balance_bdt) < amt) {
+      toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
       return;
     }
 
     setTransferring(true);
 
-    const { error: debitErr } = await supabase.from("agency_accounts" as any)
-      .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) - amt } as any)
-      .eq("id", fromAccId);
-
-    if (debitErr) {
+    const debitOk = await adjustAccountBalance(fromAccId, -amt);
+    if (!debitOk) {
       setTransferring(false);
-      toast({ title: "Error", description: debitErr.message, variant: "destructive" });
+      toast({ title: "Error", description: "Failed to debit account", variant: "destructive" });
       return;
     }
 
-    const toAcc = accounts.find(a => a.id === toAccId);
-    const { error: creditErr } = await supabase.from("agency_accounts" as any)
-      .update({ current_balance_bdt: Number(toAcc!.current_balance_bdt) + amt } as any)
-      .eq("id", toAccId);
-
-    if (creditErr) {
-      await supabase.from("agency_accounts" as any)
-        .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) } as any)
-        .eq("id", fromAccId);
+    const creditOk = await adjustAccountBalance(toAccId, amt);
+    if (!creditOk) {
+      // Rollback debit
+      await adjustAccountBalance(fromAccId, amt);
       setTransferring(false);
-      toast({ title: "Error", description: creditErr.message, variant: "destructive" });
+      toast({ title: "Error", description: "Failed to credit account", variant: "destructive" });
       return;
     }
 
@@ -342,7 +336,6 @@ export default function CashFlowManagement() {
       return;
     }
     setFundSubmitting(true);
-    const targetAcc = accounts.find(a => a.id === fundAccId);
     const { error: insertErr } = await supabase.from("liquid_fund_entries" as any).insert({
       account_id: fundAccId,
       amount_bdt: amt,
@@ -357,11 +350,10 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: insertErr.message, variant: "destructive" });
       return;
     }
-    await supabase.from("agency_accounts" as any)
-      .update({ current_balance_bdt: Number(targetAcc!.current_balance_bdt) + amt } as any)
-      .eq("id", fundAccId);
+    await adjustAccountBalance(fundAccId, amt);
+    const accName = accounts.find(a => a.id === fundAccId)?.name;
     setFundSubmitting(false);
-    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${targetAcc?.name}` });
+    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${accName}` });
     setFundAmount(""); setFundNote(""); setFundAccId(""); setFundSource("Personal Fund");
     setFundDate(new Date().toISOString().slice(0, 10));
     setFundOpen(false);
@@ -374,9 +366,10 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: "Fill in account, borrower name, and amount", variant: "destructive" });
       return;
     }
-    const fromAcc = accounts.find(a => a.id === wdFromAccId);
-    if (fromAcc && Number(fromAcc.current_balance_bdt) < amt) {
-      toast({ title: "Insufficient Balance", description: `${fromAcc.name} has only ৳${Number(fromAcc.current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+    // Fresh balance check
+    const { data: freshAcc } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", wdFromAccId).single();
+    if (freshAcc && Number((freshAcc as any).current_balance_bdt) < amt) {
+      toast({ title: "Insufficient Balance", description: `${(freshAcc as any).name} has only ৳${Number((freshAcc as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
       return;
     }
     setWdSubmitting(true);
@@ -397,13 +390,10 @@ export default function CashFlowManagement() {
       return;
     }
 
-    // Deduct from account balance
-    await supabase.from("agency_accounts" as any)
-      .update({ current_balance_bdt: Number(fromAcc!.current_balance_bdt) - amt } as any)
-      .eq("id", wdFromAccId);
+    await adjustAccountBalance(wdFromAccId, -amt);
 
     setWdSubmitting(false);
-    toast({ title: "Withdrawal Recorded", description: `৳${amt.toLocaleString()} withdrawn from ${fromAcc?.name}` });
+    toast({ title: "Withdrawal Recorded", description: `৳${amt.toLocaleString()} withdrawn from ${(freshAcc as any)?.name}` });
     setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
     setWdFromAccId(""); setWdExpectedDate(""); setWdNote("");
     setWithdrawOpen(false);
@@ -452,13 +442,8 @@ export default function CashFlowManagement() {
       .update({ returned_bdt: newReturned, status: newStatus } as any)
       .eq("id", returnWithdrawal.id);
 
-    // Credit account balance
-    const toAcc = accounts.find(a => a.id === retToAccId);
-    if (toAcc) {
-      await supabase.from("agency_accounts" as any)
-        .update({ current_balance_bdt: Number(toAcc.current_balance_bdt) + amt } as any)
-        .eq("id", retToAccId);
-    }
+    // Credit account balance using fresh DB read
+    await adjustAccountBalance(retToAccId, amt);
 
     setRetSubmitting(false);
     toast({ title: "Return Recorded", description: `৳${amt.toLocaleString()} returned` });
