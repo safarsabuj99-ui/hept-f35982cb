@@ -20,14 +20,13 @@ const roleHomeMap: Record<string, string> = {
 };
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, role, loading, signOut } = useAuth();
+  const { user, role, loading, authReady, signOut } = useAuth();
   const [orgStatus, setOrgStatus] = useState<string | null>(null);
   const [checkingOrg, setCheckingOrg] = useState(false);
   const lastCheckedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || role !== "admin") return;
-    // Skip re-check if we already fetched org status for this exact user
     if (lastCheckedUserIdRef.current === user.id) return;
 
     setCheckingOrg(true);
@@ -49,7 +48,8 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
       });
   }, [user, role]);
 
-  if (loading || checkingOrg) {
+  // Wait for auth to be fully ready before rendering anything
+  if (!authReady || loading || checkingOrg) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -86,7 +86,6 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   if (requiredRole && role !== requiredRole) {
-    // Allow admin to access client routes when impersonating
     const hasImpersonateParam = new URLSearchParams(window.location.search).has("impersonate");
     if (requiredRole === "client" && role === "admin" && (sessionStorage.getItem("impersonate_client_id") || hasImpersonateParam)) {
       // Admin is impersonating a client — allow through

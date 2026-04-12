@@ -3,9 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
 export function usePendingCounts() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const { data } = useQuery({
-    queryKey: ["pending-counts"],
+    queryKey: ["pending-counts", user?.id],
     queryFn: async () => {
       const [payments, orders, deposits] = await Promise.all([
         supabase.from("payment_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
@@ -17,7 +17,7 @@ export function usePendingCounts() {
         pendingOrders: orders.count ?? 0,
       };
     },
-    enabled: !!user,
+    enabled: authReady && !!user,
     refetchInterval: 30000,
   });
 

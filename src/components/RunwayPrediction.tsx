@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +20,14 @@ interface RunwayClient {
 }
 
 export function RunwayPrediction() {
+  const { authReady } = useAuth();
   const [clients, setClients] = useState<RunwayClient[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authReady) return;
     fetchData();
-  }, []);
+  }, [authReady]);
 
   async function fetchData() {
     const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "client");

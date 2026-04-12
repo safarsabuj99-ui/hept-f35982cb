@@ -16,7 +16,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export function usePushNotifications() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
@@ -29,15 +29,14 @@ export function usePushNotifications() {
     "PushManager" in window &&
     window.self === window.top;
 
-  // Register service worker once
   useEffect(() => {
     if (!isSupported) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, [isSupported]);
 
-  // Check existing subscription on mount + auto-resubscribe if permission granted
+  // Check existing subscription — gated on authReady
   useEffect(() => {
-    if (!isSupported || !user?.id) return;
+    if (!isSupported || !authReady || !user?.id) return;
 
     (async () => {
       try {
@@ -45,7 +44,6 @@ export function usePushNotifications() {
         const sub = await reg.pushManager.getSubscription();
 
         if (sub) {
-          // Ensure DB has this subscription (refresh on every login)
           const subJson = sub.toJSON();
           await supabase.from("push_subscriptions").upsert(
             {
@@ -58,7 +56,6 @@ export function usePushNotifications() {
           );
           setIsSubscribed(true);
         } else if (Notification.permission === "granted") {
-          // Permission granted but no subscription — auto-resubscribe
           const newSub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
@@ -79,7 +76,7 @@ export function usePushNotifications() {
         console.error("Push auto-subscribe check failed:", err);
       }
     })();
-  }, [isSupported, user?.id]);
+  }, [isSupported, authReady, user?.id]);
 
   const subscribe = useCallback(async () => {
     if (!isSupported || !user?.id) return false;

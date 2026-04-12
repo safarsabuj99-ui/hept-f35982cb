@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,10 +17,12 @@ interface RevenueVsCostChartProps {
 }
 
 export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
+  const { authReady } = useAuth();
   const [data, setData] = useState<DayData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authReady) return;
     const fetchData = async () => {
       setLoading(true);
 
@@ -74,7 +77,7 @@ export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
       setLoading(false);
     };
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, authReady]);
 
   if (loading) return <Skeleton className="h-[320px]" />;
   if (data.length === 0) return null;

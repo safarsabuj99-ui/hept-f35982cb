@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,10 +14,12 @@ interface SpendTrendChartProps {
 }
 
 export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
+  const { authReady } = useAuth();
   const [data, setData] = useState<DayData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authReady) return;
     const fetch = async () => {
       setLoading(true);
       let campaignIds: string[] = [];
@@ -85,7 +88,7 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
       setLoading(false);
     };
     fetch();
-  }, [clientId, dateRange]);
+  }, [clientId, dateRange, authReady]);
 
   if (loading) return <Skeleton className="h-[320px]" />;
   if (data.length === 0) return null;

@@ -34,15 +34,17 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
 export const ALL_FEATURE_KEYS: FeatureKey[] = Object.keys(FEATURE_LABELS) as FeatureKey[];
 
 export function useOrgFeatures() {
-  const { session } = useAuth();
+  const { session, authReady } = useAuth();
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!authReady || !session?.user?.id) {
+      if (authReady) setLoading(false);
+      return;
+    }
 
     const fetchFeatures = async () => {
-      // Get user's org_id from profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("org_id")
@@ -54,7 +56,6 @@ export function useOrgFeatures() {
         return;
       }
 
-      // Get org's allowed_features
       const { data: org } = await supabase
         .from("organizations")
         .select("allowed_features")
@@ -68,7 +69,7 @@ export function useOrgFeatures() {
     };
 
     fetchFeatures();
-  }, [session?.user?.id]);
+  }, [authReady, session?.user?.id]);
 
   const hasFeature = (key: FeatureKey): boolean => {
     return features[key] === true;
