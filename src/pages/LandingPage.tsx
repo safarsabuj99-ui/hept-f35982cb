@@ -26,7 +26,9 @@ import {
   X,
   Send,
   ArrowUpDown,
+  Globe,
 } from "lucide-react";
+import { content as t, type Lang } from "@/lib/landingContent";
 
 /* ─── scroll-reveal hook ─── */
 function useReveal() {
@@ -68,137 +70,9 @@ function Reveal({
   );
 }
 
-/* ─── data ─── */
-const painPoints = [
-  {
-    icon: Layers,
-    title: "Account Chaos",
-    desc: "Juggling dozens of Meta, TikTok & Google ad accounts across clients. Copy-pasting IDs, losing track of which account belongs to whom.",
-  },
-  {
-    icon: FileText,
-    title: "Report Slavery",
-    desc: "Spending 2-3 hours every morning pulling numbers from each platform, formatting Excel sheets, and emailing reports to every client.",
-  },
-  {
-    icon: Wallet,
-    title: "Balance Blindness",
-    desc: "Manually tracking how much each client deposited vs. how much was actually spent. One miscalculation = angry client or lost profit.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Profit Guesswork",
-    desc: "No clear picture of your agency's real margins. How much USD was bought, at what rate, how much is left — it's all in scattered spreadsheets.",
-  },
-];
-
-const features = [
-  {
-    icon: FileText,
-    title: "Automated Daily Reporting",
-    desc: "Generate polished performance reports for every client with one click. Spend, impressions, clicks, conversions — all pulled automatically from Meta, TikTok & Google.",
-  },
-  {
-    icon: BarChart3,
-    title: "Smart Ad Account Organization",
-    desc: "Map each client to their specific ad accounts across platforms. See at a glance which accounts belong to whom and switch context in seconds.",
-  },
-  {
-    icon: Wallet,
-    title: "Client Balance Tracker",
-    desc: "Real-time dashboard showing every client's deposits, daily ad spend, and remaining dollar balance. No more spreadsheets, no more errors.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Agency Profit & Dollar Management",
-    desc: "Track USD purchase costs, calculate your actual profit margins automatically, and forecast how many dollars you need to buy next. Your CFO in a dashboard.",
-  },
-];
-
-const stats = [
-  { value: "10+", label: "Hours Saved / Week", icon: Clock },
-  { value: "50+", label: "Clients Managed Easily", icon: Users },
-  { value: "3", label: "Platforms Connected", icon: Layers },
-  { value: "0", label: "Spreadsheets Needed", icon: Zap },
-];
-
-const steps = [
-  {
-    num: "01",
-    title: "Connect Your Ad Accounts",
-    desc: "Link your Meta, TikTok & Google Ads accounts in minutes. We handle the API complexity.",
-  },
-  {
-    num: "02",
-    title: "Organize Clients & Accounts",
-    desc: "Map each client to their ad accounts. Set budgets, deposit amounts, and pricing rules.",
-  },
-  {
-    num: "03",
-    title: "Automate Everything",
-    desc: "Reports go out automatically. Balances update in real-time. Profits calculate themselves.",
-  },
-];
-
-const testimonials = [
-  {
-    name: "Rakib Hasan",
-    role: "Agency Owner, 35 Clients",
-    quote:
-      "I used to spend 3 hours every morning on reports. Now it takes 2 minutes. HEPT literally gave me my mornings back.",
-    rating: 5,
-  },
-  {
-    name: "Nusrat Jahan",
-    role: "Freelance Media Buyer",
-    quote:
-      "The client balance tracker alone is worth it. No more awkward conversations about 'how much is left' — clients can see it themselves.",
-    rating: 5,
-  },
-  {
-    name: "Tanvir Ahmed",
-    role: "Digital Marketing Agency, 50+ Clients",
-    quote:
-      "We scaled from 20 to 50 clients without hiring a single extra person for reporting or finance tracking. HEPT handles it all.",
-    rating: 5,
-  },
-];
-
-const faqs = [
-  {
-    q: "Which ad platforms does HEPT support?",
-    a: "HEPT currently supports Meta (Facebook & Instagram Ads), TikTok Ads, and Google Ads. We're adding more platforms based on user demand.",
-  },
-  {
-    q: "How does the automated reporting work?",
-    a: "HEPT pulls performance data from your connected ad accounts daily, calculates key metrics (spend, impressions, clicks, conversions, ROAS), and generates beautiful client-ready reports you can share with one click.",
-  },
-  {
-    q: "Can my clients see their own balance and reports?",
-    a: "Yes! Each client gets their own branded portal where they can view their remaining balance, daily spend breakdown, and performance reports — all under your agency brand.",
-  },
-  {
-    q: "How is client billing calculated?",
-    a: "You set your own pricing rules per client (markup percentage, flat fee, or custom rates). HEPT tracks actual ad spend in USD, applies your pricing, and shows you the exact profit on every dollar spent.",
-  },
-  {
-    q: "Is my data secure?",
-    a: "Absolutely. We use bank-grade encryption, row-level security policies, and your data is isolated per organization. We never share or access your client data.",
-  },
-  {
-    q: "Can I try before I pay?",
-    a: "Yes — every plan starts with a 14-day free trial. No credit card required upfront. You'll have full access to all features during the trial.",
-  },
-];
-
-const beforeAfter = [
-  { before: "3 hours daily on manual reports", after: "Auto-generated in 2 minutes" },
-  { before: "Scattered Excel spreadsheets", after: "One unified dashboard" },
-  { before: "Client balance errors & disputes", after: "Real-time balance tracking" },
-  { before: "Guessing agency profit margins", after: "Automated profit calculation" },
-  { before: "Searching across 3 platform dashboards", after: "All platforms in one view" },
-  { before: "Manual USD purchase tracking", after: "Dollar inventory forecasting" },
-];
+const featureIcons = [FileText, BarChart3, Wallet, TrendingUp];
+const painIcons = [Layers, FileText, Wallet, TrendingUp];
+const statIcons = [Clock, Users, Layers, Zap];
 
 /* ─── mock dashboard component ─── */
 function DashboardMockup() {
@@ -241,7 +115,6 @@ function DashboardMockup() {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* KPI Row */}
           <div className="grid grid-cols-4 gap-3">
             {kpis.map((kpi) => (
               <div key={kpi.label} className="bg-muted/40 rounded-lg p-3 space-y-0.5">
@@ -252,7 +125,6 @@ function DashboardMockup() {
             ))}
           </div>
 
-          {/* Bar Chart */}
           <div className="bg-muted/30 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Spend vs Revenue</span>
@@ -262,7 +134,6 @@ function DashboardMockup() {
               </div>
             </div>
             <div className="relative h-28">
-              {/* Grid lines */}
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="absolute w-full border-t border-border/30" style={{ bottom: `${i * 33}%` }} />
               ))}
@@ -280,7 +151,6 @@ function DashboardMockup() {
             </div>
           </div>
 
-          {/* Client List */}
           <div className="space-y-2">
             {clients.map((c, i) => (
               <div key={c.name} className="flex items-center gap-3 bg-muted/20 rounded-lg p-3">
@@ -308,10 +178,11 @@ function DashboardMockup() {
 }
 
 /* ─── platform badges ─── */
-function PlatformBadges() {
+function PlatformBadges({ lang }: { lang: Lang }) {
+  const c = t[lang];
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Works with</span>
+      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{c.hero.platformLabel}</span>
       {[
         { name: "Meta Ads", color: "bg-[hsl(var(--chart-meta))]" },
         { name: "TikTok Ads", color: "bg-[hsl(var(--chart-tiktok))]" },
@@ -326,20 +197,39 @@ function PlatformBadges() {
   );
 }
 
+/* ─── Language Toggle ─── */
+function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  return (
+    <button
+      onClick={() => setLang(lang === "en" ? "bn" : "en")}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ios-glass text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+      aria-label="Switch language"
+    >
+      <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+      <span className={lang === "en" ? "text-foreground" : "text-muted-foreground"}>EN</span>
+      <span className="text-muted-foreground/40">|</span>
+      <span className={lang === "bn" ? "text-foreground" : "text-muted-foreground"}>বাংলা</span>
+    </button>
+  );
+}
+
 /* ═══════════ MAIN COMPONENT ═══════════ */
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [lang, setLang] = useState<Lang>("en");
+  const c = t[lang];
+  const fontClass = lang === "bn" ? "font-[Noto_Sans_Bengali,sans-serif]" : "";
 
   const navLinks = [
-    { href: "#problems", label: "Problems" },
-    { href: "#features", label: "Features" },
-    { href: "#how-it-works", label: "How It Works" },
-    { href: "#testimonials", label: "Testimonials" },
-    { href: "#faq", label: "FAQ" },
+    { href: "#problems", label: c.nav.problems },
+    { href: "#features", label: c.nav.features },
+    { href: "#how-it-works", label: c.nav.howItWorks },
+    { href: "#testimonials", label: c.nav.testimonials },
+    { href: "#faq", label: c.nav.faq },
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased">
+    <div className={`min-h-screen bg-background text-foreground antialiased ${fontClass}`} lang={lang}>
       {/* ── NAVBAR ── */}
       <nav className="sticky top-0 z-50 ios-glass-nav">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
@@ -352,13 +242,17 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild><Link to="/login">Log In</Link></Button>
-            <Button size="sm" asChild><Link to="/signup">Automate My Agency</Link></Button>
+            <LanguageToggle lang={lang} setLang={setLang} />
+            <Button variant="ghost" size="sm" asChild><Link to="/login">{c.nav.login}</Link></Button>
+            <Button size="sm" asChild><Link to="/signup">{c.nav.cta}</Link></Button>
           </div>
 
-          <button className="md:hidden p-2 text-muted-foreground" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          <div className="flex md:hidden items-center gap-2">
+            <LanguageToggle lang={lang} setLang={setLang} />
+            <button className="p-2 text-muted-foreground" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {mobileMenuOpen && (
@@ -367,8 +261,8 @@ export default function LandingPage() {
               <a key={l.href} href={l.href} className="block py-2 text-sm text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
             ))}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">Log In</Link></Button>
-              <Button size="sm" className="flex-1" asChild><Link to="/signup">Get Started</Link></Button>
+              <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">{c.nav.login}</Link></Button>
+              <Button size="sm" className="flex-1" asChild><Link to="/signup">{c.nav.getStarted}</Link></Button>
             </div>
           </div>
         )}
@@ -380,34 +274,32 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto text-center space-y-6">
             <Reveal>
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full ios-glass-pill text-primary text-xs font-semibold tracking-wide">
-                <Zap className="w-3.5 h-3.5" /> Built for Media Buying Agencies
+                <Zap className="w-3.5 h-3.5" /> {c.hero.badge}
               </span>
             </Reveal>
             <Reveal delay={100}>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
-                Automate Your Agency.{" "}
-                <span className="text-primary">Scale Your Clients.</span>
+                {c.hero.h1}{" "}
+                <span className="text-primary">{c.hero.h1Accent}</span>
               </h1>
             </Reveal>
             <Reveal delay={200}>
               <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Stop wasting hours on manual reports, spreadsheet tracking, and balance calculations.
-                HEPT automates ad spend reporting, client billing, and profit analytics — so you can
-                manage 50+ clients as easily as 5.
+                {c.hero.sub}
               </p>
             </Reveal>
             <Reveal delay={300}>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <Button size="lg" className="text-base px-8" asChild>
-                  <Link to="/signup">Automate My Agency <ArrowRight className="w-4 h-4 ml-1" /></Link>
+                  <Link to="/signup">{c.hero.cta} <ArrowRight className="w-4 h-4 ml-1" /></Link>
                 </Button>
                 <Button variant="outline" size="lg" className="text-base px-8" asChild>
-                  <a href="#features">See How It Works</a>
+                  <a href="#features">{c.hero.ctaSecondary}</a>
                 </Button>
               </div>
             </Reveal>
             <Reveal delay={400}>
-              <div className="flex justify-center"><PlatformBadges /></div>
+              <div className="flex justify-center"><PlatformBadges lang={lang} /></div>
             </Reveal>
           </div>
 
@@ -423,40 +315,43 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Problem</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Running an agency shouldn't feel like this</h2>
-              <p className="mt-4 text-muted-foreground text-lg">If you manage paid campaigns for multiple clients, you know these daily struggles too well.</p>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.problems.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.problems.title}</h2>
+              <p className="mt-4 text-muted-foreground text-lg">{c.problems.sub}</p>
             </div>
           </Reveal>
 
           <div className="grid sm:grid-cols-2 gap-6 mb-16">
-            {painPoints.map((p, i) => (
-              <Reveal key={p.title} delay={i * 100}>
-                <Card className="p-6 ios-glass rounded-xl transition-shadow border-none h-full">
-                  <div className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                      <p.icon className="w-5 h-5 text-destructive" />
+            {c.painPoints.map((p, i) => {
+              const Icon = painIcons[i];
+              return (
+                <Reveal key={i} delay={i * 100}>
+                  <Card className="p-6 ios-glass rounded-xl transition-shadow border-none h-full">
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+                        <Icon className="w-5 h-5 text-destructive" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg mb-1">{p.title}</h3>
+                        <p className="text-muted-foreground text-sm leading-relaxed">{p.desc}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-lg mb-1">{p.title}</h3>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{p.desc}</p>
-                    </div>
-                  </div>
-                </Card>
-              </Reveal>
-            ))}
+                  </Card>
+                </Reveal>
+              );
+            })}
           </div>
 
           <Reveal>
             <div className="max-w-3xl mx-auto">
-              <h3 className="text-center text-xl font-bold mb-6">Before HEPT vs. After HEPT</h3>
+              <h3 className="text-center text-xl font-bold mb-6">{c.problems.beforeAfterTitle}</h3>
               <div className="ios-glass-card rounded-xl overflow-hidden">
                 <div className="grid grid-cols-2 text-sm font-semibold border-b border-border">
-                  <div className="px-6 py-3 bg-destructive/5 text-destructive">❌ Before</div>
-                  <div className="px-6 py-3 bg-success/5 text-[hsl(var(--success))]">✅ After</div>
+                  <div className="px-6 py-3 bg-destructive/5 text-destructive">{c.problems.beforeLabel}</div>
+                  <div className="px-6 py-3 bg-success/5 text-[hsl(var(--success))]">{c.problems.afterLabel}</div>
                 </div>
-                {beforeAfter.map((row, i) => (
-                  <div key={i} className={`grid grid-cols-2 text-sm ${i < beforeAfter.length - 1 ? "border-b border-border/50" : ""}`}>
+                {c.beforeAfter.map((row, i) => (
+                  <div key={i} className={`grid grid-cols-2 text-sm ${i < c.beforeAfter.length - 1 ? "border-b border-border/50" : ""}`}>
                     <div className="px-6 py-3 flex items-center gap-2 text-muted-foreground">
                       <XCircle className="w-4 h-4 text-destructive/60 flex-shrink-0" />{row.before}
                     </div>
@@ -476,191 +371,190 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Solution</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Everything you need to run a profitable agency</h2>
-              <p className="mt-4 text-muted-foreground text-lg">Four powerful modules that replace your spreadsheets, manual reports, and guesswork.</p>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.features.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.features.title}</h2>
+              <p className="mt-4 text-muted-foreground text-lg">{c.features.sub}</p>
             </div>
           </Reveal>
 
           <div className="space-y-20">
-            {features.map((f, i) => (
-              <Reveal key={f.title} delay={100}>
-                <div className={`flex flex-col lg:flex-row gap-10 items-center ${i % 2 === 1 ? "lg:flex-row-reverse" : ""}`}>
-                  <div className="flex-1 space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <f.icon className="w-6 h-6 text-primary" />
-                    </div>
-                    <h3 className="text-2xl font-bold">{f.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed text-base">{f.desc}</p>
-                    <Link to="/signup" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
-                      Try it free <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  </div>
-                  <div className="flex-1 w-full">
-                    <div className="ios-glass-card rounded-xl p-5">
-                      <div className="flex items-center gap-1.5 mb-4">
-                        <div className="w-2.5 h-2.5 rounded-full bg-destructive/50" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-success/50" />
+            {c.featureItems.map((f, i) => {
+              const Icon = featureIcons[i];
+              return (
+                <Reveal key={i} delay={100}>
+                  <div className={`flex flex-col lg:flex-row gap-10 items-center ${i % 2 === 1 ? "lg:flex-row-reverse" : ""}`}>
+                    <div className="flex-1 space-y-4">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Icon className="w-6 h-6 text-primary" />
                       </div>
-                      {i === 0 && (
-                        /* Reporting Mockup */
-                        <div className="space-y-3">
-                          <div className="flex gap-1 text-[10px] font-semibold">
-                            <span className="px-2.5 py-1 rounded bg-primary text-primary-foreground">Meta</span>
-                            <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">TikTok</span>
-                            <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">Google</span>
-                          </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {[
-                              { label: "Spend", val: "$1,240", color: "text-primary" },
-                              { label: "Impressions", val: "124K", color: "text-foreground" },
-                              { label: "Clicks", val: "3,821", color: "text-foreground" },
-                              { label: "ROAS", val: "3.8x", color: "text-[hsl(var(--success))]" },
-                            ].map((kpi) => (
-                              <div key={kpi.label} className="bg-muted/50 rounded-lg p-2 text-center">
-                                <div className="text-[9px] text-muted-foreground uppercase">{kpi.label}</div>
-                                <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="border border-border/50 rounded-lg overflow-hidden text-[10px]">
-                            <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 bg-muted/40 font-semibold text-muted-foreground">
-                              <span>Campaign</span><span>Spend</span><span>Status</span>
+                      <h3 className="text-2xl font-bold">{f.title}</h3>
+                      <p className="text-muted-foreground leading-relaxed text-base">{f.desc}</p>
+                      <Link to="/signup" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                        {c.features.tryFree} <ChevronRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                    <div className="flex-1 w-full">
+                      <div className="ios-glass-card rounded-xl p-5">
+                        <div className="flex items-center gap-1.5 mb-4">
+                          <div className="w-2.5 h-2.5 rounded-full bg-destructive/50" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-success/50" />
+                        </div>
+                        {i === 0 && (
+                          <div className="space-y-3">
+                            <div className="flex gap-1 text-[10px] font-semibold">
+                              <span className="px-2.5 py-1 rounded bg-primary text-primary-foreground">Meta</span>
+                              <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">TikTok</span>
+                              <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">Google</span>
                             </div>
-                            {[
-                              { name: "Summer Sale - Conv", spend: "$420", pct: 75, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
-                              { name: "Brand Awareness Q2", spend: "$380", pct: 60, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
-                              { name: "Retargeting - DPA", spend: "$280", pct: 45, status: "Learning", sColor: "bg-warning/15 text-warning" },
-                              { name: "Lead Gen - Form", spend: "$160", pct: 30, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
-                            ].map((r) => (
-                              <div key={r.name} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 border-t border-border/30 items-center">
-                                <span className="truncate text-foreground">{r.name}</span>
-                                <div className="flex items-center gap-1">
-                                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${r.pct}%` }} /></div>
-                                  <span className="text-muted-foreground">{r.spend}</span>
+                            <div className="grid grid-cols-4 gap-2">
+                              {[
+                                { label: "Spend", val: "$1,240", color: "text-primary" },
+                                { label: "Impressions", val: "124K", color: "text-foreground" },
+                                { label: "Clicks", val: "3,821", color: "text-foreground" },
+                                { label: "ROAS", val: "3.8x", color: "text-[hsl(var(--success))]" },
+                              ].map((kpi) => (
+                                <div key={kpi.label} className="bg-muted/50 rounded-lg p-2 text-center">
+                                  <div className="text-[9px] text-muted-foreground uppercase">{kpi.label}</div>
+                                  <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
                                 </div>
-                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-medium ${r.sColor}`}>{r.status}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex justify-end">
-                            <div className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-semibold rounded-md flex items-center gap-1">
-                              <Send className="w-3 h-3" /> Send Report
+                              ))}
                             </div>
-                          </div>
-                        </div>
-                      )}
-                      {i === 1 && (
-                        /* Account Organization Mockup */
-                        <div className="space-y-3">
-                          {[
-                            { client: "FashionHub", accounts: [{ platform: "Meta", id: "act_8821", color: "bg-blue-500" }, { platform: "TikTok", id: "adv_7741", color: "bg-cyan-500" }] },
-                            { client: "TechNova", accounts: [{ platform: "Meta", id: "act_3302", color: "bg-blue-500" }, { platform: "Google", id: "ads_9910", color: "bg-amber-500" }, { platform: "TikTok", id: "adv_5523", color: "bg-cyan-500" }] },
-                            { client: "GreenLife", accounts: [{ platform: "Google", id: "ads_4415", color: "bg-amber-500" }] },
-                          ].map((c) => (
-                            <div key={c.client} className="flex items-start gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0 mt-0.5">
-                                {c.client[0]}
+                            <div className="border border-border/50 rounded-lg overflow-hidden text-[10px]">
+                              <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 bg-muted/40 font-semibold text-muted-foreground">
+                                <span>Campaign</span><span>Spend</span><span>Status</span>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-semibold text-foreground mb-1">{c.client}</div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {c.accounts.map((a) => (
-                                    <div key={a.id} className="flex items-center gap-1 bg-muted/60 rounded px-2 py-0.5">
-                                      <div className={`w-1.5 h-1.5 rounded-full ${a.color}`} />
-                                      <span className="text-[9px] font-medium text-muted-foreground">{a.platform}</span>
-                                      <span className="text-[9px] text-foreground/70 font-mono">{a.id}</span>
-                                    </div>
-                                  ))}
+                              {[
+                                { name: "Summer Sale - Conv", spend: "$420", pct: 75, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                                { name: "Brand Awareness Q2", spend: "$380", pct: 60, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                                { name: "Retargeting - DPA", spend: "$280", pct: 45, status: "Learning", sColor: "bg-warning/15 text-warning" },
+                                { name: "Lead Gen - Form", spend: "$160", pct: 30, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
+                              ].map((r) => (
+                                <div key={r.name} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 border-t border-border/30 items-center">
+                                  <span className="truncate text-foreground">{r.name}</span>
+                                  <div className="flex items-center gap-1">
+                                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${r.pct}%` }} /></div>
+                                    <span className="text-muted-foreground">{r.spend}</span>
+                                  </div>
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-medium ${r.sColor}`}>{r.status}</span>
                                 </div>
-                              </div>
-                              <div className="text-[8px] text-muted-foreground/50 flex-shrink-0 mt-1">⋮⋮</div>
+                              ))}
                             </div>
-                          ))}
-                          <div className="border-t border-dashed border-border/50 pt-2 flex items-center justify-center gap-1 text-[9px] text-muted-foreground">
-                            <ArrowUpDown className="w-3 h-3" /> Drag to reassign accounts
-                          </div>
-                        </div>
-                      )}
-                      {i === 2 && (
-                        /* Balance Tracker Mockup */
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-[1fr_70px_70px_70px] gap-1 text-[9px] font-semibold text-muted-foreground px-2 pb-1 border-b border-border/40">
-                            <span>Client</span><span className="text-right">Deposited</span><span className="text-right">Spent</span><span className="text-right">Balance</span>
-                          </div>
-                          {[
-                            { name: "FashionHub", dep: "$2,000", spent: "$980", bal: "$1,020", pct: 49, color: "bg-[hsl(var(--success))]" },
-                            { name: "TechNova", dep: "$1,500", spent: "$1,200", bal: "$300", pct: 80, color: "bg-warning" },
-                            { name: "GreenLife", dep: "$800", spent: "$750", bal: "$50", pct: 94, color: "bg-destructive" },
-                          ].map((c) => (
-                            <div key={c.name} className="grid grid-cols-[1fr_70px_70px_70px] gap-1 items-center px-2 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{c.name[0]}</div>
-                                <span className="text-xs font-medium text-foreground truncate">{c.name}</span>
+                            <div className="flex justify-end">
+                              <div className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-semibold rounded-md flex items-center gap-1">
+                                <Send className="w-3 h-3" /> Send Report
                               </div>
-                              <span className="text-[10px] text-foreground text-right font-mono">{c.dep}</span>
-                              <span className="text-[10px] text-muted-foreground text-right font-mono">{c.spent}</span>
-                              <span className="text-[10px] text-foreground text-right font-bold font-mono">{c.bal}</span>
                             </div>
-                          ))}
-                          <div className="pt-1">
+                          </div>
+                        )}
+                        {i === 1 && (
+                          <div className="space-y-3">
                             {[
-                              { pct: 49, color: "bg-[hsl(var(--success))]", label: "FashionHub" },
-                              { pct: 80, color: "bg-warning", label: "TechNova" },
-                              { pct: 94, color: "bg-destructive", label: "GreenLife" },
-                            ].map((b) => (
-                              <div key={b.label} className="flex items-center gap-2 px-2 py-0.5">
-                                <span className="text-[8px] text-muted-foreground w-16 truncate">{b.label}</span>
-                                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full ${b.color} transition-all`} style={{ width: `${b.pct}%` }} />
+                              { client: "FashionHub", accounts: [{ platform: "Meta", id: "act_8821", color: "bg-blue-500" }, { platform: "TikTok", id: "adv_7741", color: "bg-cyan-500" }] },
+                              { client: "TechNova", accounts: [{ platform: "Meta", id: "act_3302", color: "bg-blue-500" }, { platform: "Google", id: "ads_9910", color: "bg-amber-500" }, { platform: "TikTok", id: "adv_5523", color: "bg-cyan-500" }] },
+                              { client: "GreenLife", accounts: [{ platform: "Google", id: "ads_4415", color: "bg-amber-500" }] },
+                            ].map((mc) => (
+                              <div key={mc.client} className="flex items-start gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0 mt-0.5">
+                                  {mc.client[0]}
                                 </div>
-                                <span className="text-[8px] text-muted-foreground">{b.pct}%</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-semibold text-foreground mb-1">{mc.client}</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {mc.accounts.map((a) => (
+                                      <div key={a.id} className="flex items-center gap-1 bg-muted/60 rounded px-2 py-0.5">
+                                        <div className={`w-1.5 h-1.5 rounded-full ${a.color}`} />
+                                        <span className="text-[9px] font-medium text-muted-foreground">{a.platform}</span>
+                                        <span className="text-[9px] text-foreground/70 font-mono">{a.id}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="text-[8px] text-muted-foreground/50 flex-shrink-0 mt-1">⋮⋮</div>
                               </div>
                             ))}
-                          </div>
-                          <div className="border-t border-border/50 mt-1 pt-2 flex justify-between px-2 text-[10px] font-semibold">
-                            <span className="text-muted-foreground">Total Balance</span>
-                            <span className="text-foreground font-mono">$1,370</span>
-                          </div>
-                        </div>
-                      )}
-                      {i === 3 && (
-                        /* Profit & Dollar Management Mockup */
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-3 gap-2">
-                            {[
-                              { label: "USD Purchased", val: "$5,200", sub: "This month", color: "text-primary" },
-                              { label: "WAC Rate", val: "৳121.5", sub: "Avg cost", color: "text-foreground" },
-                              { label: "Margin", val: "18.2%", sub: "+2.1% MoM", color: "text-[hsl(var(--success))]" },
-                            ].map((kpi) => (
-                              <div key={kpi.label} className="bg-muted/40 rounded-lg p-2.5 text-center">
-                                <div className="text-[8px] text-muted-foreground uppercase">{kpi.label}</div>
-                                <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
-                                <div className="text-[7px] text-muted-foreground mt-0.5">{kpi.sub}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="h-20 bg-muted/30 rounded-lg p-2 flex items-end gap-0.5 relative">
-                            <div className="absolute top-1.5 left-2.5 text-[8px] text-muted-foreground font-medium">Profit Trend</div>
-                            {[35, 42, 38, 55, 48, 62, 58, 70, 65, 75, 68, 80].map((h, j) => (
-                              <div key={j} className="flex-1 rounded-t transition-all" style={{ height: `${h}%`, background: h > 50 ? 'hsl(var(--success) / 0.4)' : 'hsl(var(--primary) / 0.25)' }} />
-                            ))}
-                          </div>
-                          <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 flex items-center justify-between">
-                            <div>
-                              <div className="text-[9px] text-muted-foreground">Next Week Forecast</div>
-                              <div className="text-xs font-bold text-foreground">Need <span className="text-primary">$3,400</span> USD</div>
+                            <div className="border-t border-dashed border-border/50 pt-2 flex items-center justify-center gap-1 text-[9px] text-muted-foreground">
+                              <ArrowUpDown className="w-3 h-3" /> Drag to reassign accounts
                             </div>
-                            <TrendingUp className="w-4 h-4 text-primary" />
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {i === 2 && (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-[1fr_70px_70px_70px] gap-1 text-[9px] font-semibold text-muted-foreground px-2 pb-1 border-b border-border/40">
+                              <span>Client</span><span className="text-right">Deposited</span><span className="text-right">Spent</span><span className="text-right">Balance</span>
+                            </div>
+                            {[
+                              { name: "FashionHub", dep: "$2,000", spent: "$980", bal: "$1,020", pct: 49, color: "bg-[hsl(var(--success))]" },
+                              { name: "TechNova", dep: "$1,500", spent: "$1,200", bal: "$300", pct: 80, color: "bg-warning" },
+                              { name: "GreenLife", dep: "$800", spent: "$750", bal: "$50", pct: 94, color: "bg-destructive" },
+                            ].map((mc) => (
+                              <div key={mc.name} className="grid grid-cols-[1fr_70px_70px_70px] gap-1 items-center px-2 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{mc.name[0]}</div>
+                                  <span className="text-xs font-medium text-foreground truncate">{mc.name}</span>
+                                </div>
+                                <span className="text-[10px] text-foreground text-right font-mono">{mc.dep}</span>
+                                <span className="text-[10px] text-muted-foreground text-right font-mono">{mc.spent}</span>
+                                <span className="text-[10px] text-foreground text-right font-bold font-mono">{mc.bal}</span>
+                              </div>
+                            ))}
+                            <div className="pt-1">
+                              {[
+                                { pct: 49, color: "bg-[hsl(var(--success))]", label: "FashionHub" },
+                                { pct: 80, color: "bg-warning", label: "TechNova" },
+                                { pct: 94, color: "bg-destructive", label: "GreenLife" },
+                              ].map((b) => (
+                                <div key={b.label} className="flex items-center gap-2 px-2 py-0.5">
+                                  <span className="text-[8px] text-muted-foreground w-16 truncate">{b.label}</span>
+                                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${b.color} transition-all`} style={{ width: `${b.pct}%` }} />
+                                  </div>
+                                  <span className="text-[8px] text-muted-foreground">{b.pct}%</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="border-t border-border/50 mt-1 pt-2 flex justify-between px-2 text-[10px] font-semibold">
+                              <span className="text-muted-foreground">Total Balance</span>
+                              <span className="text-foreground font-mono">$1,370</span>
+                            </div>
+                          </div>
+                        )}
+                        {i === 3 && (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-3 gap-2">
+                              {[
+                                { label: "USD Purchased", val: "$5,200", sub: "This month", color: "text-primary" },
+                                { label: "WAC Rate", val: "৳121.5", sub: "Avg cost", color: "text-foreground" },
+                                { label: "Margin", val: "18.2%", sub: "+2.1% MoM", color: "text-[hsl(var(--success))]" },
+                              ].map((kpi) => (
+                                <div key={kpi.label} className="bg-muted/40 rounded-lg p-2.5 text-center">
+                                  <div className="text-[8px] text-muted-foreground uppercase">{kpi.label}</div>
+                                  <div className={`text-sm font-bold ${kpi.color}`}>{kpi.val}</div>
+                                  <div className="text-[7px] text-muted-foreground mt-0.5">{kpi.sub}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="h-20 bg-muted/30 rounded-lg p-2 flex items-end gap-0.5 relative">
+                              <div className="absolute top-1.5 left-2.5 text-[8px] text-muted-foreground font-medium">Profit Trend</div>
+                              {[35, 42, 38, 55, 48, 62, 58, 70, 65, 75, 68, 80].map((h, j) => (
+                                <div key={j} className="flex-1 rounded-t transition-all" style={{ height: `${h}%`, background: h > 50 ? 'hsl(var(--success) / 0.4)' : 'hsl(var(--primary) / 0.25)' }} />
+                              ))}
+                            </div>
+                            <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-2 flex items-center justify-between">
+                              <div>
+                                <div className="text-[9px] text-muted-foreground">Next Week Forecast</div>
+                                <div className="text-xs font-bold text-foreground">Need <span className="text-primary">$3,400</span> USD</div>
+                              </div>
+                              <TrendingUp className="w-4 h-4 text-primary" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Reveal>
-            ))}
+                </Reveal>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -670,23 +564,26 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">The Impact</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Manage 50 clients as easily as 5</h2>
-              <p className="mt-4 text-muted-foreground text-lg">Agencies using HEPT reclaim hours every week and scale without hiring extra staff.</p>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.stats.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.stats.title}</h2>
+              <p className="mt-4 text-muted-foreground text-lg">{c.stats.sub}</p>
             </div>
           </Reveal>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((s, i) => (
-              <Reveal key={s.label} delay={i * 100}>
-                <Card className="p-6 text-center ios-glass rounded-xl transition-all border-none">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <s.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="text-3xl sm:text-4xl font-extrabold text-foreground">{s.value}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
-                </Card>
-              </Reveal>
-            ))}
+            {c.statItems.map((s, i) => {
+              const Icon = statIcons[i];
+              return (
+                <Reveal key={i} delay={i * 100}>
+                  <Card className="p-6 text-center ios-glass rounded-xl transition-all border-none">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                      <Icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <div className="text-3xl sm:text-4xl font-extrabold text-foreground">{s.value}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+                  </Card>
+                </Reveal>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -696,18 +593,18 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">How It Works</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Up and running in under 10 minutes</h2>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.howItWorks.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.howItWorks.title}</h2>
             </div>
           </Reveal>
           <div className="grid md:grid-cols-3 gap-8">
-            {steps.map((s, i) => (
+            {c.stepItems.map((s, i) => (
               <Reveal key={s.num} delay={i * 150}>
                 <div className="relative text-center space-y-4 ios-glass rounded-xl p-6">
                   <div className="text-5xl font-extrabold text-primary/15">{s.num}</div>
                   <h3 className="text-xl font-bold">{s.title}</h3>
                   <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
-                  {i < steps.length - 1 && (
+                  {i < c.stepItems.length - 1 && (
                     <div className="hidden md:block absolute top-8 -right-4 text-primary/20">
                       <ArrowRight className="w-8 h-8" />
                     </div>
@@ -724,27 +621,27 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">Testimonials</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Trusted by agencies across Bangladesh</h2>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.testimonialSection.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.testimonialSection.title}</h2>
             </div>
           </Reveal>
           <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <Reveal key={t.name} delay={i * 100}>
+            {c.testimonialItems.map((tm, i) => (
+              <Reveal key={i} delay={i * 100}>
                 <Card className="p-6 h-full flex flex-col ios-glass rounded-xl border-none transition-all">
                   <div className="flex gap-1 mb-4">
-                    {Array.from({ length: t.rating }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <Star key={j} className="w-4 h-4 fill-warning text-warning" />
                     ))}
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed flex-1 italic">"{t.quote}"</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed flex-1 italic">"{tm.quote}"</p>
                   <div className="mt-4 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-sm font-bold text-primary">
-                      {t.name.charAt(0)}
+                      {tm.name.charAt(0)}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">{t.name}</div>
-                      <div className="text-xs text-muted-foreground">{t.role}</div>
+                      <div className="text-sm font-semibold">{tm.name}</div>
+                      <div className="text-xs text-muted-foreground">{tm.role}</div>
                     </div>
                   </div>
                 </Card>
@@ -759,13 +656,13 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center mb-12">
-              <span className="text-sm font-semibold text-primary uppercase tracking-wider">FAQ</span>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Frequently asked questions</h2>
+              <span className="text-sm font-semibold text-primary uppercase tracking-wider">{c.faqSection.badge}</span>
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">{c.faqSection.title}</h2>
             </div>
           </Reveal>
           <Reveal delay={100}>
             <Accordion type="single" collapsible className="w-full">
-              {faqs.map((f, i) => (
+              {c.faqItems.map((f, i) => (
                 <AccordionItem key={i} value={`faq-${i}`}>
                   <AccordionTrigger className="text-left text-base">{f.q}</AccordionTrigger>
                   <AccordionContent className="text-muted-foreground leading-relaxed">{f.a}</AccordionContent>
@@ -781,14 +678,14 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="relative rounded-2xl bg-primary p-12 lg:p-16 text-center overflow-hidden" style={{ boxShadow: 'inset 0 1px 0 0 hsl(0 0% 100% / 0.1), 0 12px 40px -8px hsl(0 0% 0% / 0.2)' }}>
-              <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">Ready to automate your agency?</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">{c.finalCta.title}</h2>
               <p className="text-primary-foreground/80 text-lg max-w-xl mx-auto mb-8">
-                Join hundreds of media buying agencies who've stopped drowning in spreadsheets and started scaling with HEPT.
+                {c.finalCta.sub}
               </p>
               <Button size="lg" variant="secondary" className="text-base px-8" asChild>
-                <Link to="/signup">Start Free 14-Day Trial <ArrowRight className="w-4 h-4 ml-1" /></Link>
+                <Link to="/signup">{c.finalCta.button} <ArrowRight className="w-4 h-4 ml-1" /></Link>
               </Button>
-              <p className="text-primary-foreground/60 text-xs mt-4">No credit card required • Full access during trial</p>
+              <p className="text-primary-foreground/60 text-xs mt-4">{c.finalCta.note}</p>
               <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-primary-foreground/5" />
               <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-primary-foreground/5" />
             </div>
@@ -802,15 +699,15 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
               <div className="text-lg font-bold">HEPT</div>
-              <div className="text-sm text-muted-foreground mt-1">Agency automation platform for digital marketers.</div>
+              <div className="text-sm text-muted-foreground mt-1">{c.footer.tagline}</div>
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <a href="https://heptbd.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">heptbd.com</a>
-              <Link to="/login" className="hover:text-foreground transition-colors">Log In</Link>
-              <Link to="/signup" className="hover:text-foreground transition-colors">Sign Up</Link>
+              <Link to="/login" className="hover:text-foreground transition-colors">{c.footer.login}</Link>
+              <Link to="/signup" className="hover:text-foreground transition-colors">{c.footer.signup}</Link>
             </div>
           </div>
-          <div className="mt-8 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} HEPT. All rights reserved.</div>
+          <div className="mt-8 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {c.footer.copyright}</div>
         </div>
       </footer>
     </div>
