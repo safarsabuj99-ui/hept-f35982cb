@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/dashboard/KpiCard";
@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { DollarSign, TrendingDown, TrendingUp, Percent } from "lucide-react";
+import { DateRangeFilter, DateRange, DatePreset, toISODate } from "@/components/DateRangeFilter";
 import { format, subMonths, startOfMonth } from "date-fns";
 
 export default function PlatformFinanceOverview() {
@@ -14,6 +15,8 @@ export default function PlatformFinanceOverview() {
   const [subs, setSubs] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [preset, setPreset] = useState<DatePreset>("today");
 
   useEffect(() => {
     const load = async () => {
@@ -30,10 +33,26 @@ export default function PlatformFinanceOverview() {
     load();
   }, []);
 
+  const handleRangeChange = useCallback((range: DateRange | null, p: DatePreset) => {
+    setDateRange(range);
+    setPreset(p);
+  }, []);
+
+  const inRange = useCallback((dateStr: string) => {
+    if (!dateRange) return true;
+    const d = dateStr.slice(0, 10);
+    return d >= toISODate(dateRange.from) && d <= toISODate(dateRange.to);
+  }, [dateRange]);
+
   const metrics = useMemo(() => {
-    const activeSubs = subs.filter((s: any) => s.payment_status === "paid" || s.payment_status === "pending");
-    const totalRevenue = activeSubs.reduce((sum: number, s: any) => sum + Number(s.amount_bdt || 0), 0);
-    const totalExpenses = expenses.reduce((sum: number, e: any) => sum + Number(e.amount_bdt || 0), 0);
+    const filteredSubs = subs.filter((s: any) =>
+      (s.payment_status === "paid" || s.payment_status === "pending") &&
+      inRange(s.current_period_start)
+    );
+    const filteredExpenses = expenses.filter((e: any) => inRange(e.date));
+
+    const totalRevenue = filteredSubs.reduce((sum: number, s: any) => sum + Number(s.amount_bdt || 0), 0);
+    const totalExpenses = filteredExpenses.reduce((sum: number, e: any) => sum + Number(e.amount_bdt || 0), 0);
     const netProfit = totalRevenue - totalExpenses;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -41,15 +60,14 @@ export default function PlatformFinanceOverview() {
     const months: { month: string; revenue: number; expenses: number; profit: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = subMonths(new Date(), i);
-      const key = format(d, "yyyy-MM");
       const label = format(d, "MMM yy");
       const mStart = startOfMonth(d);
       const mEnd = startOfMonth(subMonths(d, -1));
 
-      const rev = activeSubs
+      const rev = subs
         .filter((s: any) => {
           const start = new Date(s.current_period_start);
-          return start >= mStart && start < mEnd;
+          return (s.payment_status === "paid" || s.payment_status === "pending") && start >= mStart && start < mEnd;
         })
         .reduce((sum: number, s: any) => sum + Number(s.amount_bdt || 0), 0);
 
@@ -65,13 +83,13 @@ export default function PlatformFinanceOverview() {
 
     // Revenue by plan
     const planRev: Record<string, number> = {};
-    activeSubs.forEach((s: any) => {
+    filteredSubs.forEach((s: any) => {
       planRev[s.plan] = (planRev[s.plan] || 0) + Number(s.amount_bdt || 0);
     });
     const planBreakdown = Object.entries(planRev).map(([plan, amount]) => ({ plan, amount: Math.round(amount) }));
 
     return { totalRevenue, totalExpenses, netProfit, margin, months, planBreakdown };
-  }, [subs, expenses]);
+  }, [subs, expenses, inRange]);
 
   if (loading) {
     return (
@@ -82,8 +100,36 @@ export default function PlatformFinanceOverview() {
     );
   }
 
+  const periodLabel = preset === "all_time" ? "" : preset === "today" ? " (Today)" : preset === "this_month" ? " (This Month)" : "";
+
   return (
-    <div className="space-y-8 mt-4">
+    <div className="space-y-6 mt-4">
+      <DateRangeFilter onRangeChange={handleRangeChange} />
+
+      {/* P&L Summary Card */}
+      <div className="glass-card glow-border animate-slide-up-fade">
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Revenue{periodLabel}</p>
+                <p className="text-2xl font-bold text-primary mt-1">৳{Math.round(metrics.totalRevenue).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Expenses{periodLabel}</p>
+                <p className="text-2xl font-bold text-destructive mt-1">৳{Math.round(metrics.totalExpenses).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Gross Profit{periodLabel}</p>
+                <p className={`text-2xl font-bold mt-1 ${metrics.netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+                  ৳{Math.round(metrics.netProfit).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <KpiCard title="Total Revenue" value={`৳${Math.round(metrics.totalRevenue).toLocaleString()}`} icon={DollarSign} staggerIndex={0} />
         <KpiCard title="Total Expenses" value={`৳${Math.round(metrics.totalExpenses).toLocaleString()}`} icon={TrendingDown} accentColor="hsl(var(--destructive))" staggerIndex={1} />
