@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,19 +30,46 @@ import {
 } from "lucide-react";
 import { content as t, type Lang } from "@/lib/landingContent";
 
-/* ─── scroll-reveal hook ─── */
+/* ─── shared IntersectionObserver singleton ─── */
+type ObserverCallback = (entry: IntersectionObserverEntry) => void;
+const observerCallbacks = new Map<Element, ObserverCallback>();
+let sharedObserver: IntersectionObserver | null = null;
+
+function getSharedObserver() {
+  if (!sharedObserver) {
+    sharedObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const cb = observerCallbacks.get(entry.target);
+          if (cb) cb(entry);
+        });
+      },
+      { threshold: 0.15 }
+    );
+  }
+  return sharedObserver;
+}
+
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold: 0.15 }
-    );
+    const obs = getSharedObserver();
+    const callback: ObserverCallback = (entry) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        obs.unobserve(el);
+        observerCallbacks.delete(el);
+      }
+    };
+    observerCallbacks.set(el, callback);
     obs.observe(el);
-    return () => obs.disconnect();
+    return () => {
+      obs.unobserve(el);
+      observerCallbacks.delete(el);
+    };
   }, []);
   return { ref, visible };
 }
@@ -75,7 +102,7 @@ const painIcons = [Layers, FileText, Wallet, TrendingUp];
 const statIcons = [Clock, Users, Layers, Zap];
 
 /* ─── mock dashboard component ─── */
-function DashboardMockup() {
+const DashboardMockup = memo(function DashboardMockup() {
   const kpis = [
     { label: "Total Clients", value: "24", sub: "+3 this week", color: "text-primary" },
     { label: "Active Spend", value: "$12,840", sub: "across 3 platforms", color: "text-primary" },
@@ -114,18 +141,18 @@ function DashboardMockup() {
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-4 gap-3">
+        <div className="p-3 sm:p-6 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             {kpis.map((kpi) => (
-              <div key={kpi.label} className="bg-muted/40 rounded-lg p-3 space-y-0.5">
+              <div key={kpi.label} className="bg-muted/40 rounded-lg p-2 sm:p-3 space-y-0.5">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</div>
-                <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                <div className={`text-base sm:text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
                 <div className="text-[9px] text-muted-foreground">{kpi.sub}</div>
               </div>
             ))}
           </div>
 
-          <div className="bg-muted/30 rounded-lg p-4">
+          <div className="bg-muted/30 rounded-lg p-3 sm:p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Spend vs Revenue</span>
               <div className="flex items-center gap-3">
@@ -175,27 +202,27 @@ function DashboardMockup() {
       <div className="absolute -inset-4 bg-primary/5 rounded-2xl blur-3xl -z-10" />
     </div>
   );
-}
+});
 
 /* ─── platform badges ─── */
-function PlatformBadges({ lang }: { lang: Lang }) {
+const PlatformBadges = memo(function PlatformBadges({ lang }: { lang: Lang }) {
   const c = t[lang];
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
       <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{c.hero.platformLabel}</span>
       {[
         { name: "Meta Ads", color: "bg-[hsl(var(--chart-meta))]" },
         { name: "TikTok Ads", color: "bg-[hsl(var(--chart-tiktok))]" },
         { name: "Google Ads", color: "bg-[hsl(var(--chart-google))]" },
       ].map((p) => (
-        <span key={p.name} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-xs font-medium text-foreground">
+        <span key={p.name} className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full bg-muted text-xs font-medium text-foreground">
           <span className={`w-2 h-2 rounded-full ${p.color}`} />
           {p.name}
         </span>
       ))}
     </div>
   );
-}
+});
 
 /* ─── Language Toggle ─── */
 function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
@@ -278,13 +305,13 @@ export default function LandingPage() {
               </span>
             </Reveal>
             <Reveal delay={100}>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
                 {c.hero.h1}{" "}
                 <span className="text-primary">{c.hero.h1Accent}</span>
               </h1>
             </Reveal>
             <Reveal delay={200}>
-              <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
                 {c.hero.sub}
               </p>
             </Reveal>
@@ -311,7 +338,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── PAIN / AGITATION ── */}
-      <section id="problems" className="py-20 lg:py-28 bg-muted/30">
+      <section id="problems" className="py-20 lg:py-28 bg-muted/30 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -331,7 +358,7 @@ export default function LandingPage() {
                       <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
                         <Icon className="w-5 h-5 text-destructive" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h3 className="font-semibold text-lg mb-1">{p.title}</h3>
                         <p className="text-muted-foreground text-sm leading-relaxed">{p.desc}</p>
                       </div>
@@ -347,16 +374,18 @@ export default function LandingPage() {
               <h3 className="text-center text-xl font-bold mb-6">{c.problems.beforeAfterTitle}</h3>
               <div className="ios-glass-card rounded-xl overflow-hidden">
                 <div className="grid grid-cols-2 text-sm font-semibold border-b border-border">
-                  <div className="px-6 py-3 bg-destructive/5 text-destructive">{c.problems.beforeLabel}</div>
-                  <div className="px-6 py-3 bg-success/5 text-[hsl(var(--success))]">{c.problems.afterLabel}</div>
+                  <div className="px-3 sm:px-6 py-3 bg-destructive/5 text-destructive">{c.problems.beforeLabel}</div>
+                  <div className="px-3 sm:px-6 py-3 bg-success/5 text-[hsl(var(--success))]">{c.problems.afterLabel}</div>
                 </div>
                 {c.beforeAfter.map((row, i) => (
                   <div key={i} className={`grid grid-cols-2 text-sm ${i < c.beforeAfter.length - 1 ? "border-b border-border/50" : ""}`}>
-                    <div className="px-6 py-3 flex items-center gap-2 text-muted-foreground">
-                      <XCircle className="w-4 h-4 text-destructive/60 flex-shrink-0" />{row.before}
+                    <div className="px-3 sm:px-6 py-3 flex items-start sm:items-center gap-2 text-muted-foreground min-w-0">
+                      <XCircle className="w-4 h-4 text-destructive/60 flex-shrink-0 mt-0.5 sm:mt-0" />
+                      <span className="break-words min-w-0">{row.before}</span>
                     </div>
-                    <div className="px-6 py-3 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-[hsl(var(--success))] flex-shrink-0" />{row.after}
+                    <div className="px-3 sm:px-6 py-3 flex items-start sm:items-center gap-2 min-w-0">
+                      <CheckCircle2 className="w-4 h-4 text-[hsl(var(--success))] flex-shrink-0 mt-0.5 sm:mt-0" />
+                      <span className="break-words min-w-0">{row.after}</span>
                     </div>
                   </div>
                 ))}
@@ -367,7 +396,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FEATURES ── */}
-      <section id="features" className="py-20 lg:py-28">
+      <section id="features" className="py-20 lg:py-28 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -394,7 +423,7 @@ export default function LandingPage() {
                       </Link>
                     </div>
                     <div className="flex-1 w-full">
-                      <div className="ios-glass-card rounded-xl p-5">
+                      <div className="ios-glass-card rounded-xl p-4 sm:p-5">
                         <div className="flex items-center gap-1.5 mb-4">
                           <div className="w-2.5 h-2.5 rounded-full bg-destructive/50" />
                           <div className="w-2.5 h-2.5 rounded-full bg-warning/50" />
@@ -407,7 +436,7 @@ export default function LandingPage() {
                               <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">TikTok</span>
                               <span className="px-2.5 py-1 rounded bg-muted text-muted-foreground">Google</span>
                             </div>
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                               {[
                                 { label: "Spend", val: "$1,240", color: "text-primary" },
                                 { label: "Impressions", val: "124K", color: "text-foreground" },
@@ -421,7 +450,7 @@ export default function LandingPage() {
                               ))}
                             </div>
                             <div className="border border-border/50 rounded-lg overflow-hidden text-[10px]">
-                              <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 bg-muted/40 font-semibold text-muted-foreground">
+                              <div className="grid grid-cols-[1fr_60px_50px] sm:grid-cols-[1fr_80px_60px] gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-muted/40 font-semibold text-muted-foreground">
                                 <span>Campaign</span><span>Spend</span><span>Status</span>
                               </div>
                               {[
@@ -430,7 +459,7 @@ export default function LandingPage() {
                                 { name: "Retargeting - DPA", spend: "$280", pct: 45, status: "Learning", sColor: "bg-warning/15 text-warning" },
                                 { name: "Lead Gen - Form", spend: "$160", pct: 30, status: "Active", sColor: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]" },
                               ].map((r) => (
-                                <div key={r.name} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-1.5 border-t border-border/30 items-center">
+                                <div key={r.name} className="grid grid-cols-[1fr_60px_50px] sm:grid-cols-[1fr_80px_60px] gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 border-t border-border/30 items-center">
                                   <span className="truncate text-foreground">{r.name}</span>
                                   <div className="flex items-center gap-1">
                                     <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${r.pct}%` }} /></div>
@@ -480,18 +509,18 @@ export default function LandingPage() {
                         )}
                         {i === 2 && (
                           <div className="space-y-2">
-                            <div className="grid grid-cols-[1fr_70px_70px_70px] gap-1 text-[9px] font-semibold text-muted-foreground px-2 pb-1 border-b border-border/40">
-                              <span>Client</span><span className="text-right">Deposited</span><span className="text-right">Spent</span><span className="text-right">Balance</span>
+                            <div className="grid grid-cols-[1fr_55px_55px_55px] sm:grid-cols-[1fr_70px_70px_70px] gap-1 text-[9px] font-semibold text-muted-foreground px-2 pb-1 border-b border-border/40">
+                              <span>Client</span><span className="text-right">Dep.</span><span className="text-right">Spent</span><span className="text-right">Bal.</span>
                             </div>
                             {[
                               { name: "FashionHub", dep: "$2,000", spent: "$980", bal: "$1,020", pct: 49, color: "bg-[hsl(var(--success))]" },
                               { name: "TechNova", dep: "$1,500", spent: "$1,200", bal: "$300", pct: 80, color: "bg-warning" },
                               { name: "GreenLife", dep: "$800", spent: "$750", bal: "$50", pct: 94, color: "bg-destructive" },
                             ].map((mc) => (
-                              <div key={mc.name} className="grid grid-cols-[1fr_70px_70px_70px] gap-1 items-center px-2 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">{mc.name[0]}</div>
-                                  <span className="text-xs font-medium text-foreground truncate">{mc.name}</span>
+                              <div key={mc.name} className="grid grid-cols-[1fr_55px_55px_55px] sm:grid-cols-[1fr_70px_70px_70px] gap-1 items-center px-2 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
+                                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded bg-primary/10 flex items-center justify-center text-[8px] sm:text-[9px] font-bold text-primary flex-shrink-0">{mc.name[0]}</div>
+                                  <span className="text-[10px] sm:text-xs font-medium text-foreground truncate">{mc.name}</span>
                                 </div>
                                 <span className="text-[10px] text-foreground text-right font-mono">{mc.dep}</span>
                                 <span className="text-[10px] text-muted-foreground text-right font-mono">{mc.spent}</span>
@@ -560,7 +589,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── TIME SAVING ── */}
-      <section className="py-20 lg:py-28 bg-muted/30">
+      <section className="py-20 lg:py-28 bg-muted/30 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -569,17 +598,17 @@ export default function LandingPage() {
               <p className="mt-4 text-muted-foreground text-lg">{c.stats.sub}</p>
             </div>
           </Reveal>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {c.statItems.map((s, i) => {
               const Icon = statIcons[i];
               return (
                 <Reveal key={i} delay={i * 100}>
-                  <Card className="p-6 text-center ios-glass rounded-xl transition-all border-none">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                      <Icon className="w-6 h-6 text-primary" />
+                  <Card className="p-4 sm:p-6 text-center ios-glass rounded-xl transition-all border-none">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                      <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                     </div>
-                    <div className="text-3xl sm:text-4xl font-extrabold text-foreground">{s.value}</div>
-                    <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+                    <div className="text-2xl sm:text-4xl font-extrabold text-foreground break-words">{s.value}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground mt-1">{s.label}</div>
                   </Card>
                 </Reveal>
               );
@@ -589,7 +618,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" className="py-20 lg:py-28">
+      <section id="how-it-works" className="py-20 lg:py-28 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -617,7 +646,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── TESTIMONIALS ── */}
-      <section id="testimonials" className="py-20 lg:py-28 bg-muted/30">
+      <section id="testimonials" className="py-20 lg:py-28 bg-muted/30 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
@@ -652,7 +681,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="py-20 lg:py-28">
+      <section id="faq" className="py-20 lg:py-28 cv-auto">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
             <div className="text-center mb-12">
@@ -674,12 +703,12 @@ export default function LandingPage() {
       </section>
 
       {/* ── FINAL CTA ── */}
-      <section className="py-20 lg:py-28">
+      <section className="py-20 lg:py-28 cv-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal>
-            <div className="relative rounded-2xl bg-primary p-12 lg:p-16 text-center overflow-hidden" style={{ boxShadow: 'inset 0 1px 0 0 hsl(0 0% 100% / 0.1), 0 12px 40px -8px hsl(0 0% 0% / 0.2)' }}>
-              <h2 className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4">{c.finalCta.title}</h2>
-              <p className="text-primary-foreground/80 text-lg max-w-xl mx-auto mb-8">
+            <div className="relative rounded-2xl bg-primary p-6 sm:p-12 lg:p-16 text-center overflow-hidden" style={{ boxShadow: 'inset 0 1px 0 0 hsl(0 0% 100% / 0.1), 0 12px 40px -8px hsl(0 0% 0% / 0.2)' }}>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary-foreground mb-4">{c.finalCta.title}</h2>
+              <p className="text-primary-foreground/80 text-base sm:text-lg max-w-xl mx-auto mb-8">
                 {c.finalCta.sub}
               </p>
               <Button size="lg" variant="secondary" className="text-base px-8" asChild>
