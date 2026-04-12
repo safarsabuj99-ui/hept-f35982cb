@@ -492,7 +492,7 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-end gap-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2">
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full sm:w-auto"><HandCoins className="mr-2 h-4 w-4" /> Withdraw</Button>
