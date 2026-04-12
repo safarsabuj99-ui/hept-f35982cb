@@ -53,29 +53,10 @@ const PlatformBilling = lazy(() => import("@/pages/PlatformBilling"));
 const PlatformPlans = lazy(() => import("@/pages/PlatformPlans"));
 const PlatformAnnouncements = lazy(() => import("@/pages/PlatformAnnouncements"));
 const PlatformAudit = lazy(() => import("@/pages/PlatformAudit"));
-const PlatformHealth = lazy(() => import("@/pages/PlatformHealth"));
 const TenantLifecycle = lazy(() => import("@/pages/TenantLifecycle"));
 const PlatformRevenue = lazy(() => import("@/pages/PlatformRevenue"));
-const TenantUsageMetering = lazy(() => import("@/pages/TenantUsageMetering"));
-const PlatformCohorts = lazy(() => import("@/pages/PlatformCohorts"));
-const PlatformChurnPrediction = lazy(() => import("@/pages/PlatformChurnPrediction"));
-const PlatformFeatureAdoption = lazy(() => import("@/pages/PlatformFeatureAdoption"));
-const PlatformForecasting = lazy(() => import("@/pages/PlatformForecasting"));
-const PlatformCostAnalytics = lazy(() => import("@/pages/PlatformCostAnalytics"));
-const PlatformHealthScores = lazy(() => import("@/pages/PlatformHealthScores"));
-const PlatformBenchmarks = lazy(() => import("@/pages/PlatformBenchmarks"));
 const AdminSubscription = lazy(() => import("@/pages/AdminSubscription"));
 const AgencySupport = lazy(() => import("@/pages/AgencySupport"));
-const PlatformPaymentGateway = lazy(() => import("@/pages/PlatformPaymentGateway"));
-const PlatformDunning = lazy(() => import("@/pages/PlatformDunning"));
-const PlatformEmailTemplates = lazy(() => import("@/pages/PlatformEmailTemplates"));
-const PlatformEmailLog = lazy(() => import("@/pages/PlatformEmailLog"));
-const PlatformFinancialReports = lazy(() => import("@/pages/PlatformFinancialReports"));
-const PlatformCurrencyRates = lazy(() => import("@/pages/PlatformCurrencyRates"));
-const PlatformReferrals = lazy(() => import("@/pages/PlatformReferrals"));
-const PlatformSupport = lazy(() => import("@/pages/PlatformSupport"));
-const PlatformLegal = lazy(() => import("@/pages/PlatformLegal"));
-const PlatformDataExports = lazy(() => import("@/pages/PlatformDataExports"));
 const PaymentSuccess = lazy(() => import("@/pages/PaymentSuccess"));
 const PaymentFailed = lazy(() => import("@/pages/PaymentFailed"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -145,7 +126,6 @@ const App = () => (
                   <Route path="/platform" element={<PlatformDashboard />} />
                   <Route path="/platform/lifecycle" element={<TenantLifecycle />} />
                   <Route path="/platform/revenue" element={<PlatformRevenue />} />
-                  <Route path="/platform/usage" element={<TenantUsageMetering />} />
                   <Route path="/platform/agencies" element={<AgencyList />} />
                   <Route path="/platform/agencies/new" element={<CreateAgency />} />
                   <Route path="/platform/agencies/:agencyId" element={<AgencyDetail />} />
@@ -153,24 +133,6 @@ const App = () => (
                   <Route path="/platform/plans" element={<PlatformPlans />} />
                   <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
                   <Route path="/platform/audit" element={<PlatformAudit />} />
-                  <Route path="/platform/health" element={<PlatformHealth />} />
-                  <Route path="/platform/cohorts" element={<PlatformCohorts />} />
-                  <Route path="/platform/churn" element={<PlatformChurnPrediction />} />
-                  <Route path="/platform/adoption" element={<PlatformFeatureAdoption />} />
-                  <Route path="/platform/forecasting" element={<PlatformForecasting />} />
-                  <Route path="/platform/costs" element={<PlatformCostAnalytics />} />
-                  <Route path="/platform/health-scores" element={<PlatformHealthScores />} />
-                  <Route path="/platform/benchmarks" element={<PlatformBenchmarks />} />
-                  <Route path="/platform/payment-gateway" element={<PlatformPaymentGateway />} />
-                  <Route path="/platform/dunning" element={<PlatformDunning />} />
-                  <Route path="/platform/email-templates" element={<PlatformEmailTemplates />} />
-                  <Route path="/platform/email-log" element={<PlatformEmailLog />} />
-                  <Route path="/platform/financial-reports" element={<PlatformFinancialReports />} />
-                  <Route path="/platform/currency-rates" element={<PlatformCurrencyRates />} />
-                  <Route path="/platform/referrals" element={<PlatformReferrals />} />
-                  <Route path="/platform/support" element={<PlatformSupport />} />
-                  <Route path="/platform/legal" element={<PlatformLegal />} />
-                  <Route path="/platform/data-exports" element={<PlatformDataExports />} />
                 </Route>
 
                 {/* Super Admin routes */}
