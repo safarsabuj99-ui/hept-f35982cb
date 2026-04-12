@@ -2300,6 +2300,36 @@ export type Database = {
           },
         ]
       }
+      platform_expenses: {
+        Row: {
+          amount_bdt: number
+          category: string
+          created_at: string
+          created_by: string
+          date: string
+          description: string | null
+          id: string
+        }
+        Insert: {
+          amount_bdt?: number
+          category?: string
+          created_at?: string
+          created_by: string
+          date?: string
+          description?: string | null
+          id?: string
+        }
+        Update: {
+          amount_bdt?: number
+          category?: string
+          created_at?: string
+          created_by?: string
+          date?: string
+          description?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       platform_invoices: {
         Row: {
           amount_bdt: number
