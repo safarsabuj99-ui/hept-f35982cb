@@ -1,56 +1,33 @@
 
 
-## Bug: Expense Not Deducting from Cash Flow After First Entry
+## Plan: Optimize Wallet & USD Tab + Cash Flow Mobile Buttons
 
-### Root Cause
+### Issues Identified
 
-The `agencyAccounts` state in `ExpenseManager.tsx` is fetched **once on mount** (line 70) and **never refreshed**. When you add an expense:
+**1. Wallet & USD Tab (`WalletInventory.tsx`)**
+- **Stale balance bug (line 233-239)**: "Buy USD" deducts from `paidFromAccountId` using stale local `agencyAccounts` state — same bug pattern we just fixed in ExpenseManager. Uses `acc.current_balance_bdt` from mount-time state instead of fresh DB read.
+- **No account state refresh**: After recording a purchase, `agencyAccounts` is never re-fetched, so subsequent purchases overwrite each other's deductions.
+- **Realtime channel doesn't refresh accounts**: The realtime subscription watches `usd_purchases` and `usd_inventory_snapshots` but never refreshes `agencyAccounts`.
 
-1. **First expense**: Uses the correct balance from the initial fetch (e.g., account has ৳10,000). Updates DB to ৳10,000 - ৳2,000 = ৳8,000. Works correctly.
-2. **Second expense**: Still uses the **stale** local state where balance is ৳10,000 (not the updated ৳8,000). Updates DB to ৳10,000 - ৳3,000 = ৳7,000 — **overwriting** the first deduction. The balance should be ৳5,000.
+**2. Cash Flow Mobile Buttons (`CashFlowManagement.tsx`)**
+- Lines 495-690: Four action buttons (Withdraw, Add Fund, Transfer, Add Account) are stacked as `flex-col` with `w-full` on mobile — each button takes full width, pushing content far down the page. This is clunky on a 390px viewport.
+- The buttons should be a compact 2x2 grid on mobile instead of a tall vertical stack.
 
-This is a classic stale-state race condition. The same pattern exists in `CashFlowManagement.tsx` for transfers, withdrawals, and fund additions.
+### Changes
 
-### Additional Bug
-When deleting an expense, the account balance is **never restored** — the money just disappears.
+**File: `src/pages/WalletInventory.tsx`**
 
-### Fix Plan
+1. **Fix stale balance deduction** — Replace lines 233-239 (the `handleSubmit` account deduction) with `adjustAccountBalance(paidFromAccountId, -Number(bdtPaid))` to use fresh DB reads, matching the pattern already applied in ExpenseManager and CashFlowManagement.
 
-**File: `src/pages/ExpenseManager.tsx`**
+2. **Add account refresh function** — Extract `agencyAccounts` fetch into a `fetchAgencyAccounts` callback. Call it after `handleSubmit` succeeds (after purchase recorded).
 
-1. **Use atomic SQL instead of stale client-side math for balance updates.** Instead of reading `acc.current_balance_bdt` from local state and sending `update({ current_balance_bdt: oldValue - amount })`, use Supabase RPC or a pattern that reads the current DB value. Since we can't easily do `SET balance = balance - X` via the JS SDK, we'll:
-   - Fetch the **fresh** account balance from DB right before updating (a single fresh read + write, not from stale state)
-   - After successful expense insert + balance update, **refresh `agencyAccounts` state** so subsequent operations use current data
-
-2. **Refresh `agencyAccounts` after every mutation** — extract the account fetch into a reusable function and call it after `handleSubmit` and `handleDelete`.
-
-3. **Restore balance on delete** — when deleting an expense that had a `paid_from_account_id`, add the amount back to that account. This requires fetching the expense's `paid_from_account_id` before deleting.
+3. **Add `agency_accounts` to realtime channel** — Subscribe to changes on `agency_accounts` table so the UI stays fresh if balances change from other tabs (e.g., CashFlow).
 
 **File: `src/pages/CashFlowManagement.tsx`**
 
-4. **Same fix for transfers, withdrawals, fund additions, and returns** — all use stale `accounts` state for balance math. After each mutation, `fetchData()` is already called (which refreshes accounts), but the mutation itself uses stale values. Fix each handler to fetch fresh balance from DB before updating.
-
-### Technical Approach
-
-Create a small helper that does an atomic-style balance update:
-```typescript
-async function adjustAccountBalance(accountId: string, delta: number) {
-  const { data } = await supabase
-    .from("agency_accounts")
-    .select("current_balance_bdt")
-    .eq("id", accountId)
-    .single();
-  if (data) {
-    await supabase.from("agency_accounts")
-      .update({ current_balance_bdt: Number(data.current_balance_bdt) + delta })
-      .eq("id", accountId);
-  }
-}
-```
-
-This reads the **current** DB value each time instead of relying on stale React state.
+4. **Optimize mobile button layout** — Change the action buttons container from `flex flex-col sm:flex-row` to `grid grid-cols-2 sm:flex sm:flex-row` so on mobile the 4 buttons form a compact 2×2 grid instead of a tall vertical stack. Each button text will be shorter on mobile (icon + short label).
 
 ### Files Changed
-- `src/pages/ExpenseManager.tsx` — fix balance deduction, add balance restoration on delete, refresh accounts after mutations
-- `src/pages/CashFlowManagement.tsx` — fix all balance update handlers to use fresh DB reads
+- `src/pages/WalletInventory.tsx` — fix stale balance bug, add account refresh, add realtime for accounts
+- `src/pages/CashFlowManagement.tsx` — mobile 2×2 grid for action buttons
 
