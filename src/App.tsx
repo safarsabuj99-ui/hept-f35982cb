@@ -221,6 +221,21 @@ const App = () => (
                   <Route path="/dashboard/notifications" element={<Notifications />} />
                 </Route>
 
+                {/* Affiliate routes */}
+                <Route
+                  element={
+                    <ProtectedRoute requiredRole="affiliate">
+                      <AffiliateLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/affiliate" element={<AffiliateDashboard />} />
+                  <Route path="/affiliate/links" element={<AffiliateLinks />} />
+                  <Route path="/affiliate/earnings" element={<AffiliateEarnings />} />
+                  <Route path="/affiliate/payouts" element={<AffiliatePayouts />} />
+                  <Route path="/affiliate/profile" element={<AffiliateProfile />} />
+                </Route>
+
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
