@@ -1,63 +1,60 @@
 
 
-## Add Manual USD Spend Tracking
+## Add Bangla (বাংলা) Language Toggle to Landing Page
 
-**Problem:** Currently, the USD inventory only tracks ad spend (from `daily_metrics`). When you spend USD on subscriptions, tools, or other non-ad expenses, there's no way to record it — so the inventory balance doesn't reflect your actual USD on hand.
+**Goal:** Add an English/বাংলা language switcher on the landing page navbar and translate all content into natural Bangladeshi Bangla — written for Bangladeshi digital marketers, not formal/textbook Bengali.
 
-**Solution:** Create a `usd_manual_spends` table and add a "Spend USD" button alongside the existing "Buy USD" button on the Wallet Inventory page. The auto-snapshot edge function will subtract these manual spends from the balance.
+### Approach
+
+Create a translation system using a `useLang` hook with `useState` and React Context, keeping all translations in a single content map file. The language toggle sits in the navbar as a compact pill button (🇬🇧 EN / 🇧🇩 বাংলা).
 
 ### Changes
 
-#### 1. New database table: `usd_manual_spends`
+#### 1. New file: `src/lib/landingContent.ts` — All translatable strings
 
-```sql
-CREATE TABLE public.usd_manual_spends (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  date date NOT NULL DEFAULT CURRENT_DATE,
-  amount_usd numeric NOT NULL,
-  category text NOT NULL DEFAULT 'other',
-  description text,
-  notes text,
-  created_by uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  org_id uuid
-);
+A single object with `en` and `bn` keys containing every text string on the landing page:
+- **Navbar** links, CTA buttons
+- **Hero** headline, subtext, badge, buttons
+- **Pain points** — titles and descriptions rewritten in natural Bangla (not Google Translate — colloquial Bangladeshi tone targeting agency owners)
+- **Before/After** table rows
+- **Features** — titles, descriptions, CTAs
+- **Stats** labels
+- **How It Works** steps
+- **Testimonials** — quotes rewritten naturally in Bangla
+- **FAQ** — questions and answers in Bangla
+- **Final CTA** and **Footer** text
+- **Platform badges** ("Works with" → "সাপোর্ট করে")
 
-ALTER TABLE public.usd_manual_spends ENABLE ROW LEVEL SECURITY;
--- RLS: admin-only access
-CREATE POLICY "Admins can manage manual spends"
-  ON public.usd_manual_spends FOR ALL TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'))
-  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+The Bangla copy will use informal/professional tone that Bangladeshi digital marketers actually speak — mixing some English terms naturally (e.g., "Ad Account", "ROAS", "Meta Ads" stay in English as they're industry terms).
 
--- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.usd_manual_spends;
-```
+#### 2. New file: `src/hooks/useLandingLang.tsx` — Language state hook
 
-#### 2. Update `auto-snapshot-usd` edge function
+Simple `useState<'en' | 'bn'>('en')` passed via props (no need for full Context since it's one page). Exports `lang` and `setLang`.
 
-Add a third data source to the balance calculation:
+#### 3. Update: `src/pages/LandingPage.tsx`
 
-```
-balance = SUM(usd_purchases.usd_received) - SUM(daily_metrics.spend) - SUM(usd_manual_spends.amount_usd)
-```
+- Add `lang` state at the top of `LandingPage` component
+- Import content from `landingContent.ts`, access via `content[lang]`
+- **Navbar:** Add a language toggle pill button (compact, glassmorphic) showing 🇬🇧/🇧🇩 flags with EN/বাংলা labels. Positioned between nav links and login buttons.
+- Replace all hardcoded English strings with `content[lang].xxx` references
+- Data arrays (`painPoints`, `features`, `stats`, `steps`, `testimonials`, `faqs`, `beforeAfter`) move inside the component or become functions of `lang`
+- Dashboard mockup labels stay in English (they represent the actual app UI)
+- Add `lang="bn"` attribute to wrapper div when Bangla is selected (for proper font rendering)
+- Mobile menu also gets the language toggle
 
-Also include `manual_spend` total in the `metrics` JSONB for the UI to display.
+#### 4. Font consideration
 
-#### 3. Update `src/pages/WalletInventory.tsx`
+Add Bangla-compatible font. The system fonts on most devices handle Bangla well, but we'll add `"Noto Sans Bengali"` from Google Fonts as a fallback in `index.html` for consistent rendering, and apply it via a `font-bangla` class when `lang === 'bn'`.
 
-- **New "Spend USD" button** next to "Buy USD" — opens a dialog with fields: Date, USD Amount, Category (dropdown: Subscription, Tools, Hosting, Transfer, Other), Description, Notes.
-- **New state and fetch** for manual spends list, displayed in a second table tab or section below purchases ("Manual Spends" history).
-- **Inventory overview** — add a new metric row showing "Manual Spends" total alongside existing "Spent (Since)" which only covers ad spend. The "Available USD" will automatically reflect the correct balance from the snapshot.
-- **Realtime subscription** — listen to `usd_manual_spends` changes.
-- Mobile card view and desktop table view for the manual spends history, matching existing purchase history styling.
+### Bangla content strategy
 
-#### 4. Spend categories
-
-Predefined categories: `Subscription`, `Tools/Software`, `Hosting`, `Domain`, `Transfer`, `Refund`, `Other` — stored as plain text for flexibility.
+- Industry terms stay English: Meta Ads, TikTok, Google Ads, ROAS, CPC, impressions, clicks, USD, API
+- Tone: Professional but friendly Bangladeshi Bangla — like how agency owners talk in Dhaka's digital marketing community
+- Numbers: Use English numerals (not Bengali numerals) since that's standard in BD business context
+- Currency: ৳ (Taka symbol) used where relevant
 
 ### Files changed
-- Database migration (new `usd_manual_spends` table + RLS + realtime)
-- `supabase/functions/auto-snapshot-usd/index.ts` — include manual spends in balance
-- `src/pages/WalletInventory.tsx` — add Spend USD dialog, manual spend history, updated overview metrics
+- `src/lib/landingContent.ts` (new) — all EN/BN translations
+- `src/pages/LandingPage.tsx` — language toggle + dynamic content
+- `index.html` — add Noto Sans Bengali font link
 
