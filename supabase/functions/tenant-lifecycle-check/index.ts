@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   // Find trial orgs whose trial has expired (trial_ends_at + grace_period_days < now)
   const { data: trialOrgs, error } = await supabase
     .from("organizations")
-    .select("id, name, trial_ends_at, grace_period_days, status")
+    .select("id, name, trial_ends_at, grace_period_days, status, owner_user_id")
     .eq("status", "trial")
     .not("trial_ends_at", "is", null);
 
@@ -45,6 +45,19 @@ Deno.serve(async (req) => {
           status_changed_at: new Date().toISOString(),
         })
         .eq("id", org.id);
+
+      // Notify agency owner about trial expiry
+      if (org.owner_user_id) {
+        await supabase.from("notifications").insert({
+          user_id: org.owner_user_id,
+          title: "⏰ Trial Expired",
+          body: `Your trial for ${org.name} has ended. Please upgrade to a plan to continue using the platform.`,
+          type: "system",
+          priority: "high",
+          link: "/admin/subscription",
+        });
+      }
+
       suspended++;
     }
   }
