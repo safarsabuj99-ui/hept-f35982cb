@@ -92,13 +92,14 @@ export function SubscriptionGate({ orgId, orgStatus, suspensionReason, onSignOut
       // Create or update subscription
       const periodStart = new Date().toISOString().slice(0, 10);
       const periodEnd = new Date(Date.now() + (billingCycle === "yearly" ? 365 : 30) * 86400000).toISOString().slice(0, 10);
+      const planKey = selectedPlan.key as "starter" | "growth" | "agency_pro";
 
       const { data: existingSub } = await supabase.from("organization_subscriptions")
         .select("id").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).single();
 
       if (existingSub) {
         await supabase.from("organization_subscriptions").update({
-          plan: selectedPlan.key,
+          plan: planKey,
           billing_cycle: billingCycle,
           amount_bdt: getAmount(),
           payment_status: "pending",
@@ -107,9 +108,9 @@ export function SubscriptionGate({ orgId, orgStatus, suspensionReason, onSignOut
           updated_at: new Date().toISOString(),
         }).eq("id", existingSub.id);
       } else {
-        await supabase.from("organization_subscriptions").insert({
+        await (supabase.from("organization_subscriptions").insert as any)({
           org_id: orgId,
-          plan: selectedPlan.key,
+          plan: planKey,
           billing_cycle: billingCycle,
           amount_bdt: getAmount(),
           payment_status: "pending",
