@@ -1,60 +1,89 @@
 
+I found the most likely root cause and it is not just one small bug.
 
-## Add Bangla (বাংলা) Language Toggle to Landing Page
+What is going wrong:
+- The auth bootstrap is fragile in `src/hooks/useAuth.tsx`.
+- It currently calls `getSession()` first and only then subscribes to auth changes. That can create timing issues during login/session restore.
+- It also `await`s async work inside `onAuthStateChange`, which is a known source of auth timing problems.
+- Many providers and dashboard widgets start querying as soon as `user` exists, instead of waiting until auth is fully ready and the session token is stable.
+- Several of those fetches silently ignore auth/RLS errors and store empty state, so the page looks “loaded” but data is missing until a manual browser reload.
+- Your backend logs already show repeated `bad_jwt` / `invalid claim: missing sub claim` errors on `/user`, which strongly suggests a stale/corrupted stored session sometimes survives in browser storage. That explains why clearing browser data sometimes fixes it.
 
-**Goal:** Add an English/বাংলা language switcher on the landing page navbar and translate all content into natural Bangladeshi Bangla — written for Bangladeshi digital marketers, not formal/textbook Bengali.
+So this is mainly:
+1. auth race condition
+2. invalid persisted session recovery not handled
+3. early protected queries caching empty/failed results
 
-### Approach
+Implementation plan:
 
-Create a translation system using a `useLang` hook with `useState` and React Context, keeping all translations in a single content map file. The language toggle sits in the navbar as a compact pill button (🇬🇧 EN / 🇧🇩 বাংলা).
+1. Harden the auth lifecycle in `src/hooks/useAuth.tsx`
+- Register `onAuthStateChange` before `getSession()`.
+- Remove awaited async work from the auth callback.
+- Split auth into clear phases: `authReady`, `session`, `user`, `role`, `roleLoading`.
+- Add guarded role fetching with request tracking so older async results cannot overwrite newer auth state.
+- Add invalid-session recovery: if restored session is malformed or user/session data is inconsistent, clear local auth state cleanly instead of leaving the app stuck.
 
-### Changes
+2. Upgrade route gating in `src/components/ProtectedRoute.tsx` and `src/pages/Login.tsx`
+- Only allow protected content to mount after auth is fully ready and the role check is complete.
+- Prevent redirect loops or partial navigation during login.
+- Keep login success flow waiting for stable auth state instead of navigating while queries are still racing.
 
-#### 1. New file: `src/lib/landingContent.ts` — All translatable strings
+3. Create a single “safe auth-ready” pattern and apply it to global providers
+- Update these to wait for stable auth before querying:
+  - `src/hooks/useBranding.tsx`
+  - `src/hooks/useProfile.tsx`
+  - `src/hooks/usePermissions.tsx`
+  - `src/hooks/useOrgFeatures.ts`
+  - `src/hooks/usePendingCounts.tsx`
+  - `src/hooks/useNotifications.tsx`
+  - `src/hooks/usePushNotifications.ts`
+- Use `enabled: authReady && !!session?.user?.id` or equivalent guarded effects.
+- Reset state on logout so stale data from the previous session cannot leak.
 
-A single object with `en` and `bn` keys containing every text string on the landing page:
-- **Navbar** links, CTA buttons
-- **Hero** headline, subtext, badge, buttons
-- **Pain points** — titles and descriptions rewritten in natural Bangla (not Google Translate — colloquial Bangladeshi tone targeting agency owners)
-- **Before/After** table rows
-- **Features** — titles, descriptions, CTAs
-- **Stats** labels
-- **How It Works** steps
-- **Testimonials** — quotes rewritten naturally in Bangla
-- **FAQ** — questions and answers in Bangla
-- **Final CTA** and **Footer** text
-- **Platform badges** ("Works with" → "সাপোর্ট করে")
+4. Fix dashboard/query timing where data currently loads too early
+- Gate `src/hooks/useAdminDashboardData.ts` on full auth readiness, not only `!!session`.
+- Audit and patch admin widgets that use immediate `useEffect` fetches so they do not fire before auth is ready:
+  - `src/components/ProfitLossWidget.tsx`
+  - `src/components/SpendTrendChart.tsx`
+  - `src/components/dashboard/RevenueVsCostChart.tsx`
+  - `src/components/dashboard/RecentActivityFeed.tsx`
+  - `src/components/dashboard/ProfitabilityTable.tsx`
+  - `src/components/RunwayPrediction.tsx`
+  - plus the data widgets inside `AttentionPanel`
+- Where possible, normalize these to React Query or at least add auth gating + explicit error handling.
 
-The Bangla copy will use informal/professional tone that Bangladeshi digital marketers actually speak — mixing some English terms naturally (e.g., "Ad Account", "ROAS", "Meta Ads" stay in English as they're industry terms).
+5. Add smarter stale-session cleanup
+- When a broken stored session is detected, perform a controlled local sign-out and clear the bad auth storage instead of forcing the user into endless reload states.
+- This should eliminate the “works only after clearing cookies/storage” behavior.
+- I will keep this scoped to auth storage only, so it does not wipe unrelated app settings like theme/preferences.
 
-#### 2. New file: `src/hooks/useLandingLang.tsx` — Language state hook
+6. Improve resilience after sign-in/sign-out
+- Invalidate/remove sensitive cached queries on auth transitions.
+- Ensure user-scoped queries include user identifiers in keys where needed.
+- Prevent empty unauthenticated responses from being reused after login.
 
-Simple `useState<'en' | 'bn'>('en')` passed via props (no need for full Context since it's one page). Exports `lang` and `setLang`.
+7. Verification after implementation
+- Fresh login from `/login` → dashboard loads data on first try
+- Hard refresh on `/admin` with existing session → no blank widgets
+- Sign out then sign in with another account → no stale old data
+- Background tab/token refresh → no stuck reload state
+- Broken stored session case → user is cleanly recovered instead of needing manual browser cleanup
 
-#### 3. Update: `src/pages/LandingPage.tsx`
+Files I expect to change:
+- `src/hooks/useAuth.tsx`
+- `src/components/ProtectedRoute.tsx`
+- `src/pages/Login.tsx`
+- `src/hooks/useBranding.tsx`
+- `src/hooks/useProfile.tsx`
+- `src/hooks/usePermissions.tsx`
+- `src/hooks/useOrgFeatures.ts`
+- `src/hooks/usePendingCounts.tsx`
+- `src/hooks/useNotifications.tsx`
+- `src/hooks/usePushNotifications.ts`
+- `src/hooks/useAdminDashboardData.ts`
+- affected dashboard widget files listed above
 
-- Add `lang` state at the top of `LandingPage` component
-- Import content from `landingContent.ts`, access via `content[lang]`
-- **Navbar:** Add a language toggle pill button (compact, glassmorphic) showing 🇬🇧/🇧🇩 flags with EN/বাংলা labels. Positioned between nav links and login buttons.
-- Replace all hardcoded English strings with `content[lang].xxx` references
-- Data arrays (`painPoints`, `features`, `stats`, `steps`, `testimonials`, `faqs`, `beforeAfter`) move inside the component or become functions of `lang`
-- Dashboard mockup labels stay in English (they represent the actual app UI)
-- Add `lang="bn"` attribute to wrapper div when Bangla is selected (for proper font rendering)
-- Mobile menu also gets the language toggle
-
-#### 4. Font consideration
-
-Add Bangla-compatible font. The system fonts on most devices handle Bangla well, but we'll add `"Noto Sans Bengali"` from Google Fonts as a fallback in `index.html` for consistent rendering, and apply it via a `font-bangla` class when `lang === 'bn'`.
-
-### Bangla content strategy
-
-- Industry terms stay English: Meta Ads, TikTok, Google Ads, ROAS, CPC, impressions, clicks, USD, API
-- Tone: Professional but friendly Bangladeshi Bangla — like how agency owners talk in Dhaka's digital marketing community
-- Numbers: Use English numerals (not Bengali numerals) since that's standard in BD business context
-- Currency: ৳ (Taka symbol) used where relevant
-
-### Files changed
-- `src/lib/landingContent.ts` (new) — all EN/BN translations
-- `src/pages/LandingPage.tsx` — language toggle + dynamic content
-- `index.html` — add Noto Sans Bengali font link
-
+Technical summary:
+- This does not look like a database schema problem.
+- It looks like a frontend auth/session orchestration problem plus weak recovery from invalid persisted auth state.
+- The fix should be done centrally first in auth, then applied to early-loading queries so the whole app becomes stable instead of patching one page only.
