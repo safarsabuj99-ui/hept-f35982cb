@@ -1,77 +1,122 @@
 
 
-## Plan: Upgrade Platform Finance Hub to Match Agency Finance System
+## Plan: Advanced Affiliate System with Independent Dashboard
 
-The agency finance system has rich operational features (date filters, account management, USD inventory, cash flow tracking, withdrawals/loans, activity feeds). The platform finance currently has only basic charts and tables. Here's the upgrade plan to bring parity.
+### What We're Building
 
-### Tab 1: P&L Overview — Add Date Filtering & Richer Layout
-**Current**: Static totals from all subscriptions, no date filtering, no WAC concept.
-**Upgrade**:
-- Add `DateRangeFilter` component (same as agency P&L)
-- Filter invoices and expenses by date range
-- Add period-aware KPI labels ("Today", "This Month", etc.)
-- Add P&L Summary card (Revenue / Expenses / Gross Profit in 3-column layout)
-- Keep existing Monthly P&L chart and Revenue by Plan chart
+A completely standalone affiliate system where external marketers (not agencies) can register, log in, get unique tracking links, and earn commissions when clients sign up and purchase through their links. Platform owner controls commission rates per affiliate.
 
-**File**: `src/components/platform-finance/FinanceOverview.tsx`
+### Architecture
 
-### Tab 2: Revenue Analytics — No Changes Needed
-Already comprehensive with MRR/ARR/ARPA/Churn/NRR/MRR Trend/Churned Agencies. Stays as-is.
-
-### Tab 3: Expenses — Add Date Filter, Pie Chart, Pagination, Account Integration
-**Current**: Basic add/delete with trend chart and category pie. No date filter, no pagination, no "paid from account" tracking.
-**Upgrade**:
-- Add `DateRangeFilter` for filtering by period
-- Add summary KPI cards (Total / OpEx / Owner's Draw style) at top
-- Add `TablePagination` for the expense list
-- Add mobile card view (same pattern as agency ExpenseManager)
-- Add "Paid From Account" concept — requires new `paid_from_account_id` column on `platform_expenses`
-- Realtime subscription for live updates
-
-**File**: `src/components/platform-finance/ExpensesTab.tsx`
-**Migration**: Add `paid_from_account_id` column to `platform_expenses`
-
-### Tab 4: Cash Flow — Full Rebuild to Match Agency Cash Flow
-**Current**: Basic collections vs outflows chart, receivable aging, upcoming renewals. No accounts, no transfers, no activity feed, no withdrawals.
-**Upgrade**: Complete rebuild matching agency `CashFlowManagement.tsx`:
-- **Platform Accounts**: Add/manage platform-level bank/MFS/cash accounts (new `platform_accounts` table)
-- **Fund Transfers**: Transfer BDT between platform accounts (new `platform_fund_transfers` table)
-- **Activity Feed**: Unified feed of invoice payments, expenses, transfers (with pagination)
-- **Account Balance Cards**: Show all accounts with type icons and balances
-- Keep existing Receivable Aging and Upcoming Renewals sections
-- Add Liquid Fund support for platform (reuse pattern)
-
-**New Tables**:
-```sql
-CREATE TABLE platform_accounts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  type TEXT NOT NULL DEFAULT 'Bank',
-  account_number TEXT,
-  current_balance_bdt NUMERIC NOT NULL DEFAULT 0,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- RLS: platform_owner only
-
-CREATE TABLE platform_fund_transfers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  from_account_id UUID NOT NULL,
-  to_account_id UUID NOT NULL,
-  amount_bdt NUMERIC NOT NULL,
-  note TEXT,
-  created_by UUID NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- RLS: platform_owner only
+```text
+┌─────────────────────────────────────────────┐
+│  Public                                      │
+│  /affiliate/register  → Affiliate signup     │
+│  /affiliate/login     → Affiliate login      │
+│  /signup?ref=CODE     → Tracked client signup│
+├─────────────────────────────────────────────┤
+│  Affiliate Portal (/affiliate/*)             │
+│  /affiliate           → Dashboard (KPIs)     │
+│  /affiliate/links     → Generate/manage links│
+│  /affiliate/earnings  → Commission history   │
+│  /affiliate/payouts   → Payout requests      │
+│  /affiliate/profile   → Edit profile/bank    │
+├─────────────────────────────────────────────┤
+│  Platform Owner (/platform/affiliates)       │
+│  - View all affiliates                       │
+│  - Set per-affiliate commission rate         │
+│  - Approve/reject payout requests            │
+│  - View performance analytics                │
+└─────────────────────────────────────────────┘
 ```
 
-**File**: `src/components/platform-finance/CashFlowTab.tsx` (full rewrite)
+### Database Changes (Migration)
 
-### Files Changed
-- `src/components/platform-finance/FinanceOverview.tsx` — Add date filter, richer KPI layout
-- `src/components/platform-finance/ExpensesTab.tsx` — Add date filter, pagination, mobile view, account tracking
-- `src/components/platform-finance/CashFlowTab.tsx` — Full rebuild with accounts, transfers, activity feed
-- `src/lib/adjustPlatformAccountBalance.ts` — New utility (mirrors `adjustAccountBalance` for platform accounts)
-- **Migration** — Add `paid_from_account_id` to `platform_expenses`, create `platform_accounts` and `platform_fund_transfers` tables with RLS
+**New tables:**
+
+1. **`affiliates`** — Affiliate accounts (linked to auth.users)
+   - `id`, `user_id` (FK auth.users), `full_name`, `email`, `phone`, `payment_method` (bKash/Nagad/Bank), `payment_details` (JSONB), `commission_rate` (percentage, default 10, individually settable), `commission_type` (percentage/fixed), `status` (pending/active/suspended), `created_at`
+
+2. **`affiliate_links`** — Tracking links
+   - `id`, `affiliate_id` (FK affiliates), `code` (unique slug), `label` (custom name), `clicks` (counter), `is_active`, `created_at`
+
+3. **`affiliate_conversions`** — Tracks signups + purchases
+   - `id`, `affiliate_id`, `link_id`, `referred_org_id` (FK organizations), `signup_at`, `first_payment_at`, `payment_amount_bdt`, `commission_bdt`, `status` (pending/qualified/paid/rejected), `qualified_at`, `paid_at`
+
+4. **`affiliate_payouts`** — Payout requests from affiliates
+   - `id`, `affiliate_id`, `amount_bdt`, `status` (pending/approved/paid/rejected), `payment_method`, `payment_details`, `admin_note`, `requested_at`, `processed_at`
+
+**New role:** Add `'affiliate'` to `app_role` enum.
+
+**Modify:** `organizations` table — add `referred_by_affiliate_id` column.
+
+### New Edge Function
+
+**`affiliate-signup`** — Creates auth user + affiliate profile + assigns affiliate role. No agency/org creation needed.
+
+### Frontend Pages
+
+| File | Purpose |
+|------|---------|
+| `src/pages/AffiliateRegister.tsx` | Public signup form (name, email, password, phone, payment info) |
+| `src/pages/AffiliateLogin.tsx` | Login page for affiliates |
+| `src/pages/AffiliateDashboard.tsx` | KPIs: Total earnings, pending, clicks, conversions, conversion rate |
+| `src/pages/AffiliateLinks.tsx` | Generate links with custom labels, copy URL, see click counts |
+| `src/pages/AffiliateEarnings.tsx` | Conversion history table with status badges |
+| `src/pages/AffiliatePayouts.tsx` | Request payout, view payout history |
+| `src/pages/AffiliateProfile.tsx` | Edit name, phone, payment details |
+| `src/components/AffiliateLayout.tsx` | Sidebar layout for affiliate portal |
+| `src/pages/PlatformAffiliates.tsx` | Platform owner: manage affiliates, set rates, approve payouts |
+
+### Conversion Tracking Flow
+
+1. Affiliate generates link → `https://yoursite.com/signup?ref=ABC123`
+2. Client visits link → click counter increments (edge function or client-side)
+3. Client signs up → `organizations.referred_by_affiliate_id` is set
+4. Client makes first payment (subscription approved) → conversion marked `qualified`, commission calculated using that affiliate's individual `commission_rate`
+5. Affiliate requests payout → Platform owner approves → status becomes `paid`
+
+### Commission Logic
+
+- Each affiliate has their own `commission_rate` and `commission_type` (percentage or fixed)
+- Platform owner can edit per-affiliate from the management page
+- Default rate set when affiliate is approved
+- Commission calculated on first subscription payment of referred agency
+
+### Routing Updates (App.tsx)
+
+```text
+/affiliate/register   → Public
+/affiliate/login      → Public  
+/affiliate/*          → ProtectedRoute (role: affiliate) + AffiliateLayout
+/platform/affiliates  → Platform owner page
+```
+
+### Signup Page Update
+
+Modify `src/pages/Signup.tsx` to read `?ref=CODE` from URL, store in state, and pass to the `self-signup` edge function which saves `referred_by_affiliate_id` on the organization.
+
+### Platform Sidebar Update
+
+Add "Affiliates" nav item under Agencies section in `PlatformLayout.tsx`.
+
+### Files Changed/Created
+
+| Action | File |
+|--------|------|
+| Create | `src/pages/AffiliateRegister.tsx` |
+| Create | `src/pages/AffiliateLogin.tsx` |
+| Create | `src/pages/AffiliateDashboard.tsx` |
+| Create | `src/pages/AffiliateLinks.tsx` |
+| Create | `src/pages/AffiliateEarnings.tsx` |
+| Create | `src/pages/AffiliatePayouts.tsx` |
+| Create | `src/pages/AffiliateProfile.tsx` |
+| Create | `src/components/AffiliateLayout.tsx` |
+| Create | `src/pages/PlatformAffiliates.tsx` |
+| Create | `supabase/functions/affiliate-signup/index.ts` |
+| Modify | `src/App.tsx` — Add affiliate routes |
+| Modify | `src/components/PlatformLayout.tsx` — Add Affiliates nav |
+| Modify | `src/hooks/useAuth.tsx` — Add `affiliate` to AppRole |
+| Modify | `src/pages/Signup.tsx` — Read `?ref=` param |
+| Migration | New tables + enum update + RLS policies |
 
