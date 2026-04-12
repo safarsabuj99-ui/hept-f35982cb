@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Building2, CreditCard, Settings, LogOut, Crown, Megaphone, Shield, Activity,
   GitBranch, TrendingUp, BarChart3, Users, AlertTriangle, Grid3X3, LineChart, Calculator, HeartPulse, Trophy,
+  Wallet, Mail, MailOpen, FileText, DollarSign, Share2, LifeBuoy, Scale, Download,
 } from "lucide-react";
 
 interface NavItem { to: string; icon: any; label: string; }
@@ -25,13 +26,18 @@ const allSections: NavSection[] = [
   ]},
   { title: "Revenue", items: [
     { to: "/platform/revenue", icon: TrendingUp, label: "Revenue" },
+    { to: "/platform/financial-reports", icon: FileText, label: "Financial Reports" },
     { to: "/platform/usage", icon: BarChart3, label: "Usage" },
     { to: "/platform/billing", icon: CreditCard, label: "Billing" },
+    { to: "/platform/payment-gateway", icon: Wallet, label: "Payment Gateway" },
+    { to: "/platform/dunning", icon: DollarSign, label: "Dunning" },
+    { to: "/platform/currency-rates", icon: DollarSign, label: "Currency Rates" },
     { to: "/platform/plans", icon: Settings, label: "Plans" },
   ]},
   { title: "Agencies", items: [
     { to: "/platform/agencies", icon: Building2, label: "Agencies" },
     { to: "/platform/announcements", icon: Megaphone, label: "Announcements" },
+    { to: "/platform/referrals", icon: Share2, label: "Referrals" },
   ]},
   { title: "Intelligence", items: [
     { to: "/platform/cohorts", icon: Users, label: "Cohorts" },
@@ -41,6 +47,17 @@ const allSections: NavSection[] = [
     { to: "/platform/costs", icon: Calculator, label: "Costs" },
     { to: "/platform/health-scores", icon: HeartPulse, label: "Health Scores" },
     { to: "/platform/benchmarks", icon: Trophy, label: "Benchmarks" },
+  ]},
+  { title: "Communication", items: [
+    { to: "/platform/email-templates", icon: Mail, label: "Email Templates" },
+    { to: "/platform/email-log", icon: MailOpen, label: "Email Log" },
+  ]},
+  { title: "Support", items: [
+    { to: "/platform/support", icon: LifeBuoy, label: "Support Tickets" },
+  ]},
+  { title: "Compliance", items: [
+    { to: "/platform/legal", icon: Scale, label: "Legal Documents" },
+    { to: "/platform/data-exports", icon: Download, label: "Data Exports" },
   ]},
   { title: "System", items: [
     { to: "/platform/audit", icon: Shield, label: "Audit Logs" },

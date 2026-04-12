@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon, CreditCard,
+  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon, CreditCard, LifeBuoy,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useBranding } from "@/hooks/useBranding";
@@ -78,6 +78,7 @@ const allSections: NavSection[] = [
     title: "System",
     items: [
       { to: "/admin/subscription", icon: CreditCard, label: "Plan & Billing", permKey: "can_configure_system" },
+      { to: "/admin/support", icon: LifeBuoy, label: "Support" },
       { to: "/admin/settings", icon: Settings, label: "Settings", permKey: "can_configure_system" },
       { to: "/admin/logs", icon: ScrollText, label: "System Logs", permKey: "can_view_audit_logs" },
     ],
