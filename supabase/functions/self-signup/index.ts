@@ -118,7 +118,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3. Assign admin role
+    // 2b. Create affiliate conversion if referred
+    if (affiliateId && ref_code) {
+      const { data: linkData2 } = await supabaseAdmin.from("affiliate_links")
+        .select("id").eq("code", ref_code).single();
+      await supabaseAdmin.from("affiliate_conversions").insert({
+        affiliate_id: affiliateId,
+        link_id: linkData2?.id || null,
+        referred_org_id: org.id,
+        referred_org_name: agency_name.trim(),
+        status: "pending",
+      });
+    }
+
     await supabaseAdmin.from("user_roles").insert({ user_id: userId, role: "admin" });
 
     // 4. Update profile with org_id
