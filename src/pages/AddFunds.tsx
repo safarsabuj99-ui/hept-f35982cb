@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getDhakaDateString } from "@/components/DateRangeFilter";
+import { useProfile } from "@/hooks/useProfile";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 

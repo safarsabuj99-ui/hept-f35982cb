@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useProfile } from "@/hooks/useProfile";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
