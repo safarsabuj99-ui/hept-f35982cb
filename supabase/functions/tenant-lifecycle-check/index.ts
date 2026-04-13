@@ -15,6 +15,15 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Read default grace period from settings
+  const { data: graceSetting } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "default_grace_period_days")
+    .single();
+
+  const defaultGraceDays = parseInt(graceSetting?.value || "7") || 7;
+
   // Find trial orgs whose trial has expired (trial_ends_at + grace_period_days < now)
   const { data: trialOrgs, error } = await supabase
     .from("organizations")
@@ -34,7 +43,7 @@ Deno.serve(async (req) => {
 
   for (const org of trialOrgs ?? []) {
     const trialEnd = new Date(org.trial_ends_at).getTime();
-    const graceMs = (org.grace_period_days ?? 7) * 86400000;
+    const graceMs = (org.grace_period_days ?? defaultGraceDays) * 86400000;
 
     if (now > trialEnd + graceMs) {
       await supabase
@@ -63,7 +72,7 @@ Deno.serve(async (req) => {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, checked: (trialOrgs ?? []).length, suspended }),
+    JSON.stringify({ ok: true, checked: (trialOrgs ?? []).length, suspended, defaultGraceDays }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 });

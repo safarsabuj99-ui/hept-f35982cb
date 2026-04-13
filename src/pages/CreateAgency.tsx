@@ -21,6 +21,8 @@ export default function CreateAgency() {
   const [ownerName, setOwnerName] = useState("");
   const [plan, setPlan] = useState<string>("starter");
   const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [customTrialDays, setCustomTrialDays] = useState<number | "">("");
+  const [defaultTrialDays, setDefaultTrialDays] = useState(14);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -28,6 +30,9 @@ export default function CreateAgency() {
   useEffect(() => {
     supabase.from("platform_plans").select("key, name, max_clients, max_ad_accounts, max_managers, price_bdt_monthly, price_bdt_yearly").eq("is_active", true).order("sort_order").then(({ data }) => {
       if (data?.length) setPlans(data as PlanOption[]);
+    });
+    supabase.from("settings").select("value").eq("key", "default_trial_days").single().then(({ data }) => {
+      if (data?.value) setDefaultTrialDays(parseInt(data.value) || 14);
     });
   }, []);
 
@@ -47,21 +52,23 @@ export default function CreateAgency() {
       const adminUserId = data?.user_id;
       if (!adminUserId) throw new Error("Failed to create admin user");
       const featureFlags = await fetchPlanFeatureFlags(plan);
+      const trialDays = customTrialDays ? Number(customTrialDays) : defaultTrialDays;
       const { data: org, error: orgError } = await supabase.from("organizations").insert({
         name, slug: slug || name.toLowerCase().replace(/\s+/g, "-"), owner_user_id: adminUserId, plan: plan as any, status: "trial",
-        trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+        trial_ends_at: new Date(Date.now() + trialDays * 86400000).toISOString(),
         max_clients: selectedPlan?.max_clients ?? 5, max_ad_accounts: selectedPlan?.max_ad_accounts ?? 10, max_managers: selectedPlan?.max_managers ?? 2,
         allowed_features: featureFlags as any,
       }).select().single();
       if (orgError) throw orgError;
       await supabase.from("profiles").update({ org_id: org.id, is_super_admin: true }).eq("user_id", adminUserId);
       const periodStart = new Date().toISOString().slice(0, 10);
-      const periodEnd = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+      const trialDaysFinal = customTrialDays ? Number(customTrialDays) : defaultTrialDays;
+      const periodEnd = new Date(Date.now() + trialDaysFinal * 86400000).toISOString().slice(0, 10);
       await supabase.from("organization_subscriptions").insert({
         org_id: org.id, plan: plan as any, amount_bdt: selectedPlan?.price_bdt_monthly ?? 0,
         billing_cycle: "monthly", current_period_start: periodStart, current_period_end: periodEnd, payment_status: "pending",
       });
-      toast({ title: "Agency created", description: `${name} is now live with a 14-day trial.` });
+      toast({ title: "Agency created", description: `${name} is now live with a ${trialDaysFinal}-day trial.` });
       navigate("/platform/agencies");
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); } finally { setSaving(false); }
   };
@@ -108,6 +115,14 @@ export default function CreateAgency() {
                     <Badge variant="outline" className="gap-1"><UserCog className="h-3 w-3" />{selectedPlan.max_managers} managers</Badge>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Trial Period (days)</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={365} value={customTrialDays} onChange={(e) => setCustomTrialDays(e.target.value ? parseInt(e.target.value) : "")} placeholder={String(defaultTrialDays)} className="w-24" />
+                  <span className="text-sm text-muted-foreground">Default: {defaultTrialDays} days</span>
+                </div>
               </div>
 
               <div className="border-t border-border/40 pt-5 space-y-1">
