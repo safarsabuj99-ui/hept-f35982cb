@@ -400,61 +400,194 @@ export default function AdAccounts() {
           <p className="text-sm text-muted-foreground">Manage platform ad accounts linked to clients</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          {/* Auto-Import Dialog */}
-          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          {/* Auto-Import Dialog — Two-Phase */}
+          <Dialog open={importOpen} onOpenChange={(open) => { if (!open) resetImportDialog(); else setImportOpen(true); }}>
             <DialogTrigger asChild>
               <Button variant="outline" disabled={integrations.length === 0} className="flex-1 sm:flex-none h-11 sm:h-10">
                 <Download className="mr-2 h-4 w-4" /> Auto-Import
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Auto-Import Ad Accounts</DialogTitle>
+                <DialogTitle>
+                  {importPhase === "select" ? "Auto-Import Ad Accounts" : "Select Accounts to Import"}
+                </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Active Integrations</Label>
-                    <Button variant="ghost" size="sm" onClick={selectAllIntegrations} className="text-xs h-7">
-                      {selectedIntegrations.size === integrations.length ? "Deselect All" : "Select All"}
+
+              {importPhase === "select" ? (
+                /* ── Phase 1: Select Integrations ── */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Active Integrations</Label>
+                      <Button variant="ghost" size="sm" onClick={selectAllIntegrations} className="text-xs h-7">
+                        {selectedIntegrations.size === integrations.length ? "Deselect All" : "Select All"}
+                      </Button>
+                    </div>
+                    <div className="space-y-2 rounded-md border p-3">
+                      {integrations.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2 text-center">No active integrations found</p>
+                      ) : (
+                        integrations.map((int) => (
+                          <label key={int.id} className="flex items-center gap-3 py-1.5 px-1 rounded hover:bg-accent/50 cursor-pointer">
+                            <Checkbox
+                              checked={selectedIntegrations.has(int.id)}
+                              onCheckedChange={() => toggleIntegration(int.id)}
+                            />
+                            <div className="flex items-center gap-2 flex-1">
+                              <Badge variant="secondary" className="capitalize text-[10px]">{int.platform}</Badge>
+                              <span className="text-sm">{int.instance_name || `${int.platform} integration`}</span>
+                            </div>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  {selectedIntegrations.size > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedIntegrations.size} integration(s) selected — accounts will be fetched via API
+                    </p>
+                  )}
+                  {importStatus && (
+                    <p className="text-xs text-primary flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" /> {importStatus}
+                    </p>
+                  )}
+                  <DialogFooter>
+                    <Button onClick={handleFetchPreview} disabled={importing || selectedIntegrations.size === 0} className="w-full">
+                      {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Fetch Accounts
                     </Button>
-                  </div>
-                  <div className="space-y-2 rounded-md border p-3">
-                    {integrations.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2 text-center">No active integrations found</p>
-                    ) : (
-                      integrations.map((int) => (
-                        <label key={int.id} className="flex items-center gap-3 py-1.5 px-1 rounded hover:bg-accent/50 cursor-pointer">
-                          <Checkbox
-                            checked={selectedIntegrations.has(int.id)}
-                            onCheckedChange={() => toggleIntegration(int.id)}
-                          />
-                          <div className="flex items-center gap-2 flex-1">
-                            <Badge variant="secondary" className="capitalize text-[10px]">{int.platform}</Badge>
-                            <span className="text-sm">{int.instance_name || `${int.platform} integration`}</span>
-                          </div>
-                        </label>
-                      ))
-                    )}
-                  </div>
+                  </DialogFooter>
                 </div>
-                {selectedIntegrations.size > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedIntegrations.size} integration(s) selected — accounts will be fetched via API
-                  </p>
-                )}
-                {importStatus && (
-                  <p className="text-xs text-primary flex items-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin" /> {importStatus}
-                  </p>
-                )}
-              </div>
-              <DialogFooter>
-                <Button onClick={handleAutoImport} disabled={importing || selectedIntegrations.size === 0} className="w-full">
-                  {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Import Accounts
-                </Button>
-              </DialogFooter>
+              ) : (
+                /* ── Phase 2: Review & Select Discovered Accounts ── */
+                <div className="space-y-4">
+                  {/* Limit banner */}
+                  {orgLimits && orgLimits.max_ad_accounts !== null && (
+                    <div className={`rounded-lg border p-3 text-sm flex items-center justify-between ${
+                      orgLimits.remaining === 0 ? "bg-destructive/10 border-destructive/30" :
+                      orgLimits.remaining !== null && orgLimits.remaining <= 3 ? "bg-yellow-500/10 border-yellow-500/30" :
+                      "bg-primary/5 border-primary/20"
+                    }`}>
+                      <span>
+                        <strong>{orgLimits.current_count}</strong> of <strong>{orgLimits.max_ad_accounts}</strong> ad accounts used
+                      </span>
+                      <Badge variant={orgLimits.remaining === 0 ? "destructive" : "secondary"}>
+                        {orgLimits.remaining === 0 ? "Limit reached" : `${orgLimits.remaining} remaining`}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {/* Error warnings */}
+                  {importErrors.length > 0 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive space-y-1">
+                      {importErrors.map((err, i) => <p key={i}>⚠ {err}</p>)}
+                    </div>
+                  )}
+
+                  {discoveredAccounts.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="font-medium">No accounts found</p>
+                      <p className="text-xs mt-1">The selected integrations returned no ad accounts.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Select all / count */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selectedDiscovered.size > 0 && selectedDiscovered.size === discoveredAccounts.filter(a => !a.already_imported).length}
+                            onCheckedChange={selectAllDiscovered}
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {selectedDiscovered.size} of {discoveredAccounts.filter(a => !a.already_imported).length} new account(s) selected
+                          </span>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setImportPhase("select")} className="text-xs h-7">
+                          ← Back
+                        </Button>
+                      </div>
+
+                      {/* Scrollable account list */}
+                      <div className="max-h-[400px] overflow-y-auto rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-10" />
+                              <TableHead>Platform</TableHead>
+                              <TableHead>Account Name</TableHead>
+                              <TableHead>Account ID</TableHead>
+                              <TableHead>Currency</TableHead>
+                              <TableHead>Billing</TableHead>
+                              <TableHead>Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {discoveredAccounts.map((acc) => {
+                              const key = `${acc.platform}:${acc.ad_account_id}`;
+                              const isSelected = selectedDiscovered.has(key);
+                              return (
+                                <TableRow key={key} className={acc.already_imported ? "opacity-50" : isSelected ? "bg-primary/5" : ""}>
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={isSelected}
+                                      disabled={acc.already_imported}
+                                      onCheckedChange={() => toggleDiscoveredAccount(key)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary" className="capitalize text-[10px]">{acc.platform}</Badge>
+                                  </TableCell>
+                                  <TableCell className="text-sm font-medium max-w-[200px] truncate">{acc.account_name || "—"}</TableCell>
+                                  <TableCell className="font-mono text-xs">{acc.ad_account_id}</TableCell>
+                                  <TableCell><Badge variant={acc.account_currency === "BDT" ? "outline" : "default"} className="text-[10px]">{acc.account_currency}</Badge></TableCell>
+                                  <TableCell>
+                                    <Badge variant={acc.billing_type === "threshold_postpaid" ? "destructive" : "secondary"} className="text-[10px]">
+                                      {acc.billing_type === "threshold_postpaid" ? "Threshold" : "Prepaid"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {acc.already_imported ? (
+                                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Already imported</Badge>
+                                    ) : (
+                                      <Badge variant="default" className="text-[10px] bg-emerald-600">New</Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Selection vs limit warning */}
+                      {orgLimits?.remaining !== null && orgLimits?.remaining !== undefined && selectedDiscovered.size > orgLimits.remaining && (
+                        <p className="text-xs text-destructive font-medium">
+                          ⚠ You selected {selectedDiscovered.size} accounts but only {orgLimits.remaining} more are allowed. Deselect some accounts.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {importStatus && (
+                    <p className="text-xs text-primary flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" /> {importStatus}
+                    </p>
+                  )}
+
+                  <DialogFooter>
+                    <Button
+                      onClick={handleImportSelected}
+                      disabled={importing || selectedDiscovered.size === 0 || (orgLimits?.remaining === 0)}
+                      className="w-full"
+                    >
+                      {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Import {selectedDiscovered.size} Account{selectedDiscovered.size !== 1 ? "s" : ""}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 
