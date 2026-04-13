@@ -1,48 +1,48 @@
 
 
-## Plan: Add org_id Auto-Set Triggers for All Tables Missing Them
+## Plan: Fix Collections KPI Using `payment_date` Instead of `created_at`
 
-### Problem
-The screenshot shows `"new row violates row-level security policy for table ad_account_clients"` when assigning an ad account to a client. The admin RLS policy requires `org_id = get_user_org_id(auth.uid())`, but the insert payload has no `org_id` — and there's no trigger to auto-populate it.
+### Root Cause
 
-This same bug exists across **7 more tables** that have `org_id` columns with org-scoped RLS but no auto-set trigger:
+The `get_admin_dashboard_summary` RPC function calculates "Today's Collections" by filtering on `created_at::date`, but this is the **submission date** — not the actual collection date. The correct column is `payment_date`, which represents when the money was actually received.
 
-| Table | Insert Source | Will break? |
-|-------|--------------|-------------|
-| `ad_account_clients` | ClientDetail, AdAccountDetail | **Yes — screenshot** |
-| `ad_accounts` | auto-import edge function | Yes (service role) |
-| `billing_notifications` | sync-orchestrator edge function | Yes (service role) |
-| `campaign_mappings` | sync-deep-dive, sync-fast-lane | Yes (service role) |
-| `campaigns` | sync-deep-dive | Yes (service role) |
-| `notifications` | 10+ edge functions, 3+ pages | Yes |
-| `campaign_requests` | NewCampaignRequest (admin path) | Yes (admin only) |
-| `client_notices` | ClientNotices page | Yes |
+**Example from your data:** A ৳4,000 payment has `payment_date = 2026-04-14` (today) but `created_at = 2026-04-13` (yesterday in UTC). The dashboard shows ৳0 because `created_at::date` doesn't match today.
 
-### Fix — One Migration
+**Secondary bug:** The collections query is also missing the `org_id = p_org_id` filter that all other queries have — a multi-tenant data leak.
 
-Create `BEFORE INSERT` triggers on all 8 tables using a universal fallback strategy:
+### What Changes
 
-```text
-1. Try auth.uid() → get_user_org_id()     (browser inserts)
-2. Try client_id → profiles.org_id         (for tables with client_id)
-3. Try ad_account_id → ad_accounts.org_id  (for ad_account_clients, billing_notifications)
-4. Try campaign_id → campaigns.org_id      (for campaign_mappings)
-5. Try user_id → profiles.org_id           (for notifications)
-6. Last resort → first org                 (single-tenant safety)
-```
+One database migration to update the `get_admin_dashboard_summary` RPC function:
 
-Each table gets a dedicated trigger function with the appropriate fallback chain for its foreign keys.
+1. **Collections in range (line 66-71)** — change `(created_at::date)` to `payment_date` and add `org_id = v_org_id` filter
+2. **7-day collection sparkline (line 84-92)** — change `(pr.created_at::date)` to `pr.payment_date` in the join condition
 
-### Also: Backfill existing NULLs
+### Technical Detail
 
 ```sql
--- Backfill any existing NULL org_id rows from parent records
+-- Before (broken):
+SELECT COALESCE(SUM(amount_bdt), 0)
+FROM payment_requests
+WHERE status = 'approved'
+  AND (created_at::date) >= p_date_from
+  AND (created_at::date) <= p_date_to;
+
+-- After (fixed):
+SELECT COALESCE(SUM(amount_bdt), 0)
+FROM payment_requests
+WHERE status = 'approved'
+  AND payment_date >= p_date_from
+  AND payment_date <= p_date_to
+  AND org_id = v_org_id;
 ```
+
+Same fix applied to the sparkline subquery.
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Migration | Add 8 `BEFORE INSERT` trigger functions + triggers + backfill NULLs |
+| Migration | Update `get_admin_dashboard_summary` — use `payment_date` + add `org_id` filter |
 
-No UI code changes needed — the triggers will auto-populate `org_id` transparently.
+### Expected Result
+Today's Collections KPI will correctly show ৳4,000 (and any other collections made today), and the sparkline will accurately reflect daily collection history by actual payment date.
 
