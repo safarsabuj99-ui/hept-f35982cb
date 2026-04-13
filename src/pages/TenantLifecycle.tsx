@@ -41,7 +41,38 @@ export default function TenantLifecycle() {
   const fetchOrgs = async () => { const { data } = await supabase.from("organizations").select("*").order("created_at", { ascending: false }); setOrgs((data as any[]) ?? []); setLoading(false); };
   useEffect(() => { fetchOrgs(); }, []);
 
+  const filteredGrouped = STATUS_COLUMNS.map((col) => {
+    let colOrgs = orgs.filter((o) => o.status === col.key);
+    if (col.key === "trial" && trialFilter !== "all") {
+      colOrgs = colOrgs.filter((o) => {
+        const d = daysUntil(o.trial_ends_at);
+        if (trialFilter === "expiring_soon") return d !== null && d > 0 && d <= 7;
+        if (trialFilter === "expired") return d !== null && d <= 0;
+        return true;
+      });
+    }
+    return { ...col, orgs: colOrgs };
+  });
+
   const grouped = STATUS_COLUMNS.map((col) => ({ ...col, orgs: orgs.filter((o) => o.status === col.key) }));
+
+  const handleExtendTrial = async (orgId: string, trialEndsAt: string | null, days: number) => {
+    const base = trialEndsAt ? new Date(trialEndsAt).getTime() : Date.now();
+    const newEnd = new Date(base + days * 86400000).toISOString();
+    await supabase.from("organizations").update({ trial_ends_at: newEnd } as any).eq("id", orgId);
+    toast({ title: `Trial extended by ${days} days` });
+    fetchOrgs();
+  };
+
+  const handleConvertToPaid = async (orgId: string) => {
+    await supabase.from("organizations").update({
+      status: "active",
+      suspension_reason: null,
+      status_changed_at: new Date().toISOString(),
+    } as any).eq("id", orgId);
+    toast({ title: "Agency converted to active" });
+    fetchOrgs();
+  };
 
   const handleTransition = async () => {
     if (!confirmDialog) return;
