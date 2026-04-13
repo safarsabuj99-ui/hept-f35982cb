@@ -526,6 +526,7 @@ Deno.serve(async (req) => {
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             // Upsert daily metrics with funnel actions
@@ -556,6 +557,7 @@ Deno.serve(async (req) => {
                 conversion_value: conversionValue, roas,
                 status: finalStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
@@ -634,6 +636,7 @@ Deno.serve(async (req) => {
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             await upsertMetrics(campaignDbId, dataDate, {
@@ -652,6 +655,7 @@ Deno.serve(async (req) => {
                 results: Math.round(conversions), conversion_value: conversionValue,
                 roas, status: finalStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
@@ -859,6 +863,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             const spendUsd = convertSpend(spend);
@@ -889,6 +894,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                 results: conversions, conversion_value: 0, roas,
                 status: finalTiktokStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
