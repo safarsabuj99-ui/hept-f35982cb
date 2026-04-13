@@ -158,7 +158,7 @@ export default function Signup() {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      setStep(3);
+      setStep(confirmationStepIndex);
     } catch (err: any) {
       toast({ title: "Signup failed", description: err.message || "Something went wrong", variant: "destructive" });
     } finally {
