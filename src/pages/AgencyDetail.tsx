@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard, Check, X, Settings2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, LogIn, Users, Monitor, UserCheck, Clock, KeyRound, CreditCard, Check, X, Settings2, Save, RefreshCw } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { ALL_FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/hooks/useOrgFeatures";
 
@@ -283,9 +283,82 @@ export default function AgencyDetail() {
 
       {trialDays !== null && org.status === "trial" && (
         <Card className="border-warning/50 bg-warning/5">
-          <CardContent className="py-3 flex items-center gap-3">
-            <Clock className="h-5 w-5 text-warning" />
-            <p className="text-sm text-foreground"><strong>{trialDays}</strong> days left in trial{trialDays === 0 ? " — expired!" : ""}</p>
+          <CardContent className="py-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-warning" />
+              <p className="text-sm text-foreground"><strong>{trialDays}</strong> days left in trial{trialDays === 0 ? " — expired!" : ""}</p>
+            </div>
+
+            {/* Trial Progress Bar */}
+            {org.trial_ends_at && org.created_at && (() => {
+              const totalDays = Math.ceil((new Date(org.trial_ends_at).getTime() - new Date(org.created_at).getTime()) / 86400000);
+              const elapsed = totalDays - trialDays;
+              const pct = totalDays > 0 ? Math.min(100, Math.round((elapsed / totalDays) * 100)) : 100;
+              const color = trialDays > 7 ? "[&>div]:bg-success" : trialDays > 3 ? "[&>div]:bg-warning" : "[&>div]:bg-destructive";
+              return (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{elapsed}d elapsed</span>
+                    <span>{totalDays}d total</span>
+                  </div>
+                  <Progress value={pct} className={`h-2 ${color}`} />
+                </div>
+              );
+            })()}
+
+            {/* Trial Controls */}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                const newEnd = new Date((org.trial_ends_at ? new Date(org.trial_ends_at).getTime() : Date.now()) + 7 * 86400000).toISOString();
+                await updateField("trial_ends_at", newEnd);
+                toast({ title: "Trial extended by 7 days" });
+              }}>
+                <Clock className="h-3.5 w-3.5" /> +7 Days
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                const newEnd = new Date((org.trial_ends_at ? new Date(org.trial_ends_at).getTime() : Date.now()) + 14 * 86400000).toISOString();
+                await updateField("trial_ends_at", newEnd);
+                toast({ title: "Trial extended by 14 days" });
+              }}>
+                <Clock className="h-3.5 w-3.5" /> +14 Days
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                const { data: setting } = await supabase.from("settings").select("value").eq("key", "default_trial_days").single();
+                const days = parseInt(setting?.value || "14") || 14;
+                const newEnd = new Date(Date.now() + days * 86400000).toISOString();
+                await updateField("trial_ends_at", newEnd);
+                toast({ title: `Trial reset to ${days} days from today` });
+              }}>
+                <RefreshCw className="h-3.5 w-3.5" /> Reset Trial
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={async () => {
+                setSaving(true);
+                await supabase.from("organizations").update({
+                  status: "active",
+                  suspension_reason: null,
+                  status_changed_at: new Date().toISOString(),
+                } as any).eq("id", agencyId!);
+                setOrg((prev) => prev ? { ...prev, status: "active" as any } : prev);
+                toast({ title: "Agency converted to active" });
+                setSaving(false);
+              }}>
+                <Check className="h-3.5 w-3.5" /> Convert to Paid
+              </Button>
+            </div>
+
+            {/* Grace Period Override */}
+            <div className="flex items-center gap-3 pt-1 border-t border-border/40">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Grace Period:</Label>
+              <Input
+                type="number"
+                min={0}
+                max={90}
+                className="w-16 h-7 text-xs"
+                defaultValue={org.grace_period_days}
+                onBlur={(e) => updateField("grace_period_days", parseInt(e.target.value) || 0)}
+              />
+              <span className="text-xs text-muted-foreground">days after trial before suspension</span>
+            </div>
           </CardContent>
         </Card>
       )}

@@ -117,6 +117,14 @@ export default function CreateAgency() {
                 )}
               </div>
 
+              <div className="space-y-2">
+                <Label>Trial Period (days)</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={365} value={customTrialDays} onChange={(e) => setCustomTrialDays(e.target.value ? parseInt(e.target.value) : "")} placeholder={String(defaultTrialDays)} className="w-24" />
+                  <span className="text-sm text-muted-foreground">Default: {defaultTrialDays} days</span>
+                </div>
+              </div>
+
               <div className="border-t border-border/40 pt-5 space-y-1">
                 <p className="text-sm font-semibold text-foreground">Agency Admin Account</p>
                 <p className="text-xs text-muted-foreground">This user will be the agency's super admin.</p>
