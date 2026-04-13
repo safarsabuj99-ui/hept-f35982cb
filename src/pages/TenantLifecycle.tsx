@@ -4,14 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Clock, AlertTriangle, XCircle, CheckCircle, ArrowRight, GitBranch, Loader2 } from "lucide-react";
+import { Building2, Clock, AlertTriangle, XCircle, CheckCircle, ArrowRight, GitBranch, Loader2, Timer, RefreshCw, Check } from "lucide-react";
 
 type OrgStatus = "trial" | "active" | "suspended" | "cancelled";
 interface Org { id: string; name: string; slug: string; plan: string; status: OrgStatus; created_at: string; trial_ends_at: string | null; grace_period_days: number; status_changed_at: string; suspension_reason: string | null; max_clients: number; max_ad_accounts: number; max_managers: number; }
@@ -32,6 +34,7 @@ export default function TenantLifecycle() {
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ org: Org; targetStatus: OrgStatus } | null>(null);
   const [reason, setReason] = useState("");
+  const [trialFilter, setTrialFilter] = useState<"all" | "expiring_soon" | "expired">("all");
   const navigate = useNavigate();
   const { toast } = useToast();
 
