@@ -70,6 +70,12 @@ export default function AdAccounts() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
   const [importStatus, setImportStatus] = useState("");
+  // Two-phase import state
+  const [importPhase, setImportPhase] = useState<"select" | "review">("select");
+  const [discoveredAccounts, setDiscoveredAccounts] = useState<DiscoveredAccount[]>([]);
+  const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(new Set());
+  const [orgLimits, setOrgLimits] = useState<OrgLimits | null>(null);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const [form, setForm] = useState({
     platform_name: "", ad_account_id: "", account_currency: "USD",
     account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
