@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useProfile } from "@/hooks/useProfile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export default function ExpenseManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { toast } = useToast();
 
   const fetchExpenses = useCallback(async (range: DateRange | null) => {
@@ -100,6 +102,7 @@ export default function ExpenseManager() {
       description: description || null,
       created_by: user?.id,
       paid_from_account_id: paidFromAccountId || null,
+      org_id: profile?.org_id || null,
     } as any);
 
     if (!error && paidFromAccountId) {
