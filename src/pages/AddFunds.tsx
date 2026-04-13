@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getDhakaDateString } from "@/components/DateRangeFilter";
+import { useProfile } from "@/hooks/useProfile";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
 
@@ -30,6 +31,7 @@ export default function AddFunds() {
   const [isLoading, setIsLoading] = useState(false);
   const { user, role } = useAuth();
   const { toast } = useToast();
+  const { profile } = useProfile();
   
   const { permissions } = usePermissions();
   const navigate = useNavigate();
@@ -98,6 +100,7 @@ export default function AddFunds() {
         status,
         exchange_rate: null,
         platform: p.key,
+        org_id: (profile as any)?.org_id || null,
       }));
 
     const { error } = await supabase.from("transactions").insert(inserts as any);
