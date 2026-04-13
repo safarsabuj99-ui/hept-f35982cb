@@ -59,6 +59,14 @@ Deno.serve(async (req) => {
 
     const { client_id, from_platform, to_platform, amount_usd } = await req.json();
 
+    // Look up client's org_id for all inserts
+    const { data: clientProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("org_id")
+      .eq("user_id", client_id)
+      .single();
+    const clientOrgId = clientProfile?.org_id || null;
+
     // Validate inputs
     const validPlatforms = ["meta", "tiktok", "google"];
     if (!client_id || !from_platform || !to_platform || !amount_usd) {
@@ -147,6 +155,7 @@ Deno.serve(async (req) => {
       status: "completed",
       created_by: callerId,
       description,
+      org_id: clientOrgId,
     });
 
     if (debitErr) {
@@ -164,6 +173,7 @@ Deno.serve(async (req) => {
       status: "completed",
       created_by: callerId,
       description,
+      org_id: clientOrgId,
     });
 
     if (creditErr) {
@@ -178,6 +188,7 @@ Deno.serve(async (req) => {
       user_id: callerId,
       action_type: "platform_transfer",
       description: `Transfer $${usd} from ${from_platform} → ${to_platform} (→ $${destUsd}) for client ${client_id}`,
+      org_id: clientOrgId,
     });
 
     return new Response(
