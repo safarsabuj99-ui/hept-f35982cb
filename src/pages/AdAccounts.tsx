@@ -161,31 +161,114 @@ export default function AdAccounts() {
     }
   };
 
-  const handleAutoImport = async () => {
+  // Phase 1: Fetch & preview accounts from platforms
+  const handleFetchPreview = async () => {
     if (selectedIntegrations.size === 0) {
       toast({ title: "Missing fields", description: "Select at least one integration", variant: "destructive" });
       return;
     }
     setImporting(true);
     setImportStatus("Fetching accounts from platforms...");
+    setImportErrors([]);
     try {
       const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
-        body: { integration_ids: Array.from(selectedIntegrations) },
+        body: { integration_ids: Array.from(selectedIntegrations), preview: true },
       });
       if (error) throw error;
+      const discovered: DiscoveredAccount[] = data.discovered ?? [];
+      setDiscoveredAccounts(discovered);
+      setOrgLimits(data.limits ?? null);
+      setImportErrors(data.errors ?? []);
+      // Pre-select all non-imported accounts
+      const selectable = discovered.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+      // Cap at remaining limit
+      const remaining = data.limits?.remaining;
+      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      setSelectedDiscovered(new Set(capped));
+      setImportPhase("review");
+    } catch (err: any) {
+      toast({ title: "Fetch Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+      setImportStatus("");
+    }
+  };
+
+  // Phase 2: Import only selected accounts
+  const handleImportSelected = async () => {
+    if (selectedDiscovered.size === 0) {
+      toast({ title: "No accounts selected", description: "Select at least one account to import", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    setImportStatus("Importing selected accounts...");
+    try {
+      const toImport = discoveredAccounts.filter(
+        (a) => selectedDiscovered.has(`${a.platform}:${a.ad_account_id}`) && !a.already_imported
+      );
+      const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
+        body: {
+          integration_ids: Array.from(selectedIntegrations),
+          preview: false,
+          selected_accounts: toImport,
+        },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Import Failed", description: data.error, variant: "destructive" });
+        return;
+      }
       const errMsg = data.errors?.length ? `\nWarnings: ${data.errors.join("; ")}` : "";
       toast({
         title: "Import Complete",
         description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)${errMsg}`,
       });
-      setImportOpen(false);
-      setSelectedIntegrations(new Set());
+      resetImportDialog();
       fetchData();
     } catch (err: any) {
       toast({ title: "Import Failed", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
       setImportStatus("");
+    }
+  };
+
+  const resetImportDialog = () => {
+    setImportOpen(false);
+    setImportPhase("select");
+    setSelectedIntegrations(new Set());
+    setDiscoveredAccounts([]);
+    setSelectedDiscovered(new Set());
+    setOrgLimits(null);
+    setImportErrors([]);
+  };
+
+  const toggleDiscoveredAccount = (key: string) => {
+    setSelectedDiscovered((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        // Enforce limit
+        const remaining = orgLimits?.remaining;
+        if (remaining !== null && remaining !== undefined && next.size >= remaining) {
+          toast({ title: "Limit reached", description: `Your plan allows ${remaining} more ad account(s)`, variant: "destructive" });
+          return prev;
+        }
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const selectAllDiscovered = () => {
+    const selectable = discoveredAccounts.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+    if (selectedDiscovered.size === selectable.length) {
+      setSelectedDiscovered(new Set());
+    } else {
+      const remaining = orgLimits?.remaining;
+      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      setSelectedDiscovered(new Set(capped));
     }
   };
 
