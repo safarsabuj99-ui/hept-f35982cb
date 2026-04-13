@@ -44,6 +44,7 @@ export function DepositFundsDialog({
   isAdmin = false,
   onSuccess,
 }: DepositFundsDialogProps) {
+  const { profile } = useProfile();
   const { toast } = useToast();
   const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");

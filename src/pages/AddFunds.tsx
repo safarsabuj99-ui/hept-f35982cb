@@ -31,6 +31,7 @@ export default function AddFunds() {
   const [isLoading, setIsLoading] = useState(false);
   const { user, role } = useAuth();
   const { toast } = useToast();
+  const { profile } = useProfile();
   
   const { permissions } = usePermissions();
   const navigate = useNavigate();
