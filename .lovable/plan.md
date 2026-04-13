@@ -1,27 +1,33 @@
 
 
-## Plan: Delete Both Test Agencies and All Their Data
+## Plan: Backfill NULL org_id Records to MD SABUJ MIAH Agency
 
-### Agencies to Delete
-- **test1** (`fa196986-ccaa-40ee-abc0-7ea2531c8532`) — trial, user: `f7e8deb8-520e-4f43-b4ac-4205ef19080a`
-- **test agency** (`ce4e84d4-9018-49a9-9a42-89781728117e`) — pending_payment, user: `a826a5cc-2e68-4bab-b989-0a914ed1bbae`
+### Problem
+After the multi-tenant RLS fix, records with `NULL org_id` are invisible to the agency admin because the policies now require `org_id = get_user_org_id(auth.uid())`. This is why dashboard data (spend, collections, profitability) appears empty — the data exists but is filtered out.
 
-### What Gets Deleted
-Using the database insert tool (which supports DELETE), remove all rows referencing these org IDs and user IDs across all tables, then delete the organizations and auth users.
+### Affected Tables (NULL org_id counts)
+| Table | NULL Records |
+|-------|-------------|
+| transactions | 483 |
+| daily_metrics | 212 |
+| campaign_performance | 212 |
+| daily_ad_spend | 59 |
+| payment_requests | 12 |
+| usd_inventory_snapshots | 13 |
+| usd_purchases | 10 |
+| agency_expenses | 9 |
+| campaigns | 8 |
+| liquid_fund_entries | 4 |
+| ad_account_clients | 1 |
+| fund_transfers | 1 |
 
-**Deletion order** (respecting dependencies):
-1. `notification_preferences`, `notifications`, `push_subscriptions` — by user_id
-2. `subscription_payments`, `organization_subscriptions`, `subscription_invoices` — by org_id
-3. `audit_logs` — by user_id
-4. `user_roles` — by user_id
-5. `profiles` — by user_id
-6. `organizations` — by id
-7. Auth users — deleted via `auth.users` (requires migration with `DELETE FROM auth.users`)
+### Fix
+One database migration that updates all NULL `org_id` records to `a1b2c3d4-e5f6-7890-abcd-ef1234567890` (MD SABUJ MIAH Agency) across all 12 tables. Since this is the only active agency and all legacy data belongs to it, this is safe.
 
-### Technical Approach
-- Use the **insert tool** for data deletions (DELETE statements) across all affected tables
-- Use a **migration** to delete from `auth.users` (since we can't modify auth schema via insert tool — we'll use a migration that deletes and commits)
+### Files Changed
+| Action | File |
+|--------|------|
+| Migration | Backfill NULL org_id across 12 tables |
 
-### Safety
-MD SABUJ MIAH Agency (`a1b2c3d4-e5f6-7890-abcd-ef1234567890`) is untouched — all queries filter by the two test org IDs only.
+No code changes needed — the data just needs the correct org assignment.
 
