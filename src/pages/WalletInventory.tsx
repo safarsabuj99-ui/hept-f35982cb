@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ export default function WalletInventory() {
     snapshotDate: null, loading: true,
   });
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { toast } = useToast();
 
   const fetchPurchases = useCallback(async (range: DateRange | null) => {
@@ -235,6 +237,7 @@ export default function WalletInventory() {
       notes: notes || null,
       created_by: user?.id,
       paid_from_account_id: paidFromAccountId || null,
+      org_id: profile?.org_id || null,
     } as any);
     
     if (!error && paidFromAccountId) {
@@ -266,6 +269,7 @@ export default function WalletInventory() {
       description: spendDescription || null,
       notes: spendNotes || null,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
     if (error) {
@@ -290,6 +294,7 @@ export default function WalletInventory() {
       balance_usd: Number(openingBalance),
       notes: openingNotes || "Opening balance",
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
     if (error) {
@@ -309,6 +314,7 @@ export default function WalletInventory() {
       balance_usd: overview.availableBalance,
       notes: closeNotes || `Period close — Balance: $${overview.availableBalance.toLocaleString()}`,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
     if (error) {

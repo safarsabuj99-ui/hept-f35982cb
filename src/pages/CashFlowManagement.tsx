@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
+import { useProfile } from "@/hooks/useProfile";
 
 interface AgencyAccount {
   id: string;
@@ -151,6 +152,7 @@ export default function CashFlowManagement() {
   const [actPageSize, setActPageSize] = useState(20);
 
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
@@ -271,6 +273,7 @@ export default function CashFlowManagement() {
       type: accType,
       account_number: accNumber || null,
       current_balance_bdt: Number(accBalance) || 0,
+      org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
     if (error) {
@@ -320,6 +323,7 @@ export default function CashFlowManagement() {
       amount_bdt: amt,
       note: transferNote || null,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
 
     setTransferring(false);
@@ -344,6 +348,7 @@ export default function CashFlowManagement() {
       date: fundDate,
       note: fundNote || null,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
     if (insertErr) {
       setFundSubmitting(false);
@@ -382,6 +387,7 @@ export default function CashFlowManagement() {
       expected_return_date: wdExpectedDate || null,
       note: wdNote || null,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
 
     if (insertErr) {
@@ -427,6 +433,7 @@ export default function CashFlowManagement() {
       date: retDate,
       note: retNote || null,
       created_by: user?.id,
+      org_id: profile?.org_id || null,
     } as any);
 
     if (insertErr) {
