@@ -193,6 +193,7 @@ export function DepositFundsDialog({
       platform_amounts: platformAmountsObj,
       received_in_account_id: selectedAccountId || null,
       proof_image_url: proofUrl,
+      org_id: (profile as any)?.org_id || null,
     };
 
     if (paymentDate) {

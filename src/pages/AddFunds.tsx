@@ -100,6 +100,7 @@ export default function AddFunds() {
         status,
         exchange_rate: null,
         platform: p.key,
+        org_id: (profile as any)?.org_id || null,
       }));
 
     const { error } = await supabase.from("transactions").insert(inserts as any);
