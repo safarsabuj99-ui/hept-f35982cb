@@ -101,8 +101,11 @@ export default function Signup() {
 
   const nextStep = () => {
     if (step === 0 && !validateStep1()) return;
-    if (step === 1 && !validateStep2()) return;
-    if (step === 2) { handleSubmit(); return; }
+    if (step === 1 && !validateStep2()) {
+      return;
+    }
+    if (step === 1 && trialMode) { handleSubmit(); return; }
+    if (step === paymentStepIndex) { handleSubmit(); return; }
     setStep(step + 1);
     setErrors({});
   };
