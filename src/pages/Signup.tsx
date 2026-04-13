@@ -29,7 +29,8 @@ const PAYMENT_METHODS = [
   { value: "bank_transfer", label: "Bank Transfer", number: "Account details will be provided", color: "bg-blue-500" },
 ];
 
-const steps = ["Select Plan", "Account Details", "Payment", "Confirmation"];
+const STEPS_WITH_PAYMENT = ["Select Plan", "Account Details", "Payment", "Confirmation"];
+const STEPS_TRIAL = ["Select Plan", "Account Details", "Confirmation"];
 
 export default function Signup() {
   const [step, setStep] = useState(0);
@@ -45,15 +46,26 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [trialMode, setTrialMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get("ref") || "";
 
+  const steps = trialMode ? STEPS_TRIAL : STEPS_WITH_PAYMENT;
+  const paymentStepIndex = trialMode ? -1 : 2;
+  const confirmationStepIndex = trialMode ? 2 : 3;
+
   useEffect(() => {
-    supabase.from("platform_plans").select("*").eq("is_active", true).order("sort_order").then(({ data }) => {
-      setPlans((data as any[]) ?? []);
+    Promise.all([
+      supabase.from("platform_plans").select("*").eq("is_active", true).order("sort_order"),
+      supabase.from("settings").select("key, value").eq("key", "trial_on_self_signup").maybeSingle(),
+    ]).then(([plansRes, settingRes]) => {
+      setPlans((plansRes.data as any[]) ?? []);
+      if (settingRes.data && (settingRes.data as any).value === "true") {
+        setTrialMode(true);
+      }
       setLoadingPlans(false);
     });
   }, []);

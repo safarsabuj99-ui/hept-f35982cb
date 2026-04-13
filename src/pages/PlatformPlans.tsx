@@ -114,11 +114,17 @@ export default function PlatformPlans() {
       { key: "default_grace_period_days", value: String(gracePeriodDays) },
       { key: "trial_on_self_signup", value: String(trialOnSelfSignup) },
     ];
+    let failed = false;
     for (const u of updates) {
-      await supabase.from("settings").update({ value: u.value }).eq("key", u.key);
+      const { error, count } = await supabase.from("settings").update({ value: u.value }).eq("key", u.key);
+      if (error) { failed = true; break; }
     }
     setSavingTrialSettings(false);
-    toast({ title: "Trial settings saved" });
+    if (failed) {
+      toast({ title: "Failed to save trial settings", description: "Permission denied or settings not found.", variant: "destructive" });
+    } else {
+      toast({ title: "Trial settings saved" });
+    }
   };
 
   const openEdit = (plan: Plan) => {
