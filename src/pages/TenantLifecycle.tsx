@@ -112,9 +112,22 @@ export default function TenantLifecycle() {
       </div>
 
       <div>
-        <p className="section-label mb-3">Pipeline</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-label">Pipeline</p>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">Trial filter:</Label>
+            <Select value={trialFilter} onValueChange={(v: any) => setTrialFilter(v)}>
+              <SelectTrigger className="w-32 h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="expiring_soon">Expiring Soon</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
-          {grouped.map((col, colIdx) => (
+          {filteredGrouped.map((col, colIdx) => (
             <div key={col.key} className="space-y-3 animate-slide-up-fade" style={{ animationDelay: `${colIdx * 100}ms`, animationFillMode: "forwards" }}>
               <div className={`flex items-center gap-2 pb-2 border-b-2 ${col.borderColor}`}>
                 <span className={col.color}>{col.icon}</span>
@@ -127,6 +140,17 @@ export default function TenantLifecycle() {
                   const trialDaysLeft = org.status === "trial" ? daysUntil(org.trial_ends_at) : null;
                   const daysInState = daysAgo(org.status_changed_at);
                   const nextStatuses = getNextStatuses(org.status);
+
+                  // Compute trial progress
+                  const totalTrialDays = org.status === "trial" && org.trial_ends_at && org.created_at
+                    ? Math.ceil((new Date(org.trial_ends_at).getTime() - new Date(org.created_at).getTime()) / 86400000)
+                    : null;
+                  const trialElapsed = totalTrialDays && trialDaysLeft !== null ? totalTrialDays - Math.max(0, trialDaysLeft) : null;
+                  const trialPct = totalTrialDays && trialElapsed !== null ? Math.min(100, Math.round((trialElapsed / totalTrialDays) * 100)) : null;
+                  const trialColor = trialDaysLeft !== null
+                    ? trialDaysLeft > 7 ? "[&>div]:bg-success" : trialDaysLeft > 3 ? "[&>div]:bg-warning" : "[&>div]:bg-destructive"
+                    : "";
+
                   return (
                     <div key={org.id} className="glass-card glow-border">
                       <Card className="border-0 bg-transparent shadow-none">
@@ -135,6 +159,18 @@ export default function TenantLifecycle() {
                             <button onClick={() => navigate(`/platform/agencies/${org.id}`)} className="text-sm font-semibold text-foreground hover:text-primary text-left truncate max-w-[70%] transition-colors">{org.name}</button>
                             <Badge variant="outline" className="text-[10px] shrink-0 capitalize">{org.plan}</Badge>
                           </div>
+
+                          {/* Trial progress bar */}
+                          {trialPct !== null && (
+                            <div className="space-y-0.5">
+                              <Progress value={trialPct} className={`h-1.5 ${trialColor}`} />
+                              <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <span>{trialElapsed}d used</span>
+                                <span>{totalTrialDays}d total</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Building2 className="h-3 w-3" />
                             <span>{daysInState}d in state</span>
@@ -145,6 +181,22 @@ export default function TenantLifecycle() {
                             )}
                           </div>
                           {org.suspension_reason && <p className="text-xs text-destructive/80 truncate">{org.suspension_reason}</p>}
+
+                          {/* Quick actions for trial orgs */}
+                          {org.status === "trial" && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t border-border/30">
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5 gap-0.5" onClick={(e) => { e.stopPropagation(); handleExtendTrial(org.id, org.trial_ends_at, 7); }}>
+                                <Timer className="h-2.5 w-2.5" />+7d
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5 gap-0.5" onClick={(e) => { e.stopPropagation(); handleExtendTrial(org.id, org.trial_ends_at, 14); }}>
+                                <Timer className="h-2.5 w-2.5" />+14d
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-5 text-[9px] px-1.5 gap-0.5 text-success" onClick={(e) => { e.stopPropagation(); handleConvertToPaid(org.id); }}>
+                                <Check className="h-2.5 w-2.5" />Activate
+                              </Button>
+                            </div>
+                          )}
+
                           <div className="flex gap-1 pt-1">
                             {nextStatuses.map((target) => {
                               const targetCol = STATUS_COLUMNS.find((c) => c.key === target)!;
