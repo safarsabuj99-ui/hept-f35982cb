@@ -10,9 +10,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { FEATURE_LABELS, type FeatureKey } from "@/hooks/useOrgFeatures";
@@ -46,6 +45,8 @@ interface PaymentRecord {
   transaction_reference: string | null; proof_image_url: string | null;
   status: string; admin_note: string | null; created_at: string;
   invoice_id: string | null;
+  requested_plan: string | null;
+  requested_billing_cycle: string | null;
 }
 
 interface PlanData {
@@ -54,12 +55,6 @@ interface PlanData {
   max_clients: number; max_ad_accounts: number; max_managers: number;
   feature_flags: Record<string, boolean>; features: any[];
   is_popular: boolean;
-}
-
-interface UpgradeRequest {
-  id: string; org_id: string; current_plan: string; requested_plan: string;
-  requested_billing_cycle: string; status: string; admin_note: string | null;
-  created_at: string;
 }
 
 function statusColor(s: string) {
@@ -126,12 +121,12 @@ export default function AdminSubscription() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Upgrade dialog
+  // Upgrade state — now opens pay dialog with upgrade info
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [upgradeCycle, setUpgradeCycle] = useState<"monthly" | "yearly">("monthly");
-  const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([]);
-  const [pendingUpgrade, setPendingUpgrade] = useState<UpgradeRequest | null>(null);
+  // Track upgrade intent for the pay dialog
+  const [upgradeTarget, setUpgradeTarget] = useState<{ plan: PlanData; cycle: "monthly" | "yearly" } | null>(null);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -146,7 +141,7 @@ export default function AdminSubscription() {
       const orgId = prof?.org_id;
       if (!orgId) { setLoading(false); return; }
 
-      const [orgRes, subRes, invRes, clientRes, adRes, mgrRes, payRes, planRes, upgradeRes] = await Promise.all([
+      const [orgRes, subRes, invRes, clientRes, adRes, mgrRes, payRes, planRes] = await Promise.all([
         supabase.from("organizations").select("id,name,plan,status,trial_ends_at,max_clients,max_ad_accounts,max_managers,allowed_features").eq("id", orgId).single(),
         supabase.from("organization_subscriptions").select("id,plan,billing_cycle,amount_bdt,payment_status,current_period_start,current_period_end").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("platform_invoices").select("id,invoice_number,amount_bdt,status,period_start,period_end,due_date,payment_date").eq("org_id", orgId).order("created_at", { ascending: false }).limit(20),
@@ -155,7 +150,6 @@ export default function AdminSubscription() {
         supabase.from("profiles").select("user_id", { count: "exact", head: true }).eq("org_id", orgId).in("user_id", (await supabase.from("user_roles" as any).select("user_id").eq("role", "manager")).data?.map((r: any) => r.user_id) || []),
         supabase.from("subscription_payments").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(50),
         supabase.from("platform_plans").select("*").eq("is_active", true).order("sort_order"),
-        supabase.from("plan_upgrade_requests").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(20),
       ]);
 
       if (orgRes.data) setOrg(orgRes.data as any);
@@ -163,10 +157,6 @@ export default function AdminSubscription() {
       setInvoices((invRes.data || []) as any);
       setPayments((payRes.data || []) as any);
       setPlans((planRes.data || []) as any);
-
-      const reqs = (upgradeRes.data || []) as any as UpgradeRequest[];
-      setUpgradeRequests(reqs);
-      setPendingUpgrade(reqs.find((r) => r.status === "pending") || null);
 
       setCounts({
         clients: clientRes.count || 0,
@@ -184,8 +174,26 @@ export default function AdminSubscription() {
     setPayMethod("bKash");
     setPayRef("");
     setProofFile(null);
+    setUpgradeTarget(null); // regular payment, not upgrade
     setPayDialogOpen(true);
   };
+
+  const openUpgradePayDialog = (plan: PlanData) => {
+    const price = upgradeCycle === "yearly" ? plan.price_bdt_yearly : plan.price_bdt_monthly;
+    setPayingInvoice(null);
+    setPayAmount(String(price));
+    setPayMethod("bKash");
+    setPayRef("");
+    setProofFile(null);
+    setUpgradeTarget({ plan, cycle: upgradeCycle });
+    setUpgradeOpen(false);
+    setPayDialogOpen(true);
+  };
+
+  // Check if there's already a pending upgrade payment
+  const hasPendingUpgradePayment = payments.some(
+    (p) => p.status === "pending" && p.requested_plan
+  );
 
   const handleManualSubmit = async () => {
     if (!org || !session?.user?.id) return;
@@ -205,33 +213,48 @@ export default function AdminSubscription() {
         .from("subscription-proofs")
         .getPublicUrl(fileName);
 
+      const insertPayload: any = {
+        org_id: org.id,
+        invoice_id: payingInvoice?.id || null,
+        amount_bdt: Number(payAmount),
+        payment_method: "manual",
+        transaction_reference: payRef.trim(),
+        proof_image_url: urlData.publicUrl,
+        status: "pending",
+      };
+
+      // If this is an upgrade payment, attach plan info
+      if (upgradeTarget) {
+        insertPayload.requested_plan = upgradeTarget.plan.key;
+        insertPayload.requested_billing_cycle = upgradeTarget.cycle;
+      }
+
       const { error: insertError } = await supabase
         .from("subscription_payments")
-        .insert({
-          org_id: org.id,
-          invoice_id: payingInvoice?.id || null,
-          amount_bdt: Number(payAmount),
-          payment_method: "manual",
-          transaction_reference: payRef.trim(),
-          proof_image_url: urlData.publicUrl,
-          status: "pending",
-        } as any);
+        .insert(insertPayload);
       if (insertError) throw insertError;
 
       const { data: owners } = await supabase.from("user_roles" as any).select("user_id").eq("role", "platform_owner");
+      const upgradeInfo = upgradeTarget
+        ? ` (Upgrade: ${org.plan} → ${upgradeTarget.plan.name}, ${upgradeTarget.cycle})`
+        : "";
       for (const owner of (owners || [])) {
         await supabase.from("notifications").insert({
           user_id: (owner as any).user_id,
-          title: "Payment Submitted for Review",
-          body: `${org.name} submitted ৳${Number(payAmount).toLocaleString()} via ${payMethod}. Transaction ref: ${payRef.trim()}`,
+          title: upgradeTarget ? "Upgrade Payment Submitted" : "Payment Submitted for Review",
+          body: `${org.name} submitted ৳${Number(payAmount).toLocaleString()} via ${payMethod}. Transaction ref: ${payRef.trim()}${upgradeInfo}`,
           type: "system" as any,
           priority: "high",
           link: "/platform/billing",
         });
       }
 
-      toast.success("Payment submitted! Awaiting admin verification.");
+      toast.success(upgradeTarget
+        ? "Upgrade payment submitted! Your plan will be upgraded once payment is approved."
+        : "Payment submitted! Awaiting admin verification."
+      );
       setPayDialogOpen(false);
+      setUpgradeTarget(null);
 
       const { data: newPayments } = await supabase
         .from("subscription_payments")
@@ -242,59 +265,6 @@ export default function AdminSubscription() {
       setPayments((newPayments || []) as any);
     } catch (err: any) {
       toast.error(err.message || "Failed to submit payment");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpgradeRequest = async (plan: PlanData) => {
-    if (!org || !session?.user?.id) return;
-    if (pendingUpgrade) {
-      toast.error("You already have a pending upgrade request. Please wait for it to be reviewed.");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const { error } = await supabase
-        .from("plan_upgrade_requests")
-        .insert({
-          org_id: org.id,
-          current_plan: org.plan,
-          requested_plan: plan.key,
-          requested_billing_cycle: upgradeCycle,
-          status: "pending",
-        } as any);
-      if (error) throw error;
-
-      // Notify platform owner
-      const { data: owners } = await supabase.from("user_roles" as any).select("user_id").eq("role", "platform_owner");
-      for (const owner of (owners || [])) {
-        await supabase.from("notifications").insert({
-          user_id: (owner as any).user_id,
-          title: "Plan Upgrade Request",
-          body: `${org.name} requested upgrade from ${org.plan} → ${plan.name} (${upgradeCycle})`,
-          type: "system" as any,
-          priority: "high",
-          link: "/platform/billing",
-        });
-      }
-
-      toast.success("Upgrade request submitted! The platform admin will review it shortly.");
-      setUpgradeOpen(false);
-
-      // Refresh upgrade requests
-      const { data: newReqs } = await supabase
-        .from("plan_upgrade_requests")
-        .select("*")
-        .eq("org_id", org.id)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      const reqs = (newReqs || []) as any as UpgradeRequest[];
-      setUpgradeRequests(reqs);
-      setPendingUpgrade(reqs.find((r) => r.status === "pending") || null);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to submit upgrade request");
     } finally {
       setSubmitting(false);
     }
@@ -344,16 +314,15 @@ export default function AdminSubscription() {
         </Card>
       )}
 
-      {/* Pending Upgrade Banner */}
-      {pendingUpgrade && (
+      {/* Pending Upgrade Payment Banner */}
+      {hasPendingUpgradePayment && (
         <Card className="border-primary/50 bg-primary/5">
           <CardContent className="flex items-center gap-4 py-4">
             <Sparkles className="h-5 w-5 text-primary shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium">Upgrade Request Pending</p>
+              <p className="text-sm font-medium">Upgrade Payment Under Review</p>
               <p className="text-xs text-muted-foreground">
-                Your request to upgrade from <span className="font-medium capitalize">{pendingUpgrade.current_plan}</span> to{" "}
-                <span className="font-medium capitalize">{pendingUpgrade.requested_plan}</span> ({pendingUpgrade.requested_billing_cycle}) is under review.
+                Your upgrade payment has been submitted and is awaiting approval. Your plan will be upgraded automatically once approved.
               </p>
             </div>
             <Badge className="bg-warning/15 text-warning border-warning/20 gap-1">
@@ -374,7 +343,7 @@ export default function AdminSubscription() {
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Badge variant={statusColor(org.status)} className="capitalize">{org.status}</Badge>
-                {plans.some((p) => p.sort_order > currentSortOrder) && !pendingUpgrade && (
+                {plans.some((p) => p.sort_order > currentSortOrder) && !hasPendingUpgradePayment && (
                   <Button size="sm" variant="outline" onClick={() => { setUpgradeCycle(sub?.billing_cycle as any || "monthly"); setUpgradeOpen(true); }} className="gap-1.5 text-xs">
                     <ArrowUpRight className="h-3 w-3" /> Upgrade
                   </Button>
@@ -515,6 +484,7 @@ export default function AdminSubscription() {
                     <th className="pb-2 pr-4">Amount</th>
                     <th className="pb-2 pr-4">Method</th>
                     <th className="pb-2 pr-4">Reference</th>
+                    <th className="pb-2 pr-4">Type</th>
                     <th className="pb-2 pr-4">Status</th>
                     <th className="pb-2">Note</th>
                   </tr>
@@ -526,6 +496,15 @@ export default function AdminSubscription() {
                       <td className="py-2.5 pr-4 font-medium">৳{p.amount_bdt.toLocaleString()}</td>
                       <td className="py-2.5 pr-4 capitalize">{p.payment_method}</td>
                       <td className="py-2.5 pr-4 font-mono text-xs">{p.transaction_reference || "—"}</td>
+                      <td className="py-2.5 pr-4">
+                        {p.requested_plan ? (
+                          <Badge className="bg-primary/15 text-primary border-primary/20 gap-1 text-xs">
+                            <ArrowUpRight className="h-3 w-3" /> Upgrade to {p.requested_plan}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Renewal</span>
+                        )}
+                      </td>
                       <td className="py-2.5 pr-4">{paymentStatusBadge(p.status)}</td>
                       <td className="py-2.5 text-xs text-muted-foreground max-w-[200px] truncate">{p.admin_note || "—"}</td>
                     </tr>
@@ -537,55 +516,36 @@ export default function AdminSubscription() {
         </Card>
       )}
 
-      {/* Upgrade Request History */}
-      {upgradeRequests.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowUpRight className="h-5 w-5 text-muted-foreground" />
-              Upgrade Request History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 pr-4">Date</th>
-                    <th className="pb-2 pr-4">From</th>
-                    <th className="pb-2 pr-4">To</th>
-                    <th className="pb-2 pr-4">Cycle</th>
-                    <th className="pb-2 pr-4">Status</th>
-                    <th className="pb-2">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upgradeRequests.map((r) => (
-                    <tr key={r.id} className="border-b last:border-0">
-                      <td className="py-2.5 pr-4">{format(new Date(r.created_at), "MMM dd, yy")}</td>
-                      <td className="py-2.5 pr-4 capitalize">{r.current_plan}</td>
-                      <td className="py-2.5 pr-4 capitalize font-medium">{r.requested_plan}</td>
-                      <td className="py-2.5 pr-4 capitalize">{r.requested_billing_cycle}</td>
-                      <td className="py-2.5 pr-4">{paymentStatusBadge(r.status)}</td>
-                      <td className="py-2.5 text-xs text-muted-foreground max-w-[200px] truncate">{r.admin_note || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Pay Now Dialog */}
-      <Dialog open={payDialogOpen} onOpenChange={(o) => !o && setPayDialogOpen(false)}>
+      <Dialog open={payDialogOpen} onOpenChange={(o) => { if (!o) { setPayDialogOpen(false); setUpgradeTarget(null); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
-              {payingInvoice ? `Pay Invoice ${payingInvoice.invoice_number}` : "Submit Payment"}
+              {upgradeTarget
+                ? `Pay & Upgrade to ${upgradeTarget.plan.name}`
+                : payingInvoice
+                  ? `Pay Invoice ${payingInvoice.invoice_number}`
+                  : "Submit Payment"
+              }
             </DialogTitle>
           </DialogHeader>
+
+          {/* Show upgrade info banner if this is an upgrade payment */}
+          {upgradeTarget && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ArrowUpRight className="h-4 w-4 text-primary" />
+                Upgrading: <span className="capitalize">{org.plan}</span> → <span className="capitalize text-primary">{upgradeTarget.plan.name}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {upgradeTarget.cycle === "yearly" ? "Yearly" : "Monthly"} billing • ৳{(upgradeTarget.cycle === "yearly" ? upgradeTarget.plan.price_bdt_yearly : upgradeTarget.plan.price_bdt_monthly).toLocaleString()}/{upgradeTarget.cycle === "yearly" ? "yr" : "mo"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Your plan will be upgraded automatically once this payment is approved.
+              </p>
+            </div>
+          )}
 
           <Tabs defaultValue="manual">
             <TabsList className="w-full">
@@ -640,11 +600,14 @@ export default function AdminSubscription() {
                 </div>
               </div>
               <Button onClick={handleManualSubmit} disabled={submitting || !payRef.trim() || !proofFile || !payAmount} className="w-full gap-2">
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Submit for Verification
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : upgradeTarget ? <ArrowUpRight className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                {upgradeTarget ? "Submit Upgrade Payment" : "Submit for Verification"}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Your payment will be reviewed and approved by the platform administrator.
+                {upgradeTarget
+                  ? "Your plan will be upgraded automatically once payment is verified and approved."
+                  : "Your payment will be reviewed and approved by the platform administrator."
+                }
               </p>
             </TabsContent>
 
@@ -664,7 +627,7 @@ export default function AdminSubscription() {
         </DialogContent>
       </Dialog>
 
-      {/* Upgrade Plan Dialog */}
+      {/* Upgrade Plan Dialog — now opens pay dialog instead of submitting upgrade request */}
       <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -761,11 +724,11 @@ export default function AdminSubscription() {
                     ) : (
                       <Button
                         className="w-full gap-1.5"
-                        onClick={() => handleUpgradeRequest(plan)}
-                        disabled={submitting || !!pendingUpgrade}
+                        onClick={() => openUpgradePayDialog(plan)}
+                        disabled={submitting || hasPendingUpgradePayment}
                       >
-                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
-                        Request Upgrade
+                        <CreditCard className="h-4 w-4" />
+                        Pay & Upgrade
                       </Button>
                     )}
                   </CardContent>
@@ -774,9 +737,9 @@ export default function AdminSubscription() {
             })}
           </div>
 
-          {pendingUpgrade && (
+          {hasPendingUpgradePayment && (
             <p className="text-sm text-center text-warning">
-              You have a pending upgrade request. Please wait for it to be reviewed before submitting a new one.
+              You have a pending upgrade payment. Please wait for it to be approved before submitting a new one.
             </p>
           )}
         </DialogContent>

@@ -3104,6 +3104,8 @@ export type Database = {
           org_id: string
           payment_method: string
           proof_image_url: string | null
+          requested_billing_cycle: string | null
+          requested_plan: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
@@ -3120,6 +3122,8 @@ export type Database = {
           org_id: string
           payment_method?: string
           proof_image_url?: string | null
+          requested_billing_cycle?: string | null
+          requested_plan?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -3136,6 +3140,8 @@ export type Database = {
           org_id?: string
           payment_method?: string
           proof_image_url?: string | null
+          requested_billing_cycle?: string | null
+          requested_plan?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
