@@ -1,46 +1,56 @@
 
 
-## Plan: Fix Missing Spend Data by Adding org_id to Sync Functions
+## Plan: Fix All Missing org_id Issues Across Edge Functions and Database
 
-### Root Cause
-Both sync edge functions (`sync-deep-dive` and `sync-fast-lane`) write to spend/metrics tables **without setting `org_id`**. Since RLS requires `org_id = get_user_org_id(auth.uid())`, these records are invisible to the admin dashboard.
+### Problems Found
 
-**Current NULL org_id counts:**
-- `daily_metrics`: 32 records (all from today, 2026-04-14)
-- `campaign_performance`: 32 records
-- `daily_ad_spend`: 19 records
+**Data with NULL org_id right now:**
+| Table | NULL count | Impact |
+|-------|-----------|--------|
+| `transactions` | 1 | Balance miscalculation — credit invisible to admin |
+| `notifications` | 20 | Notifications invisible to some users |
+| `usd_inventory_snapshots` | 1 | Snapshot invisible |
+| `audit_logs` | 76 | Audit trail gaps |
+| `settings` | 11 | Settings invisible (but may be intentional for global) |
+| `profiles` | 1 | Affiliate test user — low risk |
 
-Every future sync creates more invisible data, so spend always appears as $0 for the current day.
+**Root cause — 3 edge functions insert without org_id, and `set_org_id_from_auth()` trigger fails because `auth.uid()` is NULL for service-role calls:**
 
-### Why Previous Triggers Don't Help
-The existing `set_org_id_from_auth()` trigger pattern uses `auth.uid()` — but edge functions run with a **service role key** where `auth.uid()` is NULL. These sync functions must explicitly set `org_id` from the ad account data they already have.
+1. **`approve-payment`** — inserts transactions and audit_logs without `org_id`. The payment request has `org_id` on it, but it's never copied to the transaction records. This is the most dangerous bug — approved deposits become invisible credits, inflating or deflating balances.
 
-### Fix — Three Parts
+2. **`platform-transfer`** — inserts 2 transactions (debit + credit) and audit_log without `org_id`. Same problem — transfer records become invisible.
 
-#### 1. Update `sync-deep-dive` edge function
-- Add `org_id` to the `ad_accounts` SELECT query
-- Pass `org_id` into every `daily_metrics` upsert
-- Pass `org_id` into every `campaign_performance` upsert
-- Pass `org_id` into every `campaigns` insert
+3. **`auto-snapshot-usd`** — upserts `usd_inventory_snapshots` without `org_id`. Uses service role, so the auth trigger fails.
 
-#### 2. Update `sync-fast-lane` edge function
-- Add `org_id` to the `ad_accounts` SELECT query
-- Pass `org_id` into every `daily_ad_spend` upsert
+### Fix — Two Parts
 
-#### 3. Backfill + add database triggers
-One migration to:
-- Backfill 32 NULL `daily_metrics` rows, 32 NULL `campaign_performance` rows, and 19 NULL `daily_ad_spend` rows with the correct org_id (looked up from related ad account/campaign)
-- Add `BEFORE INSERT OR UPDATE` triggers on these 3 tables that auto-populate `org_id` from the related campaign/ad_account as a safety net
+#### Part 1: Harden the `set_org_id_from_auth` trigger (transactions table)
+Replace it with a smarter fallback trigger that:
+- First tries `auth.uid()` (for browser-initiated inserts)
+- Falls back to looking up `org_id` from the `profiles` table using `NEW.client_id`
+- This catches ALL edge function inserts automatically — no need to modify every function
+
+Also add the same fallback pattern to `usd_inventory_snapshots` and `audit_logs`.
+
+#### Part 2: Backfill existing NULL records
+- 1 transaction: set org_id from client's profile
+- 20 notifications: set org_id from user's profile
+- 1 usd_inventory_snapshot: set to primary agency org_id
+- 76 audit_logs: set org_id from user's profile
+
+#### Part 3: Explicitly add org_id in edge functions (belt-and-suspenders)
+- **`approve-payment`**: Copy `pr.org_id` into each transaction and audit_log insert
+- **`platform-transfer`**: Look up client's org_id and include in transaction + audit_log inserts
+- **`auto-snapshot-usd`**: Look up org_id and include in snapshot upsert
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Modify | `supabase/functions/sync-deep-dive/index.ts` — add org_id to queries and all upserts |
-| Modify | `supabase/functions/sync-fast-lane/index.ts` — add org_id to queries and all upserts |
-| Migration | Backfill NULL org_id + add triggers on daily_metrics, campaign_performance, daily_ad_spend |
+| Migration | Replace `set_org_id_from_auth` trigger with smart fallback on `transactions`, `usd_inventory_snapshots`, `audit_logs` + backfill NULLs |
+| Modify | `supabase/functions/approve-payment/index.ts` — add `org_id` to transactions and audit_logs |
+| Modify | `supabase/functions/platform-transfer/index.ts` — add `org_id` to transactions and audit_logs |
+| Modify | `supabase/functions/auto-snapshot-usd/index.ts` — add `org_id` to snapshot upsert |
 
-### Expected Result
-- Today's spend data immediately visible on dashboard after backfill
-- All future syncs write org_id correctly
-- Triggers provide a safety net for any code path that forgets org_id
+### Why This Prevents Future Bugs
+The upgraded trigger uses a cascading lookup (`auth.uid()` → `client_id` profile → hardcoded fallback`), so even if a developer forgets to add `org_id` in a new edge function, the trigger will resolve it automatically. The explicit edge function changes are defense-in-depth.
 
