@@ -62,14 +62,13 @@ export default function CreateAgency() {
       if (orgError) throw orgError;
       await supabase.from("profiles").update({ org_id: org.id, is_super_admin: true }).eq("user_id", adminUserId);
       const periodStart = new Date().toISOString().slice(0, 10);
-      const periodEnd = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
       const trialDaysFinal = customTrialDays ? Number(customTrialDays) : defaultTrialDays;
+      const periodEnd = new Date(Date.now() + trialDaysFinal * 86400000).toISOString().slice(0, 10);
       await supabase.from("organization_subscriptions").insert({
         org_id: org.id, plan: plan as any, amount_bdt: selectedPlan?.price_bdt_monthly ?? 0,
-        billing_cycle: "monthly", current_period_start: periodStart, current_period_end: new Date(Date.now() + trialDaysFinal * 86400000).toISOString().slice(0, 10), payment_status: "pending",
         billing_cycle: "monthly", current_period_start: periodStart, current_period_end: periodEnd, payment_status: "pending",
       });
-      toast({ title: "Agency created", description: `${name} is now live with a 14-day trial.` });
+      toast({ title: "Agency created", description: `${name} is now live with a ${trialDaysFinal}-day trial.` });
       navigate("/platform/agencies");
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); } finally { setSaving(false); }
   };
