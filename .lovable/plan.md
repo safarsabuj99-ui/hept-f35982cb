@@ -1,33 +1,42 @@
 
 
-## Plan: Backfill NULL org_id Records to MD SABUJ MIAH Agency
+## Plan: Fix RLS Violation on `payment_requests` Insert
 
-### Problem
-After the multi-tenant RLS fix, records with `NULL org_id` are invisible to the agency admin because the policies now require `org_id = get_user_org_id(auth.uid())`. This is why dashboard data (spend, collections, profitability) appears empty — the data exists but is filtered out.
-
-### Affected Tables (NULL org_id counts)
-| Table | NULL Records |
-|-------|-------------|
-| transactions | 483 |
-| daily_metrics | 212 |
-| campaign_performance | 212 |
-| daily_ad_spend | 59 |
-| payment_requests | 12 |
-| usd_inventory_snapshots | 13 |
-| usd_purchases | 10 |
-| agency_expenses | 9 |
-| campaigns | 8 |
-| liquid_fund_entries | 4 |
-| ad_account_clients | 1 |
-| fund_transfers | 1 |
+### Root Cause
+The `admin_all_payment_requests` RLS policy requires `org_id = get_user_org_id(auth.uid())` on INSERT, but neither `DepositFundsDialog.tsx` nor `AddFunds.tsx` includes `org_id` in the insert payload. The column has no default value, so it inserts as NULL and fails the policy check.
 
 ### Fix
-One database migration that updates all NULL `org_id` records to `a1b2c3d4-e5f6-7890-abcd-ef1234567890` (MD SABUJ MIAH Agency) across all 12 tables. Since this is the only active agency and all legacy data belongs to it, this is safe.
+
+**Best approach**: Create a database trigger that auto-populates `org_id` from the inserting user's profile, so no frontend changes are needed and future insert paths are also covered.
+
+#### 1. Database Migration — Auto-set `org_id` trigger on `payment_requests`
+```sql
+CREATE OR REPLACE FUNCTION public.set_payment_request_org_id()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public AS $$
+BEGIN
+  IF NEW.org_id IS NULL THEN
+    NEW.org_id := get_user_org_id(auth.uid());
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_set_payment_request_org_id
+  BEFORE INSERT ON public.payment_requests
+  FOR EACH ROW EXECUTE FUNCTION public.set_payment_request_org_id();
+```
+
+#### 2. Also apply to `transactions` table (same pattern)
+The `AddFunds.tsx` inserts into `transactions` without `org_id` — add the same trigger there to prevent the same bug.
+
+#### 3. Defensive frontend fix — `DepositFundsDialog.tsx` and `AddFunds.tsx`
+Add `org_id` to insert payloads by fetching the user's org from their profile. This is a belt-and-suspenders approach alongside the trigger.
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Migration | Backfill NULL org_id across 12 tables |
-
-No code changes needed — the data just needs the correct org assignment.
+| Migration | Create `set_payment_request_org_id` trigger + same for `transactions` |
+| Modify | `src/components/DepositFundsDialog.tsx` — add `org_id` to insert |
+| Modify | `src/pages/AddFunds.tsx` — add `org_id` to inserts |
 
