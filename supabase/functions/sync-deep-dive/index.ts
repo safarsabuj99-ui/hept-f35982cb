@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountsQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, org_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
@@ -283,6 +283,7 @@ Deno.serve(async (req) => {
                 ad_account_id: account.id,
                 client_id: clientId,
                 objective: objective || "",
+                org_id: account.org_id,
               })
               .select("id")
               .single();
@@ -360,6 +361,7 @@ Deno.serve(async (req) => {
                 leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
                 conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
             );
@@ -524,6 +526,7 @@ Deno.serve(async (req) => {
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             // Upsert daily metrics with funnel actions
@@ -554,6 +557,7 @@ Deno.serve(async (req) => {
                 conversion_value: conversionValue, roas,
                 status: finalStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
@@ -632,6 +636,7 @@ Deno.serve(async (req) => {
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             await upsertMetrics(campaignDbId, dataDate, {
@@ -650,6 +655,7 @@ Deno.serve(async (req) => {
                 results: Math.round(conversions), conversion_value: conversionValue,
                 roas, status: finalStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );
@@ -857,6 +863,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               client_id: clientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             const spendUsd = convertSpend(spend);
@@ -887,6 +894,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                 results: conversions, conversion_value: 0, roas,
                 status: finalTiktokStatus,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,date", ignoreDuplicates: false }
             );

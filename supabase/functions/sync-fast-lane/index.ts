@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, org_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
@@ -245,6 +245,7 @@ Deno.serve(async (req) => {
               client_id: matchedClientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             const isBDT = currency === "BDT";
@@ -253,7 +254,7 @@ Deno.serve(async (req) => {
 
             spendRecords.push({
               ad_account_id: account.id,
-              date: row.date_start, // API's actual date
+              date: row.date_start,
               campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
@@ -261,6 +262,7 @@ Deno.serve(async (req) => {
               final_billable_usd: finalUsd,
               client_id: matchedClientId,
               synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
           }
 
@@ -346,6 +348,7 @@ Deno.serve(async (req) => {
               client_id: matchedClientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             spendRecords.push({
@@ -358,6 +361,7 @@ Deno.serve(async (req) => {
               final_billable_usd: spend,
               client_id: matchedClientId,
               synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
           }
 
@@ -502,6 +506,7 @@ Deno.serve(async (req) => {
               client_id: matchedClientId,
               ad_account_id: account.id,
               is_active: true,
+              org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
             spendRecords.push({
@@ -514,6 +519,7 @@ Deno.serve(async (req) => {
               final_billable_usd: spend,
               client_id: matchedClientId,
               synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
           }
 
