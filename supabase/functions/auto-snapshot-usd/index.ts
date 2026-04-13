@@ -98,6 +98,14 @@ Deno.serve(async (req) => {
     });
     const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
+    // Look up primary org_id for snapshot
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("id")
+      .limit(1)
+      .single();
+    const snapshotOrgId = orgRow?.id || null;
+
     const { error: upsertErr } = await supabase
       .from("usd_inventory_snapshots")
       .upsert(
@@ -107,6 +115,7 @@ Deno.serve(async (req) => {
           metrics,
           notes: `Auto refresh — ${monthLabel} (${timestamp})`,
           created_by: "00000000-0000-0000-0000-000000000000",
+          org_id: snapshotOrgId,
         },
         { onConflict: "snapshot_date" }
       );

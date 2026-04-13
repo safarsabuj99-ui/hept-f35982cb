@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
         user_id: user.id,
         action_type: "payment_rejected",
         description: `Rejected payment ৳${Number(pr.amount_bdt).toLocaleString()} from client ${pr.client_id}${admin_note ? ` — ${admin_note}` : ""}`,
+        org_id: pr.org_id,
       });
 
       return jsonRes({ success: true, action: "rejected" });
@@ -122,6 +123,7 @@ Deno.serve(async (req) => {
           status: "completed",
           exchange_rate: rate,
           platform: platform,
+          org_id: pr.org_id,
         });
       }
 
@@ -149,6 +151,7 @@ Deno.serve(async (req) => {
           status: "completed",
           exchange_rate: fallbackRate,
           platform: platform,
+          org_id: pr.org_id,
         });
       }
 
@@ -173,6 +176,7 @@ Deno.serve(async (req) => {
         status: "completed",
         exchange_rate: exchangeRate,
         platform: platform_override || pr.platform || null,
+        org_id: pr.org_id,
       });
     }
 
@@ -238,6 +242,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       action_type: "payment_approved",
       description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}`,
+      org_id: pr.org_id,
     });
 
     return jsonRes({
