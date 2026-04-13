@@ -14,12 +14,40 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { full_name, email, password, agency_name, plan_key, billing_cycle, payment_method, transaction_reference, proof_image_url, ref_code } = body;
 
-    // Validate required fields
-    if (!full_name?.trim() || !email?.trim() || !password || !agency_name?.trim() || !plan_key || !billing_cycle || !payment_method || !transaction_reference?.trim()) {
-      return new Response(JSON.stringify({ error: "All fields are required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Read trial settings
+    const { data: settingsRows } = await supabaseAdmin
+      .from("settings")
+      .select("key, value")
+      .in("key", ["default_trial_days", "default_grace_period_days", "trial_on_self_signup"]);
+
+    const settings: Record<string, string> = {};
+    (settingsRows || []).forEach((s: any) => { settings[s.key] = s.value; });
+
+    const trialOnSelfSignup = settings.trial_on_self_signup === "true";
+    const defaultTrialDays = parseInt(settings.default_trial_days || "14") || 14;
+    const defaultGraceDays = parseInt(settings.default_grace_period_days || "7") || 7;
+
+    // If trial mode is OFF, require payment fields
+    if (!trialOnSelfSignup) {
+      if (!full_name?.trim() || !email?.trim() || !password || !agency_name?.trim() || !plan_key || !billing_cycle || !payment_method || !transaction_reference?.trim()) {
+        return new Response(JSON.stringify({ error: "All fields are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      // Trial mode: only basic fields required
+      if (!full_name?.trim() || !email?.trim() || !password || !agency_name?.trim() || !plan_key || !billing_cycle) {
+        return new Response(JSON.stringify({ error: "Name, email, password, agency name, plan and billing cycle are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     if (password.length < 6) {
@@ -28,11 +56,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // Check if email already exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
@@ -85,10 +108,15 @@ Deno.serve(async (req) => {
         .select("id, affiliate_id, clicks").eq("code", ref_code).eq("is_active", true).single();
       if (linkData) {
         affiliateId = linkData.affiliate_id;
-        // Increment click count
         await supabaseAdmin.from("affiliate_links").update({ clicks: (linkData.clicks || 0) + 1 }).eq("id", linkData.id);
       }
     }
+
+    // Determine org status based on trial settings
+    const orgStatus = trialOnSelfSignup ? "trial" : "pending_payment";
+    const trialEndsAt = trialOnSelfSignup
+      ? new Date(Date.now() + defaultTrialDays * 86400000).toISOString()
+      : null;
 
     // 2. Create organization
     const { data: org, error: orgError } = await supabaseAdmin
@@ -98,19 +126,20 @@ Deno.serve(async (req) => {
         slug,
         owner_user_id: userId,
         plan: plan.key,
-        status: "pending_payment",
+        status: orgStatus,
         max_clients: plan.max_clients,
         max_ad_accounts: plan.max_ad_accounts,
         max_managers: plan.max_managers,
         allowed_features: plan.feature_flags || {},
         brand_name: agency_name.trim(),
+        grace_period_days: defaultGraceDays,
+        ...(trialEndsAt ? { trial_ends_at: trialEndsAt } : {}),
         ...(affiliateId ? { referred_by_affiliate_id: affiliateId } : {}),
       })
       .select("id")
       .single();
 
     if (orgError || !org) {
-      // Cleanup: delete the auth user
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return new Response(JSON.stringify({ error: "Failed to create organization" }), {
         status: 500,
@@ -143,9 +172,11 @@ Deno.serve(async (req) => {
     // 5. Create subscription
     const periodStart = new Date().toISOString().slice(0, 10);
     const periodEnd = new Date(
-      billing_cycle === "yearly"
-        ? Date.now() + 365 * 86400000
-        : Date.now() + 30 * 86400000
+      trialOnSelfSignup
+        ? Date.now() + defaultTrialDays * 86400000
+        : billing_cycle === "yearly"
+          ? Date.now() + 365 * 86400000
+          : Date.now() + 30 * 86400000
     ).toISOString().slice(0, 10);
 
     await supabaseAdmin.from("organization_subscriptions").insert({
@@ -155,35 +186,36 @@ Deno.serve(async (req) => {
       amount_bdt: amount,
       current_period_start: periodStart,
       current_period_end: periodEnd,
-      payment_status: "pending",
+      payment_status: trialOnSelfSignup ? "pending" : "pending",
     });
 
-    // 6. Create invoice
-    const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
-    const { data: invoice } = await supabaseAdmin
-      .from("platform_invoices")
-      .insert({
+    // 6-7. Only create invoice + payment record if NOT trial mode
+    if (!trialOnSelfSignup) {
+      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+      const { data: invoice } = await supabaseAdmin
+        .from("platform_invoices")
+        .insert({
+          org_id: org.id,
+          invoice_number: invoiceNumber,
+          amount_bdt: amount,
+          period_start: periodStart,
+          period_end: periodEnd,
+          status: "sent",
+          due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        })
+        .select("id")
+        .single();
+
+      await supabaseAdmin.from("subscription_payments").insert({
         org_id: org.id,
-        invoice_number: invoiceNumber,
+        invoice_id: invoice?.id || null,
         amount_bdt: amount,
-        period_start: periodStart,
-        period_end: periodEnd,
-        status: "sent",
-        due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      })
-      .select("id")
-      .single();
-
-    // 7. Create subscription payment record
-    await supabaseAdmin.from("subscription_payments").insert({
-      org_id: org.id,
-      invoice_id: invoice?.id || null,
-      amount_bdt: amount,
-      payment_method,
-      transaction_reference: transaction_reference.trim(),
-      proof_image_url: proof_image_url || null,
-      status: "pending",
-    });
+        payment_method: payment_method || "manual",
+        transaction_reference: (transaction_reference || "").trim(),
+        proof_image_url: proof_image_url || null,
+        status: "pending",
+      });
+    }
 
     // 8. Notify platform owners
     const { data: platformOwners } = await supabaseAdmin
@@ -192,10 +224,11 @@ Deno.serve(async (req) => {
       .eq("role", "platform_owner");
 
     if (platformOwners?.length) {
+      const statusLabel = trialOnSelfSignup ? `${defaultTrialDays}-day trial` : "Payment verification pending";
       const notifications = platformOwners.map((po: any) => ({
         user_id: po.user_id,
         title: "New Agency Signup",
-        body: `${agency_name.trim()} (${full_name.trim()}) signed up for ${plan.name} plan. Payment verification pending.`,
+        body: `${agency_name.trim()} (${full_name.trim()}) signed up for ${plan.name} plan. ${statusLabel}.`,
         type: "system",
         priority: "high",
         link: "/platform/billing",
@@ -203,7 +236,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("notifications").insert(notifications);
     }
 
-    return new Response(JSON.stringify({ success: true, user_id: userId }), {
+    return new Response(JSON.stringify({ success: true, user_id: userId, trial_mode: trialOnSelfSignup }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
