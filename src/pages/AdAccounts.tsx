@@ -39,6 +39,24 @@ const CURRENCIES = [
 interface ClientProfile { user_id: string; full_name: string; }
 interface Integration { id: string; platform: string; instance_name: string | null; is_active: boolean; }
 interface AccountClientAssignment { id: string; ad_account_id: string; client_id: string; mapping_keyword: string; }
+interface DiscoveredAccount {
+  ad_account_id: string;
+  account_name: string;
+  account_currency: string;
+  billing_type: string;
+  threshold_limit: number | null;
+  next_billing_date: string | null;
+  current_threshold_spend: number | null;
+  platform: string;
+  integration_id: string;
+  integration_name: string;
+  already_imported: boolean;
+}
+interface OrgLimits {
+  max_ad_accounts: number | null;
+  current_count: number;
+  remaining: number | null;
+}
 
 export default function AdAccounts() {
   const [accounts, setAccounts] = useState<any[]>([]);
