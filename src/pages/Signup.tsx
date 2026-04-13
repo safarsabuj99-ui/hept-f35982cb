@@ -324,8 +324,8 @@ export default function Signup() {
           </div>
         )}
 
-        {/* Step 3: Payment */}
-        {step === 2 && selectedPlan && (
+        {/* Step 3: Payment (only if not trial mode) */}
+        {!trialMode && step === paymentStepIndex && selectedPlan && (
           <div className="max-w-lg mx-auto">
             <h1 className="text-2xl font-bold text-center mb-2">Submit Payment</h1>
             <p className="text-center text-muted-foreground mb-8">
@@ -392,24 +392,30 @@ export default function Signup() {
           </div>
         )}
 
-        {/* Step 4: Confirmation */}
-        {step === 3 && (
+        {/* Confirmation */}
+        {step === confirmationStepIndex && (
           <div className="max-w-lg mx-auto text-center py-12">
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="h-10 w-10 text-primary" />
             </div>
             <h1 className="text-2xl font-bold mb-3">Signup Submitted! 🎉</h1>
             <p className="text-muted-foreground mb-6">
-              Your agency account has been created and your payment is under review.
-              You'll receive access once the payment is verified by our team.
+              {trialMode
+                ? "Your agency account has been created with a free trial. You can start using the platform right away!"
+                : "Your agency account has been created and your payment is under review. You'll receive access once the payment is verified by our team."}
             </p>
             <Card className="text-left mb-8">
               <CardContent className="pt-6 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Agency</span><span className="font-medium">{form.agency_name}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium">{selectedPlan?.name} ({billingCycle})</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">৳{selectedPlan ? price(selectedPlan).toLocaleString() : "—"}</span></div>
+                {!trialMode && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">৳{selectedPlan ? price(selectedPlan).toLocaleString() : "—"}</span></div>
+                )}
                 <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{form.email}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Status</span><Badge variant="secondary">Under Review</Badge></div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge variant="secondary">{trialMode ? "Trial Active" : "Under Review"}</Badge>
+                </div>
               </CardContent>
             </Card>
             <Button asChild>
@@ -419,15 +425,15 @@ export default function Signup() {
         )}
 
         {/* Navigation buttons */}
-        {step < 3 && (
+        {step < confirmationStepIndex && (
           <div className="flex items-center justify-between mt-8 max-w-lg mx-auto">
             <Button variant="ghost" onClick={() => { setStep(Math.max(0, step - 1)); setErrors({}); }} disabled={step === 0 || submitting}>
               <ArrowLeft className="h-4 w-4 mr-1" /> Back
             </Button>
             <Button onClick={nextStep} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              {step === 2 ? "Submit & Sign Up" : "Continue"}
-              {step < 2 && <ArrowRight className="h-4 w-4 ml-1" />}
+              {(trialMode && step === 1) || (!trialMode && step === paymentStepIndex) ? "Submit & Sign Up" : "Continue"}
+              {!((trialMode && step === 1) || (!trialMode && step === paymentStepIndex)) && <ArrowRight className="h-4 w-4 ml-1" />}
             </Button>
           </div>
         )}
