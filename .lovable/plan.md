@@ -1,48 +1,63 @@
 
 
-## Plan: Fix Collections KPI Using `payment_date` Instead of `created_at`
+## Plan: Add org_id Auto-Set Triggers to All 21 Remaining Tables
 
-### Root Cause
+### Problem Found
 
-The `get_admin_dashboard_summary` RPC function calculates "Today's Collections" by filtering on `created_at::date`, but this is the **submission date** — not the actual collection date. The correct column is `payment_date`, which represents when the money was actually received.
+After a full audit, **21 tables** have `org_id` columns with org-scoped RLS policies but **no auto-set trigger**. Any insert without explicit `org_id` will either:
+- Fail with "violates row-level security policy" (browser inserts)
+- Create invisible records (service-role inserts)
 
-**Example from your data:** A ৳4,000 payment has `payment_date = 2026-04-14` (today) but `created_at = 2026-04-13` (yesterday in UTC). The dashboard shows ৳0 because `created_at::date` doesn't match today.
+### Tables Already Protected (have triggers)
+`transactions`, `audit_logs`, `ad_accounts`, `ad_account_clients`, `agency_accounts`, `agency_expenses`, `billing_notifications`, `campaign_mappings`, `campaign_performance`, `campaign_requests`, `campaigns`, `cash_withdrawals`, `cash_withdrawal_returns`, `client_notices`, `daily_ad_spend`, `daily_metrics`, `fund_transfers`, `liquid_fund_entries`, `notifications`, `payment_requests`, `usd_inventory_snapshots`, `usd_manual_spends`, `usd_purchases`
 
-**Secondary bug:** The collections query is also missing the `org_id = p_org_id` filter that all other queries have — a multi-tenant data leak.
+### Tables Missing Triggers (21 total)
 
-### What Changes
+| Table | Lookup Strategy | Insert Sources |
+|-------|----------------|----------------|
+| `api_integrations` | `auth.uid()` | IntegrationsTab (browser), sync functions |
+| `subscription_payments` | `auth.uid()` → already has org_id in payload | SubscriptionGate (browser) |
+| `organization_subscriptions` | `auth.uid()` | SubscriptionGate, change-plan edge fn |
+| `plan_upgrade_requests` | `auth.uid()` | AgencyDetail (browser) |
+| `plan_change_log` | org_id in payload | change-plan edge fn |
+| `platform_invoices` | org_id in payload | subscription-lifecycle edge fn |
+| `data_export_requests` | `requested_by` → profiles | data-export edge fn |
+| `document_acceptances` | `user_id` → profiles | browser |
+| `support_tickets` | org_id in payload | AgencySupport (browser) |
+| `email_log` | `user_id` → profiles | edge functions |
+| `dunning_runs` | `subscription_id` → org_subscriptions | dunning-processor edge fn |
+| `gateway_transactions` | `subscription_id` → org_subscriptions | payment-gateway edge fn |
+| `overage_charges` | org_id in payload | meter-usage edge fn |
+| `sla_metrics` | org_id in payload | sla-monitor edge fn |
+| `referral_codes` | org_id in payload | edge fn |
+| `payment_gateway_config` | `auth.uid()` | browser |
+| `acquisition_costs` | `auth.uid()` | platform admin |
+| `feature_usage_events` | org_id in payload | edge fn |
+| `tenant_health_scores` | org_id in payload | edge fn |
+| `usage_metering_logs` | org_id in payload | edge fn |
+| `platform_costs` | platform-level | platform owner |
 
-One database migration to update the `get_admin_dashboard_summary` RPC function:
+### Fix — One Migration
 
-1. **Collections in range (line 66-71)** — change `(created_at::date)` to `payment_date` and add `org_id = v_org_id` filter
-2. **7-day collection sparkline (line 84-92)** — change `(pr.created_at::date)` to `pr.payment_date` in the join condition
+Create `BEFORE INSERT` triggers on all 21 tables using the same cascading fallback pattern already proven on the other tables:
 
-### Technical Detail
-
-```sql
--- Before (broken):
-SELECT COALESCE(SUM(amount_bdt), 0)
-FROM payment_requests
-WHERE status = 'approved'
-  AND (created_at::date) >= p_date_from
-  AND (created_at::date) <= p_date_to;
-
--- After (fixed):
-SELECT COALESCE(SUM(amount_bdt), 0)
-FROM payment_requests
-WHERE status = 'approved'
-  AND payment_date >= p_date_from
-  AND payment_date <= p_date_to
-  AND org_id = v_org_id;
+```text
+1. auth.uid() → get_user_org_id()        (browser)
+2. user_id/client_id → profiles.org_id   (edge functions)
+3. subscription_id → org_subscriptions   (billing tables)
+4. First org fallback                     (single-tenant safety)
 ```
 
-Same fix applied to the sparkline subquery.
+Group the tables by their lookup strategy to reuse trigger functions:
+
+- **User-based** (10 tables): `api_integrations`, `subscription_payments`, `plan_upgrade_requests`, `document_acceptances`, `support_tickets`, `payment_gateway_config`, `acquisition_costs`, `platform_costs`, `referral_codes`, `email_log` — use `auth.uid()` then `user_id` → profiles
+- **Subscription-based** (3 tables): `organization_subscriptions`, `dunning_runs`, `gateway_transactions` — use org_id from subscription
+- **Direct org_id** (8 tables): `plan_change_log`, `platform_invoices`, `overage_charges`, `sla_metrics`, `feature_usage_events`, `tenant_health_scores`, `usage_metering_logs`, `data_export_requests` — these already get org_id in payload from edge functions, trigger is safety net only
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Migration | Update `get_admin_dashboard_summary` — use `payment_date` + add `org_id` filter |
+| Migration | Add 21 `BEFORE INSERT OR UPDATE` trigger functions + triggers |
 
-### Expected Result
-Today's Collections KPI will correctly show ৳4,000 (and any other collections made today), and the sparkline will accurately reflect daily collection history by actual payment date.
+No UI code changes needed — triggers auto-populate `org_id` transparently. This is the final coverage pass — after this, every table with `org_id` in the system will have automatic resolution.
 
