@@ -121,7 +121,7 @@ export default function Signup() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep3()) return;
+    if (!trialMode && !validateStep3()) return;
     if (!selectedPlan) return;
     setSubmitting(true);
 
