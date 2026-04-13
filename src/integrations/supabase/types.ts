@@ -3634,10 +3634,12 @@ export type Database = {
     }
     Functions: {
       cleanup_old_notifications: { Args: never; Returns: undefined }
-      get_admin_dashboard_summary: {
-        Args: { p_date_from: string; p_date_to: string }
-        Returns: Json
-      }
+      get_admin_dashboard_summary:
+        | { Args: { p_date_from: string; p_date_to: string }; Returns: Json }
+        | {
+            Args: { p_date_from: string; p_date_to: string; p_org_id?: string }
+            Returns: Json
+          }
       get_managed_client_ids: {
         Args: { _manager_id: string }
         Returns: string[]

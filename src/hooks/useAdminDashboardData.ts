@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { DateRange, toISODate } from "@/components/DateRangeFilter";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 
 interface ClientWithBalance {
   user_id: string;
@@ -25,13 +26,14 @@ interface DashboardData {
   collectHistory: number[];
 }
 
-async function fetchDashboardData(dateRange: DateRange | null): Promise<DashboardData> {
+async function fetchDashboardData(dateRange: DateRange | null, orgId: string): Promise<DashboardData> {
   const from = dateRange ? toISODate(dateRange.from) : toISODate(new Date());
   const to = dateRange ? toISODate(dateRange.to) : toISODate(new Date());
 
   const { data, error } = await supabase.rpc("get_admin_dashboard_summary", {
     p_date_from: from,
     p_date_to: to,
+    p_org_id: orgId,
   });
 
   if (error) {
@@ -69,16 +71,18 @@ async function fetchDashboardData(dateRange: DateRange | null): Promise<Dashboar
 
 export function useAdminDashboardData(dateRange: DateRange | null) {
   const { session, authReady } = useAuth();
+  const { profile } = useProfile();
   const queryClient = useQueryClient();
+  const orgId = profile?.org_id;
 
   const dateKey = dateRange
     ? `${toISODate(dateRange.from)}_${toISODate(dateRange.to)}`
     : "all";
 
   const query = useQuery({
-    queryKey: ["admin-dashboard", dateKey],
-    queryFn: () => fetchDashboardData(dateRange),
-    enabled: authReady && !!session,
+    queryKey: ["admin-dashboard", dateKey, orgId],
+    queryFn: () => fetchDashboardData(dateRange, orgId!),
+    enabled: authReady && !!session && !!orgId,
     staleTime: 60_000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
