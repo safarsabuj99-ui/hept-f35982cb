@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, org_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
