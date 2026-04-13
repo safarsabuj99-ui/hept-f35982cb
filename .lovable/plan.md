@@ -1,51 +1,34 @@
 
 
-## Plan: Fix Trial Settings Not Persisting + Signup Ignoring Trial Mode
+## Plan: Fix Trial Mode Not Detected on Signup Page
 
-### Root Cause Analysis
+### Root Cause
 
-**Bug 1 — Trial toggle resets on reload:**
-The `settings` table RLS policy only allows the `admin` role to update rows. Platform owners have the `platform_owner` role, so when they toggle "Trial on Self-Signup" ON and save, the database update silently returns 0 rows affected. The UI shows success, but the DB still holds `"false"`. On reload, it reads the unchanged value.
+The `settings` table has an RLS SELECT policy restricted to `authenticated` users only. The Signup page is accessed by **unauthenticated** visitors (anon key), so the query to fetch `trial_on_self_signup` returns nothing. The trial toggle stays `false` and the payment step always shows.
 
-**Bug 2 — Signup always requires payment:**
-The `Signup.tsx` page has a hardcoded 4-step flow (Plan → Details → **Payment** → Confirmation). It never reads the `trial_on_self_signup` setting from the database, so even if the setting were correctly saved, the signup form would still force users through the payment step.
+### Fix (2 changes)
 
-### Fix
-
-#### 1. Database Migration — Fix RLS Policy
-Update the settings update policy to also allow `platform_owner` role:
+#### 1. Database Migration — Allow Anon Read on Settings
+Add a SELECT policy for the `anon` role so unauthenticated pages can read settings:
 
 ```sql
-DROP POLICY "admin_write_settings" ON public.settings;
-CREATE POLICY "admin_or_platform_write_settings" ON public.settings
-  FOR UPDATE TO authenticated
-  USING (
-    has_role(auth.uid(), 'admin'::app_role)
-    OR has_role(auth.uid(), 'platform_owner'::app_role)
-  )
-  WITH CHECK (
-    has_role(auth.uid(), 'admin'::app_role)
-    OR has_role(auth.uid(), 'platform_owner'::app_role)
-  );
+CREATE POLICY "anon_read_settings" ON public.settings
+  FOR SELECT TO anon USING (true);
 ```
 
-#### 2. Modify `src/pages/Signup.tsx` — Trial-Aware Signup Flow
-- On mount, fetch `trial_on_self_signup` from the `settings` table
-- If trial mode is ON:
-  - Change steps to 3: "Select Plan" → "Account Details" → "Confirmation" (skip Payment)
-  - Submit directly after step 2 validation (no payment fields required)
-  - The `self-signup` edge function already handles trial mode correctly (it checks the setting and skips payment validation)
-- If trial mode is OFF: keep current 4-step flow with payment
+This is safe — the `settings` table holds non-sensitive configuration values (trial days, grace period, toggle flags). Write access remains restricted to authenticated admins/platform owners.
 
-#### 3. Modify `src/pages/PlatformPlans.tsx` — Add Save Feedback
-- After `saveTrialSettings`, check if the update actually affected rows
-- Show an error toast if the update failed (defensive, since the RLS fix should resolve it)
+#### 2. No Code Changes Needed
+The Signup page already has the correct logic:
+- Fetches `trial_on_self_signup` on mount (line 63)
+- If `"true"`, sets `trialMode = true` → skips Payment step, submits after Account Details
+- The `self-signup` edge function already handles trial mode (reads the setting server-side and skips payment validation)
 
-### Files Changed
+Once anon users can read the setting, everything works end-to-end:
+1. Platform owner enables trial → saved to DB (already working after RLS fix)
+2. New user visits Signup → reads setting → sees 3 steps (no payment)
+3. Submits → edge function creates org with `trial` status
+4. Trial expires → SubscriptionGate blocks access → user upgrades with payment
 
-| File | Change |
-|------|--------|
-| Migration | Fix RLS policy on `settings` to include `platform_owner` |
-| `src/pages/Signup.tsx` | Fetch `trial_on_self_signup`, conditionally skip payment step |
-| `src/pages/PlatformPlans.tsx` | Add error handling on save |
+One migration, zero code changes.
 
