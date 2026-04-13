@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountsQuery = supabase
       .from("ad_accounts")
-      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
+      .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, org_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
       .eq("is_active", true)
       .in("id", mappedAccountIds);
 
@@ -283,6 +283,7 @@ Deno.serve(async (req) => {
                 ad_account_id: account.id,
                 client_id: clientId,
                 objective: objective || "",
+                org_id: account.org_id,
               })
               .select("id")
               .single();
@@ -360,6 +361,7 @@ Deno.serve(async (req) => {
                 leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
                 conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
                 synced_at: new Date().toISOString(),
+                org_id: account.org_id,
               },
               { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
             );
