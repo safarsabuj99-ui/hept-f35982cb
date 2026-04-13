@@ -69,12 +69,17 @@ export default function PlatformPlans() {
   const [saving, setSaving] = useState(false);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [subscriberCounts, setSubscriberCounts] = useState<Record<string, number>>({});
+  const [trialDays, setTrialDays] = useState(14);
+  const [gracePeriodDays, setGracePeriodDays] = useState(7);
+  const [trialOnSelfSignup, setTrialOnSelfSignup] = useState(false);
+  const [savingTrialSettings, setSavingTrialSettings] = useState(false);
   const { toast } = useToast();
 
   const fetchPlans = async () => {
-    const [{ data: plansData }, { data: subs }] = await Promise.all([
+    const [{ data: plansData }, { data: subs }, { data: settingsData }] = await Promise.all([
       supabase.from("platform_plans" as any).select("*").order("sort_order"),
       supabase.from("organization_subscriptions").select("plan"),
+      supabase.from("settings").select("key, value").in("key", ["default_trial_days", "default_grace_period_days", "trial_on_self_signup"]),
     ]);
 
     setPlans((plansData as any[])?.map((p: any) => ({
@@ -87,10 +92,34 @@ export default function PlatformPlans() {
     const counts: Record<string, number> = {};
     (subs || []).forEach((s: any) => { counts[s.plan] = (counts[s.plan] || 0) + 1; });
     setSubscriberCounts(counts);
+
+    // Load trial settings
+    if (settingsData) {
+      const settingsMap: Record<string, string> = {};
+      settingsData.forEach((s: any) => { settingsMap[s.key] = s.value; });
+      if (settingsMap.default_trial_days) setTrialDays(parseInt(settingsMap.default_trial_days) || 14);
+      if (settingsMap.default_grace_period_days) setGracePeriodDays(parseInt(settingsMap.default_grace_period_days) || 7);
+      if (settingsMap.trial_on_self_signup) setTrialOnSelfSignup(settingsMap.trial_on_self_signup === "true");
+    }
+
     setLoading(false);
   };
 
   useEffect(() => { fetchPlans(); }, []);
+
+  const saveTrialSettings = async () => {
+    setSavingTrialSettings(true);
+    const updates = [
+      { key: "default_trial_days", value: String(trialDays) },
+      { key: "default_grace_period_days", value: String(gracePeriodDays) },
+      { key: "trial_on_self_signup", value: String(trialOnSelfSignup) },
+    ];
+    for (const u of updates) {
+      await supabase.from("settings").update({ value: u.value }).eq("key", u.key);
+    }
+    setSavingTrialSettings(false);
+    toast({ title: "Trial settings saved" });
+  };
 
   const openEdit = (plan: Plan) => {
     setEditing(plan);
