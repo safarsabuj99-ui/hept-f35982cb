@@ -14,7 +14,7 @@ import {
   Loader2, Plus, Pencil, Star, Trash2, Check, X,
   Users, MonitorSmartphone, UserCog, Crown, Sparkles,
   Shield, BarChart3, Palette, MessageSquare, DollarSign,
-  Zap, Globe, Headphones, Receipt, Landmark, RefreshCw
+  Zap, Globe, Headphones, Receipt, Landmark, RefreshCw, Clock
 } from "lucide-react";
 import { ALL_FEATURE_KEYS, FEATURE_LABELS, type FeatureKey } from "@/hooks/useOrgFeatures";
 
@@ -356,6 +356,77 @@ export default function PlatformPlans() {
             </div>
           );
         })}
+      </div>
+
+      {/* ─── Trial Settings Card ─── */}
+      <div className="glass-card glow-border animate-slide-up-fade" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+        <div className="p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/10">
+                <Clock className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Trial Settings</h3>
+                <p className="text-xs text-muted-foreground">Configure default trial periods for new agencies</p>
+              </div>
+            </div>
+            <Button size="sm" onClick={saveTrialSettings} disabled={savingTrialSettings} className="gap-1.5 shimmer-btn">
+              {savingTrialSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Save
+            </Button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Default Trial Period</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={trialDays}
+                  onChange={(e) => setTrialDays(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">How many days new agencies get for trial</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Grace Period</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={gracePeriodDays}
+                  onChange={(e) => setGracePeriodDays(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-20"
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Extra days after trial before auto-suspension</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Trial on Self-Signup</Label>
+              <div className="flex items-center gap-3 pt-1">
+                <Switch
+                  checked={trialOnSelfSignup}
+                  onCheckedChange={setTrialOnSelfSignup}
+                />
+                <span className="text-sm text-muted-foreground">{trialOnSelfSignup ? "Enabled" : "Disabled"}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {trialOnSelfSignup
+                  ? "Self-signups start in trial mode (no payment required)"
+                  : "Self-signups must submit payment proof first"}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ─── Editor Dialog ─── */}
