@@ -827,14 +827,14 @@ export default function PaymentRequests() {
                           const rate = perPlatformRates[platform] || 120;
                           const usd = Math.round((Number(bdtAmount) / rate) * 100) / 100;
                           return (
-                            <div key={platform} className="flex items-center gap-2 rounded-md border p-2.5">
+                            <div key={platform} className="flex flex-wrap items-center gap-1.5 sm:gap-2 rounded-md border p-2.5">
                               <Badge variant="outline" className={cn("capitalize text-xs shrink-0", PLATFORM_COLORS[platform] || "")}>
                                 {platform}
                               </Badge>
-                              <span className="text-xs text-muted-foreground font-mono shrink-0">
+                              <span className="text-xs text-muted-foreground font-mono">
                                 ৳{Number(bdtAmount).toLocaleString()}
                               </span>
-                              <span className="text-xs text-muted-foreground shrink-0">÷</span>
+                              <span className="text-xs text-muted-foreground">÷</span>
                               <Input
                                 type="number"
                                 value={rate}
@@ -842,11 +842,11 @@ export default function PaymentRequests() {
                                   const val = Number(e.target.value);
                                   if (val > 0) setPerPlatformRates(prev => ({ ...prev, [platform]: val }));
                                 }}
-                                className="w-20 h-7 text-xs font-mono text-center"
+                                className="w-16 sm:w-20 h-7 text-xs font-mono text-center"
                                 min={1}
                               />
-                              <span className="text-xs text-muted-foreground shrink-0">=</span>
-                              <span className="text-sm font-mono font-semibold text-primary shrink-0">${fmt(usd)}</span>
+                              <span className="text-xs text-muted-foreground">=</span>
+                              <span className="text-sm font-mono font-semibold text-primary">${fmt(usd)}</span>
                             </div>
                           );
                         })}
