@@ -8,14 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, ShieldAlert } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getDhakaDateString } from "@/components/DateRangeFilter";
 import { useProfile } from "@/hooks/useProfile";
+import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
 interface ClientProfile { user_id: string; full_name: string; business_name: string | null; }
+interface AgencyAccount { id: string; name: string; type: string; current_balance_bdt: number; }
 
 const PLATFORMS = [
   { key: "meta", label: "Meta" },
@@ -42,6 +45,13 @@ export default function AddFunds() {
   // Multi-platform amounts (USD)
   const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({ meta: false, tiktok: false, google: false });
   const [platformAmounts, setPlatformAmounts] = useState<Record<string, string>>({ meta: "", tiktok: "", google: "" });
+
+  // Loan toggle state
+  const [isLoanFunded, setIsLoanFunded] = useState(false);
+  const [loanAccountId, setLoanAccountId] = useState("");
+  const [loanBorrower, setLoanBorrower] = useState("");
+  const [loanExpectedDate, setLoanExpectedDate] = useState("");
+  const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
 
   const totalAmount = PLATFORMS.reduce((sum, p) => {
     if (platformEnabled[p.key] && platformAmounts[p.key]) {
@@ -80,9 +90,22 @@ export default function AddFunds() {
     fetchClients();
   }, [isManager, user]);
 
+  // Load agency accounts for loan option
+  useEffect(() => {
+    async function loadAccounts() {
+      const { data } = await (supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name") as any);
+      setAgencyAccounts((data as AgencyAccount[]) || []);
+    }
+    loadAccounts();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientId || !hasValidPlatform) return;
+    if (isLoanFunded && (!loanAccountId || !loanBorrower.trim())) {
+      toast({ title: "Error", description: "Select a source account and enter borrower name for loan", variant: "destructive" });
+      return;
+    }
     setIsLoading(true);
 
     const status = isManager ? "pending_approval" : "completed";
@@ -105,16 +128,54 @@ export default function AddFunds() {
 
     const { error } = await supabase.from("transactions").insert(inserts as any);
 
-    setIsLoading(false);
     if (error) {
+      setIsLoading(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      const msg = isManager
-        ? "Deposit submitted for Super Admin approval"
-        : `$${totalAmount.toFixed(2)} added successfully`;
-      toast({ title: "Success", description: msg });
-      navigate(backPath);
+      return;
     }
+
+    // If loan-funded, create cash_withdrawals record and debit account
+    if (isLoanFunded && loanAccountId) {
+      // Get current exchange rate to estimate BDT amount
+      const { data: rateData } = await supabase
+        .from("currency_rates")
+        .select("rate")
+        .eq("from_currency", "USD")
+        .eq("to_currency", "BDT")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+      
+      const exchangeRate = rateData ? Number(rateData.rate) : 120;
+      const loanAmountBdt = totalAmount * exchangeRate;
+
+      const { error: wdError } = await supabase.from("cash_withdrawals" as any).insert({
+        from_account_id: loanAccountId,
+        amount_bdt: loanAmountBdt,
+        category: "business_loan",
+        borrower_name: loanBorrower.trim(),
+        expected_return_date: loanExpectedDate || null,
+        note: `Loan for client fund deposit — $${totalAmount.toFixed(2)} × ৳${exchangeRate}`,
+        created_by: user!.id,
+        org_id: (profile as any)?.org_id || null,
+      } as any);
+
+      if (wdError) {
+        setIsLoading(false);
+        toast({ title: "Warning", description: `Funds added but loan record failed: ${wdError.message}`, variant: "destructive" });
+        navigate(backPath);
+        return;
+      }
+
+      await adjustAccountBalance(loanAccountId, -loanAmountBdt);
+    }
+
+    setIsLoading(false);
+    const msg = isManager
+      ? "Deposit submitted for Super Admin approval"
+      : `$${totalAmount.toFixed(2)} added successfully${isLoanFunded ? " (loan recorded)" : ""}`;
+    toast({ title: "Success", description: msg });
+    navigate(backPath);
   };
 
   if (isManager && !permissions.can_add_funds) {
@@ -202,6 +263,43 @@ export default function AddFunds() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Loan-Funded Toggle */}
+            <div className="rounded-lg border p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Funded by Loan</Label>
+                  <p className="text-xs text-muted-foreground">Track this deposit as a loan in Cash Flow</p>
+                </div>
+                <Switch checked={isLoanFunded} onCheckedChange={setIsLoanFunded} />
+              </div>
+
+              {isLoanFunded && (
+                <div className="space-y-3 pt-2 border-t">
+                  <div>
+                    <Label>Source Account</Label>
+                    <Select value={loanAccountId} onValueChange={setLoanAccountId}>
+                      <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                      <SelectContent>
+                        {agencyAccounts.map(a => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Borrower Name</Label>
+                    <Input placeholder="Who provided this loan?" value={loanBorrower} onChange={e => setLoanBorrower(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Expected Return Date (optional)</Label>
+                    <Input type="date" value={loanExpectedDate} onChange={e => setLoanExpectedDate(e.target.value)} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
