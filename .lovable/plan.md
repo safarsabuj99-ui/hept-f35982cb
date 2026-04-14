@@ -1,31 +1,48 @@
 
 
-## Plan: Convert Two Existing Loan Entries to New Loan Tracking System
+## Plan: Premium Responsive KPI Widget for Cash Flow
 
-### Data Found
+### Current State
+The 6 KPIs are split into two separate grid sections — 3 summary cards (Total Liquid Funds, Outstanding Withdrawals, Loan Outstanding) and 3 account-type cards (Cash, Bank, MFS). On mobile, they stack vertically into 6 full-width rows, taking excessive vertical space.
 
-| # | Amount | Date | Note | Liquid Fund ID | Account ID |
-|---|--------|------|------|---------------|------------|
-| 1 | ৳29,000 | 2026-04-13 | "From arif. Total 50k" | `257619ec-...` | `c3787088-...` |
-| 2 | ৳21,000 | 2026-04-09 | "From Arif" | `58794828-...` | `c3787088-...` |
+### New Design: Unified Premium Widget
 
-Both from lender **Arif**, same account, same org, same creator.
-
-### What Will Happen
-
-One database migration that inserts two rows into `liquid_fund_loans`:
+Replace both grids with a single unified `glass-card` widget:
 
 ```text
-Entry 1: ৳29,000 — lender "Arif", date 2026-04-13, note "From arif. Total 50k", status active
-Entry 2: ৳21,000 — lender "Arif", date 2026-04-09, note "From Arif", status active
+┌─────────────────────────────────────────────────────┐
+│  DESKTOP (lg+): 2 rows                             │
+│  ┌───────────┬──────────────┬──────────────┐        │
+│  │ Total     │ Outstanding  │ Loan         │  Row 1 │
+│  │ Liquid    │ Withdrawals  │ Outstanding  │        │
+│  ├───────────┼──────────────┼──────────────┤        │
+│  │ Cash      │ Bank         │ MFS          │  Row 2 │
+│  └───────────┴──────────────┴──────────────┘        │
+│                                                     │
+│  TABLET (sm-lg): 3 cols, 2 rows (same as desktop)   │
+│                                                     │
+│  MOBILE (<sm): 2 cols compact grid                  │
+│  ┌──────────┬──────────────┐                        │
+│  │ Total    │ Withdrawals  │                        │
+│  │ Liquid   │ Outstanding  │                        │
+│  ├──────────┼──────────────┤                        │
+│  │ Loan     │ Cash         │                        │
+│  ├──────────┼──────────────┤                        │
+│  │ Bank     │ MFS          │                        │
+│  └──────────┴──────────────┘                        │
+└─────────────────────────────────────────────────────┘
 ```
 
-Both linked to their original `liquid_fund_entries` records so the data stays connected. After this, both loans will appear in the new **Loans tab** on Cash Flow with full return/repayment tracking.
+### Visual Enhancements
+- Single glass-card container with accent-colored left border per KPI cell
+- Top 3 KPIs (summary) use colored accent bars (primary, warning, destructive)
+- Bottom 3 (account types) use subtle muted styling
+- Compact font sizing on mobile (`text-lg` vs `text-2xl`)
+- Always show all 6 KPIs (remove conditional hiding of withdrawals/loans when zero — zero is useful info)
+- Staggered fade-in animation matching the existing `animate-slide-up-fade` pattern
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Migration | Insert 2 rows into `liquid_fund_loans` from existing data |
-
-No UI changes needed — the Loans tab already displays these records.
+| Modify | `src/pages/CashFlowManagement.tsx` — Replace lines 849-921 with unified premium KPI grid |
 
