@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle } from "lucide-react";
+import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle, Landmark } from "lucide-react";
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useProfile } from "@/hooks/useProfile";
@@ -62,6 +62,20 @@ interface CashWithdrawal {
   created_at: string;
 }
 
+interface LiquidFundLoan {
+  id: string;
+  liquid_fund_id: string | null;
+  to_account_id: string;
+  amount_bdt: number;
+  returned_bdt: number;
+  status: string;
+  lender_name: string;
+  date: string;
+  expected_return_date: string | null;
+  note: string | null;
+  created_at: string;
+}
+
 interface CashWithdrawalReturn {
   id: string;
   withdrawal_id: string;
@@ -97,6 +111,7 @@ export default function CashFlowManagement() {
   const [transfers, setTransfers] = useState<FundTransfer[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [withdrawals, setWithdrawals] = useState<CashWithdrawal[]>([]);
+  const [loans, setLoans] = useState<LiquidFundLoan[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -123,6 +138,9 @@ export default function CashFlowManagement() {
   const [fundDate, setFundDate] = useState(new Date().toISOString().slice(0, 10));
   const [fundNote, setFundNote] = useState("");
   const [fundSubmitting, setFundSubmitting] = useState(false);
+  // Loan-specific fields for Add Fund
+  const [fundLenderName, setFundLenderName] = useState("");
+  const [fundExpectedReturn, setFundExpectedReturn] = useState("");
 
   // Withdrawal state
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -134,7 +152,7 @@ export default function CashFlowManagement() {
   const [wdNote, setWdNote] = useState("");
   const [wdSubmitting, setWdSubmitting] = useState(false);
 
-  // Return state
+  // Return state (for withdrawals)
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnWithdrawal, setReturnWithdrawal] = useState<CashWithdrawal | null>(null);
   const [retAmount, setRetAmount] = useState("");
@@ -143,9 +161,22 @@ export default function CashFlowManagement() {
   const [retNote, setRetNote] = useState("");
   const [retSubmitting, setRetSubmitting] = useState(false);
 
+  // Loan return state
+  const [loanReturnOpen, setLoanReturnOpen] = useState(false);
+  const [returnLoan, setReturnLoan] = useState<LiquidFundLoan | null>(null);
+  const [loanRetAmount, setLoanRetAmount] = useState("");
+  const [loanRetFromAccId, setLoanRetFromAccId] = useState("");
+  const [loanRetDate, setLoanRetDate] = useState(new Date().toISOString().slice(0, 10));
+  const [loanRetNote, setLoanRetNote] = useState("");
+  const [loanRetSubmitting, setLoanRetSubmitting] = useState(false);
+
   // Withdrawal pagination
   const [wdPage, setWdPage] = useState(1);
   const [wdPageSize, setWdPageSize] = useState(20);
+
+  // Loan pagination
+  const [loanPage, setLoanPage] = useState(1);
+  const [loanPageSize, setLoanPageSize] = useState(20);
 
   // Activity pagination
   const [actPage, setActPage] = useState(1);
@@ -157,7 +188,7 @@ export default function CashFlowManagement() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes] = await Promise.all([
+    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes, loanRes, loanRetRes] = await Promise.all([
       supabase.from("agency_accounts" as any).select("*").order("type").order("name"),
       supabase.from("fund_transfers" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("payment_requests" as any).select("amount_bdt, payment_method, created_at, status, received_in_account_id").eq("status", "approved").order("created_at", { ascending: false }).limit(10),
@@ -165,12 +196,15 @@ export default function CashFlowManagement() {
       supabase.from("agency_expenses" as any).select("amount_bdt, category, date, created_at, paid_from_account_id, description").order("created_at", { ascending: false }).limit(10),
       supabase.from("liquid_fund_entries" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("cash_withdrawals" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("liquid_fund_loans" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("liquid_fund_loan_returns" as any).select("*").order("created_at", { ascending: false }).limit(20),
     ]);
 
     const accs = (accRes.data as any[]) ?? [];
     setAccounts(accs);
     setTransfers((transferRes.data as any[]) ?? []);
     setWithdrawals((wdRes.data as any[]) ?? []);
+    setLoans((loanRes.data as any[]) ?? []);
 
     const accMap: Record<string, string> = {};
     for (const a of accs) accMap[a.id] = a.name;
@@ -228,7 +262,7 @@ export default function CashFlowManagement() {
       });
     }
 
-    // Add withdrawal & return activity
+    // Add withdrawal activity
     for (const w of (wdRes.data as any[]) ?? []) {
       activity.push({
         id: `wd-${w.id}`,
@@ -237,6 +271,19 @@ export default function CashFlowManagement() {
         amount_bdt: Number(w.amount_bdt),
         date: w.created_at,
         account_name: w.from_account_id ? accMap[w.from_account_id] : undefined,
+      });
+    }
+
+    // Add loan return activity
+    for (const lr of (loanRetRes.data as any[]) ?? []) {
+      const loan = (loanRes.data as any[])?.find((l: any) => l.id === lr.loan_id);
+      activity.push({
+        id: `lr-${lr.id}`,
+        type: "out",
+        description: `Loan Repayment${loan ? `: ${loan.lender_name}` : ""}`,
+        amount_bdt: Number(lr.amount_bdt),
+        date: lr.created_at,
+        account_name: lr.to_account_id ? accMap[lr.to_account_id] : undefined,
       });
     }
 
@@ -258,6 +305,8 @@ export default function CashFlowManagement() {
       .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_entries" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_withdrawals" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "cash_withdrawal_returns" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_loans" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "liquid_fund_loan_returns" }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchData]);
@@ -292,7 +341,6 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: "Select different accounts and a valid amount", variant: "destructive" });
       return;
     }
-    // Fresh balance check
     const { data: freshFrom } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", fromAccId).single();
     if (freshFrom && Number((freshFrom as any).current_balance_bdt) < amt) {
       toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
@@ -310,7 +358,6 @@ export default function CashFlowManagement() {
 
     const creditOk = await adjustAccountBalance(toAccId, amt);
     if (!creditOk) {
-      // Rollback debit
       await adjustAccountBalance(fromAccId, amt);
       setTransferring(false);
       toast({ title: "Error", description: "Failed to credit account", variant: "destructive" });
@@ -339,8 +386,14 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: "Select an account and enter a valid amount", variant: "destructive" });
       return;
     }
+    if (fundSource === "Loan" && !fundLenderName.trim()) {
+      toast({ title: "Error", description: "Lender name is required for loan-funded deposits", variant: "destructive" });
+      return;
+    }
     setFundSubmitting(true);
-    const { error: insertErr } = await supabase.from("liquid_fund_entries" as any).insert({
+
+    // Insert liquid fund entry
+    const { data: lfData, error: insertErr } = await supabase.from("liquid_fund_entries" as any).insert({
       account_id: fundAccId,
       amount_bdt: amt,
       type: "inflow",
@@ -349,18 +402,40 @@ export default function CashFlowManagement() {
       note: fundNote || null,
       created_by: user?.id,
       org_id: profile?.org_id || null,
-    } as any);
+    } as any).select("id").single();
+
     if (insertErr) {
       setFundSubmitting(false);
       toast({ title: "Error", description: insertErr.message, variant: "destructive" });
       return;
     }
+
+    // If source is Loan, also create a liquid_fund_loans record
+    if (fundSource === "Loan" && lfData) {
+      const { error: loanErr } = await supabase.from("liquid_fund_loans" as any).insert({
+        liquid_fund_id: (lfData as any).id,
+        to_account_id: fundAccId,
+        amount_bdt: amt,
+        lender_name: fundLenderName.trim(),
+        date: fundDate,
+        expected_return_date: fundExpectedReturn || null,
+        note: fundNote || null,
+        created_by: user?.id,
+        org_id: profile?.org_id || null,
+      } as any);
+      if (loanErr) {
+        setFundSubmitting(false);
+        toast({ title: "Warning", description: "Fund added but loan tracking failed: " + loanErr.message, variant: "destructive" });
+      }
+    }
+
     await adjustAccountBalance(fundAccId, amt);
-    const accName = accounts.find(a => a.id === fundAccId)?.name;
+    const accNameFound = accounts.find(a => a.id === fundAccId)?.name;
     setFundSubmitting(false);
-    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${accName}` });
+    toast({ title: "Fund Added", description: `৳${amt.toLocaleString()} deposited to ${accNameFound}` });
     setFundAmount(""); setFundNote(""); setFundAccId(""); setFundSource("Personal Fund");
     setFundDate(new Date().toISOString().slice(0, 10));
+    setFundLenderName(""); setFundExpectedReturn("");
     setFundOpen(false);
     fetchData();
   };
@@ -371,7 +446,6 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: "Fill in account, borrower name, and amount", variant: "destructive" });
       return;
     }
-    // Fresh balance check
     const { data: freshAcc } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", wdFromAccId).single();
     if (freshAcc && Number((freshAcc as any).current_balance_bdt) < amt) {
       toast({ title: "Insufficient Balance", description: `${(freshAcc as any).name} has only ৳${Number((freshAcc as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
@@ -425,7 +499,6 @@ export default function CashFlowManagement() {
     }
     setRetSubmitting(true);
 
-    // Insert return record
     const { error: insertErr } = await supabase.from("cash_withdrawal_returns" as any).insert({
       withdrawal_id: returnWithdrawal.id,
       amount_bdt: amt,
@@ -442,20 +515,78 @@ export default function CashFlowManagement() {
       return;
     }
 
-    // Update withdrawal returned_bdt and status
     const newReturned = Number(returnWithdrawal.returned_bdt) + amt;
     const newStatus = newReturned >= Number(returnWithdrawal.amount_bdt) ? "fully_returned" : "partially_returned";
     await supabase.from("cash_withdrawals" as any)
       .update({ returned_bdt: newReturned, status: newStatus } as any)
       .eq("id", returnWithdrawal.id);
 
-    // Credit account balance using fresh DB read
     await adjustAccountBalance(retToAccId, amt);
 
     setRetSubmitting(false);
     toast({ title: "Return Recorded", description: `৳${amt.toLocaleString()} returned` });
     setReturnOpen(false);
     setReturnWithdrawal(null);
+    fetchData();
+  };
+
+  // Loan return handlers
+  const openLoanReturnDialog = (loan: LiquidFundLoan) => {
+    setReturnLoan(loan);
+    setLoanRetAmount("");
+    setLoanRetFromAccId(loan.to_account_id);
+    setLoanRetDate(new Date().toISOString().slice(0, 10));
+    setLoanRetNote("");
+    setLoanReturnOpen(true);
+  };
+
+  const handleRecordLoanReturn = async () => {
+    if (!returnLoan) return;
+    const amt = Number(loanRetAmount);
+    const remaining = Number(returnLoan.amount_bdt) - Number(returnLoan.returned_bdt);
+    if (!loanRetFromAccId || amt <= 0 || amt > remaining) {
+      toast({ title: "Error", description: `Enter a valid amount (max ৳${remaining.toLocaleString()})`, variant: "destructive" });
+      return;
+    }
+
+    // Check balance
+    const { data: freshAcc } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", loanRetFromAccId).single();
+    if (freshAcc && Number((freshAcc as any).current_balance_bdt) < amt) {
+      toast({ title: "Insufficient Balance", description: `${(freshAcc as any).name} has only ৳${Number((freshAcc as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+      return;
+    }
+
+    setLoanRetSubmitting(true);
+
+    const { error: insertErr } = await supabase.from("liquid_fund_loan_returns" as any).insert({
+      loan_id: returnLoan.id,
+      amount_bdt: amt,
+      to_account_id: loanRetFromAccId,
+      date: loanRetDate,
+      note: loanRetNote || null,
+      created_by: user?.id,
+      org_id: profile?.org_id || null,
+    } as any);
+
+    if (insertErr) {
+      setLoanRetSubmitting(false);
+      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
+      return;
+    }
+
+    const newReturned = Number(returnLoan.returned_bdt) + amt;
+    const newStatus = newReturned >= Number(returnLoan.amount_bdt) ? "fully_returned" : "partially_returned";
+    await supabase.from("liquid_fund_loans" as any)
+      .update({ returned_bdt: newReturned, status: newStatus } as any)
+      .eq("id", returnLoan.id);
+
+    // Debit the account (money leaving to repay lender)
+    await adjustAccountBalance(loanRetFromAccId, -amt);
+
+    setLoanRetSubmitting(false);
+    toast({ title: "Loan Repayment Recorded", description: `৳${amt.toLocaleString()} repaid` });
+    setLoanReturnOpen(false);
+    setReturnLoan(null);
     fetchData();
   };
 
@@ -486,15 +617,19 @@ export default function CashFlowManagement() {
     .filter(w => w.status !== "fully_returned")
     .reduce((s, w) => s + (Number(w.amount_bdt) - Number(w.returned_bdt)), 0);
 
+  const outstandingLoans = loans
+    .filter(l => l.status !== "fully_returned")
+    .reduce((s, l) => s + (Number(l.amount_bdt) - Number(l.returned_bdt)), 0);
+
   const activityIcon = (type: string) => {
     if (type === "in") return <ArrowDown className="h-3.5 w-3.5 text-success" />;
     if (type === "out") return <ArrowUp className="h-3.5 w-3.5 text-destructive" />;
     return <MoveHorizontal className="h-3.5 w-3.5 text-primary" />;
   };
 
-  const isOverdue = (w: CashWithdrawal) => {
-    if (w.status === "fully_returned" || !w.expected_return_date) return false;
-    return new Date(w.expected_return_date) < new Date();
+  const isOverdue = (item: { status: string; expected_return_date: string | null }) => {
+    if (item.status === "fully_returned" || !item.expected_return_date) return false;
+    return new Date(item.expected_return_date) < new Date();
   };
 
   return (
@@ -594,6 +729,21 @@ export default function CashFlowManagement() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Loan-specific fields */}
+              {fundSource === "Loan" && (
+                <>
+                  <div>
+                    <Label>Lender Name <span className="text-destructive">*</span></Label>
+                    <Input placeholder="Who gave you this loan?" value={fundLenderName} onChange={e => setFundLenderName(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Expected Return Date (optional)</Label>
+                    <Input type="date" value={fundExpectedReturn} onChange={e => setFundExpectedReturn(e.target.value)} />
+                  </div>
+                </>
+              )}
+
               <div>
                 <Label>Date</Label>
                 <Input type="date" value={fundDate} onChange={e => setFundDate(e.target.value)} />
@@ -696,8 +846,8 @@ export default function CashFlowManagement() {
         </Dialog>
       </div>
 
-      {/* Total Liquid Funds + Outstanding Withdrawals */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+      {/* KPI Cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -724,6 +874,23 @@ export default function CashFlowManagement() {
                   <p className="text-xs text-muted-foreground mt-1">Money owed back to cash flow</p>
                 </div>
                 <HandCoins className="h-8 w-8 sm:h-10 sm:w-10 text-warning/40" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {outstandingLoans > 0 && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Loan Outstanding</p>
+                  {loading ? <Skeleton className="h-10 w-48" /> : (
+                    <p className="text-2xl sm:text-3xl font-bold font-mono text-destructive">৳{outstandingLoans.toLocaleString()}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">Loan amount to repay</p>
+                </div>
+                <Landmark className="h-8 w-8 sm:h-10 sm:w-10 text-destructive/40" />
               </div>
             </CardContent>
           </Card>
@@ -758,6 +925,9 @@ export default function CashFlowManagement() {
           <TabsTrigger value="accounts" className="flex-shrink-0">Accounts ({accounts.length})</TabsTrigger>
           <TabsTrigger value="withdrawals" className="flex-shrink-0">
             Withdrawals ({withdrawals.filter(w => w.status !== "fully_returned").length})
+          </TabsTrigger>
+          <TabsTrigger value="loans" className="flex-shrink-0">
+            Loans ({loans.filter(l => l.status !== "fully_returned").length})
           </TabsTrigger>
           <TabsTrigger value="activity" className="flex-shrink-0">Recent Activity</TabsTrigger>
           <TabsTrigger value="transfers" className="flex-shrink-0">Transfer History</TabsTrigger>
@@ -962,6 +1132,129 @@ export default function CashFlowManagement() {
           </Card>
         </TabsContent>
 
+        {/* Loans Tab */}
+        <TabsContent value="loans">
+          <Card>
+            <CardContent className="pt-6">
+              {loading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : loans.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No loans recorded yet. Use "Add Fund" with source "Loan" to track loan-funded deposits.</p>
+              ) : (
+                <>
+                  {/* Mobile card view */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {loans.slice((loanPage - 1) * loanPageSize, loanPage * loanPageSize).map(l => {
+                      const remaining = Number(l.amount_bdt) - Number(l.returned_bdt);
+                      const overdue = isOverdue(l);
+                      const toAcc = accounts.find(a => a.id === l.to_account_id);
+                      return (
+                        <div key={l.id} className={`rounded-xl border p-4 space-y-3 bg-card ${overdue ? "border-destructive/50" : ""}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={STATUS_VARIANTS[l.status] || "secondary"} className="text-xs capitalize">
+                                {l.status.replace(/_/g, " ")}
+                              </Badge>
+                              {overdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{l.lender_name || "—"}</p>
+                            <p className="text-xs text-muted-foreground">{toAcc?.name || "?"} · {new Date(l.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-mono font-semibold">৳{Number(l.amount_bdt).toLocaleString()}</p>
+                              {remaining > 0 && remaining < Number(l.amount_bdt) && (
+                                <p className="text-xs text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
+                              )}
+                            </div>
+                            {l.status !== "fully_returned" && (
+                              <Button size="sm" variant="outline" onClick={() => openLoanReturnDialog(l)}>
+                                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Repay
+                              </Button>
+                            )}
+                          </div>
+                          {l.expected_return_date && (
+                            <p className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                              {overdue ? "Overdue" : "Due"}: {new Date(l.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Lender</TableHead>
+                          <TableHead>To Account</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Repaid</TableHead>
+                          <TableHead className="text-right">Outstanding</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loans.slice((loanPage - 1) * loanPageSize, loanPage * loanPageSize).map(l => {
+                          const remaining = Number(l.amount_bdt) - Number(l.returned_bdt);
+                          const overdue = isOverdue(l);
+                          const toAcc = accounts.find(a => a.id === l.to_account_id);
+                          return (
+                            <TableRow key={l.id} className={overdue ? "bg-destructive/5" : ""}>
+                              <TableCell className="font-mono text-sm">{new Date(l.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                              <TableCell className="font-medium">{l.lender_name || "—"}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{toAcc?.name || "?"}</TableCell>
+                              <TableCell className="text-right font-mono font-semibold">৳{Number(l.amount_bdt).toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-mono text-success">৳{Number(l.returned_bdt).toLocaleString()}</TableCell>
+                              <TableCell className={`text-right font-mono font-semibold ${remaining > 0 ? "text-destructive" : "text-success"}`}>
+                                ৳{remaining.toLocaleString()}
+                              </TableCell>
+                              <TableCell className={`text-sm ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                                {l.expected_return_date ? (
+                                  <span className="flex items-center gap-1">
+                                    {overdue && <AlertTriangle className="h-3 w-3" />}
+                                    {new Date(l.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                ) : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={STATUS_VARIANTS[l.status] || "secondary"} className="text-xs capitalize">
+                                  {l.status.replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {l.status !== "fully_returned" && (
+                                  <Button size="sm" variant="outline" onClick={() => openLoanReturnDialog(l)}>
+                                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Repay
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <TablePagination
+                    totalItems={loans.length}
+                    pageSize={loanPageSize}
+                    currentPage={loanPage}
+                    onPageChange={setLoanPage}
+                    onPageSizeChange={setLoanPageSize}
+                  />
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="activity">
           <Card>
             <CardContent className="pt-6">
@@ -1073,7 +1366,7 @@ export default function CashFlowManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Record Return Dialog */}
+      {/* Record Return Dialog (Withdrawals) */}
       <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Record Return</DialogTitle></DialogHeader>
@@ -1118,6 +1411,57 @@ export default function CashFlowManagement() {
               </div>
               <Button className="w-full" onClick={handleRecordReturn} disabled={retSubmitting}>
                 {retSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Return
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Loan Repayment Dialog */}
+      <Dialog open={loanReturnOpen} onOpenChange={setLoanReturnOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Record Loan Repayment</DialogTitle></DialogHeader>
+          {returnLoan && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-3 space-y-1">
+                <p className="text-sm font-medium">Lender: {returnLoan.lender_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Total: ৳{Number(returnLoan.amount_bdt).toLocaleString()} · Repaid: ৳{Number(returnLoan.returned_bdt).toLocaleString()} · 
+                  <span className="text-destructive font-medium"> Outstanding: ৳{(Number(returnLoan.amount_bdt) - Number(returnLoan.returned_bdt)).toLocaleString()}</span>
+                </p>
+              </div>
+              <div>
+                <Label>Repayment Amount (BDT)</Label>
+                <Input
+                  type="number"
+                  placeholder={`Max ৳${(Number(returnLoan.amount_bdt) - Number(returnLoan.returned_bdt)).toLocaleString()}`}
+                  value={loanRetAmount}
+                  onChange={e => setLoanRetAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Pay From Account</Label>
+                <Select value={loanRetFromAccId} onValueChange={setLoanRetFromAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={loanRetDate} onChange={e => setLoanRetDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={loanRetNote} onChange={e => setLoanRetNote(e.target.value)} placeholder="e.g. Monthly installment" />
+              </div>
+              <Button className="w-full" onClick={handleRecordLoanReturn} disabled={loanRetSubmitting}>
+                {loanRetSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Repayment
               </Button>
             </div>
           )}
