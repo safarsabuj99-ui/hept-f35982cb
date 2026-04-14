@@ -1,14 +1,17 @@
 
 
-## Plan: Hide KPI Subtitles on Mobile
+## Plan: Lock App Orientation to Portrait
 
-### Change
-Add `hidden sm:block` to the subtitle `<p>` tag in `KpiCard.tsx` so subtitles are hidden on mobile viewports and visible on tablet/desktop.
+### Problem
+The `manifest.json` has `"orientation": "any"`, which allows the PWA to rotate freely — even when the device rotation lock is enabled. When installed as a standalone PWA, the manifest orientation overrides the device setting.
+
+### Solution
+Change `"orientation": "any"` to `"orientation": "portrait"` in `manifest.json`. This locks the app to portrait mode regardless of device rotation.
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Modify | `src/components/dashboard/KpiCard.tsx` — Line 118: add `hidden sm:block` class to subtitle paragraph |
+| Modify | `public/manifest.json` — Change line 9: `"orientation": "portrait"` |
 
-One-line change. No new props needed — subtitles will be hidden below 640px across all KpiCard usages (admin dashboard included), which is consistent with the compact mobile standard.
+Single-line change. After this, the installed PWA will always stay in portrait mode.
 
