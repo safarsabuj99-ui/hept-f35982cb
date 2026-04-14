@@ -1,63 +1,44 @@
 
 
-## Plan: Add org_id Auto-Set Triggers to All 21 Remaining Tables
+## Plan: Add Loan-Funded Option to Add Funds with KPI on Cash Flow Page
 
-### Problem Found
+### What Changes
 
-After a full audit, **21 tables** have `org_id` columns with org-scoped RLS policies but **no auto-set trigger**. Any insert without explicit `org_id` will either:
-- Fail with "violates row-level security policy" (browser inserts)
-- Create invisible records (service-role inserts)
+**1. AddFunds page** (`src/pages/AddFunds.tsx`)
+- Add a "Funded by Loan" toggle switch below the platform amounts section
+- When enabled, show: source agency account selector, borrower name, expected return date fields
+- On submit: after creating the credit transactions, also insert a `cash_withdrawals` record with category `business_loan` and debit the selected agency account balance
+- This makes the loan automatically appear in Cash Flow > Withdrawals tab with the existing "Return" button
 
-### Tables Already Protected (have triggers)
-`transactions`, `audit_logs`, `ad_accounts`, `ad_account_clients`, `agency_accounts`, `agency_expenses`, `billing_notifications`, `campaign_mappings`, `campaign_performance`, `campaign_requests`, `campaigns`, `cash_withdrawals`, `cash_withdrawal_returns`, `client_notices`, `daily_ad_spend`, `daily_metrics`, `fund_transfers`, `liquid_fund_entries`, `notifications`, `payment_requests`, `usd_inventory_snapshots`, `usd_manual_spends`, `usd_purchases`
+**2. DepositFundsDialog** (`src/components/DepositFundsDialog.tsx`)
+- Same "Funded by Loan" toggle with agency account/borrower/expected return date fields
+- Same dual-insert logic: creates the payment request AND a `cash_withdrawals` record when loan is toggled on
 
-### Tables Missing Triggers (21 total)
+**3. Cash Flow page KPI** (`src/pages/CashFlowManagement.tsx`)
+- Replace the conditional "Outstanding Withdrawals" card with a permanent **"Loan Outstanding"** KPI card that shows the total of all active/partially-returned loans (`amount_bdt - returned_bdt` where `status != 'fully_returned'`)
+- This KPI is always visible (not hidden when zero) so you can always see your loan position
+- Add a count of active loans beneath the amount
 
-| Table | Lookup Strategy | Insert Sources |
-|-------|----------------|----------------|
-| `api_integrations` | `auth.uid()` | IntegrationsTab (browser), sync functions |
-| `subscription_payments` | `auth.uid()` → already has org_id in payload | SubscriptionGate (browser) |
-| `organization_subscriptions` | `auth.uid()` | SubscriptionGate, change-plan edge fn |
-| `plan_upgrade_requests` | `auth.uid()` | AgencyDetail (browser) |
-| `plan_change_log` | org_id in payload | change-plan edge fn |
-| `platform_invoices` | org_id in payload | subscription-lifecycle edge fn |
-| `data_export_requests` | `requested_by` → profiles | data-export edge fn |
-| `document_acceptances` | `user_id` → profiles | browser |
-| `support_tickets` | org_id in payload | AgencySupport (browser) |
-| `email_log` | `user_id` → profiles | edge functions |
-| `dunning_runs` | `subscription_id` → org_subscriptions | dunning-processor edge fn |
-| `gateway_transactions` | `subscription_id` → org_subscriptions | payment-gateway edge fn |
-| `overage_charges` | org_id in payload | meter-usage edge fn |
-| `sla_metrics` | org_id in payload | sla-monitor edge fn |
-| `referral_codes` | org_id in payload | edge fn |
-| `payment_gateway_config` | `auth.uid()` | browser |
-| `acquisition_costs` | `auth.uid()` | platform admin |
-| `feature_usage_events` | org_id in payload | edge fn |
-| `tenant_health_scores` | org_id in payload | edge fn |
-| `usage_metering_logs` | org_id in payload | edge fn |
-| `platform_costs` | platform-level | platform owner |
+**No database changes needed** — the existing `cash_withdrawals` and `cash_withdrawal_returns` tables already support loan categories (`business_loan`, `personal_loan`, etc.) with the Return flow fully functional.
 
-### Fix — One Migration
-
-Create `BEFORE INSERT` triggers on all 21 tables using the same cascading fallback pattern already proven on the other tables:
+### Technical Detail
 
 ```text
-1. auth.uid() → get_user_org_id()        (browser)
-2. user_id/client_id → profiles.org_id   (edge functions)
-3. subscription_id → org_subscriptions   (billing tables)
-4. First org fallback                     (single-tenant safety)
+AddFunds submit flow (when loan enabled):
+1. Insert credit transactions (existing)
+2. Insert cash_withdrawals { category: "business_loan", from_account_id, borrower_name, amount_bdt: totalAmount * exchange_rate_estimate, ... }
+3. Debit agency account via adjustAccountBalance()
+
+DepositFundsDialog submit flow (when loan enabled):
+1. Insert payment_request (existing)  
+2. Insert cash_withdrawals record
+3. Debit agency account
 ```
-
-Group the tables by their lookup strategy to reuse trigger functions:
-
-- **User-based** (10 tables): `api_integrations`, `subscription_payments`, `plan_upgrade_requests`, `document_acceptances`, `support_tickets`, `payment_gateway_config`, `acquisition_costs`, `platform_costs`, `referral_codes`, `email_log` — use `auth.uid()` then `user_id` → profiles
-- **Subscription-based** (3 tables): `organization_subscriptions`, `dunning_runs`, `gateway_transactions` — use org_id from subscription
-- **Direct org_id** (8 tables): `plan_change_log`, `platform_invoices`, `overage_charges`, `sla_metrics`, `feature_usage_events`, `tenant_health_scores`, `usage_metering_logs`, `data_export_requests` — these already get org_id in payload from edge functions, trigger is safety net only
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Migration | Add 21 `BEFORE INSERT OR UPDATE` trigger functions + triggers |
-
-No UI code changes needed — triggers auto-populate `org_id` transparently. This is the final coverage pass — after this, every table with `org_id` in the system will have automatic resolution.
+| Modify | `src/pages/AddFunds.tsx` — add loan toggle + account/borrower fields + dual insert |
+| Modify | `src/components/DepositFundsDialog.tsx` — add loan toggle + same logic |
+| Modify | `src/pages/CashFlowManagement.tsx` — enhance KPI to show "Loan Outstanding" permanently |
 
