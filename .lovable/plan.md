@@ -1,63 +1,71 @@
 
 
-## Plan: Add org_id Auto-Set Triggers to All 21 Remaining Tables
+## Plan: Loan-Funded Liquid Fund Tracking with Repayment System
 
-### Problem Found
+### What You Get
 
-After a full audit, **21 tables** have `org_id` columns with org-scoped RLS policies but **no auto-set trigger**. Any insert without explicit `org_id` will either:
-- Fail with "violates row-level security policy" (browser inserts)
-- Create invisible records (service-role inserts)
+1. **Enhanced "Add Fund" dialog** — When source is "Loan", new fields appear: Lender Name, Expected Return Date
+2. **New "Liquid Fund Loans" tab** alongside Withdrawals — shows all loan-funded liquid funds with status tracking (Active / Partially Returned / Fully Returned), overdue highlighting
+3. **Loan Repayment dialog** — Record partial/full returns against loan entries (debits from selected account, updates loan status)
+4. **"Loan Outstanding" KPI card** on Cash Flow tab — shows total unreturned loan amount across both withdrawal loans AND liquid fund loans
 
-### Tables Already Protected (have triggers)
-`transactions`, `audit_logs`, `ad_accounts`, `ad_account_clients`, `agency_accounts`, `agency_expenses`, `billing_notifications`, `campaign_mappings`, `campaign_performance`, `campaign_requests`, `campaigns`, `cash_withdrawals`, `cash_withdrawal_returns`, `client_notices`, `daily_ad_spend`, `daily_metrics`, `fund_transfers`, `liquid_fund_entries`, `notifications`, `payment_requests`, `usd_inventory_snapshots`, `usd_manual_spends`, `usd_purchases`
+### Database Changes (Migration)
 
-### Tables Missing Triggers (21 total)
-
-| Table | Lookup Strategy | Insert Sources |
-|-------|----------------|----------------|
-| `api_integrations` | `auth.uid()` | IntegrationsTab (browser), sync functions |
-| `subscription_payments` | `auth.uid()` → already has org_id in payload | SubscriptionGate (browser) |
-| `organization_subscriptions` | `auth.uid()` | SubscriptionGate, change-plan edge fn |
-| `plan_upgrade_requests` | `auth.uid()` | AgencyDetail (browser) |
-| `plan_change_log` | org_id in payload | change-plan edge fn |
-| `platform_invoices` | org_id in payload | subscription-lifecycle edge fn |
-| `data_export_requests` | `requested_by` → profiles | data-export edge fn |
-| `document_acceptances` | `user_id` → profiles | browser |
-| `support_tickets` | org_id in payload | AgencySupport (browser) |
-| `email_log` | `user_id` → profiles | edge functions |
-| `dunning_runs` | `subscription_id` → org_subscriptions | dunning-processor edge fn |
-| `gateway_transactions` | `subscription_id` → org_subscriptions | payment-gateway edge fn |
-| `overage_charges` | org_id in payload | meter-usage edge fn |
-| `sla_metrics` | org_id in payload | sla-monitor edge fn |
-| `referral_codes` | org_id in payload | edge fn |
-| `payment_gateway_config` | `auth.uid()` | browser |
-| `acquisition_costs` | `auth.uid()` | platform admin |
-| `feature_usage_events` | org_id in payload | edge fn |
-| `tenant_health_scores` | org_id in payload | edge fn |
-| `usage_metering_logs` | org_id in payload | edge fn |
-| `platform_costs` | platform-level | platform owner |
-
-### Fix — One Migration
-
-Create `BEFORE INSERT` triggers on all 21 tables using the same cascading fallback pattern already proven on the other tables:
-
+**New table: `liquid_fund_loans`**
 ```text
-1. auth.uid() → get_user_org_id()        (browser)
-2. user_id/client_id → profiles.org_id   (edge functions)
-3. subscription_id → org_subscriptions   (billing tables)
-4. First org fallback                     (single-tenant safety)
+id              uuid PK
+liquid_fund_id  uuid FK → liquid_fund_entries.id
+to_account_id   uuid FK → agency_accounts.id
+amount_bdt      numeric
+returned_bdt    numeric (default 0)
+status          withdrawal_status (reuse existing enum: active/partially_returned/fully_returned)
+lender_name     text
+date            date
+expected_return_date  date (nullable)
+note            text (nullable)
+created_by      uuid
+org_id          uuid (nullable, FK → organizations)
+created_at      timestamptz
 ```
 
-Group the tables by their lookup strategy to reuse trigger functions:
+**New table: `liquid_fund_loan_returns`** (mirrors `cash_withdrawal_returns`)
+```text
+id              uuid PK
+loan_id         uuid FK → liquid_fund_loans.id
+amount_bdt      numeric
+to_account_id   uuid FK → agency_accounts.id (account debited for repayment)
+date            date
+note            text (nullable)
+created_by      uuid
+org_id          uuid (nullable)
+created_at      timestamptz
+```
 
-- **User-based** (10 tables): `api_integrations`, `subscription_payments`, `plan_upgrade_requests`, `document_acceptances`, `support_tickets`, `payment_gateway_config`, `acquisition_costs`, `platform_costs`, `referral_codes`, `email_log` — use `auth.uid()` then `user_id` → profiles
-- **Subscription-based** (3 tables): `organization_subscriptions`, `dunning_runs`, `gateway_transactions` — use org_id from subscription
-- **Direct org_id** (8 tables): `plan_change_log`, `platform_invoices`, `overage_charges`, `sla_metrics`, `feature_usage_events`, `tenant_health_scores`, `usage_metering_logs`, `data_export_requests` — these already get org_id in payload from edge functions, trigger is safety net only
+**RLS policies** on both tables scoped to `org_id = get_user_org_id(auth.uid())`.
+
+**Auto-set org_id triggers** on both tables using the standard cascading fallback.
+
+### UI Changes (CashFlowManagement.tsx)
+
+1. **Add Fund dialog** — When source = "Loan":
+   - Show "Lender Name" input
+   - Show "Expected Return Date" date picker
+   - On submit: insert `liquid_fund_entries` + insert `liquid_fund_loans` + credit account balance
+
+2. **New "Loans (N)" tab** next to "Withdrawals (N)" — Table showing:
+   - Lender Name, Amount, Returned, Remaining, Status badge, Expected Date (overdue in red)
+   - "Record Return" button per row → opens return dialog (amount, to account, date, note)
+
+3. **Loan Outstanding KPI** — New card next to "Outstanding Withdrawals":
+   - Sums `amount_bdt - returned_bdt` from both `cash_withdrawals` (existing) and `liquid_fund_loans` (new) where status ≠ fully_returned
+   - Or split into two: "Withdrawal Outstanding" + "Loan Outstanding"
+
+4. **Recent Activity feed** — Include loan repayments as "in" type entries
 
 ### Files Changed
+
 | Action | File |
 |--------|------|
-| Migration | Add 21 `BEFORE INSERT OR UPDATE` trigger functions + triggers |
-
-No UI code changes needed — triggers auto-populate `org_id` transparently. This is the final coverage pass — after this, every table with `org_id` in the system will have automatic resolution.
+| Migration | Create `liquid_fund_loans` + `liquid_fund_loan_returns` tables, RLS, triggers |
+| Modify | `src/pages/CashFlowManagement.tsx` — Add loan fields to Add Fund dialog, new Loans tab, return dialog, KPI card |
 
