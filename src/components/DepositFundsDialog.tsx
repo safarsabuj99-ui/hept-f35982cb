@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useProfile } from "@/hooks/useProfile";
+import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -10,10 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Banknote, CalendarIcon, Loader2, ImagePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/compressImage";
+import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
 interface DepositFundsDialogProps {
   open: boolean;
@@ -28,6 +31,7 @@ interface AgencyAccount {
   id: string;
   name: string;
   type: string;
+  current_balance_bdt: number;
 }
 
 const PLATFORMS = [
@@ -45,6 +49,7 @@ export function DepositFundsDialog({
   onSuccess,
 }: DepositFundsDialogProps) {
   const { profile } = useProfile();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");
@@ -61,6 +66,12 @@ export function DepositFundsDialog({
   // Multi-platform amounts
   const [platformEnabled, setPlatformEnabled] = useState<Record<string, boolean>>({ meta: false, tiktok: false, google: false });
   const [platformAmounts, setPlatformAmounts] = useState<Record<string, string>>({ meta: "", tiktok: "", google: "" });
+
+  // Loan toggle state
+  const [isLoanFunded, setIsLoanFunded] = useState(false);
+  const [loanAccountId, setLoanAccountId] = useState("");
+  const [loanBorrower, setLoanBorrower] = useState("");
+  const [loanExpectedDate, setLoanExpectedDate] = useState("");
 
   const totalAmount = PLATFORMS.reduce((sum, p) => {
     if (platformEnabled[p.key] && platformAmounts[p.key]) {
@@ -92,7 +103,7 @@ export function DepositFundsDialog({
   useEffect(() => {
     if (!open) return;
     async function loadAccounts() {
-      const { data } = await (supabase.from("agency_accounts" as any).select("id, name, type").eq("is_active", true).order("name") as any);
+      const { data } = await (supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name") as any);
       setAgencyAccounts((data as AgencyAccount[]) || []);
     }
     loadAccounts();
@@ -115,6 +126,10 @@ export function DepositFundsDialog({
       setProofPreview(null);
       setPlatformEnabled({ meta: false, tiktok: false, google: false });
       setPlatformAmounts({ meta: "", tiktok: "", google: "" });
+      setIsLoanFunded(false);
+      setLoanAccountId("");
+      setLoanBorrower("");
+      setLoanExpectedDate("");
       if (!clientId) setSelectedClient("");
     }
   }, [open, clientId]);
@@ -147,6 +162,10 @@ export function DepositFundsDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasValidPlatform || !method || !resolvedClientId) return;
+    if (isLoanFunded && (!loanAccountId || !loanBorrower.trim())) {
+      toast({ title: "Error", description: "Select a source account and enter borrower name for loan", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
 
     let proofUrl: string | null = null;
@@ -201,14 +220,39 @@ export function DepositFundsDialog({
     }
 
     const { error } = await (supabase.from("payment_requests" as any).insert(insertPayload) as any);
-    setSubmitting(false);
+    
     if (error) {
+      setSubmitting(false);
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Request Submitted", description: "Payment request has been submitted successfully." });
-      onOpenChange(false);
-      onSuccess?.();
+      return;
     }
+
+    // If loan-funded, create cash_withdrawals record and debit account
+    if (isLoanFunded && loanAccountId) {
+      const loanAmountBdt = totalAmount; // DepositFundsDialog amounts are already in BDT
+
+      const { error: wdError } = await supabase.from("cash_withdrawals" as any).insert({
+        from_account_id: loanAccountId,
+        amount_bdt: loanAmountBdt,
+        category: "business_loan",
+        borrower_name: loanBorrower.trim(),
+        expected_return_date: loanExpectedDate || null,
+        note: `Loan for client deposit — ৳${loanAmountBdt.toLocaleString()}`,
+        created_by: user?.id,
+        org_id: (profile as any)?.org_id || null,
+      } as any);
+
+      if (!wdError) {
+        await adjustAccountBalance(loanAccountId, -loanAmountBdt);
+      } else {
+        toast({ title: "Warning", description: `Deposit submitted but loan record failed: ${wdError.message}` });
+      }
+    }
+
+    setSubmitting(false);
+    toast({ title: "Request Submitted", description: `Payment request submitted${isLoanFunded ? " (loan recorded)" : ""}.` });
+    onOpenChange(false);
+    onSuccess?.();
   };
 
   return (
@@ -332,6 +376,43 @@ export function DepositFundsDialog({
                 </PopoverContent>
               </Popover>
             </div>
+
+          {/* Loan-Funded Toggle */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Funded by Loan</Label>
+                <p className="text-xs text-muted-foreground">Track this deposit as a loan in Cash Flow</p>
+              </div>
+              <Switch checked={isLoanFunded} onCheckedChange={setIsLoanFunded} />
+            </div>
+
+            {isLoanFunded && (
+              <div className="space-y-3 pt-2 border-t">
+                <div>
+                  <Label>Source Account</Label>
+                  <Select value={loanAccountId} onValueChange={setLoanAccountId}>
+                    <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                    <SelectContent>
+                      {agencyAccounts.map(a => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Borrower Name</Label>
+                  <Input placeholder="Who provided this loan?" value={loanBorrower} onChange={e => setLoanBorrower(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Expected Return Date (optional)</Label>
+                  <Input type="date" value={loanExpectedDate} onChange={e => setLoanExpectedDate(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Payment Proof Upload */}
           <div className="space-y-2">

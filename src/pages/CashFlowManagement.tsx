@@ -482,9 +482,9 @@ export default function CashFlowManagement() {
   }
 
   const activeAccounts = accounts.filter(a => a.is_active);
-  const outstandingWithdrawals = withdrawals
-    .filter(w => w.status !== "fully_returned")
-    .reduce((s, w) => s + (Number(w.amount_bdt) - Number(w.returned_bdt)), 0);
+  const activeLoans = withdrawals.filter(w => w.status !== "fully_returned");
+  const outstandingWithdrawals = activeLoans.reduce((s, w) => s + (Number(w.amount_bdt) - Number(w.returned_bdt)), 0);
+  const loanCount = activeLoans.length;
 
   const activityIcon = (type: string) => {
     if (type === "in") return <ArrowDown className="h-3.5 w-3.5 text-success" />;
@@ -712,22 +712,24 @@ export default function CashFlowManagement() {
           </CardContent>
         </Card>
 
-        {outstandingWithdrawals > 0 && (
-          <Card className="border-warning/30 bg-warning/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Outstanding Withdrawals</p>
-                  {loading ? <Skeleton className="h-10 w-48" /> : (
-                    <p className="text-2xl sm:text-3xl font-bold font-mono text-warning">৳{outstandingWithdrawals.toLocaleString()}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">Money owed back to cash flow</p>
-                </div>
-                <HandCoins className="h-8 w-8 sm:h-10 sm:w-10 text-warning/40" />
+        <Card className={outstandingWithdrawals > 0 ? "border-warning/30 bg-warning/5" : ""}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Loan Outstanding</p>
+                {loading ? <Skeleton className="h-10 w-48" /> : (
+                  <p className={`text-2xl sm:text-3xl font-bold font-mono ${outstandingWithdrawals > 0 ? "text-warning" : ""}`}>
+                    ৳{outstandingWithdrawals.toLocaleString()}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {loanCount > 0 ? `${loanCount} active loan${loanCount > 1 ? "s" : ""}` : "No active loans"}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <HandCoins className={`h-8 w-8 sm:h-10 sm:w-10 ${outstandingWithdrawals > 0 ? "text-warning/40" : "text-muted-foreground/30"}`} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Breakdown by Type */}
