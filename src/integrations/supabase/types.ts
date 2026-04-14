@@ -1870,6 +1870,134 @@ export type Database = {
           },
         ]
       }
+      liquid_fund_loan_returns: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          loan_id: string
+          note: string | null
+          org_id: string | null
+          to_account_id: string
+        }
+        Insert: {
+          amount_bdt?: number
+          created_at?: string
+          created_by: string
+          date?: string
+          id?: string
+          loan_id: string
+          note?: string | null
+          org_id?: string | null
+          to_account_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          loan_id?: string
+          note?: string | null
+          org_id?: string | null
+          to_account_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "liquid_fund_loan_returns_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "liquid_fund_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "liquid_fund_loan_returns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "liquid_fund_loan_returns_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      liquid_fund_loans: {
+        Row: {
+          amount_bdt: number
+          created_at: string
+          created_by: string
+          date: string
+          expected_return_date: string | null
+          id: string
+          lender_name: string
+          liquid_fund_id: string | null
+          note: string | null
+          org_id: string | null
+          returned_bdt: number
+          status: Database["public"]["Enums"]["withdrawal_status"]
+          to_account_id: string
+        }
+        Insert: {
+          amount_bdt?: number
+          created_at?: string
+          created_by: string
+          date?: string
+          expected_return_date?: string | null
+          id?: string
+          lender_name?: string
+          liquid_fund_id?: string | null
+          note?: string | null
+          org_id?: string | null
+          returned_bdt?: number
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          to_account_id: string
+        }
+        Update: {
+          amount_bdt?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          expected_return_date?: string | null
+          id?: string
+          lender_name?: string
+          liquid_fund_id?: string | null
+          note?: string | null
+          org_id?: string | null
+          returned_bdt?: number
+          status?: Database["public"]["Enums"]["withdrawal_status"]
+          to_account_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "liquid_fund_loans_liquid_fund_id_fkey"
+            columns: ["liquid_fund_id"]
+            isOneToOne: false
+            referencedRelation: "liquid_fund_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "liquid_fund_loans_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "liquid_fund_loans_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manager_permissions: {
         Row: {
           can_add_funds: boolean
