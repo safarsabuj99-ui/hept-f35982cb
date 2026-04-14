@@ -115,7 +115,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, loading, trend, ac
                 <p className="text-lg sm:text-2xl font-bold tracking-tight font-mono">{animatedValue}</p>
               )}
               {subtitle && !loading && (
-                <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+                <p className="hidden sm:block text-xs text-muted-foreground truncate">{subtitle}</p>
               )}
               {trend && !loading && (
                 <p className={cn("text-xs font-medium", trend.positive ? "text-success" : "text-destructive")}>
