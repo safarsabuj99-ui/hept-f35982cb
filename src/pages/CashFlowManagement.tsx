@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -846,78 +847,95 @@ export default function CashFlowManagement() {
         </Dialog>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Liquid Funds</p>
-                {loading ? <Skeleton className="h-10 w-48" /> : (
-                  <p className="text-2xl sm:text-3xl font-bold font-mono">৳{totalBalance.toLocaleString()}</p>
+      {/* Premium KPI Widget */}
+      <div className="glass-card glow-border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-border/40">
+          {/* Row 1: Summary KPIs */}
+          {[
+            {
+              label: "Total Liquid Funds",
+              value: totalBalance,
+              icon: Wallet,
+              accent: "primary",
+              sub: "All accounts combined",
+            },
+            {
+              label: "Outstanding Withdrawals",
+              value: outstandingWithdrawals,
+              icon: HandCoins,
+              accent: "warning",
+              sub: "Money owed back",
+            },
+            {
+              label: "Loan Outstanding",
+              value: outstandingLoans,
+              icon: Landmark,
+              accent: "destructive",
+              sub: "Loan amount to repay",
+            },
+            {
+              label: "Cash",
+              value: balanceByType["Cash"] || 0,
+              icon: ACCOUNT_TYPE_ICONS["Cash"],
+              accent: "muted-foreground",
+            },
+            {
+              label: "Bank",
+              value: balanceByType["Bank"] || 0,
+              icon: ACCOUNT_TYPE_ICONS["Bank"],
+              accent: "muted-foreground",
+            },
+            {
+              label: "MFS",
+              value: balanceByType["MFS"] || 0,
+              icon: ACCOUNT_TYPE_ICONS["MFS"],
+              accent: "muted-foreground",
+            },
+          ].map((kpi, i) => {
+            const Icon = kpi.icon;
+            const isSummary = i < 3;
+            return (
+              <div
+                key={kpi.label}
+                className={cn(
+                  "relative p-3 sm:p-4 opacity-0 animate-slide-up-fade",
+                  isSummary && `border-l-2 border-l-${kpi.accent}`
                 )}
-              </div>
-              <Wallet className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {outstandingWithdrawals > 0 && (
-          <Card className="border-warning/30 bg-warning/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Outstanding Withdrawals</p>
-                  {loading ? <Skeleton className="h-10 w-48" /> : (
-                    <p className="text-2xl sm:text-3xl font-bold font-mono text-warning">৳{outstandingWithdrawals.toLocaleString()}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">Money owed back to cash flow</p>
-                </div>
-                <HandCoins className="h-8 w-8 sm:h-10 sm:w-10 text-warning/40" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {outstandingLoans > 0 && (
-          <Card className="border-destructive/30 bg-destructive/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Loan Outstanding</p>
-                  {loading ? <Skeleton className="h-10 w-48" /> : (
-                    <p className="text-2xl sm:text-3xl font-bold font-mono text-destructive">৳{outstandingLoans.toLocaleString()}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">Loan amount to repay</p>
-                </div>
-                <Landmark className="h-8 w-8 sm:h-10 sm:w-10 text-destructive/40" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Breakdown by Type */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        {(["Cash", "Bank", "MFS"] as const).map(type => {
-          const Icon = ACCOUNT_TYPE_ICONS[type];
-          const bal = balanceByType[type] || 0;
-          return (
-            <Card key={type}>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2"><Icon className="h-5 w-5 text-muted-foreground" /></div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{type}</p>
-                    {loading ? <Skeleton className="h-7 w-24" /> : (
-                      <p className="text-xl font-bold font-mono">৳{bal.toLocaleString()}</p>
+                style={{ animationDelay: `${i * 80}ms`, animationFillMode: "forwards" }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 truncate">
+                      {kpi.label}
+                    </p>
+                    {loading ? (
+                      <Skeleton className="h-6 sm:h-8 w-20 sm:w-28 mt-1" />
+                    ) : (
+                      <p className={cn(
+                        "text-lg sm:text-2xl font-bold font-mono tracking-tight mt-0.5",
+                        isSummary && kpi.accent !== "primary" && kpi.value > 0 && `text-${kpi.accent}`
+                      )}>
+                        ৳{kpi.value.toLocaleString()}
+                      </p>
+                    )}
+                    {kpi.sub && !loading && (
+                      <p className="text-[10px] sm:text-xs text-muted-foreground/60 mt-0.5 truncate">{kpi.sub}</p>
                     )}
                   </div>
+                  <div className={cn(
+                    "flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg",
+                    isSummary ? `bg-${kpi.accent}/10` : "bg-muted"
+                  )}>
+                    <Icon className={cn(
+                      "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                      isSummary ? `text-${kpi.accent}` : "text-muted-foreground"
+                    )} />
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <Tabs defaultValue="accounts">
