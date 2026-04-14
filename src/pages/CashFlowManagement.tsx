@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { KpiCard } from "@/components/dashboard/KpiCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -847,95 +848,59 @@ export default function CashFlowManagement() {
         </Dialog>
       </div>
 
-      {/* Premium KPI Widget */}
-      <div className="glass-card glow-border rounded-xl overflow-hidden">
-        <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-border/40">
-          {/* Row 1: Summary KPIs */}
-          {[
-            {
-              label: "Total Liquid Funds",
-              value: totalBalance,
-              icon: Wallet,
-              accent: "primary",
-              sub: "All accounts combined",
-            },
-            {
-              label: "Outstanding Withdrawals",
-              value: outstandingWithdrawals,
-              icon: HandCoins,
-              accent: "warning",
-              sub: "Money owed back",
-            },
-            {
-              label: "Loan Outstanding",
-              value: outstandingLoans,
-              icon: Landmark,
-              accent: "destructive",
-              sub: "Loan amount to repay",
-            },
-            {
-              label: "Cash",
-              value: balanceByType["Cash"] || 0,
-              icon: ACCOUNT_TYPE_ICONS["Cash"],
-              accent: "muted-foreground",
-            },
-            {
-              label: "Bank",
-              value: balanceByType["Bank"] || 0,
-              icon: ACCOUNT_TYPE_ICONS["Bank"],
-              accent: "muted-foreground",
-            },
-            {
-              label: "MFS",
-              value: balanceByType["MFS"] || 0,
-              icon: ACCOUNT_TYPE_ICONS["MFS"],
-              accent: "muted-foreground",
-            },
-          ].map((kpi, i) => {
-            const Icon = kpi.icon;
-            const isSummary = i < 3;
-            return (
-              <div
-                key={kpi.label}
-                className={cn(
-                  "relative p-3 sm:p-4 opacity-0 animate-slide-up-fade",
-                  isSummary && `border-l-2 border-l-${kpi.accent}`
-                )}
-                style={{ animationDelay: `${i * 80}ms`, animationFillMode: "forwards" }}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 truncate">
-                      {kpi.label}
-                    </p>
-                    {loading ? (
-                      <Skeleton className="h-6 sm:h-8 w-20 sm:w-28 mt-1" />
-                    ) : (
-                      <p className={cn(
-                        "text-lg sm:text-2xl font-bold font-mono tracking-tight mt-0.5",
-                        isSummary && kpi.accent !== "primary" && kpi.value > 0 && `text-${kpi.accent}`
-                      )}>
-                        ৳{kpi.value.toLocaleString()}
-                      </p>
-                    )}
-                    {kpi.sub && !loading && (
-                      <p className="text-[10px] sm:text-xs text-muted-foreground/60 mt-0.5 truncate">{kpi.sub}</p>
-                    )}
-                  </div>
-                  <div className={cn(
-                    "flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg",
-                    isSummary ? `bg-${kpi.accent}/10` : "bg-muted"
-                  )}>
-                    <Icon className={cn(
-                      "h-3.5 w-3.5 sm:h-4 sm:w-4",
-                      isSummary ? `text-${kpi.accent}` : "text-muted-foreground"
-                    )} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Premium KPI Cards */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3">
+        <KpiCard
+          title="Total Liquid Funds"
+          value={`৳${totalBalance.toLocaleString()}`}
+          subtitle="All accounts combined"
+          icon={Wallet}
+          loading={loading}
+          accentColor="hsl(var(--primary))"
+          staggerIndex={0}
+        />
+        <KpiCard
+          title="Outstanding Withdrawals"
+          value={`৳${outstandingWithdrawals.toLocaleString()}`}
+          subtitle="Money owed back"
+          icon={HandCoins}
+          loading={loading}
+          accentColor="hsl(var(--warning))"
+          staggerIndex={1}
+        />
+        <KpiCard
+          title="Loan Outstanding"
+          value={`৳${outstandingLoans.toLocaleString()}`}
+          subtitle="Loan amount to repay"
+          icon={Landmark}
+          loading={loading}
+          accentColor="hsl(var(--destructive))"
+          staggerIndex={2}
+        />
+        <KpiCard
+          title="Cash"
+          value={`৳${(balanceByType["Cash"] || 0).toLocaleString()}`}
+          icon={Banknote}
+          loading={loading}
+          accentColor="hsl(var(--chart-meta))"
+          staggerIndex={3}
+        />
+        <KpiCard
+          title="Bank"
+          value={`৳${(balanceByType["Bank"] || 0).toLocaleString()}`}
+          icon={Building2}
+          loading={loading}
+          accentColor="hsl(var(--chart-google))"
+          staggerIndex={4}
+        />
+        <KpiCard
+          title="MFS"
+          value={`৳${(balanceByType["MFS"] || 0).toLocaleString()}`}
+          icon={Smartphone}
+          loading={loading}
+          accentColor="hsl(var(--chart-tiktok))"
+          staggerIndex={5}
+        />
       </div>
 
       <Tabs defaultValue="accounts">
