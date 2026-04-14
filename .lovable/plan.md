@@ -1,48 +1,28 @@
 
 
-## Plan: Premium Responsive KPI Widget for Cash Flow
+## Plan: Upgrade Cash Flow KPIs to Premium KpiCard Components
 
-### Current State
-The 6 KPIs are split into two separate grid sections — 3 summary cards (Total Liquid Funds, Outstanding Withdrawals, Loan Outstanding) and 3 account-type cards (Cash, Bank, MFS). On mobile, they stack vertically into 6 full-width rows, taking excessive vertical space.
+### Problem
+The current Cash Flow KPIs use a flat grid with `divide-x/divide-y` inside a single container. They lack the premium effects the admin dashboard has: gradient accent bars, background glow orbs, 3D perspective tilt, count-up animations, and hover interactions.
 
-### New Design: Unified Premium Widget
+### Solution
+Replace the inline KPI grid (lines 850-939) with 6 individual `KpiCard` components — the same component used on the admin dashboard — inside a responsive `grid-cols-2 sm:grid-cols-3` layout.
 
-Replace both grids with a single unified `glass-card` widget:
+Each KPI maps to a `KpiCard`:
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  DESKTOP (lg+): 2 rows                             │
-│  ┌───────────┬──────────────┬──────────────┐        │
-│  │ Total     │ Outstanding  │ Loan         │  Row 1 │
-│  │ Liquid    │ Withdrawals  │ Outstanding  │        │
-│  ├───────────┼──────────────┼──────────────┤        │
-│  │ Cash      │ Bank         │ MFS          │  Row 2 │
-│  └───────────┴──────────────┴──────────────┘        │
-│                                                     │
-│  TABLET (sm-lg): 3 cols, 2 rows (same as desktop)   │
-│                                                     │
-│  MOBILE (<sm): 2 cols compact grid                  │
-│  ┌──────────┬──────────────┐                        │
-│  │ Total    │ Withdrawals  │                        │
-│  │ Liquid   │ Outstanding  │                        │
-│  ├──────────┼──────────────┤                        │
-│  │ Loan     │ Cash         │                        │
-│  ├──────────┼──────────────┤                        │
-│  │ Bank     │ MFS          │                        │
-│  └──────────┴──────────────┘                        │
-└─────────────────────────────────────────────────────┘
-```
+| KPI | Icon | Accent Color |
+|-----|------|-------------|
+| Total Liquid Funds | Wallet | `hsl(var(--primary))` |
+| Outstanding Withdrawals | HandCoins | `hsl(var(--warning))` |
+| Loan Outstanding | Landmark | `hsl(var(--destructive))` |
+| Cash | Banknote | `hsl(var(--chart-meta))` |
+| Bank | Building2 | `hsl(var(--chart-google))` |
+| MFS | Smartphone | `hsl(var(--chart-tiktok))` |
 
-### Visual Enhancements
-- Single glass-card container with accent-colored left border per KPI cell
-- Top 3 KPIs (summary) use colored accent bars (primary, warning, destructive)
-- Bottom 3 (account types) use subtle muted styling
-- Compact font sizing on mobile (`text-lg` vs `text-2xl`)
-- Always show all 6 KPIs (remove conditional hiding of withdrawals/loans when zero — zero is useful info)
-- Staggered fade-in animation matching the existing `animate-slide-up-fade` pattern
+Each card gets: gradient top bar, glow orb, 3D tilt on hover, count-up animation, staggered fade-in — all from the existing `KpiCard` component. No new components needed.
 
 ### Files Changed
 | Action | File |
 |--------|------|
-| Modify | `src/pages/CashFlowManagement.tsx` — Replace lines 849-921 with unified premium KPI grid |
+| Modify | `src/pages/CashFlowManagement.tsx` — Replace lines 850-939 with 6 `KpiCard` instances in a responsive grid |
 
