@@ -185,9 +185,10 @@ Deno.serve(async (req) => {
     const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
     if (isManualToday) {
+      // Only update derived fields — never touch baseline_balance_usd or notes
       const { error: metricErr } = await supabase
         .from("usd_inventory_snapshots")
-        .update({ metrics, balance_usd: r2(balance), notes: `Manual baseline — metrics refreshed (${timestamp})` })
+        .update({ metrics, balance_usd: r2(balance) })
         .eq("snapshot_date", today);
       if (metricErr) throw metricErr;
       console.log(`Updated metrics on manual baseline (${today})`);
