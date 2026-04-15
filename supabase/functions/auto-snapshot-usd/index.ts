@@ -133,12 +133,12 @@ Deno.serve(async (req) => {
     if (positiveClientIds.length > 0) {
       const { data: profileRows } = await supabase
         .from("profiles")
-        .select("id, full_name")
-        .in("id", positiveClientIds);
+        .select("user_id, full_name")
+        .in("user_id", positiveClientIds);
 
       const nameMap: Record<string, string> = {};
       for (const p of (profileRows as any[]) ?? []) {
-        nameMap[p.id] = p.full_name || "Unknown";
+        nameMap[p.user_id] = p.full_name || "Unknown";
       }
 
       clientBalancesArray = positiveClientIds
