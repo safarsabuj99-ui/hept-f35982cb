@@ -156,15 +156,13 @@ export default function WalletInventory() {
     const metrics = (snap?.metrics as any) ?? {};
 
     setOverview({
-      carryForward: metrics.carry_forward ?? (snap ? Number(snap.balance_usd) : 0),
+      carryForward: snap?.baseline_balance_usd != null
+        ? Number(snap.baseline_balance_usd)
+        : (metrics.carry_forward ?? (snap ? Number(snap.balance_usd) : 0)),
       boughtSince: metrics.bought_since ?? 0,
       spentSince: metrics.spent_since ?? 0,
       manualSpend: metrics.manual_spend ?? 0,
-      availableBalance: snap
-        ? (metrics.carry_forward !== undefined
-          ? (metrics.carry_forward + (metrics.bought_since ?? 0) - (metrics.spent_since ?? 0) - (metrics.manual_spend ?? 0))
-          : Number(snap.balance_usd))
-        : 0,
+      availableBalance: snap ? Number(snap.balance_usd) : 0,
       dailyBurn: metrics.daily_burn ?? 0,
       runwayDays: metrics.runway_days ?? 0,
       clientObligations: metrics.client_obligations ?? 0,
