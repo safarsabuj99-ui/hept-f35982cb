@@ -1,38 +1,57 @@
 
 
-## Plan: Fix USD Inventory Not Counting Same-Day Purchases
+## Plan: Fix Available USD Showing Stale Manual Baseline Value
 
 ### Problem
 
-The `auto-snapshot-usd` edge function uses `gt("date", baselineDate)` — strictly **greater than** — to filter purchases, ad spend, and manual spends since the last baseline. Since the baseline date is `2026-04-15` and the $505.989 purchase is also on `2026-04-15`, it gets excluded. Result: Available USD stays at -$126 instead of reflecting the new purchase.
+On manual baseline days, the edge function updates only the `metrics` JSONB but leaves `balance_usd` at the original manual value (-$125.71). The UI reads `balance_usd` for "Available USD", so it stays stale even though the correct computed balance ($292.70) exists in the metrics.
 
-### Fix
+### Root Cause
 
-**File: `supabase/functions/auto-snapshot-usd/index.ts`** (lines 59-66)
-
-Change all three filters from `gt` to `gte`:
-
+Line 163 in `WalletInventory.tsx`:
 ```typescript
-// Before:
-q.gt("date", baselineDate)
-q.gt("data_date", baselineDate)
-q.gt("date", baselineDate)
-
-// After:
-q.gte("date", baselineDate)
-q.gte("data_date", baselineDate)
-q.gte("date", baselineDate)
+availableBalance: snap ? Number(snap.balance_usd) : 0,
 ```
 
-This is safe because the manual baseline's `balance_usd` is a frozen value (-$125.71) — it does not include any purchases/spend from the baseline day itself. The carry-forward plus same-day activity gives the correct balance.
+And in the edge function, the manual-baseline update path (around line 178) only updates `metrics` and `notes` — it does **not** touch `balance_usd`.
 
-### Result
+### Fix (2 changes)
 
-After deploying and refreshing, Available USD will show: **-$125.71 + $505.989 = ~$380.28** (minus any same-day ad spend).
+**1. Edge Function (`supabase/functions/auto-snapshot-usd/index.ts`)**
+
+On the manual-baseline update path, also update `balance_usd` with the computed balance:
+
+```typescript
+// Change from:
+.update({ metrics, notes: `...` })
+
+// To:
+.update({ metrics, balance_usd: r2(balance), notes: `...` })
+```
+
+This ensures `balance_usd` always reflects the latest computed value, even on manual baseline days.
+
+**2. UI Fallback (`src/pages/WalletInventory.tsx`, line 163)**
+
+Add a fallback so the UI can also derive the balance from metrics if `balance_usd` looks like a stale baseline:
+
+```typescript
+// Compute available from metrics if present, otherwise fall back to balance_usd
+const computedBalance = (metrics.carry_forward !== undefined)
+  ? (metrics.carry_forward + (metrics.bought_since ?? 0) - (metrics.spent_since ?? 0) - (metrics.manual_spend ?? 0))
+  : Number(snap.balance_usd);
+
+availableBalance: snap ? computedBalance : 0,
+```
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/auto-snapshot-usd/index.ts` | `gt` → `gte` on 3 filters (lines 60, 63, 66) |
+| `supabase/functions/auto-snapshot-usd/index.ts` | Add `balance_usd: r2(balance)` to the manual-baseline update |
+| `src/pages/WalletInventory.tsx` | Derive availableBalance from metrics fields |
+
+### Result
+
+After deploying and refreshing, Available USD will correctly show ~$292.70 instead of -$126.
 
