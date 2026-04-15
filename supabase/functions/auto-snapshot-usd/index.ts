@@ -6,6 +6,30 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper: fetch ALL rows from a table, paginating past the 1000-row server limit
+async function fetchAll(
+  supabase: any,
+  table: string,
+  selectCols: string,
+  filters?: (q: any) => any,
+) {
+  const PAGE = 1000;
+  let allRows: any[] = [];
+  let offset = 0;
+  while (true) {
+    let q = supabase.from(table).select(selectCols);
+    if (filters) q = filters(q);
+    q = q.range(offset, offset + PAGE - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allRows = allRows.concat(data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return allRows;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -20,7 +44,6 @@ Deno.serve(async (req) => {
       .toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
     // 1. Find the latest manual baseline snapshot (opening balance / period close)
-    //    These are snapshots created by users (not by the auto job "00000000-...")
     const { data: baselineSnap } = await supabase
       .from("usd_inventory_snapshots")
       .select("snapshot_date, balance_usd, created_by")
@@ -32,34 +55,30 @@ Deno.serve(async (req) => {
     const baselineDate = baseline?.snapshot_date ?? null;
     const carryForward = baseline ? Number(baseline.balance_usd) : 0;
 
-    // 2. Sum purchases, ad spend, and manual spends SINCE baseline
-    const purchaseQuery = supabase.from("usd_purchases").select("usd_received").limit(100000);
-    const spendQuery = supabase.from("daily_metrics").select("spend").limit(100000);
-    const manualSpendQuery = supabase.from("usd_manual_spends").select("amount_usd").limit(100000);
+    // 2. Sum purchases, ad spend, and manual spends SINCE baseline (paginated)
+    const purchaseFilter = baselineDate
+      ? (q: any) => q.gt("date", baselineDate)
+      : undefined;
+    const spendFilter = baselineDate
+      ? (q: any) => q.gt("data_date", baselineDate)
+      : undefined;
+    const manualFilter = baselineDate
+      ? (q: any) => q.gt("date", baselineDate)
+      : undefined;
 
-    if (baselineDate) {
-      purchaseQuery.gt("date", baselineDate);
-      spendQuery.gt("data_date", baselineDate);
-      manualSpendQuery.gt("date", baselineDate);
-    }
-
-    const [purchasesRes, spendRes, manualSpendRes] = await Promise.all([
-      purchaseQuery,
-      spendQuery,
-      manualSpendQuery,
+    const [purchases, spendRows, manualRows] = await Promise.all([
+      fetchAll(supabase, "usd_purchases", "usd_received", purchaseFilter),
+      fetchAll(supabase, "daily_metrics", "spend", spendFilter),
+      fetchAll(supabase, "usd_manual_spends", "amount_usd", manualFilter),
     ]);
 
-    if (purchasesRes.error) throw purchasesRes.error;
-    if (spendRes.error) throw spendRes.error;
-    if (manualSpendRes.error) throw manualSpendRes.error;
-
-    const boughtSince = (purchasesRes.data ?? []).reduce(
+    const boughtSince = purchases.reduce(
       (s: number, r: any) => s + Number(r.usd_received || 0), 0
     );
-    const spentSince = (spendRes.data ?? []).reduce(
+    const spentSince = spendRows.reduce(
       (s: number, r: any) => s + Number(r.spend || 0), 0
     );
-    const manualSpend = (manualSpendRes.data ?? []).reduce(
+    const manualSpend = manualRows.reduce(
       (s: number, r: any) => s + Number(r.amount_usd || 0), 0
     );
 
@@ -70,15 +89,12 @@ Deno.serve(async (req) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
 
-    const { data: burn7, error: burnErr } = await supabase
-      .from("daily_metrics")
-      .select("spend")
-      .gte("data_date", sevenDaysAgoStr)
-      .limit(100000);
+    const burn7 = await fetchAll(
+      supabase, "daily_metrics", "spend",
+      (q: any) => q.gte("data_date", sevenDaysAgoStr),
+    );
 
-    if (burnErr) throw burnErr;
-
-    const last7Spend = (burn7 ?? []).reduce(
+    const last7Spend = burn7.reduce(
       (s: number, r: any) => s + Number(r.spend), 0
     );
     const dailyBurn = last7Spend / 7;
@@ -86,17 +102,14 @@ Deno.serve(async (req) => {
       ? Math.max(0, Math.floor(balance / dailyBurn))
       : balance > 0 ? 999 : 0;
 
-    // 4. Client obligations (all completed transactions)
-    const { data: txns, error: txnErr } = await supabase
-      .from("transactions")
-      .select("type, amount, client_id")
-      .eq("status", "completed")
-      .limit(100000);
-
-    if (txnErr) throw txnErr;
+    // 4. Client obligations (all completed transactions — paginated)
+    const txns = await fetchAll(
+      supabase, "transactions", "type, amount, client_id",
+      (q: any) => q.eq("status", "completed"),
+    );
 
     const clientBalances: Record<string, number> = {};
-    for (const t of (txns ?? []) as any[]) {
+    for (const t of txns as any[]) {
       const cid = t.client_id;
       if (!clientBalances[cid]) clientBalances[cid] = 0;
       clientBalances[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
@@ -129,7 +142,6 @@ Deno.serve(async (req) => {
     });
     const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
-    // Look up primary org_id for snapshot
     const { data: orgRow } = await supabase
       .from("organizations")
       .select("id")
@@ -153,7 +165,7 @@ Deno.serve(async (req) => {
 
     if (upsertErr) throw upsertErr;
 
-    console.log(`Auto snapshot: $${balance.toFixed(2)} on ${today} | carry=$${carryForward} bought=$${boughtSince.toFixed(2)} spent=$${spentSince.toFixed(2)} manual=$${manualSpend.toFixed(2)} | baseline=${baselineDate ?? 'none'}`);
+    console.log(`Auto snapshot: $${balance.toFixed(2)} on ${today} | rows: purchases=${purchases.length} spend=${spendRows.length} manual=${manualRows.length} txns=${txns.length} | carry=$${carryForward} bought=$${boughtSince.toFixed(2)} spent=$${spentSince.toFixed(2)} manual=$${manualSpend.toFixed(2)} | baseline=${baselineDate ?? 'none'}`);
 
     return new Response(
       JSON.stringify({ success: true, balance: r2(balance), metrics, snapshot_date: today }),
