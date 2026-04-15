@@ -175,14 +175,20 @@ Deno.serve(async (req) => {
     const isManualToday = (todaySnap as any[])?.[0]?.created_by &&
       (todaySnap as any[])[0].created_by !== "00000000-0000-0000-0000-000000000000";
 
+    const now = new Date();
+    const monthLabel = now.toLocaleDateString("en-US", {
+      month: "long", year: "numeric", timeZone: "Asia/Dhaka",
+    });
+    const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
+
     if (isManualToday) {
-      console.log(`Skipping upsert — today (${today}) has a manual baseline snapshot`);
+      const { error: metricErr } = await supabase
+        .from("usd_inventory_snapshots")
+        .update({ metrics, notes: `Manual baseline — metrics refreshed (${timestamp})` })
+        .eq("snapshot_date", today);
+      if (metricErr) throw metricErr;
+      console.log(`Updated metrics on manual baseline (${today})`);
     } else {
-      const now = new Date();
-      const monthLabel = now.toLocaleDateString("en-US", {
-        month: "long", year: "numeric", timeZone: "Asia/Dhaka",
-      });
-      const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
       const { data: orgRow } = await supabase
         .from("organizations")
