@@ -351,14 +351,18 @@ Deno.serve(async (req) => {
               org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
+            const isBDTGoogle = currency === "BDT";
+            const googleAccountRate = isBDTGoogle ? (account.exchange_rate ?? 1) : 1;
+            const googleFinalUsd = isBDTGoogle ? Math.round((spend / googleAccountRate) * 100) / 100 : spend;
+
             spendRecords.push({
               ad_account_id: account.id,
               date: row.segments?.date,
               campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
-              exchange_rate_used: 1,
-              final_billable_usd: spend,
+              exchange_rate_used: googleAccountRate,
+              final_billable_usd: googleFinalUsd,
               client_id: matchedClientId,
               synced_at: new Date().toISOString(),
               org_id: account.org_id,
@@ -509,14 +513,18 @@ Deno.serve(async (req) => {
               org_id: account.org_id,
             }, { onConflict: "campaign_id" });
 
+            const isBDTTiktok = currency === "BDT";
+            const tiktokAccountRate = isBDTTiktok ? (account.exchange_rate ?? 1) : 1;
+            const tiktokFinalUsd = isBDTTiktok ? Math.round((spend / tiktokAccountRate) * 100) / 100 : spend;
+
             spendRecords.push({
               ad_account_id: account.id,
               date,
               campaign_name: campaignName,
               raw_spend_amount: spend,
               raw_currency: currency,
-              exchange_rate_used: 1,
-              final_billable_usd: spend,
+              exchange_rate_used: tiktokAccountRate,
+              final_billable_usd: tiktokFinalUsd,
               client_id: matchedClientId,
               synced_at: new Date().toISOString(),
               org_id: account.org_id,
