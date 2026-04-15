@@ -1,31 +1,45 @@
 
 
-## Plan: Add Per-Client Obligation Balance Breakdown to USD Inventory
+## Plan: Fix Client Obligations Not Showing on Manual Baseline Days
 
-### What It Does
+### Problem
 
-Adds a client-by-client obligation balance table to the USD Inventory wallet page, showing each client's positive USD balance (money you owe them in ad spend). Currently only a single aggregate number is shown.
+When a manual baseline snapshot exists for today (like the -$125.71 close), the `auto-snapshot-usd` edge function **skips the entire upsert** (line 178). This means client obligations, USD needed, client balances breakdown, burn rate, and runway are all stuck at whatever was set during the manual insert — which was zeroed out.
 
-### Data Source
+The screenshot confirms: Client Obligations shows $0, USD Needed shows $0, and no client breakdown appears.
 
-The `auto-snapshot-usd` edge function already computes per-client balances from the `transactions` table. We'll enhance it to include the per-client breakdown in the `metrics` JSONB, and display it in the UI.
+### Fix
 
-### Actions
+**File: `supabase/functions/auto-snapshot-usd/index.ts`**
 
-**1. Update `auto-snapshot-usd` edge function**
-- Add a `client_balances` array to the `metrics` object containing `{ client_id, full_name, balance }` for each client with a positive balance (obligation)
-- Join against `profiles` to get client names
+Change the manual baseline logic: instead of skipping entirely, **update only the `metrics` JSONB and `notes`** while preserving the manual `balance_usd` and `created_by`. This way:
+- The carry-forward balance stays at -$125.71 (protected)
+- Client obligations, burn rate, runway, and per-client breakdown are recalculated on every refresh
 
-**2. Update `WalletInventory.tsx` UI**
-- Replace the single-line "Client Obligations" text with an expandable section or small table
-- Show each client's name and their USD obligation balance
-- Keep the total and "USD Needed" summary
-- Add a collapsible/accordion so it doesn't clutter the overview when collapsed
+```typescript
+// Before (line 178-179):
+if (isManualToday) {
+  console.log(`Skipping upsert — today has a manual baseline`);
+}
+
+// After:
+if (isManualToday) {
+  // Update metrics only — preserve balance_usd and created_by
+  const { error: metricErr } = await supabase
+    .from("usd_inventory_snapshots")
+    .update({ metrics, notes: `Manual baseline — metrics refreshed (${timestamp})` })
+    .eq("snapshot_date", today);
+  if (metricErr) throw metricErr;
+}
+```
+
+### Result
+
+After deploying, clicking "Refresh" will populate client obligations, USD needed, per-client breakdown, burn rate, and runway — even on days with a manual baseline snapshot.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/auto-snapshot-usd/index.ts` | Add per-client balance breakdown to metrics JSONB |
-| `src/pages/WalletInventory.tsx` | Display client obligation table with names and balances |
+| `supabase/functions/auto-snapshot-usd/index.ts` | Update metrics on manual baseline days instead of skipping |
 
