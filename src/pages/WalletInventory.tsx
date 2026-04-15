@@ -166,14 +166,14 @@ export default function WalletInventory() {
   const handleRefreshNow = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
     try {
-      await supabase.functions.invoke("auto-snapshot-usd");
+      await refreshSnapshot();
       await fetchOverview();
       toast({ title: "Refreshed", description: "USD inventory updated." });
     } catch {
       toast({ title: "Error", description: "Failed to refresh", variant: "destructive" });
       setOverview(prev => ({ ...prev, loading: false }));
     }
-  }, [fetchOverview, toast]);
+  }, [fetchOverview, refreshSnapshot, toast]);
 
   const fetchAgencyAccounts = useCallback(async () => {
     const { data } = await supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name");
