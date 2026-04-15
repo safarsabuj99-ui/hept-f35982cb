@@ -33,9 +33,9 @@ Deno.serve(async (req) => {
     const carryForward = baseline ? Number(baseline.balance_usd) : 0;
 
     // 2. Sum purchases, ad spend, and manual spends SINCE baseline
-    const purchaseQuery = supabase.from("usd_purchases").select("usd_received");
-    const spendQuery = supabase.from("daily_metrics").select("spend");
-    const manualSpendQuery = supabase.from("usd_manual_spends").select("amount_usd");
+    const purchaseQuery = supabase.from("usd_purchases").select("usd_received").limit(100000);
+    const spendQuery = supabase.from("daily_metrics").select("spend").limit(100000);
+    const manualSpendQuery = supabase.from("usd_manual_spends").select("amount_usd").limit(100000);
 
     if (baselineDate) {
       purchaseQuery.gt("date", baselineDate);
@@ -73,7 +73,8 @@ Deno.serve(async (req) => {
     const { data: burn7, error: burnErr } = await supabase
       .from("daily_metrics")
       .select("spend")
-      .gte("data_date", sevenDaysAgoStr);
+      .gte("data_date", sevenDaysAgoStr)
+      .limit(100000);
 
     if (burnErr) throw burnErr;
 
@@ -89,7 +90,8 @@ Deno.serve(async (req) => {
     const { data: txns, error: txnErr } = await supabase
       .from("transactions")
       .select("type, amount, client_id")
-      .eq("status", "completed");
+      .eq("status", "completed")
+      .limit(100000);
 
     if (txnErr) throw txnErr;
 
