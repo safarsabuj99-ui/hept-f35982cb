@@ -648,17 +648,52 @@ export default function WalletInventory() {
 
               {/* Bottom row: obligations & needed */}
               {!overview.loading && (
-                <div className="mt-3 pt-3 border-t flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm">
-                  <span className="text-muted-foreground">
-                    Client Obligations: <span className="font-mono font-medium text-foreground">${overview.clientObligations.toLocaleString()}</span>
-                  </span>
-                  {overview.usdNeeded > 0 ? (
-                    <span className="text-destructive flex items-center gap-1">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      USD Needed: <span className="font-mono font-medium">${overview.usdNeeded.toLocaleString()}</span>
+                <div className="mt-3 pt-3 border-t space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm">
+                    <span className="text-muted-foreground">
+                      Client Obligations: <span className="font-mono font-medium text-foreground">${overview.clientObligations.toLocaleString()}</span>
+                      {overview.clientBalances.length > 0 && (
+                        <span className="text-muted-foreground ml-1">({overview.clientBalances.length} clients)</span>
+                      )}
                     </span>
-                  ) : (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">USD Needed: $0 ✓</span>
+                    {overview.usdNeeded > 0 ? (
+                      <span className="text-destructive flex items-center gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        USD Needed: <span className="font-mono font-medium">${overview.usdNeeded.toLocaleString()}</span>
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">USD Needed: $0 ✓</span>
+                    )}
+                  </div>
+
+                  {/* Per-client obligation breakdown */}
+                  {overview.clientBalances.length > 0 && (
+                    <details className="group">
+                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 select-none">
+                        <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                        View client breakdown
+                      </summary>
+                      <div className="mt-2 rounded-md border overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs h-8">Client</TableHead>
+                              <TableHead className="text-xs h-8 text-right">Balance (USD)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {overview.clientBalances.map((cb) => (
+                              <TableRow key={cb.client_id} className="hover:bg-muted/30">
+                                <TableCell className="py-1.5 text-sm">{cb.full_name}</TableCell>
+                                <TableCell className="py-1.5 text-sm text-right font-mono font-medium">
+                                  ${cb.balance.toLocaleString()}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </details>
                   )}
                 </div>
               )}
