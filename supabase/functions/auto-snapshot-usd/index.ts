@@ -135,35 +135,48 @@ Deno.serve(async (req) => {
       baseline_date: baselineDate,
     };
 
-    // 6. Upsert today's snapshot
-    const now = new Date();
-    const monthLabel = now.toLocaleDateString("en-US", {
-      month: "long", year: "numeric", timeZone: "Asia/Dhaka",
-    });
-    const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
-
-    const { data: orgRow } = await supabase
-      .from("organizations")
-      .select("id")
-      .limit(1)
-      .single();
-    const snapshotOrgId = orgRow?.id || null;
-
-    const { error: upsertErr } = await supabase
+    // 6. Check if today already has a manual baseline — never overwrite it
+    const { data: todaySnap } = await supabase
       .from("usd_inventory_snapshots")
-      .upsert(
-        {
-          snapshot_date: today,
-          balance_usd: r2(balance),
-          metrics,
-          notes: `Auto refresh — ${monthLabel} (${timestamp})`,
-          created_by: "00000000-0000-0000-0000-000000000000",
-          org_id: snapshotOrgId,
-        },
-        { onConflict: "snapshot_date" }
-      );
+      .select("created_by")
+      .eq("snapshot_date", today)
+      .limit(1);
 
-    if (upsertErr) throw upsertErr;
+    const isManualToday = (todaySnap as any[])?.[0]?.created_by &&
+      (todaySnap as any[])[0].created_by !== "00000000-0000-0000-0000-000000000000";
+
+    if (isManualToday) {
+      console.log(`Skipping upsert — today (${today}) has a manual baseline snapshot`);
+    } else {
+      const now = new Date();
+      const monthLabel = now.toLocaleDateString("en-US", {
+        month: "long", year: "numeric", timeZone: "Asia/Dhaka",
+      });
+      const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
+
+      const { data: orgRow } = await supabase
+        .from("organizations")
+        .select("id")
+        .limit(1)
+        .single();
+      const snapshotOrgId = orgRow?.id || null;
+
+      const { error: upsertErr } = await supabase
+        .from("usd_inventory_snapshots")
+        .upsert(
+          {
+            snapshot_date: today,
+            balance_usd: r2(balance),
+            metrics,
+            notes: `Auto refresh — ${monthLabel} (${timestamp})`,
+            created_by: "00000000-0000-0000-0000-000000000000",
+            org_id: snapshotOrgId,
+          },
+          { onConflict: "snapshot_date" }
+        );
+
+      if (upsertErr) throw upsertErr;
+    }
 
     console.log(`Auto snapshot: $${balance.toFixed(2)} on ${today} | rows: purchases=${purchases.length} spend=${spendRows.length} manual=${manualRows.length} txns=${txns.length} | carry=$${carryForward} bought=$${boughtSince.toFixed(2)} spent=$${spentSince.toFixed(2)} manual=$${manualSpend.toFixed(2)} | baseline=${baselineDate ?? 'none'}`);
 
