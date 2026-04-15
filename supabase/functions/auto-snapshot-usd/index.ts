@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
     if (isManualToday) {
       const { error: metricErr } = await supabase
         .from("usd_inventory_snapshots")
-        .update({ metrics, notes: `Manual baseline — metrics refreshed (${timestamp})` })
+        .update({ metrics, balance_usd: r2(balance), notes: `Manual baseline — metrics refreshed (${timestamp})` })
         .eq("snapshot_date", today);
       if (metricErr) throw metricErr;
       console.log(`Updated metrics on manual baseline (${today})`);
