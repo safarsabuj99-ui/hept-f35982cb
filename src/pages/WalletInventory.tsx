@@ -107,7 +107,7 @@ export default function WalletInventory() {
   const [overview, setOverview] = useState<UsdOverview>({
     carryForward: 0, boughtSince: 0, spentSince: 0, manualSpend: 0, availableBalance: 0,
     dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0,
-    snapshotDate: null, loading: true,
+    snapshotDate: null, loading: true, clientBalances: [],
   });
   const { user } = useAuth();
   const { profile } = useProfile();
