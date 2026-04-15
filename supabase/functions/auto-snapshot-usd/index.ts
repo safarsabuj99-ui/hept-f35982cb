@@ -57,13 +57,13 @@ Deno.serve(async (req) => {
 
     // 2. Sum purchases, ad spend, and manual spends SINCE baseline (paginated)
     const purchaseFilter = baselineDate
-      ? (q: any) => q.gt("date", baselineDate)
+      ? (q: any) => q.gte("date", baselineDate)
       : undefined;
     const spendFilter = baselineDate
-      ? (q: any) => q.gt("data_date", baselineDate)
+      ? (q: any) => q.gte("data_date", baselineDate)
       : undefined;
     const manualFilter = baselineDate
-      ? (q: any) => q.gt("date", baselineDate)
+      ? (q: any) => q.gte("date", baselineDate)
       : undefined;
 
     const [purchases, spendRows, manualRows] = await Promise.all([
