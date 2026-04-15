@@ -1,28 +1,31 @@
 
 
-## Plan: Close USD Inventory & Reopen at -$125.71
+## Plan: Add Per-Client Obligation Balance Breakdown to USD Inventory
 
-### What This Does
+### What It Does
 
-Closes the current USD inventory period by inserting a **manual baseline snapshot** for today (2026-04-15) with a balance of **-$125.71**. The `auto-snapshot-usd` edge function recognizes manual snapshots (where `created_by` is not the system UUID) and uses them as the carry-forward starting point — it will never overwrite a manual baseline.
+Adds a client-by-client obligation balance table to the USD Inventory wallet page, showing each client's positive USD balance (money you owe them in ad spend). Currently only a single aggregate number is shown.
 
-Going forward, the balance formula becomes: `-125.71 + future_purchases - future_spend - future_manual_spends`.
+### Data Source
+
+The `auto-snapshot-usd` edge function already computes per-client balances from the `transactions` table. We'll enhance it to include the per-client breakdown in the `metrics` JSONB, and display it in the UI.
 
 ### Actions
 
-**1. Upsert today's snapshot as a manual baseline**
+**1. Update `auto-snapshot-usd` edge function**
+- Add a `client_balances` array to the `metrics` object containing `{ client_id, full_name, balance }` for each client with a positive balance (obligation)
+- Join against `profiles` to get client names
 
-Using the insert tool, upsert into `usd_inventory_snapshots`:
-- `snapshot_date`: 2026-04-15
-- `balance_usd`: -125.71
-- `created_by`: the admin's actual user ID (not the system zero-UUID)
-- `org_id`: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-- `notes`: "Period close — reopened at -$125.71"
-- `metrics`: carry_forward of -125.71, zeroed bought/spent/manual counters
+**2. Update `WalletInventory.tsx` UI**
+- Replace the single-line "Client Obligations" text with an expandable section or small table
+- Show each client's name and their USD obligation balance
+- Keep the total and "USD Needed" summary
+- Add a collapsible/accordion so it doesn't clutter the overview when collapsed
 
-**2. Trigger `auto-snapshot-usd`** to verify it picks up the new baseline and skips overwriting today's manual entry.
+### Files Changed
 
-### Result
-
-The wallet dashboard will show **-$125.71** as the available balance, and all future auto-snapshots will compute relative to this new baseline.
+| File | Change |
+|------|--------|
+| `supabase/functions/auto-snapshot-usd/index.ts` | Add per-client balance breakdown to metrics JSONB |
+| `src/pages/WalletInventory.tsx` | Display client obligation table with names and balances |
 
