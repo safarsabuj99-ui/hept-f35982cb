@@ -125,6 +125,9 @@ Deno.serve(async (req) => {
     );
     const usdNeeded = Math.max(0, clientObligations - balance);
 
+    // 5. Build metrics object
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+
     // Fetch client names for the breakdown
     let clientBalancesArray: { client_id: string; full_name: string; balance: number }[] = [];
     if (positiveClientIds.length > 0) {
@@ -147,8 +150,6 @@ Deno.serve(async (req) => {
         .sort((a, b) => b.balance - a.balance);
     }
 
-    // 5. Build metrics object
-    const r2 = (n: number) => Math.round(n * 100) / 100;
     const metrics = {
       carry_forward: r2(carryForward),
       bought_since: r2(boughtSince),
