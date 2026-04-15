@@ -315,7 +315,7 @@ export default function WalletInventory() {
       toast({ title: "Success", description: "Opening balance set. Inventory tracking starts now." });
       setOpeningBalance(""); setOpeningNotes("");
       setOpeningBalanceDialogOpen(false);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
