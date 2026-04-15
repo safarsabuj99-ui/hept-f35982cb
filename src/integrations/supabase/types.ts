@@ -3608,6 +3608,7 @@ export type Database = {
       usd_inventory_snapshots: {
         Row: {
           balance_usd: number
+          baseline_balance_usd: number | null
           created_at: string
           created_by: string
           id: string
@@ -3618,6 +3619,7 @@ export type Database = {
         }
         Insert: {
           balance_usd?: number
+          baseline_balance_usd?: number | null
           created_at?: string
           created_by: string
           id?: string
@@ -3628,6 +3630,7 @@ export type Database = {
         }
         Update: {
           balance_usd?: number
+          baseline_balance_usd?: number | null
           created_at?: string
           created_by?: string
           id?: string
