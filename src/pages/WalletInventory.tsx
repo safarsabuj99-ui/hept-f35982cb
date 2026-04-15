@@ -291,7 +291,7 @@ export default function WalletInventory() {
       setSpendAmount(""); setSpendCategory("Other"); setSpendDescription(""); setSpendNotes("");
       setSpendDialogOpen(false);
       fetchManualSpends(dateRange);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
