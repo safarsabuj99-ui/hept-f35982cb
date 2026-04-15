@@ -335,7 +335,7 @@ export default function WalletInventory() {
       toast({ title: "Period Closed", description: `Snapshot saved with $${overview.availableBalance.toLocaleString()} balance.` });
       setCloseNotes("");
       setClosePeriodDialogOpen(false);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
