@@ -128,6 +128,14 @@ export default function WalletInventory() {
     setManualSpendLoading(false);
   }, []);
 
+  const refreshSnapshot = useCallback(async () => {
+    try {
+      await supabase.functions.invoke("auto-snapshot-usd");
+    } catch (e) {
+      console.warn("Snapshot refresh failed:", e);
+    }
+  }, []);
+
   const fetchOverview = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
 
