@@ -19,29 +19,53 @@ Deno.serve(async (req) => {
     const today = new Date()
       .toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
-    // 1. Full recomputation — sum ALL purchases, ALL ad spend, and ALL manual spends
+    // 1. Find the latest manual baseline snapshot (opening balance / period close)
+    //    These are snapshots created by users (not by the auto job "00000000-...")
+    const { data: baselineSnap } = await supabase
+      .from("usd_inventory_snapshots")
+      .select("snapshot_date, balance_usd, created_by")
+      .neq("created_by", "00000000-0000-0000-0000-000000000000")
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+
+    const baseline = (baselineSnap as any[])?.[0] ?? null;
+    const baselineDate = baseline?.snapshot_date ?? null;
+    const carryForward = baseline ? Number(baseline.balance_usd) : 0;
+
+    // 2. Sum purchases, ad spend, and manual spends SINCE baseline
+    const purchaseQuery = supabase.from("usd_purchases").select("usd_received");
+    const spendQuery = supabase.from("daily_metrics").select("spend");
+    const manualSpendQuery = supabase.from("usd_manual_spends").select("amount_usd");
+
+    if (baselineDate) {
+      purchaseQuery.gt("date", baselineDate);
+      spendQuery.gt("data_date", baselineDate);
+      manualSpendQuery.gt("date", baselineDate);
+    }
+
     const [purchasesRes, spendRes, manualSpendRes] = await Promise.all([
-      supabase.from("usd_purchases").select("usd_received"),
-      supabase.from("daily_metrics").select("spend"),
-      supabase.from("usd_manual_spends").select("amount_usd"),
+      purchaseQuery,
+      spendQuery,
+      manualSpendQuery,
     ]);
 
     if (purchasesRes.error) throw purchasesRes.error;
     if (spendRes.error) throw spendRes.error;
     if (manualSpendRes.error) throw manualSpendRes.error;
 
-    const totalPurchased = (purchasesRes.data ?? []).reduce(
+    const boughtSince = (purchasesRes.data ?? []).reduce(
       (s: number, r: any) => s + Number(r.usd_received || 0), 0
     );
-    const totalSpend = (spendRes.data ?? []).reduce(
+    const spentSince = (spendRes.data ?? []).reduce(
       (s: number, r: any) => s + Number(r.spend || 0), 0
     );
-    const totalManualSpend = (manualSpendRes.data ?? []).reduce(
+    const manualSpend = (manualSpendRes.data ?? []).reduce(
       (s: number, r: any) => s + Number(r.amount_usd || 0), 0
     );
-    const balance = totalPurchased - totalSpend - totalManualSpend;
 
-    // 2. 7-day burn rate
+    const balance = carryForward + boughtSince - spentSince - manualSpend;
+
+    // 3. 7-day burn rate
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
@@ -61,7 +85,7 @@ Deno.serve(async (req) => {
       ? Math.max(0, Math.floor(balance / dailyBurn))
       : balance > 0 ? 999 : 0;
 
-    // 3. Client obligations (all completed transactions)
+    // 4. Client obligations (all completed transactions)
     const { data: txns, error: txnErr } = await supabase
       .from("transactions")
       .select("type, amount, client_id")
@@ -80,18 +104,23 @@ Deno.serve(async (req) => {
       .reduce((s, b) => s + b, 0);
     const usdNeeded = Math.max(0, clientObligations - balance);
 
-    // 4. Build metrics object
+    // 5. Build metrics object
+    const r2 = (n: number) => Math.round(n * 100) / 100;
     const metrics = {
-      total_purchased: Math.round(totalPurchased * 100) / 100,
-      total_spend: Math.round(totalSpend * 100) / 100,
-      manual_spend: Math.round(totalManualSpend * 100) / 100,
-      daily_burn: Math.round(dailyBurn * 100) / 100,
+      carry_forward: r2(carryForward),
+      bought_since: r2(boughtSince),
+      spent_since: r2(spentSince),
+      manual_spend: r2(manualSpend),
+      total_purchased: r2(carryForward + boughtSince),
+      total_spend: r2(spentSince),
+      daily_burn: r2(dailyBurn),
       runway_days: runwayDays,
-      client_obligations: Math.round(clientObligations * 100) / 100,
-      usd_needed: Math.round(usdNeeded * 100) / 100,
+      client_obligations: r2(clientObligations),
+      usd_needed: r2(usdNeeded),
+      baseline_date: baselineDate,
     };
 
-    // 5. Upsert today's snapshot
+    // 6. Upsert today's snapshot
     const now = new Date();
     const monthLabel = now.toLocaleDateString("en-US", {
       month: "long", year: "numeric", timeZone: "Asia/Dhaka",
@@ -111,7 +140,7 @@ Deno.serve(async (req) => {
       .upsert(
         {
           snapshot_date: today,
-          balance_usd: balance,
+          balance_usd: r2(balance),
           metrics,
           notes: `Auto refresh — ${monthLabel} (${timestamp})`,
           created_by: "00000000-0000-0000-0000-000000000000",
@@ -122,10 +151,10 @@ Deno.serve(async (req) => {
 
     if (upsertErr) throw upsertErr;
 
-    console.log(`Auto snapshot upserted: $${balance.toFixed(2)} on ${today} (manual spend: $${totalManualSpend.toFixed(2)})`);
+    console.log(`Auto snapshot: $${balance.toFixed(2)} on ${today} | carry=$${carryForward} bought=$${boughtSince.toFixed(2)} spent=$${spentSince.toFixed(2)} manual=$${manualSpend.toFixed(2)} | baseline=${baselineDate ?? 'none'}`);
 
     return new Response(
-      JSON.stringify({ success: true, balance, metrics, snapshot_date: today }),
+      JSON.stringify({ success: true, balance: r2(balance), metrics, snapshot_date: today }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

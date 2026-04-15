@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS trg_set_usd_inventory_snapshots_org_id ON public.usd_inventory_snapshots;

@@ -128,6 +128,14 @@ export default function WalletInventory() {
     setManualSpendLoading(false);
   }, []);
 
+  const refreshSnapshot = useCallback(async () => {
+    try {
+      await supabase.functions.invoke("auto-snapshot-usd");
+    } catch (e) {
+      console.warn("Snapshot refresh failed:", e);
+    }
+  }, []);
+
   const fetchOverview = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
 
@@ -158,14 +166,14 @@ export default function WalletInventory() {
   const handleRefreshNow = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
     try {
-      await supabase.functions.invoke("auto-snapshot-usd");
+      await refreshSnapshot();
       await fetchOverview();
       toast({ title: "Refreshed", description: "USD inventory updated." });
     } catch {
       toast({ title: "Error", description: "Failed to refresh", variant: "destructive" });
       setOverview(prev => ({ ...prev, loading: false }));
     }
-  }, [fetchOverview, toast]);
+  }, [fetchOverview, refreshSnapshot, toast]);
 
   const fetchAgencyAccounts = useCallback(async () => {
     const { data } = await supabase.from("agency_accounts" as any).select("id, name, type, current_balance_bdt").eq("is_active", true).order("name");
@@ -186,6 +194,10 @@ export default function WalletInventory() {
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, () => { fetchManualSpends(dateRange); fetchOverview(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, () => fetchAgencyAccounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => {
+        // Auto-spend detected — refresh snapshot then overview
+        refreshSnapshot().then(() => fetchOverview());
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchPurchases, fetchOverview, fetchManualSpends, fetchAgencyAccounts, dateRange]);
@@ -251,8 +263,8 @@ export default function WalletInventory() {
       setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
-      fetchOverview();
       fetchAgencyAccounts();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
@@ -279,7 +291,7 @@ export default function WalletInventory() {
       setSpendAmount(""); setSpendCategory("Other"); setSpendDescription(""); setSpendNotes("");
       setSpendDialogOpen(false);
       fetchManualSpends(dateRange);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
@@ -303,7 +315,7 @@ export default function WalletInventory() {
       toast({ title: "Success", description: "Opening balance set. Inventory tracking starts now." });
       setOpeningBalance(""); setOpeningNotes("");
       setOpeningBalanceDialogOpen(false);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
@@ -323,7 +335,7 @@ export default function WalletInventory() {
       toast({ title: "Period Closed", description: `Snapshot saved with $${overview.availableBalance.toLocaleString()} balance.` });
       setCloseNotes("");
       setClosePeriodDialogOpen(false);
-      fetchOverview();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
