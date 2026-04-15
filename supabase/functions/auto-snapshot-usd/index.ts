@@ -108,16 +108,44 @@ Deno.serve(async (req) => {
       (q: any) => q.eq("status", "completed"),
     );
 
-    const clientBalances: Record<string, number> = {};
+    const clientBalancesMap: Record<string, number> = {};
     for (const t of txns as any[]) {
       const cid = t.client_id;
-      if (!clientBalances[cid]) clientBalances[cid] = 0;
-      clientBalances[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
+      if (!clientBalancesMap[cid]) clientBalancesMap[cid] = 0;
+      clientBalancesMap[cid] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
     }
-    const clientObligations = Object.values(clientBalances)
-      .filter((b) => b > 0)
-      .reduce((s, b) => s + b, 0);
+
+    // Get positive-balance client IDs for obligation breakdown
+    const positiveClientIds = Object.entries(clientBalancesMap)
+      .filter(([, b]) => b > 0)
+      .map(([cid]) => cid);
+
+    const clientObligations = positiveClientIds.reduce(
+      (s, cid) => s + clientBalancesMap[cid], 0
+    );
     const usdNeeded = Math.max(0, clientObligations - balance);
+
+    // Fetch client names for the breakdown
+    let clientBalancesArray: { client_id: string; full_name: string; balance: number }[] = [];
+    if (positiveClientIds.length > 0) {
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", positiveClientIds);
+
+      const nameMap: Record<string, string> = {};
+      for (const p of (profileRows as any[]) ?? []) {
+        nameMap[p.id] = p.full_name || "Unknown";
+      }
+
+      clientBalancesArray = positiveClientIds
+        .map((cid) => ({
+          client_id: cid,
+          full_name: nameMap[cid] || "Unknown",
+          balance: r2(clientBalancesMap[cid]),
+        }))
+        .sort((a, b) => b.balance - a.balance);
+    }
 
     // 5. Build metrics object
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -133,6 +161,7 @@ Deno.serve(async (req) => {
       client_obligations: r2(clientObligations),
       usd_needed: r2(usdNeeded),
       baseline_date: baselineDate,
+      client_balances: clientBalancesArray,
     };
 
     // 6. Check if today already has a manual baseline — never overwrite it
