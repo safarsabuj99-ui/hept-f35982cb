@@ -189,11 +189,6 @@ Deno.serve(async (req) => {
       if (metricErr) throw metricErr;
       console.log(`Updated metrics on manual baseline (${today})`);
     } else {
-      const now = new Date();
-      const monthLabel = now.toLocaleDateString("en-US", {
-        month: "long", year: "numeric", timeZone: "Asia/Dhaka",
-      });
-      const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
       const { data: orgRow } = await supabase
         .from("organizations")
