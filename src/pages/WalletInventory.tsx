@@ -194,6 +194,10 @@ export default function WalletInventory() {
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
       .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, () => { fetchManualSpends(dateRange); fetchOverview(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, () => fetchAgencyAccounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => {
+        // Auto-spend detected — refresh snapshot then overview
+        refreshSnapshot().then(() => fetchOverview());
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchPurchases, fetchOverview, fetchManualSpends, fetchAgencyAccounts, dateRange]);
