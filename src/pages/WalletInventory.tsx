@@ -263,8 +263,8 @@ export default function WalletInventory() {
       setBdtPaid(""); setUsdReceived(""); setChargePercent(""); setNotes(""); setPaidFromAccountId("");
       setDialogOpen(false);
       fetchPurchases(dateRange);
-      fetchOverview();
       fetchAgencyAccounts();
+      refreshSnapshot().then(() => fetchOverview());
     }
   };
 
