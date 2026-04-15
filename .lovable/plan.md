@@ -1,35 +1,38 @@
 
 
-## Plan: Fix "record new has no field client_id" Error on Expense Insert
+## Plan: Fix USD Inventory Not Counting Same-Day Purchases
 
 ### Problem
 
-The database trigger `trg_set_agency_expenses_org_id` (function `set_org_id_from_auth`) has a fallback branch that references `NEW.client_id`, but the `agency_expenses` table has no `client_id` column. This causes every expense insert to fail.
+The `auto-snapshot-usd` edge function uses `gt("date", baselineDate)` — strictly **greater than** — to filter purchases, ad spend, and manual spends since the last baseline. Since the baseline date is `2026-04-15` and the $505.989 purchase is also on `2026-04-15`, it gets excluded. Result: Available USD stays at -$126 instead of reflecting the new purchase.
 
 ### Fix
 
-**One migration** to replace the trigger function, removing the `client_id` fallback branch. The `agency_expenses` table is admin-only — `auth.uid()` will always be available, so the fallback is unnecessary.
+**File: `supabase/functions/auto-snapshot-usd/index.ts`** (lines 59-66)
 
-```sql
-CREATE OR REPLACE FUNCTION set_org_id_from_auth()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  IF NEW.org_id IS NULL THEN
-    NEW.org_id := get_user_org_id(auth.uid());
-  END IF;
-  RETURN NEW;
-END;
-$$;
+Change all three filters from `gt` to `gte`:
+
+```typescript
+// Before:
+q.gt("date", baselineDate)
+q.gt("data_date", baselineDate)
+q.gt("date", baselineDate)
+
+// After:
+q.gte("date", baselineDate)
+q.gte("data_date", baselineDate)
+q.gte("date", baselineDate)
 ```
+
+This is safe because the manual baseline's `balance_usd` is a frozen value (-$125.71) — it does not include any purchases/spend from the baseline day itself. The carry-forward plus same-day activity gives the correct balance.
+
+### Result
+
+After deploying and refreshing, Available USD will show: **-$125.71 + $505.989 = ~$380.28** (minus any same-day ad spend).
 
 ### Files Changed
 
-| Action | Detail |
-|--------|--------|
-| Migration | Replace `set_org_id_from_auth` function to remove invalid `client_id` reference |
-
-No UI changes needed.
+| File | Change |
+|------|--------|
+| `supabase/functions/auto-snapshot-usd/index.ts` | `gt` → `gte` on 3 filters (lines 60, 63, 66) |
 
