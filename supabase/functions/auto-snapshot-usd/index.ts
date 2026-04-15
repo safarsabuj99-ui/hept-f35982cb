@@ -46,14 +46,17 @@ Deno.serve(async (req) => {
     // 1. Find the latest manual baseline snapshot (opening balance / period close)
     const { data: baselineSnap } = await supabase
       .from("usd_inventory_snapshots")
-      .select("snapshot_date, balance_usd, created_by")
+      .select("snapshot_date, balance_usd, baseline_balance_usd, created_by")
       .neq("created_by", "00000000-0000-0000-0000-000000000000")
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
     const baseline = (baselineSnap as any[])?.[0] ?? null;
     const baselineDate = baseline?.snapshot_date ?? null;
-    const carryForward = baseline ? Number(baseline.balance_usd) : 0;
+    // Use the immutable baseline field; fall back to balance_usd for old rows
+    const carryForward = baseline
+      ? Number(baseline.baseline_balance_usd ?? baseline.balance_usd)
+      : 0;
 
     // 2. Sum purchases, ad spend, and manual spends SINCE baseline (paginated)
     const purchaseFilter = baselineDate
@@ -182,9 +185,10 @@ Deno.serve(async (req) => {
     const timestamp = now.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" });
 
     if (isManualToday) {
+      // Only update derived fields — never touch baseline_balance_usd or notes
       const { error: metricErr } = await supabase
         .from("usd_inventory_snapshots")
-        .update({ metrics, balance_usd: r2(balance), notes: `Manual baseline — metrics refreshed (${timestamp})` })
+        .update({ metrics, balance_usd: r2(balance) })
         .eq("snapshot_date", today);
       if (metricErr) throw metricErr;
       console.log(`Updated metrics on manual baseline (${today})`);
