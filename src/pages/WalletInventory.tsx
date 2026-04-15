@@ -12,12 +12,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame, CalendarCheck, RotateCcw, MinusCircle } from "lucide-react";
+import { DollarSign, TrendingUp, Package, Wallet, Plus, Loader2, AlertTriangle, Clock, Flame, CalendarCheck, RotateCcw, MinusCircle, ChevronDown, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+interface ClientBalance {
+  client_id: string;
+  full_name: string;
+  balance: number;
+}
 
 interface UsdOverview {
   carryForward: number;
@@ -31,6 +37,7 @@ interface UsdOverview {
   usdNeeded: number;
   snapshotDate: string | null;
   loading: boolean;
+  clientBalances: ClientBalance[];
 }
 
 interface UsdPurchase {
