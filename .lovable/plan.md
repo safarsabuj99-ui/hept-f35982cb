@@ -1,38 +1,22 @@
 
 
-## Plan: Set Correct USD Baseline to −$30
+## Plan: Delete Manual Spends & Refresh Balance
 
-### Problem
-The system has no manual baseline snapshot, so it sums **all historical** purchases, ad spend, and manual spends — producing −$608. Your actual current balance is **−$30**.
+### What exists
+Two manual spend records in `usd_manual_spends`:
+1. $447 — "Previous due dollar paid from USD" (Apr 12)
+2. $85 — "Previous due dollar paid from USD" (Apr 12)
 
-### Fix
-**Database migration**: Insert a manual baseline snapshot for today with `balance_usd = -30`. The `auto-snapshot-usd` function already supports baselines — it looks for the latest snapshot where `created_by` is not the auto-refresh UUID. Once a baseline exists, it only counts purchases/spend **after** that date.
+### Actions
+1. **Delete all rows** from `usd_manual_spends` using the insert tool (DELETE statement)
+2. **Invoke `auto-snapshot-usd`** to recalculate the balance without manual spends
 
-```sql
-INSERT INTO usd_inventory_snapshots (snapshot_date, balance_usd, notes, created_by, org_id)
-VALUES (
-  CURRENT_DATE,
-  -30,
-  'Manual baseline — correct opening balance set by admin',
-  '00000000-0000-0000-0000-000000000001',  -- non-auto UUID = treated as manual baseline
-  'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-)
-ON CONFLICT (snapshot_date) DO UPDATE
-SET balance_usd = -30,
-    notes = 'Manual baseline — correct opening balance set by admin',
-    created_by = '00000000-0000-0000-0000-000000000001';
-```
-
-Then invoke `auto-snapshot-usd` to refresh — it will find this baseline, use −$30 as carry forward, and only add today's new purchases/spend on top.
-
-### Result
-- Available Balance will show **−$30** (plus any purchases/spend from today onward)
-- Future auto-refreshes will stay accurate, always building from this baseline
-- No code changes needed — only a data fix
+### Impact
+The available balance will increase by $532 (the total of deleted manual spends). Since the current baseline is −$30, the new balance will be −$30 + $0 (no new purchases/spend since baseline) = approximately −$30 (unchanged from baseline, since manual spends were the only delta being subtracted).
 
 ### Files
 | Action | Detail |
 |--------|--------|
-| Migration | Insert manual baseline snapshot with −$30 |
-| Test | Invoke `auto-snapshot-usd` to verify correct balance |
+| Data delete | Remove all rows from `usd_manual_spends` |
+| Test | Re-invoke `auto-snapshot-usd` to verify updated balance |
 
