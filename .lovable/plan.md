@@ -1,26 +1,38 @@
 
 
-## Plan: Fix USD Snapshot 1000-Row Query Limit
+## Plan: Set Correct USD Baseline to −$30
 
-### Root Cause
-The `auto-snapshot-usd` edge function queries `daily_metrics` without setting a limit. Supabase defaults to returning only **1,000 rows**. Your table has **1,400 rows**, so ~400 rows of spend data are silently dropped, making the balance appear ~$862 higher than reality.
-
-**Current snapshot**: $255.10 (wrong — undercounts spend)
-**Actual calculation**: $2,733.64 purchased − $2,808.94 spend − $532 manual = **−$607.30**
-
-You mentioned your balance should be **−$28**. After fixing the query limit, the system will calculate accurately from all data. If the result doesn't match your expected −$28, you can use the **Set Opening Balance** feature to align the starting point with your actual known balance.
+### Problem
+The system has no manual baseline snapshot, so it sums **all historical** purchases, ad spend, and manual spends — producing −$608. Your actual current balance is **−$30**.
 
 ### Fix
-Update `supabase/functions/auto-snapshot-usd/index.ts` to bypass the 1,000-row default on all queries by paginating or setting explicit high limits on:
-- `daily_metrics` spend query (main balance calculation)
-- `daily_metrics` 7-day burn rate query
-- `transactions` client obligations query
+**Database migration**: Insert a manual baseline snapshot for today with `balance_usd = -30`. The `auto-snapshot-usd` function already supports baselines — it looks for the latest snapshot where `created_by` is not the auto-refresh UUID. Once a baseline exists, it only counts purchases/spend **after** that date.
 
-### Files Changed
-| Action | File |
-|--------|------|
-| Modify | `supabase/functions/auto-snapshot-usd/index.ts` — add `.limit(100000)` to all queries that could exceed 1,000 rows |
-| Deploy + Test | Re-run snapshot to verify correct balance |
+```sql
+INSERT INTO usd_inventory_snapshots (snapshot_date, balance_usd, notes, created_by, org_id)
+VALUES (
+  CURRENT_DATE,
+  -30,
+  'Manual baseline — correct opening balance set by admin',
+  '00000000-0000-0000-0000-000000000001',  -- non-auto UUID = treated as manual baseline
+  'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+)
+ON CONFLICT (snapshot_date) DO UPDATE
+SET balance_usd = -30,
+    notes = 'Manual baseline — correct opening balance set by admin',
+    created_by = '00000000-0000-0000-0000-000000000001';
+```
 
-One-line additions per query. No other changes needed.
+Then invoke `auto-snapshot-usd` to refresh — it will find this baseline, use −$30 as carry forward, and only add today's new purchases/spend on top.
+
+### Result
+- Available Balance will show **−$30** (plus any purchases/spend from today onward)
+- Future auto-refreshes will stay accurate, always building from this baseline
+- No code changes needed — only a data fix
+
+### Files
+| Action | Detail |
+|--------|--------|
+| Migration | Insert manual baseline snapshot with −$30 |
+| Test | Invoke `auto-snapshot-usd` to verify correct balance |
 
