@@ -167,6 +167,7 @@ export default function WalletInventory() {
       usdNeeded: metrics.usd_needed ?? 0,
       snapshotDate: snap?.snapshot_date ?? null,
       loading: false,
+      clientBalances: (metrics.client_balances as ClientBalance[]) ?? [],
     });
   }, []);
 
