@@ -1,43 +1,58 @@
 
-The user wants to open a new USD inventory period at $220, accounting for the fact that $2.48 has already been spent today. So the baseline should be set such that current available = $220 with $2.48 spent since baseline → baseline = $222.48. OR set baseline = $220 and consider spend already covered.
+## Plan: Boost Landing Page Performance
 
-Let me re-read: "220 USD is available after spend 2.48 USD. Lets reopen new USD inventory"
+### Issues found in PageSpeed report
+1. **Render-blocking ~310 ms** — Google Fonts CSS link blocks paint despite the `media="print"` swap (parser still discovers it sync).
+2. **Use efficient cache lifetimes (~250 KiB)** — static assets lack long cache headers (Lovable-managed; can't fully fix).
+3. **Reduce unused JavaScript ~117 KiB / unused CSS ~18 KiB** — landing page bundle pulls in the entire React app (Auth, Branding, Currency providers, react-query, Toaster, Sonner, Tooltip, all routes).
+4. **LCP delay** — 6+ blank/dark frames before hero appears because:
+   - `App.tsx` boots `AuthProvider` → `BrandingProvider` → `CurrencyProvider` before Suspense fallback renders `LandingPage`.
+   - Even unauthenticated visitors wait for Supabase `getSession()` to resolve before `SmartHome` returns `<LandingPage/>`.
+5. **Forced reflow** — `getSharedObserver()` + 30+ Reveal wrappers on initial paint.
 
-So they want: after today's $2.48 spend has been deducted, $220 should remain available. The cleanest way: set the baseline = $222.48 dated today, so when the auto-snapshot deducts the $2.48 spend that already happened today, the displayed Available USD = $220.
+### Fix Plan
 
-Actually simpler: set the baseline_balance_usd = 222.48 for today (2026-04-17), and the auto-snapshot computes balance = 222.48 - 2.48 (today's spend) = 220.
+**1. Fast-path the landing route in `src/App.tsx`**
+- Detect `pathname === "/"` AND no active session token in `localStorage` BEFORE mounting `AuthProvider`/`BrandingProvider`/`CurrencyProvider`.
+- Render `<LandingPage/>` directly inside a minimal shell (just `BrowserRouter` + `Suspense`). Skip QueryClient, Toaster, Sonner, Tooltip, Auth bootstrap entirely.
+- Auth + providers only mount when navigating to an app route.
 
-Plan is short and clear.
+**2. Eager-import the Landing page**
+- Change `const LandingPage = lazy(() => import(...))` to a static import. Removes the extra chunk roundtrip (currently 2 sequential network hops: `index.html` → `App` chunk → `LandingPage` chunk).
 
-## Plan: Open New USD Period at $220 (After $2.48 Spend)
+**3. Inline critical hero CSS in `index.html`**
+- Add minimal CSS for nav + hero (background, font, hero text sizing) inside `<style>` so first paint shows hero text without waiting for `index.css` (~973 lines).
 
-### Goal
-Open a fresh USD inventory period today (2026-04-17) so that **Available USD = $220** after today's $2.48 ad spend is accounted for.
+**4. Defer Google Fonts properly**
+- Replace `<link media="print" onload>` trick with `rel="preload" as="style"` + onload swap. Add `font-display: swap` reliance (already in URL).
+- Drop `Noto Sans Bengali` from initial load — only fetch when user toggles to BN. Saves a font family on first paint.
+- Drop `JetBrains Mono` from landing — not used in landing hero.
 
-### Approach
-Since the auto-snapshot function calculates:
-`balance = baseline + purchases_since_baseline − spend_since_baseline − manual_spend_since_baseline`
+**5. Slim the landing component**
+- Replace `lucide-react` named imports (~30) with only those used in above-fold (hero). Lazy-load the rest of the page (testimonials, FAQ, dashboard mockup) using `React.lazy` + `Suspense` so initial LCP only ships nav + hero.
+- Wrap `DashboardMockup` in `React.lazy` — it's heavy and below-fold.
+- Reduce Reveal wrappers' initial work: skip IntersectionObserver setup until after first paint (`requestIdleCallback`).
 
-To land at $220 with $2.48 already spent today, the baseline must be set to **$222.48**.
+**6. Vite build optimization (`vite.config.ts`)**
+- Add `build.rollupOptions.output.manualChunks` to split:
+  - `react-vendor` (react, react-dom, react-router-dom)
+  - `ui-vendor` (radix, lucide-react)
+  - `supabase` (only loaded with auth)
+- Add `build.cssCodeSplit: true` (default already, verify).
 
-### Steps
+**7. Service worker**
+- Already minimal (no caching). Keep as-is, but defer registration until after landing first paint (it currently only registers in `usePushNotifications` which is fine).
 
-1. **Upsert today's snapshot row** (`2026-04-17`) in `usd_inventory_snapshots`:
-   - `baseline_balance_usd = 222.48` (immutable carry-forward anchor)
-   - `balance_usd = 220` (current available after today's spend)
-   - `created_by = your admin user_id` (marks as a manual baseline)
-   - `notes = "Period reopen — $220 available after $2.48 spend"`
-   - `metrics = { carry_forward: 222.48, bought_since: 0, spent_since: 2.48, manual_spend: 0 }`
+### Files to change
+| File | Change |
+|---|---|
+| `index.html` | Inline critical hero CSS, fix font preload, drop unused fonts from initial load |
+| `src/App.tsx` | Fast-path `/` route — render LandingPage without Auth/Branding/Currency/Query providers; eager-import LandingPage |
+| `src/pages/LandingPage.tsx` | Lazy-load below-fold sections (DashboardMockup, testimonials, FAQ); defer IntersectionObserver setup; load Bengali font on demand |
+| `vite.config.ts` | Add `manualChunks` for vendor splitting |
 
-2. **Trigger `auto-snapshot-usd`** to recompute derived metrics (burn rate, runway, client obligations) against the new $222.48 baseline. The function will read today's $2.48 spend and confirm the displayed balance = $220.
-
-3. **Verify** the Wallet Inventory page shows **Available USD = $220**.
-
-### Why $222.48 baseline (not $220)
-The auto-snapshot subtracts every spend dated ≥ baseline_date. Today's $2.48 has `data_date = 2026-04-17`, so it counts against the baseline. Setting baseline = $222.48 produces the correct $220 display.
-
-### Result
-- Old period (ending 2026-04-16) sealed; history preserved.
-- New period anchored at $222.48 dated today.
-- Wallet shows **$220 Available USD**, with the $2.48 spend correctly attributed to the new period.
-- All future purchases/spend/manual entries from today onward accumulate cleanly on this baseline.
+### Expected impact
+- LCP: ~3 dark frames → ~1 frame (eliminate Auth bootstrap wait).
+- Initial JS: −80 to −120 KiB (no Supabase/react-query/Auth on landing).
+- Render-blocking: −310 ms (proper font preload + inlined critical CSS).
+- TBT: lower (smaller main bundle + deferred observers).
