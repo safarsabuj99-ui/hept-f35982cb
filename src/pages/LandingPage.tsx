@@ -52,23 +52,32 @@ function getSharedObserver() {
 
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  // Start visible to avoid layout shift + observer work blocking LCP.
+  // Animations gracefully no-op for already-visible items.
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = getSharedObserver();
-    const callback: ObserverCallback = (entry) => {
-      if (entry.isIntersecting) {
-        setVisible(true);
-        obs.unobserve(el);
-        observerCallbacks.delete(el);
-      }
-    };
-    observerCallbacks.set(el, callback);
-    obs.observe(el);
+    // Defer observer wiring until browser is idle — keeps it off the LCP critical path.
+    const ric: (cb: () => void) => number =
+      (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1));
+    const handle = ric(() => {
+      const obs = getSharedObserver();
+      const callback: ObserverCallback = (entry) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          obs.unobserve(el);
+          observerCallbacks.delete(el);
+        }
+      };
+      observerCallbacks.set(el, callback);
+      obs.observe(el);
+    });
     return () => {
-      obs.unobserve(el);
+      const cic = (window as any).cancelIdleCallback;
+      if (cic) cic(handle);
       observerCallbacks.delete(el);
+      if (sharedObserver) sharedObserver.unobserve(el);
     };
   }, []);
   return { ref, visible };
