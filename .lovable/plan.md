@@ -1,64 +1,70 @@
 
 
-## Mobile-Optimized Premium Action Buttons (Cash Flow)
+Looking at the screenshot at 390px: buttons are too tall (h-11 = 44px), labels feel oversized, the wrapping container adds extra padding making the whole bar bulky, and "Add Account" being full primary blue dominates visually. User wants **compact + organized + optimized**.
 
-### Issues spotted on mobile (390px viewport)
-1. **Visual inconsistency** — 3 buttons use ghost/glassmorphic style, but "Add Account" uses solid primary gradient → feels mismatched
-2. **Cramped 2×2 grid** — `gap-2.5` is tight at 390px, buttons feel squished
-3. **Uneven heights/padding** — Withdraw uses `px-4`, Add Account uses `px-5`; icon margins differ
-4. **Icon micro-rotation on Transfer is broken** — `group-hover:translate-x-0.5 group-hover:-translate-x-0` cancels itself
-5. **Mobile order** — "Add Account" (the rarely-used one) is bottom-right and styled as the primary CTA; "Add Fund" (most-used daily action) should visually lead
-6. **Touch targets** — `h-10` (40px) is below the 44px iOS recommendation
+## Plan: Compact Mobile Action Bar
 
-### Redesign (single unified system, all 4 buttons)
+### Issues at 390px (current state)
+1. Buttons are ~44px tall in a 2×2 grid → bar takes ~110px vertical space
+2. Wrapper `glass-card p-2.5` adds 20px extra padding = wasted real estate
+3. Icon + label feel chunky; `text-[13px] font-semibold` + `gap-1.5` reads heavy
+4. "Add Account" solid blue + others ghost = visual weight imbalance — Add Account screams loudest but is the least frequent action
+5. 2×2 grid wastes horizontal width; a 4-across row would be more scannable
 
-**Container**
-- Replace `grid grid-cols-2 sm:flex sm:justify-end gap-2.5` with `grid grid-cols-2 sm:flex sm:justify-end gap-3`
-- Wrap in a subtle `glass-card p-2.5 rounded-xl` container on mobile only — groups them as one premium "action bar"
-- Order: **Add Fund (success) → Withdraw (warning) → Transfer (primary outline) → Add Account (primary solid)** — most-frequent first
+### Redesign — Compact Pill Row
 
-**All buttons share**
-- `h-11` (44px touch target) on mobile, `sm:h-10` on desktop
-- `px-3 sm:px-4` (consistent)
-- `rounded-xl` (matches container)
-- `text-[13px] sm:text-sm font-semibold tracking-tight`
-- `gap-1.5` between icon and label (uniform — no `mr-2` on icons)
-- Same shimmer sweep span
-- Same hover lift `hover:-translate-y-0.5 active:translate-y-0`
-- Same transition timing `duration-300`
-- Icon size `h-3.5 w-3.5 sm:h-4 sm:w-4`
+**Container (mobile)**
+- Switch from `grid grid-cols-2 gap-3 p-2.5` to **`flex gap-1.5 p-1.5`** — single row, 4 buttons across
+- Drop the heavy `glass-card` wrapper background — use a subtle `border border-border/30 bg-card/30 backdrop-blur-md rounded-xl` (lighter)
+- Keep desktop layout (`sm:flex sm:justify-end sm:gap-3 sm:p-0 sm:bg-transparent sm:border-0`)
 
-**Per-button accent (only color/icon differs)**
-| Button | Border | Bg gradient | Text | Icon | Glow shadow |
-|---|---|---|---|---|---|
-| Add Fund | `success/30` | `success/15 → success/5 → transparent` | `success` → `success-foreground` on hover | PiggyBank | success/55 |
-| Withdraw | `warning/30` | `warning/15 → warning/5 → transparent` | `warning` → `warning-foreground` on hover | HandCoins | warning/55 |
-| Transfer | `primary/30` | `primary/15 → primary/5 → transparent` | `primary` → `primary-foreground` on hover | ArrowLeftRight | primary/55 |
-| Add Account | `primary/40` | **solid** `primary → primary/85` | `primary-foreground` always | Plus | primary/65 |
+**All 4 buttons (mobile)**
+- Height: `h-9` (36px) — still tappable, much more compact than 44px
+- Padding: `px-2` (was `px-3`)
+- Gap icon↔label: `gap-1` (was `gap-1.5`)
+- Font: `text-[11px] font-medium tracking-tight` (was `text-[13px] font-semibold`)
+- Icon: `h-3 w-3` (was `h-3.5 w-3.5`)
+- Radius: `rounded-lg` (was `rounded-xl` — matches new compact scale)
+- Width: `flex-1` (equal share of row)
+- Keep shimmer + hover-lift micro-interactions (they're cheap and premium)
 
-The first 3 share the glassmorphic ghost style. **Add Account** stays as the solid filled CTA but gets the same height/padding/radius/shimmer so it visually belongs to the family — it's just "filled" instead of "outline" (like a primary in a button group).
+**Desktop (sm+) restores comfortable size**
+- `sm:h-10 sm:px-4 sm:gap-1.5 sm:text-sm sm:rounded-xl sm:flex-none`
+- Icons `sm:h-4 sm:w-4`
 
-**Fix Transfer icon hover** — replace broken cancel with `group-hover:translate-x-0.5` only, plus a subtle `group-hover:scale-110`.
+**Visual weight rebalance**
+- Demote "Add Account" from solid primary → **outlined primary** (matches the other 3 ghost-glassmorphic style). All 4 share the same visual weight system, only the **accent color** differs (success / warning / primary / primary).
+- Keeps semantic clarity (color = action type) without one button screaming louder than others.
 
-**Mobile-specific polish**
-- Add `text-xs` label fallback if label would wrap (none should at 44px width per cell)
-- Ensure no `sm:w-auto` reverts — use `w-full sm:w-auto`
-- Subtle entrance: stagger `animate-slide-up-fade` with `animationDelay: 0/60/120/180ms`
+**Order (unchanged)**
+Add Fund (success) → Withdraw (warning) → Transfer (primary) → Add Account (primary)
+
+### Result at 390px
+```text
+┌────────────────────────────────────────┐
+│ [+ Fund] [↗ Draw] [⇄ Trans] [+ Acct]  │  ← single row, ~48px tall total
+└────────────────────────────────────────┘
+```
+vs current:
+```text
+┌──────────────────────────┐
+│ [+ Add Fund] [↗ Withdraw]│
+│ [⇄ Transfer] [+ Add Acct]│  ← 2×2, ~110px tall
+└──────────────────────────┘
+```
+Vertical space saved: ~60px. Buttons now read as **one tidy control strip**, not a hero block.
 
 ### File to edit
-- `src/pages/CashFlowManagement.tsx` — only lines 639–842 (the 4 button block)
+- `src/pages/CashFlowManagement.tsx` — only the 4-button container block (lines ~639–842)
 
 ### Won't touch
-- Dialog content / form logic
-- Other tables / pagination
-- Any handler functions
-- Any other page or component
+- Dialog logic, handlers, other tables, other pages
+- Desktop appearance stays premium-comfortable (only mobile gets compacted)
+- All semantic colors and shimmer/hover micro-interactions preserved
 
-### Expected result
-A cohesive, premium 4-button action bar that:
-- Looks like one designed unit (not 4 ad-hoc buttons)
-- Hits 44px touch targets on mobile
-- Maintains semantic colors (warning/success/primary)
-- Has consistent spacing, icon sizing, and motion language
-- Reads "Add Fund first" — matches actual usage frequency
+### Expected impact
+- Bar height: 110px → ~48px (–56%)
+- Reads as one unified compact toolbar
+- All 4 buttons visually equal — accent color carries meaning, not size
+- Still hits comfortable 36px tap height with `flex-1` widths giving ~88px each on 390px = plenty of touch area
 
