@@ -52,23 +52,32 @@ function getSharedObserver() {
 
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  // Start visible to avoid layout shift + observer work blocking LCP.
+  // Animations gracefully no-op for already-visible items.
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const obs = getSharedObserver();
-    const callback: ObserverCallback = (entry) => {
-      if (entry.isIntersecting) {
-        setVisible(true);
-        obs.unobserve(el);
-        observerCallbacks.delete(el);
-      }
-    };
-    observerCallbacks.set(el, callback);
-    obs.observe(el);
+    // Defer observer wiring until browser is idle — keeps it off the LCP critical path.
+    const ric: (cb: () => void) => number =
+      (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1));
+    const handle = ric(() => {
+      const obs = getSharedObserver();
+      const callback: ObserverCallback = (entry) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          obs.unobserve(el);
+          observerCallbacks.delete(el);
+        }
+      };
+      observerCallbacks.set(el, callback);
+      obs.observe(el);
+    });
     return () => {
-      obs.unobserve(el);
+      const cic = (window as any).cancelIdleCallback;
+      if (cic) cic(handle);
       observerCallbacks.delete(el);
+      if (sharedObserver) sharedObserver.unobserve(el);
     };
   }, []);
   return { ref, visible };
@@ -246,6 +255,17 @@ export default function LandingPage() {
   const [lang, setLang] = useState<Lang>("en");
   const c = t[lang];
   const fontClass = lang === "bn" ? "font-[Noto_Sans_Bengali,sans-serif]" : "";
+
+  // Load Bengali font only when user switches to BN — keeps initial paint lean.
+  useEffect(() => {
+    if (lang !== "bn") return;
+    if (document.getElementById("bn-font-link")) return;
+    const link = document.createElement("link");
+    link.id = "bn-font-link";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+  }, [lang]);
 
   const navLinks = [
     { href: "#problems", label: c.nav.problems },

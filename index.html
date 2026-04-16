@@ -16,12 +16,27 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.json" />
 
-    <style>#root-loader{display:flex;align-items:center;justify-content:center;height:100vh;background:#09090b}#root-loader svg{width:48px;height:48px;animation:rl .8s linear infinite}@keyframes rl{to{transform:rotate(360deg)}}</style>
+    <!-- Critical inline CSS for instant first paint (loader + nav + hero) -->
+    <style>
+      :root{color-scheme:dark light}
+      html,body{margin:0;padding:0;background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
+      #root-loader{display:flex;align-items:center;justify-content:center;height:100vh;background:#09090b}
+      #root-loader svg{width:48px;height:48px;animation:rl .8s linear infinite}
+      @keyframes rl{to{transform:rotate(360deg)}}
+      .lp-shell{min-height:100vh;background:#09090b;color:#fafafa}
+      .lp-nav{position:sticky;top:0;z-index:50;height:64px;display:flex;align-items:center;backdrop-filter:blur(12px);background:rgba(9,9,11,.7);border-bottom:1px solid rgba(255,255,255,.06)}
+      .lp-nav-inner{max-width:80rem;margin:0 auto;padding:0 1rem;display:flex;align-items:center;justify-content:space-between;width:100%}
+      .lp-logo{font-size:1.25rem;font-weight:700;letter-spacing:-.02em;color:#fafafa;text-decoration:none}
+      .lp-hero{max-width:80rem;margin:0 auto;padding:5rem 1rem 4rem;text-align:center}
+      .lp-h1{font-size:clamp(1.875rem,5vw,3.75rem);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin:0 auto;max-width:48rem}
+      .lp-sub{font-size:clamp(1rem,2vw,1.25rem);color:#a1a1aa;max-width:42rem;margin:1.25rem auto 0;line-height:1.6}
+    </style>
 
-    <!-- Non-render-blocking Google Fonts -->
+    <!-- Preload critical Inter font (latin only, swap) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" onload="this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" /></noscript>
 
     <meta property="og:title" content="HEPT - Ad Management Platform" />
     <meta property="og:description" content="Manage ad spending, payments, and campaigns in one place" />
@@ -34,7 +49,6 @@
   </head>
 
   <body>
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" /></noscript>
     <div id="root"><div id="root-loader"><svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
