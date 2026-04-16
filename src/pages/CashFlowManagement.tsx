@@ -636,79 +636,18 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5">
-        <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-warning/25 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_6px_20px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
-            >
-              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <HandCoins className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
-              <span className="font-semibold tracking-tight">Withdraw</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Category</Label>
-                <Select value={wdCategory} onValueChange={setWdCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="personal_loan">Personal Loan</SelectItem>
-                    <SelectItem value="business_loan">Business Loan</SelectItem>
-                    <SelectItem value="others_loan">Others Loan</SelectItem>
-                    <SelectItem value="advance">Advance</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Borrower Name</Label>
-                <Input placeholder="Who is this for?" value={wdBorrower} onChange={e => setWdBorrower(e.target.value)} />
-              </div>
-              <div>
-                <Label>Amount (BDT)</Label>
-                <Input type="number" placeholder="e.g. 50000" value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
-              </div>
-              <div>
-                <Label>From Account</Label>
-                <Select value={wdFromAccId} onValueChange={setWdFromAccId}>
-                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
-                  <SelectContent>
-                    {activeAccounts.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Expected Return Date (optional)</Label>
-                <Input type="date" value={wdExpectedDate} onChange={e => setWdExpectedDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>Note (optional)</Label>
-                <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
-              </div>
-              <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
-                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Withdrawal
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
+      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-3 p-2.5 sm:p-0 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl shadow-sm sm:border-0 sm:bg-transparent sm:backdrop-blur-none sm:shadow-none">
+        {/* 1. Add Fund — most-used, success accent */}
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
             <Button
               variant="ghost"
-              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-success/25 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_6px_20px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+              style={{ animationDelay: "0ms" }}
+              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-success/30 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_8px_24px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <PiggyBank className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
-              <span className="font-semibold tracking-tight">Add Fund</span>
+              <PiggyBank className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
+              <span>Add Fund</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -774,15 +713,83 @@ export default function CashFlowManagement() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* 2. Withdraw — warning accent */}
+        <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              style={{ animationDelay: "60ms" }}
+              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-warning/30 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_8px_24px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <HandCoins className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
+              <span>Withdraw</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Category</Label>
+                <Select value={wdCategory} onValueChange={setWdCategory}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal_loan">Personal Loan</SelectItem>
+                    <SelectItem value="business_loan">Business Loan</SelectItem>
+                    <SelectItem value="others_loan">Others Loan</SelectItem>
+                    <SelectItem value="advance">Advance</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Borrower Name</Label>
+                <Input placeholder="Who is this for?" value={wdBorrower} onChange={e => setWdBorrower(e.target.value)} />
+              </div>
+              <div>
+                <Label>Amount (BDT)</Label>
+                <Input type="number" placeholder="e.g. 50000" value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label>From Account</Label>
+                <Select value={wdFromAccId} onValueChange={setWdFromAccId}>
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Expected Return Date (optional)</Label>
+                <Input type="date" value={wdExpectedDate} onChange={e => setWdExpectedDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Note (optional)</Label>
+                <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
+              </div>
+              <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
+                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Withdrawal
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 3. Transfer — primary outline */}
         <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
           <DialogTrigger asChild>
             <Button
               variant="ghost"
-              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+              style={{ animationDelay: "120ms" }}
+              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <ArrowLeftRight className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-x-0" />
-              <span className="font-semibold tracking-tight">Transfer</span>
+              <ArrowLeftRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:translate-x-0.5" />
+              <span>Transfer</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -829,15 +836,17 @@ export default function CashFlowManagement() {
           </DialogContent>
         </Dialog>
 
+        {/* 4. Add Account — primary solid CTA */}
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button
-              className="group relative w-full sm:w-auto h-10 px-5 overflow-hidden rounded-lg border-0 bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.65)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
+              style={{ animationDelay: "180ms" }}
+              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-primary/40 bg-gradient-to-br from-primary via-primary to-primary/85 text-primary-foreground shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] hover:shadow-[0_10px_28px_-6px_hsl(var(--primary)/0.65)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 text-[13px] sm:text-sm font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
-              <span className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-              <Plus className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
-              <span className="font-semibold tracking-tight">Add Account</span>
+              <span className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:rotate-90" />
+              <span>Add Account</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
