@@ -594,7 +594,47 @@ export default function WalletInventory() {
                   </DialogContent>
                 </Dialog>
               )}
-            </div>
+              {!overview.loading && hasSnapshot && (
+                <Dialog open={resetBalanceDialogOpen} onOpenChange={setResetBalanceDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Wallet className="mr-1 h-3.5 w-3.5" /> Reset Balance
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Reset Available Balance</DialogTitle></DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                      Enter the actual USD currently on your card. This locks today's snapshot as the new baseline — future ad spend and purchases will be tracked from this point.
+                    </p>
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <Label>Actual USD on Card</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 221.51"
+                          value={resetBalance}
+                          onChange={e => setResetBalance(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          System currently shows: <span className="font-mono">${overview.availableBalance.toLocaleString()}</span>
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Notes (optional)</Label>
+                        <Textarea
+                          value={resetNotes}
+                          onChange={e => setResetNotes(e.target.value)}
+                          placeholder="e.g. Reconciled with Bybit card balance"
+                        />
+                      </div>
+                      <Button className="w-full" onClick={handleResetBalance} disabled={submitting}>
+                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Lock as New Baseline
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
           </div>
         </CardHeader>
         <CardContent>
