@@ -1,95 +1,57 @@
 
 
-## Smart Plan: Upgrade Buttons Project-Wide via Variant System
+## Replace QuickActions buttons with a Premium Global Client Search
 
-### The challenge
-- Project has **1,563 `<Button>` instances across 67 files**
-- Manually editing each one = error-prone, inconsistent, weeks of work
-- The Cash Flow buttons look great because they got hand-crafted glassmorphic styles inline — but that pattern can't scale
+### What's removed
+The two buttons inside `QuickActions` on the Admin Dashboard:
+- "Add Funds"
+- "Approve Pending"
 
-### The smart solution
-**Don't edit 1,563 buttons. Edit the source: `src/components/ui/button.tsx`.**
+### What replaces them
+A single **premium glassmorphic search trigger** that opens a command-palette-style dialog (⌘K / Ctrl+K shortcut) for fuzzy-searching all clients. Selecting a client navigates to `/admin/clients/:userId`.
 
-Every `<Button variant="...">` in the project pulls from `buttonVariants` (cva). If we upgrade those base variants to the premium glassmorphic treatment (shimmer sweep, hover lift, soft glow, semantic color gradient), **every button project-wide becomes premium automatically** — with zero changes anywhere else.
+### New component — `src/components/dashboard/ClientSearchCommand.tsx`
 
-### What gets added to `buttonVariants`
+**Trigger button (idle state)** — sits where QuickActions was:
+- Full-width inside its glass-card row, max-w-md on desktop
+- `h-11` glassmorphic pill: `border-border/50 bg-card/40 backdrop-blur-xl rounded-xl`
+- Left: `Search` icon (muted) + placeholder text "Search clients by name, email, phone…"
+- Right: `<kbd>⌘K</kbd>` hint badge (hidden on mobile)
+- Premium hover: subtle border glow `hover:border-primary/40` + `hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.35)]`
+- Soft inner gradient `from-card/60 to-card/30` for depth
+- Animated `pulse-dot` micro-accent left of the kbd hint to feel "alive"
 
-**Base (applies to all variants)**
-- `relative overflow-hidden` for shimmer sweep
-- `transition-all duration-300` (replaces `transition-colors`)
-- Hover micro-lift: `hover:-translate-y-0.5 active:translate-y-0`
-- Shimmer pseudo via existing `.shimmer-btn::after` keyframe (already in index.css)
-- Slightly softer radius: keep `rounded-md` but add subtle border refinement
+**Command dialog (open state)** — uses existing `CommandDialog` from `@/components/ui/command`:
+- Search input with live fuzzy filter via cmdk (built-in)
+- Results: client list with avatar circle (initials), full name, email/phone secondary, balance pill on the right (green if >0, red if <0)
+- Empty state: "No clients found" with a subtle illustration-style muted message
+- Grouped sections: "Clients" (top) + a "Quick Actions" group at bottom with 2 entries — "View All Clients" (→ `/admin/clients`) and "Add New Client" (→ `/admin/clients/new`) — preserves discoverability without bringing back the removed buttons
+- ⌘K / Ctrl+K global shortcut to open from anywhere on the dashboard
+- ESC closes; Enter on highlighted item navigates
 
-**Per-variant upgrades** (semantic = correct accent automatically)
+### Data source
+Reuse existing `clients` already loaded in `useAdminDashboardData` — pass them down. No new query, zero extra network. Each client object already has `user_id`, `full_name`, `balance`, and (where present) `email`/`phone`.
 
-| Variant | Current | Upgraded |
-|---|---|---|
-| `default` (primary) | flat `bg-primary` | gradient `from-primary to-primary/85` + glow `hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.55)]` |
-| `destructive` | flat red | gradient `from-destructive to-destructive/85` + red glow shadow |
-| `outline` | plain border | glassmorphic: `border-border/60 bg-card/40 backdrop-blur-sm` + `hover:bg-accent hover:border-primary/40` |
-| `secondary` | flat gray | subtle gradient `from-secondary to-secondary/70` + soft shadow |
-| `ghost` | transparent | unchanged base, but gains shimmer + lift on hover |
-| `link` | unchanged (text-only, no shimmer/lift) | |
+### Wiring
+1. **`src/components/dashboard/QuickActions.tsx`** — replace entire body with the new search trigger; rename file purpose stays the same (or we replace usage and keep file as-is but render `<ClientSearchCommand>`). Cleaner: keep `QuickActions.tsx` as the host, swap its inner JSX, drop `pendingCount` & `onAddFunds` props.
+2. **`src/pages/AdminDashboard.tsx`** — pass `clients` to `QuickActions`; remove `pendingCount`/`onAddFunds` props from the call. Keep `DepositFundsDialog` mounted (still triggered from elsewhere like FAB / other pages) — actually since it's only opened by the removed button, we can also remove the `depositOpen` state and the `<DepositFundsDialog>` from this page to keep it clean.
+3. **`src/components/dashboard/ClientSearchCommand.tsx`** — new file containing trigger + CommandDialog logic + ⌘K listener.
 
-**New variants added** (so semantic intent gets the right look)
+### Files touched (3)
+- `src/components/dashboard/QuickActions.tsx` — gutted, renders `<ClientSearchCommand clients={clients} />`
+- `src/components/dashboard/ClientSearchCommand.tsx` — **new**
+- `src/pages/AdminDashboard.tsx` — pass clients prop, drop deposit dialog wiring
 
-| New variant | Use case | Style |
-|---|---|---|
-| `success` | Add Fund, Approve, Save success | green glassmorphic gradient + green glow |
-| `warning` | Withdraw, Caution actions | amber glassmorphic gradient + amber glow |
-| `premium` | Hero CTAs (Add Account etc.) | primary solid + stronger glow + shimmer |
+### Won't touch
+- Any other page, route, or button system
+- The upgraded button variants from earlier work
+- Routes — `/admin/clients/:userId` already exists ✓
+- Other dashboards (Manager / Client / Platform) — scope is admin only as requested
 
-These let developers write `<Button variant="success">` and get the polished Cash Flow look automatically.
-
-### Shimmer integration
-Add the shimmer sweep span built into the base classes via:
-```text
-before:absolute before:inset-0 before:-translate-x-full 
-hover:before:translate-x-full before:transition-transform 
-before:duration-700 before:bg-gradient-to-r 
-before:from-transparent before:via-white/15 before:to-transparent
-before:pointer-events-none
-```
-(uses Tailwind's `before:` pseudo — no extra DOM, no breaking changes)
-
-### Cleanup of CashFlowManagement.tsx
-Once base variants are upgraded, the 4 Cash Flow buttons can be **simplified back to clean variant usage**:
-```tsx
-<Button variant="success" size="sm"><PiggyBank /> Add Fund</Button>
-<Button variant="warning" size="sm"><HandCoins /> Withdraw</Button>
-<Button variant="outline" size="sm"><ArrowLeftRight /> Transfer</Button>
-<Button variant="default" size="sm"><Plus /> Add Account</Button>
-```
-Same premium look, 90% less code.
-
-### Compatibility & safety
-- **Zero breaking changes** — all existing variant names keep working
-- **Icon buttons** (size="icon") get a subtler treatment: no shimmer (too small), but keep lift
-- **Disabled state** preserved via existing `disabled:pointer-events-none disabled:opacity-50`
-- **`asChild` Slot pattern** continues to work (we use Tailwind classes, not extra DOM)
-- **Accessibility** unchanged — focus ring, ARIA, keyboard all preserved
-
-### What changes vs what stays
-
-**Edit (2 files)**
-1. `src/components/ui/button.tsx` — extend `buttonVariants` cva: add base motion/shimmer, upgrade variant styles, add `success`/`warning`/`premium` variants
-2. `src/pages/CashFlowManagement.tsx` — simplify the 4 inline-styled buttons to use new variants (lines 639–851)
-
-**Don't touch**
-- The other 1,500+ buttons (they auto-upgrade via the variant system)
-- Button API surface (props, asChild, size, ref forwarding)
-- index.css (shimmer-btn class stays for backward-compat with `<Button className="shimmer-btn">`)
-- Any handlers, dialogs, or business logic
-
-### Expected outcome
-- Every button in the project — admin pages, client portal, settings, dialogs, tables — instantly gains the premium glassmorphic feel
-- Semantic accent colors are now built-in (developers no longer need to remember 8 utility classes)
-- Cash Flow file shrinks ~150 lines of repetitive className soup
-- Future buttons stay consistent automatically — no design drift
-
-### Risks & mitigation
-- **Risk**: shimmer on every button could feel busy → **mitigate** by using subtle `via-white/15` (not `/30`) and only on hover, not idle
-- **Risk**: hover-lift on table-row icon buttons looks weird → **mitigate** by suppressing lift on `size="icon"` variant
-- **Risk**: gradient on `default` changes button rendering slightly → **mitigate** by keeping `bg-primary` as base color (gradient is `from-primary to-primary/85` — visually 95% identical at rest, only subtle depth)
+### Premium aesthetic guarantees
+- Glassmorphic surface matches existing `glass-card` language used across the dashboard
+- Animated entrance: `animate-slide-up-fade` with `300ms` delay (matches removed QuickActions timing — no layout flash)
+- Micro-interactions: hover lift `-translate-y-0.5`, shimmer border glow, animated pulse-dot
+- Keyboard-first UX (⌘K) signals "modern power tool"
+- No icon-only mystery — placeholder text guides users immediately
 
