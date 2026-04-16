@@ -831,7 +831,14 @@ export default function CashFlowManagement() {
 
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
+            <Button
+              className="group relative w-full sm:w-auto h-10 px-5 overflow-hidden rounded-lg border-0 bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.65)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+              <span className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <Plus className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+              <span className="font-semibold tracking-tight">Add Account</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Agency Account</DialogTitle></DialogHeader>
