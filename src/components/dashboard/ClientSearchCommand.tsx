@@ -298,8 +298,8 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                 <CommandGroup
                   heading={
                     <span className="flex items-center gap-1.5">
-                      <Star className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
-                      <span className="text-amber-400/80">Top Balances</span>
+                      <Star className="h-2.5 w-2.5 text-warning fill-warning" />
+                      <span className="text-warning/80">Top Balances</span>
                       <span className="ml-auto text-muted-foreground/40 normal-case tracking-normal font-normal">
                         {topClients.length}
                       </span>
