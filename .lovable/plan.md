@@ -1,4 +1,2 @@
 
-Score went 87 → 82 (regressed!). Likely cause: heavy inlined CSS+HTML in `index.html` increased document size and TTFB cost more than it saved. Also — the inlined hero is being rendered, then React replaces it (mismatch causes re-paint, hurting LCP).
-
-Let me inspect what shipped.
+The user wants the 4 action buttons (Withdraw, Add Fund, Transfer, Add Account) in the Cash Flow tab redesigned to feel more premium, aesthetic, and "good looking." Let me check the current implementation.
