@@ -80,6 +80,9 @@ export default function WalletInventory() {
   const [spendDialogOpen, setSpendDialogOpen] = useState(false);
   const [openingBalanceDialogOpen, setOpeningBalanceDialogOpen] = useState(false);
   const [closePeriodDialogOpen, setClosePeriodDialogOpen] = useState(false);
+  const [resetBalanceDialogOpen, setResetBalanceDialogOpen] = useState(false);
+  const [resetBalance, setResetBalance] = useState("");
+  const [resetNotes, setResetNotes] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [openingNotes, setOpeningNotes] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
@@ -349,6 +352,34 @@ export default function WalletInventory() {
     }
   };
 
+  const handleResetBalance = async () => {
+    const amt = Number(resetBalance);
+    if (!resetBalance || isNaN(amt) || amt < 0) {
+      toast({ title: "Error", description: "Please enter a valid USD balance", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const today = getDhakaDateString();
+    // Upsert today's snapshot as a manual baseline so future auto-snapshots respect it
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
+      snapshot_date: today,
+      balance_usd: amt,
+      baseline_balance_usd: amt,
+      notes: resetNotes || `Balance reset to match card — $${amt.toLocaleString()}`,
+      created_by: user?.id,
+      org_id: profile?.org_id || null,
+    } as any, { onConflict: "snapshot_date" });
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Balance Reset", description: `Available USD locked at $${amt.toLocaleString()} for today.` });
+      setResetBalance(""); setResetNotes("");
+      setResetBalanceDialogOpen(false);
+      refreshSnapshot().then(() => fetchOverview());
+    }
+  };
+
   const previewRate = bdtPaid && effectiveUsd > 0
     ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
     : "—";
@@ -558,6 +589,47 @@ export default function WalletInventory() {
                       </div>
                       <Button className="w-full" onClick={handleClosePeriod} disabled={submitting}>
                         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Close Period
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {!overview.loading && hasSnapshot && (
+                <Dialog open={resetBalanceDialogOpen} onOpenChange={setResetBalanceDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Wallet className="mr-1 h-3.5 w-3.5" /> Reset Balance
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Reset Available Balance</DialogTitle></DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                      Enter the actual USD currently on your card. This locks today's snapshot as the new baseline — future ad spend and purchases will be tracked from this point.
+                    </p>
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <Label>Actual USD on Card</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 221.51"
+                          value={resetBalance}
+                          onChange={e => setResetBalance(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          System currently shows: <span className="font-mono">${overview.availableBalance.toLocaleString()}</span>
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Notes (optional)</Label>
+                        <Textarea
+                          value={resetNotes}
+                          onChange={e => setResetNotes(e.target.value)}
+                          placeholder="e.g. Reconciled with Bybit card balance"
+                        />
+                      </div>
+                      <Button className="w-full" onClick={handleResetBalance} disabled={submitting}>
+                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Lock as New Baseline
                       </Button>
                     </div>
                   </DialogContent>

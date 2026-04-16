@@ -58,15 +58,18 @@ Deno.serve(async (req) => {
       ? Number(baseline.baseline_balance_usd ?? baseline.balance_usd)
       : 0;
 
-    // 2. Sum purchases, ad spend, and manual spends SINCE baseline (paginated)
+    // 2. Sum purchases, ad spend, and manual spends STRICTLY AFTER baseline day (paginated)
+    // IMPORTANT: Use `gt` (not `gte`) — the baseline value already includes everything
+    // that happened on the baseline calendar day. Including same-day rows again
+    // would double-count them.
     const purchaseFilter = baselineDate
-      ? (q: any) => q.gte("date", baselineDate)
+      ? (q: any) => q.gt("date", baselineDate)
       : undefined;
     const spendFilter = baselineDate
-      ? (q: any) => q.gte("data_date", baselineDate)
+      ? (q: any) => q.gt("data_date", baselineDate)
       : undefined;
     const manualFilter = baselineDate
-      ? (q: any) => q.gte("date", baselineDate)
+      ? (q: any) => q.gt("date", baselineDate)
       : undefined;
 
     const [purchases, spendRows, manualRows] = await Promise.all([
