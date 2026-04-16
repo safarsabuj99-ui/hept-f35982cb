@@ -15,14 +15,12 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { AttentionPanel } from "@/components/dashboard/AttentionPanel";
 import { RunwayPrediction } from "@/components/RunwayPrediction";
-import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import {
   DollarSign, Banknote, AlertCircle, Wallet
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function AdminDashboard() {
-  const [depositOpen, setDepositOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => {
     const t = getLocalToday();
     return { from: t, to: t };
@@ -86,7 +84,7 @@ export default function AdminDashboard() {
 
       <DateRangeFilter onRangeChange={handleDateChange} />
 
-      <QuickActions pendingCount={pendingCount} onAddFunds={() => setDepositOpen(true)} />
+      <QuickActions clients={clients} />
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -153,13 +151,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <DepositFundsDialog
-        open={depositOpen}
-        onOpenChange={setDepositOpen}
-        showClientSelector
-        isAdmin
-        onSuccess={handleRefresh}
-      />
     </div>
     </PullToRefresh>
   );
