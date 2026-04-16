@@ -702,7 +702,14 @@ export default function CashFlowManagement() {
 
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><PiggyBank className="mr-2 h-4 w-4" /> Add Fund</Button>
+            <Button
+              variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-success/25 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_6px_20px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <PiggyBank className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
+              <span className="font-semibold tracking-tight">Add Fund</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Liquid Fund</DialogTitle></DialogHeader>
