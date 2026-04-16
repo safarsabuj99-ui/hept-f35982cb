@@ -635,6 +635,7 @@ export default function WalletInventory() {
                   </DialogContent>
                 </Dialog>
               )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
