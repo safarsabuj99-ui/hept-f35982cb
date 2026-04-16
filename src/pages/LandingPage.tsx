@@ -237,14 +237,15 @@ const PlatformBadges = memo(function PlatformBadges({ lang }: { lang: Lang }) {
 function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   return (
     <button
+      type="button"
       onClick={() => setLang(lang === "en" ? "bn" : "en")}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ios-glass text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-      aria-label="Switch language"
+      aria-label={`Switch language. Current: ${lang === "en" ? "English" : "Bangla"}`}
     >
-      <Globe className="w-3.5 h-3.5 text-muted-foreground" />
-      <span className={lang === "en" ? "text-foreground" : "text-muted-foreground"}>EN</span>
-      <span className="text-muted-foreground/40">|</span>
-      <span className={lang === "bn" ? "text-foreground" : "text-muted-foreground"}>বাংলা</span>
+      <Globe className="w-3.5 h-3.5 text-foreground/70" aria-hidden="true" />
+      <span className={lang === "en" ? "text-foreground" : "text-foreground/60"}>EN</span>
+      <span className="text-foreground/40" aria-hidden="true">|</span>
+      <span className={lang === "bn" ? "text-foreground" : "text-foreground/60"}>বাংলা</span>
     </button>
   );
 }
