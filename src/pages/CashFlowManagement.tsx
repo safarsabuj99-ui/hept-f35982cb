@@ -636,10 +636,17 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5">
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><HandCoins className="mr-2 h-4 w-4" /> Withdraw</Button>
+            <Button
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-amber-500/25 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 hover:border-amber-500/50 hover:shadow-[0_4px_20px_-4px_hsl(var(--warning)/0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+              variant="ghost"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
+              <HandCoins className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
+              <span className="font-semibold tracking-tight">Withdraw</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
