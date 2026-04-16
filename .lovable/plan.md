@@ -1,92 +1,55 @@
 
 
-## Plan: Fix USD Inventory Available Balance Mismatch
+## Plan: Fix Ad Guard 401 Auth Failure + Make Platform Pause Actually Work
 
-### What I found
+### Root Cause
 
-The **Available USD** shown on `/admin/finance?tab=wallet` is `$140.00`, but you say your card actually has `$221.51`. After tracing the math through `auto-snapshot-usd`:
+The cron job (every 2 minutes) calls `ad-guard-check` with the **anon key** as Bearer token. The function checks `Deno.env.get("SUPABASE_ANON_KEY")` — but **this env var doesn't exist** in Supabase Edge Functions. Only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are available.
 
-**Current snapshot (2026-04-17):**
-```
-baseline (-125.71)   ← set manually 04-15 at 18:35 Dhaka
-+ purchases since 04-15 = +505.99   ← Bybit purchase from 04-15 at 12:07
-- spend since 04-15 = -240.28       ← includes 04-15, 04-16, 04-17 daily metrics
-- manual spend = 0
-= $140.00
-```
+Result: `anonKey = ""`, comparison fails, `auth.getUser(anonKey)` fails → **401 on every single cron invocation**. The 4 guard_paused campaigns for Fahim have been sitting in the queue since 15:02 with zero pause attempts — the platform API was never called.
 
-### Bug 1: Same-day-as-baseline double counting (confirmed)
+### Fix
 
-The function filter is `>= baseline_date` (calendar day). When you set the baseline on **April 15 at 18:35**, that `-125.71` figure already reflected all purchases and spend that happened **earlier that same day**.
+#### 1. Fix auth in `ad-guard-check` (the critical fix)
 
-But the recompute then adds them again:
-- `usd_purchases` row from 04-15 at 12:07 (`+505.99`) — already inside baseline → counted twice
-- `daily_metrics` for `data_date = 04-15` (`-117.35`) — already inside baseline → subtracted twice
+Decode the JWT payload to detect anon/service_role tokens instead of relying on the missing env var:
 
-This makes the running balance drift further from reality every refresh, exactly the same class of bug we fixed before but on the **opposite edge** (start day vs. end day).
-
-### Bug 2: No way to correct the card balance
-
-Right now your card holds `$221.51`. The system insists it's `$140.00`. Because the baseline is immutable and same-day rows are double-counted, no amount of refresh will make these match. There's no UI to say "trust me, the real balance right now is X — reset baseline."
-
-### The fix
-
-#### 1. Stop double-counting same-day baseline activity (`auto-snapshot-usd/index.ts`)
-
-Change the filter from "include baseline date" to "include only what happened after the baseline":
-
-```ts
-// purchases & manual spends — exclude baseline day entirely
-const purchaseFilter = baselineDate
-  ? (q) => q.gt("date", baselineDate)
-  : undefined;
-const manualFilter = baselineDate
-  ? (q) => q.gt("date", baselineDate)
-  : undefined;
-
-// daily_metrics (spend) — same: only days strictly after baseline
-const spendFilter = baselineDate
-  ? (q) => q.gt("data_date", baselineDate)
-  : undefined;
+```typescript
+let isTrustedCall = token === serviceRoleKey;
+if (!isTrustedCall) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (payload.role === 'anon' || payload.role === 'service_role') {
+      isTrustedCall = true;
+    }
+  } catch {}
+}
 ```
 
-Effect on the current data after deploy:
-```
--125.71 + 0 - (120.45 + 2.48) = -248.64
-```
+#### 2. Make Phase 2 immediately attempt pause (not just queue)
 
-That number is honest given the recorded inputs, but it's still not `$221.51`. That gap is the symptom of Bug 2 — the baseline itself is stale/wrong relative to physical reality.
+Currently Phase 2 only sets `guard_paused` and inserts a queue entry. The actual API call only happens on the **next** cron cycle (Phase 1). This wastes 2+ minutes.
 
-#### 2. Add a "Reset Available Balance" action in the wallet UI (`WalletInventory.tsx`)
+Change: After queuing, immediately call `pause-campaign` inline for each campaign in the same run. If the inline call succeeds, skip the queue entry entirely.
 
-A new small dialog ("Reset Available Balance") that lets you enter the **actual current USD on your card** and stores it as a fresh manual snapshot for **today** with:
-- `baseline_balance_usd = <entered amount>`
-- `balance_usd = <entered amount>`
-- `notes = "Balance reset to match card — ৳..."`
-- `created_by = <your user id>` (manual, so future auto-snapshots respect it)
+#### 3. Add admin notification on guard activation
 
-After this, the auto-snapshot picks it up as the new immutable baseline and only counts purchases/spend **from tomorrow onward** — exactly what you want.
+When campaigns are guard-paused, insert a notification so admins are alerted immediately.
 
-This replaces the awkward "Close Period" workflow when you just need to correct a drift.
+#### 4. Deploy and process the stuck jobs
 
-#### 3. One-time data correction
+After deploying the fixed function, the next cron run will process the 4 pending jobs for Fahim and actually call the TikTok API to pause them.
 
-Once the code is deployed, you click **Reset Available Balance → enter `221.51`**. From then on:
-- Baseline locks at `$221.51` for today (04-17)
-- Tomorrow's spend syncs subtract from it
-- Future card top-ups (logged via `Record Purchase`) add to it
-- Refreshes can't drift it anymore
-
-### Files changed
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/auto-snapshot-usd/index.ts` | Switch filters from `gte` to `gt` on baseline date; add comment explaining why |
-| `src/pages/WalletInventory.tsx` | Add "Reset Available Balance" button + dialog that writes a manual baseline snapshot for today |
+| `supabase/functions/ad-guard-check/index.ts` | Fix auth (JWT decode), inline pause attempts in Phase 2, add admin notification |
 
 ### Result
 
-- The double-counting bug at the start edge of the period is gone (matches the prior fix at the end edge)
-- You get a one-click way to realign the system to your actual card balance whenever they drift apart
-- After your one-time reset to `$221.51`, the Available USD will tick down correctly as ads spend and up correctly as you record new purchases
+- Cron will no longer 401 — guard checks will actually execute
+- Campaigns will be paused on the ad platform within the same guard run (not deferred)
+- Fahim's 4 TikTok campaigns will be paused on the next cron cycle (~2 min)
+- Admins get notified when guard activates
 
