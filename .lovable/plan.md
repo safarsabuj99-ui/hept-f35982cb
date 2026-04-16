@@ -1,55 +1,43 @@
 
+The user wants to open a new USD inventory period at $220, accounting for the fact that $2.48 has already been spent today. So the baseline should be set such that current available = $220 with $2.48 spent since baseline → baseline = $222.48. OR set baseline = $220 and consider spend already covered.
 
-## Plan: Fix Ad Guard 401 Auth Failure + Make Platform Pause Actually Work
+Let me re-read: "220 USD is available after spend 2.48 USD. Lets reopen new USD inventory"
 
-### Root Cause
+So they want: after today's $2.48 spend has been deducted, $220 should remain available. The cleanest way: set the baseline = $222.48 dated today, so when the auto-snapshot deducts the $2.48 spend that already happened today, the displayed Available USD = $220.
 
-The cron job (every 2 minutes) calls `ad-guard-check` with the **anon key** as Bearer token. The function checks `Deno.env.get("SUPABASE_ANON_KEY")` — but **this env var doesn't exist** in Supabase Edge Functions. Only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are available.
+Actually simpler: set the baseline_balance_usd = 222.48 for today (2026-04-17), and the auto-snapshot computes balance = 222.48 - 2.48 (today's spend) = 220.
 
-Result: `anonKey = ""`, comparison fails, `auth.getUser(anonKey)` fails → **401 on every single cron invocation**. The 4 guard_paused campaigns for Fahim have been sitting in the queue since 15:02 with zero pause attempts — the platform API was never called.
+Plan is short and clear.
 
-### Fix
+## Plan: Open New USD Period at $220 (After $2.48 Spend)
 
-#### 1. Fix auth in `ad-guard-check` (the critical fix)
+### Goal
+Open a fresh USD inventory period today (2026-04-17) so that **Available USD = $220** after today's $2.48 ad spend is accounted for.
 
-Decode the JWT payload to detect anon/service_role tokens instead of relying on the missing env var:
+### Approach
+Since the auto-snapshot function calculates:
+`balance = baseline + purchases_since_baseline − spend_since_baseline − manual_spend_since_baseline`
 
-```typescript
-let isTrustedCall = token === serviceRoleKey;
-if (!isTrustedCall) {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.role === 'anon' || payload.role === 'service_role') {
-      isTrustedCall = true;
-    }
-  } catch {}
-}
-```
+To land at $220 with $2.48 already spent today, the baseline must be set to **$222.48**.
 
-#### 2. Make Phase 2 immediately attempt pause (not just queue)
+### Steps
 
-Currently Phase 2 only sets `guard_paused` and inserts a queue entry. The actual API call only happens on the **next** cron cycle (Phase 1). This wastes 2+ minutes.
+1. **Upsert today's snapshot row** (`2026-04-17`) in `usd_inventory_snapshots`:
+   - `baseline_balance_usd = 222.48` (immutable carry-forward anchor)
+   - `balance_usd = 220` (current available after today's spend)
+   - `created_by = your admin user_id` (marks as a manual baseline)
+   - `notes = "Period reopen — $220 available after $2.48 spend"`
+   - `metrics = { carry_forward: 222.48, bought_since: 0, spent_since: 2.48, manual_spend: 0 }`
 
-Change: After queuing, immediately call `pause-campaign` inline for each campaign in the same run. If the inline call succeeds, skip the queue entry entirely.
+2. **Trigger `auto-snapshot-usd`** to recompute derived metrics (burn rate, runway, client obligations) against the new $222.48 baseline. The function will read today's $2.48 spend and confirm the displayed balance = $220.
 
-#### 3. Add admin notification on guard activation
+3. **Verify** the Wallet Inventory page shows **Available USD = $220**.
 
-When campaigns are guard-paused, insert a notification so admins are alerted immediately.
-
-#### 4. Deploy and process the stuck jobs
-
-After deploying the fixed function, the next cron run will process the 4 pending jobs for Fahim and actually call the TikTok API to pause them.
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/ad-guard-check/index.ts` | Fix auth (JWT decode), inline pause attempts in Phase 2, add admin notification |
+### Why $222.48 baseline (not $220)
+The auto-snapshot subtracts every spend dated ≥ baseline_date. Today's $2.48 has `data_date = 2026-04-17`, so it counts against the baseline. Setting baseline = $222.48 produces the correct $220 display.
 
 ### Result
-
-- Cron will no longer 401 — guard checks will actually execute
-- Campaigns will be paused on the ad platform within the same guard run (not deferred)
-- Fahim's 4 TikTok campaigns will be paused on the next cron cycle (~2 min)
-- Admins get notified when guard activates
-
+- Old period (ending 2026-04-16) sealed; history preserved.
+- New period anchored at $222.48 dated today.
+- Wallet shows **$220 Available USD**, with the $2.48 spend correctly attributed to the new period.
+- All future purchases/spend/manual entries from today onward accumulate cleanly on this baseline.
