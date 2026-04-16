@@ -352,6 +352,34 @@ export default function WalletInventory() {
     }
   };
 
+  const handleResetBalance = async () => {
+    const amt = Number(resetBalance);
+    if (!resetBalance || isNaN(amt) || amt < 0) {
+      toast({ title: "Error", description: "Please enter a valid USD balance", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const today = getDhakaDateString();
+    // Upsert today's snapshot as a manual baseline so future auto-snapshots respect it
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
+      snapshot_date: today,
+      balance_usd: amt,
+      baseline_balance_usd: amt,
+      notes: resetNotes || `Balance reset to match card — $${amt.toLocaleString()}`,
+      created_by: user?.id,
+      org_id: profile?.org_id || null,
+    } as any, { onConflict: "snapshot_date" });
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Balance Reset", description: `Available USD locked at $${amt.toLocaleString()} for today.` });
+      setResetBalance(""); setResetNotes("");
+      setResetBalanceDialogOpen(false);
+      refreshSnapshot().then(() => fetchOverview());
+    }
+  };
+
   const previewRate = bdtPaid && effectiveUsd > 0
     ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
     : "—";
