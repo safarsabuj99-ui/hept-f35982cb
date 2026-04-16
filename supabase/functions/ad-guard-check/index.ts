@@ -25,12 +25,22 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceRoleKey);
 
-    // Auth: accept service role key, anon key (cron/trigger), or admin JWT
+    // Auth: accept service role key directly, or decode JWT to check role
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace("Bearer ", "");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-    const isTrustedCall = token === serviceRoleKey || token === anonKey;
+    let isTrustedCall = token === serviceRoleKey;
+
+    if (!isTrustedCall && token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        if (payload.role === "anon" || payload.role === "service_role") {
+          isTrustedCall = true;
+        }
+      } catch (_e) {
+        // Not a valid JWT — fall through to user auth check
+      }
+    }
 
     if (!isTrustedCall) {
       const { data: { user: caller }, error: authError } = await sb.auth.getUser(token);
@@ -56,8 +66,99 @@ Deno.serve(async (req) => {
     let timedOut = false;
     const results: any[] = [];
 
-    // The URL of the pause-campaign edge function — the SAME one the manual UI uses
     const pauseUrl = `${supabaseUrl}/functions/v1/pause-campaign`;
+
+    // Helper: attempt to pause a single campaign via pause-campaign function
+    async function attemptPause(campaignId: string, campaignName: string, platform: string, clientId: string | null, attemptNum: number, jobId?: number): Promise<boolean> {
+      try {
+        const res = await fetch(pauseUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ campaign_id: campaignId, action: "pause" }),
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+          // Clean up queue job if exists
+          if (jobId) {
+            await sb.from("guard_pause_jobs").delete().eq("id", jobId);
+          }
+
+          await sb.from("campaigns").update({
+            pause_confirmed_at: new Date().toISOString(),
+            pause_required: false,
+          }).eq("id", campaignId);
+
+          totalConfirmed++;
+          console.log(`✓ CONFIRMED: ${campaignName} (${platform}) — paused via pause-campaign`);
+
+          await sb.from("audit_logs").insert({
+            user_id: clientId || "00000000-0000-0000-0000-000000000000",
+            action_type: "ad_guard_platform_verified",
+            description: `Ad Guard confirmed pause for "${campaignName}" (${platform}) via pause-campaign. Attempt #${attemptNum}. ${result.message || ""}`,
+          });
+          return true;
+        } else {
+          const errorMsg = result.error || "Unknown error from pause-campaign";
+
+          if (jobId) {
+            if (attemptNum >= MAX_ATTEMPTS) {
+              await sb.from("guard_pause_jobs").update({
+                status: "failed",
+                last_error: errorMsg,
+                attempts: attemptNum,
+              }).eq("id", jobId);
+            } else {
+              const backoffMs = Math.min(attemptNum * 60000, 600000);
+              await sb.from("guard_pause_jobs").update({
+                last_error: errorMsg,
+                attempts: attemptNum,
+                available_at: new Date(Date.now() + backoffMs).toISOString(),
+              }).eq("id", jobId);
+            }
+          }
+
+          await sb.from("campaigns").update({
+            pause_error: errorMsg.substring(0, 500),
+            pause_attempt_count: attemptNum,
+          }).eq("id", campaignId);
+
+          totalFailed++;
+          console.error(`✗ FAILED (attempt ${attemptNum}): ${campaignName} (${platform}): ${errorMsg}`);
+
+          await sb.from("audit_logs").insert({
+            user_id: clientId || "00000000-0000-0000-0000-000000000000",
+            action_type: "ad_guard_api_error",
+            description: `Ad Guard pause FAILED for "${campaignName}" (${platform}), attempt #${attemptNum}: ${errorMsg.substring(0, 200)}`,
+          });
+          return false;
+        }
+      } catch (fetchErr: any) {
+        const errorMsg = `Network error calling pause-campaign: ${fetchErr.message || "unknown"}`;
+        const backoffMs = Math.min(attemptNum * 30000, 300000);
+
+        if (jobId) {
+          await sb.from("guard_pause_jobs").update({
+            last_error: errorMsg,
+            attempts: attemptNum,
+            available_at: new Date(Date.now() + backoffMs).toISOString(),
+          }).eq("id", jobId);
+        }
+
+        await sb.from("campaigns").update({
+          pause_error: errorMsg.substring(0, 500),
+          pause_attempt_count: attemptNum,
+        }).eq("id", campaignId);
+
+        totalFailed++;
+        console.error(`✗ NETWORK ERROR (attempt ${attemptNum}): ${campaignName}: ${errorMsg}`);
+        return false;
+      }
+    }
 
     // ===== PHASE 1: Process queued jobs by calling pause-campaign =====
     const { data: pendingJobs } = await sb
@@ -71,16 +172,14 @@ Deno.serve(async (req) => {
     if (pendingJobs && pendingJobs.length > 0) {
       console.log(`Phase 1: ${pendingJobs.length} pending pause jobs to process`);
 
-      // Pre-fetch campaign data to check status before calling
       const campaignIds = pendingJobs.map(j => j.campaign_id);
       const { data: campaigns } = await sb
         .from("campaigns")
-        .select("id, name, platform, client_id, status, pause_required")
+        .select("id, name, platform, client_id, status, pause_required, pause_confirmed_at")
         .in("id", campaignIds);
 
       const campMap = new Map((campaigns || []).map(c => [c.id, c]));
 
-      // Process in batches of BATCH_SIZE
       for (let i = 0; i < pendingJobs.length; i += BATCH_SIZE) {
         if (timeLeft() < 3000) {
           console.log(`⏱ Timeout approaching at job ${i}/${pendingJobs.length}`);
@@ -97,21 +196,20 @@ Deno.serve(async (req) => {
               return;
             }
 
-            // If campaign was resumed by deposit (status back to active AND pause_required false), remove job
+            // If campaign was resumed by deposit, remove job
             if (!campaign.pause_required && campaign.status !== "guard_paused") {
               await sb.from("guard_pause_jobs").delete().eq("id", job.id);
               return;
             }
 
-            // If instant trigger already confirmed the pause, just clean up the job
+            // If already confirmed
             if (campaign.pause_confirmed_at) {
               await sb.from("guard_pause_jobs").delete().eq("id", job.id);
               totalConfirmed++;
-              console.log(`✓ ALREADY CONFIRMED (instant trigger): ${campaign.name} (${campaign.platform})`);
+              console.log(`✓ ALREADY CONFIRMED: ${campaign.name} (${campaign.platform})`);
               return;
             }
 
-            // If already confirmed paused, clean up
             if (campaign.status === "paused") {
               await sb.from("campaigns").update({
                 pause_confirmed_at: new Date().toISOString(),
@@ -122,91 +220,13 @@ Deno.serve(async (req) => {
               return;
             }
 
-            // === Call the SAME pause-campaign function that manual pause uses ===
-            try {
-              const res = await fetch(pauseUrl, {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${serviceRoleKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ campaign_id: job.campaign_id, action: "pause" }),
-              });
-
-              const result = await res.json();
-
-              if (result.success) {
-                // pause-campaign already updated DB status to "paused" and set pause_confirmed_at
-                // Just clean up the queue job
-                await sb.from("guard_pause_jobs").delete().eq("id", job.id);
-                totalConfirmed++;
-                console.log(`✓ CONFIRMED: ${campaign.name} (${campaign.platform}) — paused via pause-campaign`);
-
-                await sb.from("audit_logs").insert({
-                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
-                  action_type: "ad_guard_platform_verified",
-                  description: `Ad Guard confirmed pause for "${campaign.name}" (${campaign.platform}) via pause-campaign. Attempt #${job.attempts + 1}. ${result.message || ""}`,
-                });
-              } else {
-                // pause-campaign returned an error
-                const newAttempts = job.attempts + 1;
-                const errorMsg = result.error || "Unknown error from pause-campaign";
-
-                if (newAttempts >= MAX_ATTEMPTS) {
-                  await sb.from("guard_pause_jobs").update({
-                    status: "failed",
-                    last_error: errorMsg,
-                    attempts: newAttempts,
-                  }).eq("id", job.id);
-                } else {
-                  const backoffMs = Math.min(newAttempts * 60000, 600000);
-                  await sb.from("guard_pause_jobs").update({
-                    last_error: errorMsg,
-                    attempts: newAttempts,
-                    available_at: new Date(Date.now() + backoffMs).toISOString(),
-                  }).eq("id", job.id);
-                }
-
-                await sb.from("campaigns").update({
-                  pause_error: errorMsg.substring(0, 500),
-                  pause_attempt_count: newAttempts,
-                }).eq("id", campaign.id);
-
-                totalFailed++;
-                console.error(`✗ FAILED (attempt ${newAttempts}): ${campaign.name} (${campaign.platform}): ${errorMsg}`);
-
-                await sb.from("audit_logs").insert({
-                  user_id: campaign.client_id || "00000000-0000-0000-0000-000000000000",
-                  action_type: "ad_guard_api_error",
-                  description: `Ad Guard pause FAILED for "${campaign.name}" (${campaign.platform}), attempt #${newAttempts}: ${errorMsg.substring(0, 200)}`,
-                });
-              }
-            } catch (fetchErr: any) {
-              // Network error calling pause-campaign
-              const newAttempts = job.attempts + 1;
-              const errorMsg = `Network error calling pause-campaign: ${fetchErr.message || "unknown"}`;
-              const backoffMs = Math.min(newAttempts * 30000, 300000);
-
-              await sb.from("guard_pause_jobs").update({
-                last_error: errorMsg,
-                attempts: newAttempts,
-                available_at: new Date(Date.now() + backoffMs).toISOString(),
-              }).eq("id", job.id);
-
-              await sb.from("campaigns").update({
-                pause_error: errorMsg.substring(0, 500),
-                pause_attempt_count: newAttempts,
-              }).eq("id", campaign.id);
-
-              totalFailed++;
-              console.error(`✗ NETWORK ERROR (attempt ${newAttempts}): ${campaign.name}: ${errorMsg}`);
-            }
+            await attemptPause(campaign.id, campaign.name, campaign.platform, campaign.client_id, job.attempts + 1, job.id);
           })
         );
       }
     }
 
-    // ===== PHASE 2: Scan for active campaigns on low-balance clients (safety net) =====
+    // ===== PHASE 2: Scan for active campaigns on low-balance clients + IMMEDIATE pause =====
     if (timeLeft() > 5000) {
       const { data: activeCampaigns } = await sb
         .from("campaigns")
@@ -258,6 +278,7 @@ Deno.serve(async (req) => {
               const pausedNames: string[] = [];
 
               for (const campaign of camps) {
+                // Mark as guard_paused
                 await sb.from("campaigns").update({
                   status: "guard_paused",
                   pause_required: true,
@@ -268,18 +289,11 @@ Deno.serve(async (req) => {
                   updated_at: new Date().toISOString(),
                 }).eq("id", campaign.id);
 
-                await sb.from("guard_pause_jobs").upsert({
-                  campaign_id: campaign.id,
-                  status: "pending",
-                  available_at: new Date().toISOString(),
-                  last_error: null,
-                  attempts: 0,
-                }, { onConflict: "campaign_id" });
-
                 pausedIds.push(campaign.id);
                 pausedNames.push(campaign.name || campaign.platform_id);
               }
 
+              // Update profile
               const allPausedIds = [...new Set([...alreadyPaused.map(String), ...pausedIds])];
               await sb.from("profiles").update({
                 system_paused_campaigns: allPausedIds,
@@ -289,16 +303,43 @@ Deno.serve(async (req) => {
               await sb.from("audit_logs").insert({
                 user_id: clientId,
                 action_type: "ad_guard_pause",
-                description: `Ad Guard queued ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}). Queued for platform pause.`,
+                description: `Ad Guard queued ${pausedIds.length} campaigns for ${profile.full_name}: [${pausedNames.join(", ")}]. Balance: $${balance.toFixed(2)} (threshold: $${effectiveThreshold}).`,
               });
+
+              // === IMMEDIATE PAUSE: Try to pause on platform right now ===
+              for (const campaign of camps) {
+                if (timeLeft() < 3000) { timedOut = true; break; }
+
+                const success = await attemptPause(
+                  campaign.id,
+                  campaign.name || campaign.platform_id,
+                  campaign.platform,
+                  clientId,
+                  1
+                );
+
+                if (!success) {
+                  // Queue for retry if immediate attempt failed
+                  await sb.from("guard_pause_jobs").upsert({
+                    campaign_id: campaign.id,
+                    status: "pending",
+                    available_at: new Date(Date.now() + 60000).toISOString(),
+                    last_error: "Immediate attempt failed, queued for retry",
+                    attempts: 1,
+                  }, { onConflict: "campaign_id" });
+                } else {
+                  // Clean up queue entry if it exists
+                  await sb.from("guard_pause_jobs").delete().eq("campaign_id", campaign.id);
+                }
+              }
 
               totalNewlyQueued += pausedIds.length;
               results.push({
                 client: profile.full_name,
                 balance: Math.round(balance * 100) / 100,
                 threshold: effectiveThreshold,
-                action: "QUEUED_FOR_PAUSE",
-                campaigns_queued: pausedIds.length,
+                action: "PAUSED",
+                campaigns_count: pausedIds.length,
               });
             }
           } else {
@@ -319,10 +360,11 @@ Deno.serve(async (req) => {
         .from("campaigns")
         .select("id, name, platform, client_id")
         .eq("status", "guard_paused")
+        .eq("pause_required", true)
+        .is("pause_confirmed_at", null)
         .not("client_id", "is", null);
 
       if (stuckCampaigns && stuckCampaigns.length > 0) {
-        // Check which ones have NO queue entry
         const stuckIds = stuckCampaigns.map(c => c.id);
         const { data: existingJobs } = await sb
           .from("guard_pause_jobs")
@@ -332,10 +374,8 @@ Deno.serve(async (req) => {
 
         let requeued = 0;
         for (const camp of stuckCampaigns) {
-          if (jobSet.has(camp.id)) continue; // Already has a job
-          // Re-queue with pause_required = true
+          if (jobSet.has(camp.id)) continue;
           await sb.from("campaigns").update({
-            pause_required: true,
             pause_attempt_count: 0,
             pause_error: null,
           }).eq("id", camp.id);
@@ -380,19 +420,17 @@ Deno.serve(async (req) => {
     }
 
     const elapsed = Date.now() - START_TIME;
-    const checked = results.filter(r => r.action === "OK").length + results.filter(r => r.action === "QUEUED_FOR_PAUSE").length;
 
     return new Response(
       JSON.stringify({
         success: true,
         elapsed_ms: elapsed,
         timed_out: timedOut,
-        checked,
         phase1_jobs_processed: pendingJobs?.length ?? 0,
         phase1_confirmed: totalConfirmed,
         phase1_failed: totalFailed,
         phase2_newly_queued: totalNewlyQueued,
-        total_campaigns_paused: totalConfirmed + totalNewlyQueued,
+        total_campaigns_paused: totalConfirmed,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
