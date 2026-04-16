@@ -756,15 +756,15 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
               <div className="text-lg font-bold">HEPT</div>
-              <div className="text-sm text-muted-foreground mt-1">{c.footer.tagline}</div>
+              <div className="text-sm text-foreground/70 mt-1">{c.footer.tagline}</div>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-6 text-sm text-foreground/80">
               <a href="https://heptbd.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">heptbd.com</a>
               <Link to="/login" className="hover:text-foreground transition-colors">{c.footer.login}</Link>
               <Link to="/signup" className="hover:text-foreground transition-colors">{c.footer.signup}</Link>
             </div>
           </div>
-          <div className="mt-8 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {c.footer.copyright}</div>
+          <div className="mt-8 text-center text-xs text-foreground/60">© {new Date().getFullYear()} {c.footer.copyright}</div>
         </div>
       </footer>
     </div>
