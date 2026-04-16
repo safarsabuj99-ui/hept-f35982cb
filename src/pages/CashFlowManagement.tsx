@@ -643,10 +643,10 @@ export default function CashFlowManagement() {
             <Button
               variant="ghost"
               style={{ animationDelay: "0ms" }}
-              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-success/30 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_8px_24px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
+              className="animate-slide-up-fade group relative flex-1 sm:flex-none sm:w-auto h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-1.5 overflow-hidden rounded-lg sm:rounded-xl border border-success/30 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_8px_24px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[11px] sm:text-sm font-medium sm:font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <PiggyBank className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
+              <PiggyBank className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
               <span>Add Fund</span>
             </Button>
           </DialogTrigger>
