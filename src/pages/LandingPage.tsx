@@ -256,6 +256,17 @@ export default function LandingPage() {
   const c = t[lang];
   const fontClass = lang === "bn" ? "font-[Noto_Sans_Bengali,sans-serif]" : "";
 
+  // Load Bengali font only when user switches to BN — keeps initial paint lean.
+  useEffect(() => {
+    if (lang !== "bn") return;
+    if (document.getElementById("bn-font-link")) return;
+    const link = document.createElement("link");
+    link.id = "bn-font-link";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+  }, [lang]);
+
   const navLinks = [
     { href: "#problems", label: c.nav.problems },
     { href: "#features", label: c.nav.features },
