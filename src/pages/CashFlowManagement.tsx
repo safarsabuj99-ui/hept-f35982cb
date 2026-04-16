@@ -636,10 +636,17 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5">
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><HandCoins className="mr-2 h-4 w-4" /> Withdraw</Button>
+            <Button
+              variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-warning/25 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_6px_20px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <HandCoins className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
+              <span className="font-semibold tracking-tight">Withdraw</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
@@ -695,7 +702,14 @@ export default function CashFlowManagement() {
 
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><PiggyBank className="mr-2 h-4 w-4" /> Add Fund</Button>
+            <Button
+              variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-success/25 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_6px_20px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <PiggyBank className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
+              <span className="font-semibold tracking-tight">Add Fund</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Liquid Fund</DialogTitle></DialogHeader>
@@ -762,7 +776,14 @@ export default function CashFlowManagement() {
         </Dialog>
         <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
+            <Button
+              variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <ArrowLeftRight className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-x-0" />
+              <span className="font-semibold tracking-tight">Transfer</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Fund Transfer</DialogTitle></DialogHeader>
@@ -810,7 +831,14 @@ export default function CashFlowManagement() {
 
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
+            <Button
+              className="group relative w-full sm:w-auto h-10 px-5 overflow-hidden rounded-lg border-0 bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.65)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+              <span className="absolute inset-0 rounded-lg bg-gradient-to-t from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <Plus className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+              <span className="font-semibold tracking-tight">Add Account</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Agency Account</DialogTitle></DialogHeader>
