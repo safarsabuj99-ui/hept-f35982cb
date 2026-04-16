@@ -1,57 +1,110 @@
 
 
-## Replace QuickActions buttons with a Premium Global Client Search
+## Premium Redesign: Client Search Command Palette
 
-### What's removed
-The two buttons inside `QuickActions` on the Admin Dashboard:
-- "Add Funds"
-- "Approve Pending"
+Looking at the screenshot at 390px — current popup feels like a stock cmdk dialog: flat dark bg, basic rows, generic balance pills, no hierarchy, no atmosphere. Needs to feel like a **luxury command center**, not a list.
 
-### What replaces them
-A single **premium glassmorphic search trigger** that opens a command-palette-style dialog (⌘K / Ctrl+K shortcut) for fuzzy-searching all clients. Selecting a client navigates to `/admin/clients/:userId`.
+### Issues spotted
+1. **Flat surface** — no depth, no glass, no gradient. Reads cheap.
+2. **Generic avatars** — solid blue circles, all identical hue → can't visually distinguish clients
+3. **Balance pills are noisy** — green/red bordered pills compete with names; should whisper, not shout
+4. **No hierarchy** — every row weighs the same; no sense of "top clients" or recency
+5. **Empty header** — just "Clients (23)" muted label, wastes prime real estate
+6. **Input feels detached** — basic border-bottom, no atmosphere
+7. **No micro-delight** — no entrance animation, no hover glow, no selection shimmer
+8. **Mobile cramped** — rows feel tight, balance pill clips on long names
 
-### New component — `src/components/dashboard/ClientSearchCommand.tsx`
+### Redesign vision: "Spotlight × Linear × Apple Wallet"
 
-**Trigger button (idle state)** — sits where QuickActions was:
-- Full-width inside its glass-card row, max-w-md on desktop
-- `h-11` glassmorphic pill: `border-border/50 bg-card/40 backdrop-blur-xl rounded-xl`
-- Left: `Search` icon (muted) + placeholder text "Search clients by name, email, phone…"
-- Right: `<kbd>⌘K</kbd>` hint badge (hidden on mobile)
-- Premium hover: subtle border glow `hover:border-primary/40` + `hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.35)]`
-- Soft inner gradient `from-card/60 to-card/30` for depth
-- Animated `pulse-dot` micro-accent left of the kbd hint to feel "alive"
+#### 1. Dialog shell — atmospheric glass
+- Override default `DialogContent` styling via custom wrapper
+- `bg-gradient-to-b from-card/95 via-card/90 to-card/85` + `backdrop-blur-2xl`
+- Border: `border border-border/40` + outer glow `shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]`
+- Top-edge accent: thin `1px` gradient line `from-transparent via-primary/40 to-transparent` — premium signature
+- Rounded `rounded-2xl` (was default `rounded-lg`)
+- Subtle SVG noise overlay at 3% opacity for tactile depth (matches `ios-glass` pattern)
+- Max-width `max-w-xl`, mobile `mx-4`
 
-**Command dialog (open state)** — uses existing `CommandDialog` from `@/components/ui/command`:
-- Search input with live fuzzy filter via cmdk (built-in)
-- Results: client list with avatar circle (initials), full name, email/phone secondary, balance pill on the right (green if >0, red if <0)
-- Empty state: "No clients found" with a subtle illustration-style muted message
-- Grouped sections: "Clients" (top) + a "Quick Actions" group at bottom with 2 entries — "View All Clients" (→ `/admin/clients`) and "Add New Client" (→ `/admin/clients/new`) — preserves discoverability without bringing back the removed buttons
-- ⌘K / Ctrl+K global shortcut to open from anywhere on the dashboard
-- ESC closes; Enter on highlighted item navigates
+#### 2. Search header — elevated input zone
+- Wrap input in gradient bg `bg-gradient-to-r from-primary/5 via-transparent to-primary/5`
+- Search icon: `text-primary/70` (was muted), slight glow on focus
+- Input text: `text-base font-medium` (was sm), placeholder italic muted
+- Right side: replace plain X with kbd `<ESC>` hint + close button
+- Bottom: gradient divider `from-transparent via-border to-transparent` (not flat border)
+- Live result counter pill on the right: "23 results" in soft primary chip
 
-### Data source
-Reuse existing `clients` already loaded in `useAdminDashboardData` — pass them down. No new query, zero extra network. Each client object already has `user_id`, `full_name`, `balance`, and (where present) `email`/`phone`.
+#### 3. Result rows — premium client cards
+- Row padding: `py-2.5 px-3` (more breathing room)
+- Hover/selected state: `bg-gradient-to-r from-primary/10 via-primary/5 to-transparent` + left-edge `2px` primary accent bar (animated slide-in)
+- Avatar redesign:
+  - **Deterministic color per client** — hash `user_id` → 1 of 8 gradient pairs (blue/purple/pink/amber/emerald/cyan/rose/indigo)
+  - `h-9 w-9` rounded-full with `ring-1 ring-white/10` + soft inner shadow
+  - Initials in `font-semibold text-[11px] tracking-wide`
+- Name: `text-sm font-medium text-foreground`
+- Subtitle: business name OR email, `text-[11px] text-muted-foreground/70` truncate
+- **Balance treatment** — replaces loud bordered pills:
+  - Right-aligned, `text-sm font-semibold tabular-nums`
+  - Color only (no border, no bg): `text-success` / `text-destructive` / `text-muted-foreground`
+  - Tiny trend icon above amount: `↑` if balance > avg, `↓` if negative, `−` if zero (subtle muted)
+  - "BDT" suffix in `text-[9px] uppercase tracking-wider opacity-50`
+- Subtle row separator: `border-b border-border/20` (very faint)
 
-### Wiring
-1. **`src/components/dashboard/QuickActions.tsx`** — replace entire body with the new search trigger; rename file purpose stays the same (or we replace usage and keep file as-is but render `<ClientSearchCommand>`). Cleaner: keep `QuickActions.tsx` as the host, swap its inner JSX, drop `pendingCount` & `onAddFunds` props.
-2. **`src/pages/AdminDashboard.tsx`** — pass `clients` to `QuickActions`; remove `pendingCount`/`onAddFunds` props from the call. Keep `DepositFundsDialog` mounted (still triggered from elsewhere like FAB / other pages) — actually since it's only opened by the removed button, we can also remove the `depositOpen` state and the `<DepositFundsDialog>` from this page to keep it clean.
-3. **`src/components/dashboard/ClientSearchCommand.tsx`** — new file containing trigger + CommandDialog logic + ⌘K listener.
+#### 4. Smart grouping (replaces flat "Clients (23)")
+Three semantic groups in priority order:
+- **⭐ Top Balances** (top 3 by positive balance) — golden accent header
+- **⚠️ Needs Attention** (negative balances) — soft red accent header  
+- **All Clients** (rest, A-Z) — neutral muted header
 
-### Files touched (3)
-- `src/components/dashboard/QuickActions.tsx` — gutted, renders `<ClientSearchCommand clients={clients} />`
-- `src/components/dashboard/ClientSearchCommand.tsx` — **new**
-- `src/pages/AdminDashboard.tsx` — pass clients prop, drop deposit dialog wiring
+Group headers: `text-[10px] font-bold uppercase tracking-[0.15em]` + accent dot + count badge. Sticky on scroll for context.
+
+#### 5. Empty state — designed, not default
+- Animated search icon (subtle pulse)
+- Two-line message: "No clients match" + "Try a different name or email"
+- Micro-CTA: "→ Add new client" link
+
+#### 6. Footer — power-user hints
+- Slim footer bar `h-9 border-t border-border/30 bg-card/50`
+- Left: navigation hints `↑↓ navigate` `↵ open` `esc close` (kbd-styled)
+- Right: subtle branding dot `● HEPT` muted
+
+#### 7. Quick Actions group — promoted
+- Move to footer-adjacent position with divider
+- Two items: "View All Clients" + "Add New Client"
+- Icon in circular bg `bg-primary/10`, subtle hover lift
+
+#### 8. Micro-interactions
+- Dialog entrance: `animate-scale-in` + fade (already in shadcn defaults — verify smooth)
+- Row hover: `transition-all duration-200` with left-bar slide
+- Selected row: faint shimmer sweep on highlight change
+- Input focus: search icon scales `scale-110` briefly
+
+### Implementation scope
+
+**Edit only**: `src/components/dashboard/ClientSearchCommand.tsx` (~250 lines)
+- Add helper functions: `getClientColor(userId)`, `groupClients(clients)`, `formatBalance(n)`
+- Replace `<CommandDialog>` usage with custom `<Dialog>` + `<DialogContent>` for full styling control (CommandDialog wraps too tightly)
+- Use `<Command>` primitives directly inside custom dialog shell
+- Keep ⌘K listener, navigation, and search logic identical
+
+**Optionally edit**: `src/components/ui/command.tsx` — only if absolutely needed for header/footer slot. Prefer to wrap externally to avoid touching shared UI.
 
 ### Won't touch
-- Any other page, route, or button system
-- The upgraded button variants from earlier work
-- Routes — `/admin/clients/:userId` already exists ✓
-- Other dashboards (Manager / Client / Platform) — scope is admin only as requested
+- `src/components/ui/command.tsx` (shared by other features)
+- `src/components/ui/dialog.tsx`
+- The trigger button (already premium)
+- Any data fetching, routing, or business logic
+- Other pages or dashboards
 
-### Premium aesthetic guarantees
-- Glassmorphic surface matches existing `glass-card` language used across the dashboard
-- Animated entrance: `animate-slide-up-fade` with `300ms` delay (matches removed QuickActions timing — no layout flash)
-- Micro-interactions: hover lift `-translate-y-0.5`, shimmer border glow, animated pulse-dot
-- Keyboard-first UX (⌘K) signals "modern power tool"
-- No icon-only mystery — placeholder text guides users immediately
+### Why this works
+- **Visual hierarchy** — top balances rise, problem accounts surface, rest stays browsable
+- **Personality per row** — deterministic avatar colors make scanning faster
+- **Atmosphere** — glass + glow + gradient line + noise = "premium app", not "stock dialog"
+- **Information density without noise** — balance whispers via color, not pills
+- **Power-user signals** — keyboard hints in footer say "this is a serious tool"
+- **Mobile-first** — all spacing, font sizes, and touch targets work at 390px
+
+### Risk & mitigation
+- **Risk**: bypassing `CommandDialog` and rolling custom shell could break cmdk keyboard nav → **mitigate** by keeping `<Command>` root wrapper inside `<DialogContent>` (cmdk works with any wrapper)
+- **Risk**: 3 grouped sections feel busy with few clients → **mitigate** by hiding empty groups (e.g., no "Needs Attention" header if no negative balances)
+- **Risk**: deterministic color hash collisions → **mitigate** by using 8 colors over typical 20-50 clients (acceptable variety)
 
