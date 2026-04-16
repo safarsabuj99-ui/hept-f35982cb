@@ -636,7 +636,7 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-3 p-2.5 sm:p-0 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl shadow-sm sm:border-0 sm:bg-transparent sm:backdrop-blur-none sm:shadow-none">
+      <div className="flex flex-row sm:justify-end gap-1.5 sm:gap-3 p-1.5 sm:p-0 rounded-xl sm:rounded-none border border-border/30 sm:border-0 bg-card/30 sm:bg-transparent backdrop-blur-md sm:backdrop-blur-none">
         {/* 1. Add Fund — most-used, success accent */}
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
