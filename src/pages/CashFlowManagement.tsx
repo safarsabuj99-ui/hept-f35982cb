@@ -776,7 +776,14 @@ export default function CashFlowManagement() {
         </Dialog>
         <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto"><ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer</Button>
+            <Button
+              variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
+            >
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <ArrowLeftRight className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-x-0" />
+              <span className="font-semibold tracking-tight">Transfer</span>
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Fund Transfer</DialogTitle></DialogHeader>
