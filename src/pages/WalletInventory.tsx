@@ -80,6 +80,9 @@ export default function WalletInventory() {
   const [spendDialogOpen, setSpendDialogOpen] = useState(false);
   const [openingBalanceDialogOpen, setOpeningBalanceDialogOpen] = useState(false);
   const [closePeriodDialogOpen, setClosePeriodDialogOpen] = useState(false);
+  const [resetBalanceDialogOpen, setResetBalanceDialogOpen] = useState(false);
+  const [resetBalance, setResetBalance] = useState("");
+  const [resetNotes, setResetNotes] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [openingNotes, setOpeningNotes] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
