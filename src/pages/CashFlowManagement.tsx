@@ -846,7 +846,7 @@ export default function CashFlowManagement() {
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
               <Plus className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:rotate-90" />
-              <span className="sm:inline">Account</span><span className="hidden sm:inline">&nbsp;</span>
+              <span><span className="hidden sm:inline">Add </span>Account</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
