@@ -296,16 +296,23 @@ export default function LandingPage() {
 
           <div className="flex md:hidden items-center gap-2">
             <LanguageToggle lang={lang} setLang={setLang} />
-            <button className="p-2 text-muted-foreground" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              type="button"
+              className="p-2 text-muted-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-nav"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
           </div>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-2">
+          <div id="mobile-nav" className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-2">
             {navLinks.map((l) => (
-              <a key={l.href} href={l.href} className="block py-2 text-sm text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
+              <a key={l.href} href={l.href} className="block py-2 text-sm text-foreground/80 hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
             ))}
             <div className="flex gap-2 pt-2">
               <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">{c.nav.login}</Link></Button>
