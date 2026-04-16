@@ -20,12 +20,15 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     cssCodeSplit: true,
+    target: "es2020",
+    minify: "esbuild",
     rollupOptions: {
       output: {
         manualChunks: {
           "react-vendor": ["react", "react-dom", "react-router-dom"],
           "supabase": ["@supabase/supabase-js"],
           "query": ["@tanstack/react-query"],
+          "icons": ["lucide-react"],
         },
       },
     },
