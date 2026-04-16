@@ -289,8 +289,8 @@ export default function ClientDashboard() {
               </p>
               {balance < 0 ? (
                 <>
-                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
-                    ৳{Math.abs(balanceBdt).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <p className="text-2xl md:text-4xl font-bold font-mono text-red-300 count-up">
+                    -৳{Math.abs(balanceBdt).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                   <p className="text-sm font-mono text-red-300 mt-0.5">
                     {fmt(balance)}
