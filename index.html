@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>HEPT - Ad Management Platform</title>
-    <meta name="description" content="Manage ad spending, payments, and campaigns in one place" />
+    <title>HEPT — Automate Your Ad Agency. Scale Your Clients.</title>
+    <meta name="description" content="HEPT automates ad spend reporting, client billing, and profit analytics for media-buying agencies. Manage 50+ clients as easily as 5 across Meta, TikTok, and Google." />
     <meta name="author" content="HEPT" />
+    <link rel="canonical" href="https://heptbd.com/" />
 
     <!-- PWA meta tags -->
     <meta name="theme-color" content="#6366f1" />
@@ -19,28 +20,34 @@
     <!-- Critical inline CSS for instant first paint (loader + nav + hero) -->
     <style>
       :root{color-scheme:dark light}
-      html,body{margin:0;padding:0;background:#09090b;color:#fafafa;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
-      #root-loader{display:flex;align-items:center;justify-content:center;height:100vh;background:#09090b}
-      #root-loader svg{width:48px;height:48px;animation:rl .8s linear infinite}
-      @keyframes rl{to{transform:rotate(360deg)}}
+      html,body{margin:0;padding:0;background:#09090b;color:#fafafa;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
       .lp-shell{min-height:100vh;background:#09090b;color:#fafafa}
       .lp-nav{position:sticky;top:0;z-index:50;height:64px;display:flex;align-items:center;backdrop-filter:blur(12px);background:rgba(9,9,11,.7);border-bottom:1px solid rgba(255,255,255,.06)}
       .lp-nav-inner{max-width:80rem;margin:0 auto;padding:0 1rem;display:flex;align-items:center;justify-content:space-between;width:100%}
       .lp-logo{font-size:1.25rem;font-weight:700;letter-spacing:-.02em;color:#fafafa;text-decoration:none}
       .lp-hero{max-width:80rem;margin:0 auto;padding:5rem 1rem 4rem;text-align:center}
-      .lp-h1{font-size:clamp(1.875rem,5vw,3.75rem);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin:0 auto;max-width:48rem}
+      .lp-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.25rem .75rem;border-radius:9999px;background:rgba(99,102,241,.12);color:#a5b4fc;font-size:.75rem;font-weight:600;letter-spacing:.02em}
+      .lp-h1{font-size:clamp(1.875rem,5vw,3.75rem);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin:1.25rem auto 0;max-width:48rem;color:#fafafa}
+      .lp-h1-accent{color:#818cf8}
       .lp-sub{font-size:clamp(1rem,2vw,1.25rem);color:#a1a1aa;max-width:42rem;margin:1.25rem auto 0;line-height:1.6}
+      .lp-cta-row{display:flex;flex-direction:column;gap:.75rem;align-items:center;justify-content:center;margin-top:1.5rem}
+      @media(min-width:640px){.lp-cta-row{flex-direction:row}}
+      .lp-cta{display:inline-flex;align-items:center;justify-content:center;height:2.75rem;padding:0 2rem;border-radius:.5rem;font-size:1rem;font-weight:500;text-decoration:none;transition:opacity .2s;border:1px solid transparent}
+      .lp-cta-primary{background:#6366f1;color:#fff}
+      .lp-cta-secondary{background:transparent;color:#fafafa;border-color:rgba(255,255,255,.15)}
     </style>
 
-    <!-- Preload critical Inter font (latin only, swap) -->
+    <!-- Preconnect to Google Fonts (non-render-blocking) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" onload="this.rel='stylesheet'" />
+    <!-- Async font load: media swap trick keeps it non-render-blocking -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" /></noscript>
 
-    <meta property="og:title" content="HEPT - Ad Management Platform" />
-    <meta property="og:description" content="Manage ad spending, payments, and campaigns in one place" />
+    <meta property="og:title" content="HEPT — Automate Your Ad Agency. Scale Your Clients." />
+    <meta property="og:description" content="Automate ad spend reporting, client billing & profit analytics for Meta, TikTok and Google." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://heptbd.com/" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
@@ -49,7 +56,7 @@
   </head>
 
   <body>
-    <div id="root"><div id="root-loader"><svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg></div></div>
+    <div id="root"><div class="lp-shell"><nav class="lp-nav" aria-label="Primary"><div class="lp-nav-inner"><a href="/" class="lp-logo">HEPT</a></div></nav><section class="lp-hero"><span class="lp-badge">⚡ Built for Media Buying Agencies</span><h1 class="lp-h1">Automate Your Agency. <span class="lp-h1-accent">Scale Your Clients.</span></h1><p class="lp-sub">Stop wasting hours on manual reports, spreadsheet tracking, and balance calculations. HEPT automates ad spend reporting, client billing, and profit analytics — so you can manage 50+ clients as easily as 5.</p><div class="lp-cta-row"><a href="/signup" class="lp-cta lp-cta-primary">Automate My Agency →</a><a href="#features" class="lp-cta lp-cta-secondary">See How It Works</a></div></section></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

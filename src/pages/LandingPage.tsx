@@ -237,14 +237,15 @@ const PlatformBadges = memo(function PlatformBadges({ lang }: { lang: Lang }) {
 function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   return (
     <button
+      type="button"
       onClick={() => setLang(lang === "en" ? "bn" : "en")}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ios-glass text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-      aria-label="Switch language"
+      aria-label={`Switch language. Current: ${lang === "en" ? "English" : "Bangla"}`}
     >
-      <Globe className="w-3.5 h-3.5 text-muted-foreground" />
-      <span className={lang === "en" ? "text-foreground" : "text-muted-foreground"}>EN</span>
-      <span className="text-muted-foreground/40">|</span>
-      <span className={lang === "bn" ? "text-foreground" : "text-muted-foreground"}>বাংলা</span>
+      <Globe className="w-3.5 h-3.5 text-foreground/70" aria-hidden="true" />
+      <span className={lang === "en" ? "text-foreground" : "text-foreground/60"}>EN</span>
+      <span className="text-foreground/40" aria-hidden="true">|</span>
+      <span className={lang === "bn" ? "text-foreground" : "text-foreground/60"}>বাংলা</span>
     </button>
   );
 }
@@ -296,16 +297,23 @@ export default function LandingPage() {
 
           <div className="flex md:hidden items-center gap-2">
             <LanguageToggle lang={lang} setLang={setLang} />
-            <button className="p-2 text-muted-foreground" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              type="button"
+              className="p-2 text-muted-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-nav"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
           </div>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-2">
+          <div id="mobile-nav" className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-2">
             {navLinks.map((l) => (
-              <a key={l.href} href={l.href} className="block py-2 text-sm text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
+              <a key={l.href} href={l.href} className="block py-2 text-sm text-foreground/80 hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>{l.label}</a>
             ))}
             <div className="flex gap-2 pt-2">
               <Button variant="outline" size="sm" className="flex-1" asChild><Link to="/login">{c.nav.login}</Link></Button>
@@ -748,15 +756,15 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
               <div className="text-lg font-bold">HEPT</div>
-              <div className="text-sm text-muted-foreground mt-1">{c.footer.tagline}</div>
+              <div className="text-sm text-foreground/70 mt-1">{c.footer.tagline}</div>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-6 text-sm text-foreground/80">
               <a href="https://heptbd.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">heptbd.com</a>
               <Link to="/login" className="hover:text-foreground transition-colors">{c.footer.login}</Link>
               <Link to="/signup" className="hover:text-foreground transition-colors">{c.footer.signup}</Link>
             </div>
           </div>
-          <div className="mt-8 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {c.footer.copyright}</div>
+          <div className="mt-8 text-center text-xs text-foreground/60">© {new Date().getFullYear()} {c.footer.copyright}</div>
         </div>
       </footer>
     </div>
