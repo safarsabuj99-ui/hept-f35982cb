@@ -636,17 +636,17 @@ export default function CashFlowManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-3 p-2.5 sm:p-0 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl shadow-sm sm:border-0 sm:bg-transparent sm:backdrop-blur-none sm:shadow-none">
+      <div className="flex flex-row sm:justify-end gap-1.5 sm:gap-3 p-1.5 sm:p-0 rounded-xl sm:rounded-none border border-border/30 sm:border-0 bg-card/30 sm:bg-transparent backdrop-blur-md sm:backdrop-blur-none">
         {/* 1. Add Fund — most-used, success accent */}
         <Dialog open={fundOpen} onOpenChange={setFundOpen}>
           <DialogTrigger asChild>
             <Button
               variant="ghost"
               style={{ animationDelay: "0ms" }}
-              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-success/30 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_8px_24px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
+              className="animate-slide-up-fade group relative flex-1 sm:flex-none sm:w-auto h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-1.5 overflow-hidden rounded-lg sm:rounded-xl border border-success/30 bg-gradient-to-br from-success/15 via-success/5 to-transparent text-success hover:text-success-foreground hover:bg-success hover:border-success hover:shadow-[0_8px_24px_-6px_hsl(var(--success)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[11px] sm:text-sm font-medium sm:font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <PiggyBank className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
+              <PiggyBank className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]" />
               <span>Add Fund</span>
             </Button>
           </DialogTrigger>
@@ -720,10 +720,10 @@ export default function CashFlowManagement() {
             <Button
               variant="ghost"
               style={{ animationDelay: "60ms" }}
-              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-warning/30 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_8px_24px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
+              className="animate-slide-up-fade group relative flex-1 sm:flex-none sm:w-auto h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-1.5 overflow-hidden rounded-lg sm:rounded-xl border border-warning/30 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_8px_24px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[11px] sm:text-sm font-medium sm:font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <HandCoins className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
+              <HandCoins className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
               <span>Withdraw</span>
             </Button>
           </DialogTrigger>
@@ -785,10 +785,10 @@ export default function CashFlowManagement() {
             <Button
               variant="ghost"
               style={{ animationDelay: "120ms" }}
-              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[13px] sm:text-sm font-semibold tracking-tight"
+              className="animate-slide-up-fade group relative flex-1 sm:flex-none sm:w-auto h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-1.5 overflow-hidden rounded-lg sm:rounded-xl border border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[11px] sm:text-sm font-medium sm:font-semibold tracking-tight"
             >
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <ArrowLeftRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:translate-x-0.5" />
+              <ArrowLeftRight className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:scale-110 group-hover:translate-x-0.5" />
               <span>Transfer</span>
             </Button>
           </DialogTrigger>
@@ -840,13 +840,13 @@ export default function CashFlowManagement() {
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
             <Button
+              variant="ghost"
               style={{ animationDelay: "180ms" }}
-              className="animate-slide-up-fade group relative w-full sm:w-auto h-11 sm:h-10 px-3 sm:px-4 gap-1.5 overflow-hidden rounded-xl border border-primary/40 bg-gradient-to-br from-primary via-primary to-primary/85 text-primary-foreground shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.5)] hover:shadow-[0_10px_28px_-6px_hsl(var(--primary)/0.65)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 text-[13px] sm:text-sm font-semibold tracking-tight"
+              className="animate-slide-up-fade group relative flex-1 sm:flex-none sm:w-auto h-9 sm:h-10 px-2 sm:px-4 gap-1 sm:gap-1.5 overflow-hidden rounded-lg sm:rounded-xl border border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent text-primary hover:text-primary-foreground hover:bg-primary hover:border-primary hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm text-[11px] sm:text-sm font-medium sm:font-semibold tracking-tight"
             >
-              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
-              <span className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:rotate-90" />
-              <span>Add Account</span>
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4 transition-transform duration-300 group-hover:rotate-90" />
+              <span><span className="hidden sm:inline">Add </span>Account</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
