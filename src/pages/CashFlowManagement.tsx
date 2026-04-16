@@ -640,10 +640,10 @@ export default function CashFlowManagement() {
         <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
           <DialogTrigger asChild>
             <Button
-              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-amber-500/25 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 hover:border-amber-500/50 hover:shadow-[0_4px_20px_-4px_hsl(var(--warning)/0.35)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
               variant="ghost"
+              className="group relative w-full sm:w-auto h-10 px-4 overflow-hidden rounded-lg border border-warning/25 bg-gradient-to-br from-warning/15 via-warning/5 to-transparent text-warning hover:text-warning-foreground hover:bg-warning hover:border-warning hover:shadow-[0_6px_20px_-6px_hsl(var(--warning)/0.55)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 backdrop-blur-sm"
             >
-              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
               <HandCoins className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg]" />
               <span className="font-semibold tracking-tight">Withdraw</span>
             </Button>
