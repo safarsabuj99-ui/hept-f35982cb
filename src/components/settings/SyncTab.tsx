@@ -137,6 +137,9 @@ export function SyncTab() {
 
   return (
     <div className="space-y-6">
+      {/* Sync Queue Health */}
+      <SyncQueueHealthCard />
+
       {/* Schedule Card */}
       <Card>
         <CardHeader>
