@@ -125,7 +125,14 @@ Deno.serve(async (req) => {
       const stat = statsMap.get(acc.id) as any;
       // Fast-lane: always 1-day full job
       const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 5);
-      const useChunking = !isFastLane && chunkDays < TOTAL_WINDOW_DAYS;
+      // Smart chunking gate: chunk whenever we have ANY signal that a full
+      // 25-day pull will be heavy. Defaults to chunking for unknown accounts.
+      const useChunking = !isFastLane && (
+        chunkDays < TOTAL_WINDOW_DAYS ||                    // explicit recommendation
+        (stat?.consecutive_failures ?? 0) >= 1 ||           // any recent failure
+        (stat?.total_rows_last_sync ?? 0) >= 200 ||         // measured as heavy
+        !stat                                                // never measured before
+      );
 
       if (!useChunking) {
         // Single full-window job (light account or fast-lane)
