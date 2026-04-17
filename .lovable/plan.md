@@ -1,110 +1,116 @@
 
 
-## Premium Redesign: Client Search Command Palette
+## Job Queue + Worker Pattern for Deep-Dive Sync (1000+ campaign scale)
 
-Looking at the screenshot at 390px — current popup feels like a stock cmdk dialog: flat dark bg, basic rows, generic balance pills, no hierarchy, no atmosphere. Needs to feel like a **luxury command center**, not a list.
+### Goal
+Replace single-shot Deep-Dive sync with a queue-based architecture that scales to 1000+ campaigns without CPU timeouts.
 
-### Issues spotted
-1. **Flat surface** — no depth, no glass, no gradient. Reads cheap.
-2. **Generic avatars** — solid blue circles, all identical hue → can't visually distinguish clients
-3. **Balance pills are noisy** — green/red bordered pills compete with names; should whisper, not shout
-4. **No hierarchy** — every row weighs the same; no sense of "top clients" or recency
-5. **Empty header** — just "Clients (23)" muted label, wastes prime real estate
-6. **Input feels detached** — basic border-bottom, no atmosphere
-7. **No micro-delight** — no entrance animation, no hover glow, no selection shimmer
-8. **Mobile cramped** — rows feel tight, balance pill clips on long names
+### Architecture
 
-### Redesign vision: "Spotlight × Linear × Apple Wallet"
+```text
+[Cron every 1min] → [drain-sync-queue worker]
+                          ↓ pulls 10 jobs
+                    [process 10 campaigns in ~10s]
+                          ↓
+                    [mark done / retry failed]
 
-#### 1. Dialog shell — atmospheric glass
-- Override default `DialogContent` styling via custom wrapper
-- `bg-gradient-to-b from-card/95 via-card/90 to-card/85` + `backdrop-blur-2xl`
-- Border: `border border-border/40` + outer glow `shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]`
-- Top-edge accent: thin `1px` gradient line `from-transparent via-primary/40 to-transparent` — premium signature
-- Rounded `rounded-2xl` (was default `rounded-lg`)
-- Subtle SVG noise overlay at 3% opacity for tactile depth (matches `ios-glass` pattern)
-- Max-width `max-w-xl`, mobile `mx-4`
+[Orchestrator] → enqueues all campaigns into sync_jobs
+[Worker]       → drains queue 10 at a time, exits cleanly under 25s
+```
 
-#### 2. Search header — elevated input zone
-- Wrap input in gradient bg `bg-gradient-to-r from-primary/5 via-transparent to-primary/5`
-- Search icon: `text-primary/70` (was muted), slight glow on focus
-- Input text: `text-base font-medium` (was sm), placeholder italic muted
-- Right side: replace plain X with kbd `<ESC>` hint + close button
-- Bottom: gradient divider `from-transparent via-border to-transparent` (not flat border)
-- Live result counter pill on the right: "23 results" in soft primary chip
+### Database changes (1 migration)
 
-#### 3. Result rows — premium client cards
-- Row padding: `py-2.5 px-3` (more breathing room)
-- Hover/selected state: `bg-gradient-to-r from-primary/10 via-primary/5 to-transparent` + left-edge `2px` primary accent bar (animated slide-in)
-- Avatar redesign:
-  - **Deterministic color per client** — hash `user_id` → 1 of 8 gradient pairs (blue/purple/pink/amber/emerald/cyan/rose/indigo)
-  - `h-9 w-9` rounded-full with `ring-1 ring-white/10` + soft inner shadow
-  - Initials in `font-semibold text-[11px] tracking-wide`
-- Name: `text-sm font-medium text-foreground`
-- Subtitle: business name OR email, `text-[11px] text-muted-foreground/70` truncate
-- **Balance treatment** — replaces loud bordered pills:
-  - Right-aligned, `text-sm font-semibold tabular-nums`
-  - Color only (no border, no bg): `text-success` / `text-destructive` / `text-muted-foreground`
-  - Tiny trend icon above amount: `↑` if balance > avg, `↓` if negative, `−` if zero (subtle muted)
-  - "BDT" suffix in `text-[9px] uppercase tracking-wider opacity-50`
-- Subtle row separator: `border-b border-border/20` (very faint)
+**New table: `sync_jobs`**
+- `id` uuid PK
+- `ad_account_id` uuid (FK)
+- `function_name` text ('sync-deep-dive' | 'sync-fast-lane')
+- `status` text ('pending' | 'processing' | 'done' | 'failed')
+- `attempts` int default 0
+- `max_attempts` int default 3
+- `last_error` text
+- `error_code` text
+- `scheduled_at` timestamptz default now()
+- `started_at`, `completed_at` timestamptz
+- `org_id` uuid
+- Indexes: `(status, scheduled_at)`, `(ad_account_id, function_name)` unique partial where status in ('pending','processing')
+- RLS: admin-only via `get_user_org_id`
 
-#### 4. Smart grouping (replaces flat "Clients (23)")
-Three semantic groups in priority order:
-- **⭐ Top Balances** (top 3 by positive balance) — golden accent header
-- **⚠️ Needs Attention** (negative balances) — soft red accent header  
-- **All Clients** (rest, A-Z) — neutral muted header
+### Edge function changes
 
-Group headers: `text-[10px] font-bold uppercase tracking-[0.15em]` + accent dot + count badge. Sticky on scroll for context.
+**1. New function: `sync-queue-worker`** (verify_jwt = false)
+- Pulls **10 pending jobs** atomically (`FOR UPDATE SKIP LOCKED`)
+- Marks them `processing`
+- For each job: invokes target sync function with single `ad_account_id`
+- Marks `done` on success, increments `attempts` + sets `pending` again on retryable failure, `failed` on permanent failure (token_expired, max attempts)
+- Hard exit at 20s — leftover `processing` jobs auto-recover via timeout reset (>2min stuck = back to pending)
+- Returns: `{processed, succeeded, failed, remaining}`
 
-#### 5. Empty state — designed, not default
-- Animated search icon (subtle pulse)
-- Two-line message: "No clients match" + "Try a different name or email"
-- Micro-CTA: "→ Add new client" link
+**2. Refactor `sync-orchestrator`**
+- Instead of looping accounts inline, **enqueues** them into `sync_jobs`
+- Skips accounts already pending/processing (idempotent)
+- Returns immediately: `{enqueued: N, queue_depth: M}`
+- Triggers first worker run via `fetch()` (fire-and-forget) for instant start
 
-#### 6. Footer — power-user hints
-- Slim footer bar `h-9 border-t border-border/30 bg-card/50`
-- Left: navigation hints `↑↓ navigate` `↵ open` `esc close` (kbd-styled)
-- Right: subtle branding dot `● HEPT` muted
+**3. Keep `sync-deep-dive` / `sync-fast-lane` unchanged**
+- Already accept `ad_account_ids: [single_id]` — no changes needed
 
-#### 7. Quick Actions group — promoted
-- Move to footer-adjacent position with divider
-- Two items: "View All Clients" + "Add New Client"
-- Icon in circular bg `bg-primary/10`, subtle hover lift
+### Cron job (via SQL insert tool, not migration)
 
-#### 8. Micro-interactions
-- Dialog entrance: `animate-scale-in` + fade (already in shadcn defaults — verify smooth)
-- Row hover: `transition-all duration-200` with left-bar slide
-- Selected row: faint shimmer sweep on highlight change
-- Input focus: search icon scales `scale-110` briefly
+```sql
+SELECT cron.schedule(
+  'drain-sync-queue',
+  '* * * * *', -- every 1 minute
+  $$ SELECT net.http_post(
+    url:='https://hhpiimnvkgmpfnldgdhc.supabase.co/functions/v1/sync-queue-worker',
+    headers:='{"Content-Type":"application/json","Authorization":"Bearer <anon>"}'::jsonb,
+    body:='{}'::jsonb
+  ); $$
+);
+```
 
-### Implementation scope
+Existing Deep-Dive cron (every 30min) keeps running — but now calls orchestrator which only enqueues. Worker drains every minute.
 
-**Edit only**: `src/components/dashboard/ClientSearchCommand.tsx` (~250 lines)
-- Add helper functions: `getClientColor(userId)`, `groupClients(clients)`, `formatBalance(n)`
-- Replace `<CommandDialog>` usage with custom `<Dialog>` + `<DialogContent>` for full styling control (CommandDialog wraps too tightly)
-- Use `<Command>` primitives directly inside custom dialog shell
-- Keep ⌘K listener, navigation, and search logic identical
+### UI: Sync Health visibility
 
-**Optionally edit**: `src/components/ui/command.tsx` — only if absolutely needed for header/footer slot. Prefer to wrap externally to avoid touching shared UI.
+Add a new card to **Settings → Sync tab** showing:
+- Queue depth (pending count)
+- Currently processing count
+- Failed jobs (last 24h) with retry button
+- Avg processing time per job
+- "Clear failed" / "Retry all failed" admin actions
 
-### Won't touch
-- `src/components/ui/command.tsx` (shared by other features)
-- `src/components/ui/dialog.tsx`
-- The trigger button (already premium)
-- Any data fetching, routing, or business logic
-- Other pages or dashboards
+### Why this scales to 1000+
 
-### Why this works
-- **Visual hierarchy** — top balances rise, problem accounts surface, rest stays browsable
-- **Personality per row** — deterministic avatar colors make scanning faster
-- **Atmosphere** — glass + glow + gradient line + noise = "premium app", not "stock dialog"
-- **Information density without noise** — balance whispers via color, not pills
-- **Power-user signals** — keyboard hints in footer say "this is a serious tool"
-- **Mobile-first** — all spacing, font sizes, and touch targets work at 390px
+| Campaigns | Queue depth | Workers/min | Drain time | API safety |
+|-----------|-------------|-------------|------------|------------|
+| 150 | 150 | 1 × 10 jobs | ~15 min | ✅ |
+| 500 | 500 | 1 × 10 jobs | ~50 min | ✅ |
+| 1000 | 1000 | 1 × 10 jobs | ~100 min | ✅ |
+| 1000 (bumped) | 1000 | parallel cron at `*/1` × 2 workers × 10 jobs | ~50 min | ✅ |
 
-### Risk & mitigation
-- **Risk**: bypassing `CommandDialog` and rolling custom shell could break cmdk keyboard nav → **mitigate** by keeping `<Command>` root wrapper inside `<DialogContent>` (cmdk works with any wrapper)
-- **Risk**: 3 grouped sections feel busy with few clients → **mitigate** by hiding empty groups (e.g., no "Needs Attention" header if no negative balances)
-- **Risk**: deterministic color hash collisions → **mitigate** by using 8 colors over typical 20-50 clients (acceptable variety)
+For 1000+ at faster cadence, simply schedule **2-3 parallel workers** per minute — same code, just more cron entries. No CPU limits ever hit because each worker only handles 10 jobs and exits in ~10s.
+
+### Files touched
+
+**New:**
+- `supabase/functions/sync-queue-worker/index.ts`
+- Migration: create `sync_jobs` table + RLS + indexes
+- SQL insert: cron schedule
+
+**Modified:**
+- `supabase/functions/sync-orchestrator/index.ts` — enqueue instead of inline loop
+- `supabase/config.toml` — add `[functions.sync-queue-worker] verify_jwt = false`
+- `src/components/settings/SyncTab.tsx` — add queue health card
+
+**Untouched:**
+- `sync-deep-dive`, `sync-fast-lane` — already single-account capable
+- All campaign/metric data logic
+- Existing sync_logs (kept for history)
+
+### Build time: ~45 minutes
+
+### Risks & mitigations
+- **Risk**: Stuck `processing` jobs if worker crashes mid-batch → **mitigate**: timeout reset query in worker start (`UPDATE sync_jobs SET status='pending' WHERE status='processing' AND started_at < now() - interval '2 minutes'`)
+- **Risk**: Duplicate enqueues → **mitigate**: unique partial index on `(ad_account_id, function_name)` for active jobs
+- **Risk**: Cron race with manual orchestrator triggers → **mitigate**: `FOR UPDATE SKIP LOCKED` ensures atomic job claims
 
