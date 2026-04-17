@@ -148,12 +148,12 @@ export function SyncQueueHealthCard() {
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Processing</p>
-            <p className="text-2xl font-bold mt-1 text-blue-500">{stats.processing}</p>
+            <p className="text-2xl font-bold mt-1 text-primary">{stats.processing}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">in flight</p>
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Done (24h)</p>
-            <p className="text-2xl font-bold mt-1 text-green-500">{stats.done_24h}</p>
+            <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.done_24h}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">avg {(stats.avg_ms / 1000).toFixed(1)}s/job</p>
           </div>
           <div className="rounded-lg border p-3">
