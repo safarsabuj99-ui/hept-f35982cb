@@ -6,9 +6,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const BATCH_SIZE = 1; // 1 job per worker — sync-deep-dive is heavy (~20s/account)
-const HARD_TIMEOUT_MS = 23000; // exit cleanly under 25s edge limit
-const PER_JOB_TIMEOUT_MS = 22000;
+const BATCH_SIZE = 1; // 1 job per worker — sync-deep-dive is heavy
+// Edge Functions have a 150s wall-clock limit. The worker mostly *waits* on the
+// inner sync function (network I/O, not CPU), so we can safely use a long timeout.
+const HARD_TIMEOUT_MS = 140000; // exit cleanly under 150s wall-clock limit
+const PER_JOB_TIMEOUT_MS = 120000; // give heavy TikTok accounts time to paginate
 
 function classifyError(errorMsg: string, errorCode?: string): string {
   if (!errorMsg) return "unknown";
