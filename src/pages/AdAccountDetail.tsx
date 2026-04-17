@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -142,17 +143,29 @@ export default function AdAccountDetail() {
 
     if (camps && camps.length > 0) {
       const campaignIds = camps.map((c) => c.id);
-      let metricsQuery = supabase
-        .from("daily_metrics")
-        .select("*")
-        .in("campaign_id", campaignIds);
-      if (spendDateRange) {
-        metricsQuery = metricsQuery
-          .gte("data_date", format(spendDateRange.from, "yyyy-MM-dd"))
-          .lte("data_date", format(spendDateRange.to, "yyyy-MM-dd"));
+      const fromDate = spendDateRange ? format(spendDateRange.from, "yyyy-MM-dd") : null;
+      const toDate = spendDateRange ? format(spendDateRange.to, "yyyy-MM-dd") : null;
+
+      const CHUNK = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < campaignIds.length; i += CHUNK) {
+        chunks.push(campaignIds.slice(i, i + CHUNK));
       }
-      const { data: metrics } = await metricsQuery;
-      const enriched = (metrics ?? []).map((m: any) => {
+
+      const results = await Promise.all(
+        chunks.map((ids) =>
+          fetchAllRows<any>(() => {
+            let q = supabase.from("daily_metrics").select("*").in("campaign_id", ids);
+            if (fromDate && toDate) {
+              q = q.gte("data_date", fromDate).lte("data_date", toDate);
+            }
+            return q;
+          })
+        )
+      );
+      const metrics = results.flat();
+
+      const enriched = metrics.map((m: any) => {
         const campaign = camps.find((c) => c.id === m.campaign_id);
         return { ...m, campaign };
       });

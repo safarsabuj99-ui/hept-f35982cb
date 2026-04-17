@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { useAuth } from "@/hooks/useAuth";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,11 +49,14 @@ export default function CampaignMapping() {
       return;
     }
 
-    let campaignsQuery = supabase.from("campaigns").select("*, objective").order("created_at", { ascending: false });
-    campaignsQuery = campaignsQuery.in("ad_account_id", mappedAccountIds);
-
-    const [{ data: camps }, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
-      campaignsQuery,
+    const [camps, { data: roles }, { data: profiles }, { data: accounts }] = await Promise.all([
+      fetchAllRows<any>(() =>
+        supabase
+          .from("campaigns")
+          .select("*, objective")
+          .in("ad_account_id", mappedAccountIds)
+          .order("created_at", { ascending: false })
+      ),
       supabase.from("user_roles").select("user_id").eq("role", "client"),
       supabase.from("profiles").select("user_id, full_name"),
       supabase.from("ad_accounts").select("id, account_name, ad_account_id"),
@@ -61,21 +65,34 @@ export default function CampaignMapping() {
     const campaignIds = camps?.map((c: any) => c.id) ?? [];
     let metricData: any[] = [];
     if (campaignIds.length > 0) {
-      let metricsQuery = supabase
-        .from("daily_metrics")
-        .select("*")
-        .in("campaign_id", campaignIds)
-        .order("data_date", { ascending: false });
+      const { format } = await import("date-fns");
+      const fromDate = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
+      const toDate = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
 
-      if (dateRange) {
-        const { format } = await import("date-fns");
-        metricsQuery = metricsQuery
-          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      // Chunk campaign IDs to avoid URL-length limits when there are many
+      // campaigns, and paginate each chunk to bypass the 1000-row cap.
+      const CHUNK = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < campaignIds.length; i += CHUNK) {
+        chunks.push(campaignIds.slice(i, i + CHUNK));
       }
 
-      const { data: mets } = await metricsQuery;
-      metricData = mets ?? [];
+      const results = await Promise.all(
+        chunks.map((ids) =>
+          fetchAllRows<any>(() => {
+            let q = supabase
+              .from("daily_metrics")
+              .select("*")
+              .in("campaign_id", ids)
+              .order("data_date", { ascending: false });
+            if (fromDate && toDate) {
+              q = q.gte("data_date", fromDate).lte("data_date", toDate);
+            }
+            return q;
+          })
+        )
+      );
+      metricData = results.flat();
     }
 
     setCampaigns(camps ?? []);

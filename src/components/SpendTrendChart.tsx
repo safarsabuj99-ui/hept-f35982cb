@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -61,19 +62,32 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
 
       if (campaignIds.length === 0) { setData([]); setLoading(false); return; }
 
-      let query = supabase
-        .from("daily_metrics")
-        .select("data_date, spend")
-        .in("campaign_id", campaignIds)
-        .order("data_date", { ascending: true });
+      const fromDate = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
+      const toDate = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
 
-      if (dateRange) {
-        query = query
-          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      // Chunk + paginate to bypass 1000-row cap
+      const CHUNK = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < campaignIds.length; i += CHUNK) {
+        chunks.push(campaignIds.slice(i, i + CHUNK));
       }
 
-      const { data: metricsData } = await query;
+      const results = await Promise.all(
+        chunks.map((ids) =>
+          fetchAllRows<any>(() => {
+            let q = supabase
+              .from("daily_metrics")
+              .select("data_date, spend")
+              .in("campaign_id", ids)
+              .order("data_date", { ascending: true });
+            if (fromDate && toDate) {
+              q = q.gte("data_date", fromDate).lte("data_date", toDate);
+            }
+            return q;
+          })
+        )
+      );
+      const metricsData = results.flat();
 
       const grouped: Record<string, number> = {};
       for (const row of metricsData ?? []) {

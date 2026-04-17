@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,23 +65,31 @@ export default function ClientReports() {
 
       if (campaigns && campaigns.length > 0) {
         const campaignIds = campaigns.map((c) => c.id);
+        const fromDate = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
+        const toDate = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
 
-        // Query daily_metrics with optional date filtering
-        let metricsQuery = supabase
-          .from("daily_metrics")
-          .select("*")
-          .in("campaign_id", campaignIds);
-
-        if (dateRange) {
-          metricsQuery = metricsQuery
-            .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
-            .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+        // Chunk campaign IDs and paginate each chunk to bypass 1000-row cap.
+        const CHUNK = 200;
+        const chunks: string[][] = [];
+        for (let i = 0; i < campaignIds.length; i += CHUNK) {
+          chunks.push(campaignIds.slice(i, i + CHUNK));
         }
 
-        const { data: metrics } = await metricsQuery;
+        const results = await Promise.all(
+          chunks.map((ids) =>
+            fetchAllRows<any>(() => {
+              let q = supabase.from("daily_metrics").select("*").in("campaign_id", ids);
+              if (fromDate && toDate) {
+                q = q.gte("data_date", fromDate).lte("data_date", toDate);
+              }
+              return q;
+            })
+          )
+        );
+        const metrics = results.flat();
 
         // Combine campaigns + metrics
-        const enriched = (metrics ?? []).map((m: any) => {
+        const enriched = metrics.map((m: any) => {
           const campaign = campaigns.find((c) => c.id === m.campaign_id);
           return { ...m, campaign };
         });
