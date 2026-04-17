@@ -3391,18 +3391,138 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_account_stats: {
+        Row: {
+          ad_account_id: string
+          avg_rows_per_day: number | null
+          consecutive_failures: number | null
+          last_error: string | null
+          last_full_sync_at: string | null
+          org_id: string | null
+          recommended_chunk_days: number | null
+          total_rows_last_sync: number | null
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          avg_rows_per_day?: number | null
+          consecutive_failures?: number | null
+          last_error?: string | null
+          last_full_sync_at?: string | null
+          org_id?: string | null
+          recommended_chunk_days?: number | null
+          total_rows_last_sync?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          avg_rows_per_day?: number | null
+          consecutive_failures?: number | null
+          last_error?: string | null
+          last_full_sync_at?: string | null
+          org_id?: string | null
+          recommended_chunk_days?: number | null
+          total_rows_last_sync?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_account_stats_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: true
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_account_stats_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_integrity_alerts: {
+        Row: {
+          actual_rows: number | null
+          ad_account_id: string
+          alert_type: string
+          created_at: string
+          expected_rows: number | null
+          id: string
+          message: string | null
+          missing_date_from: string | null
+          missing_date_to: string | null
+          org_id: string | null
+          resolved: boolean
+          resolved_at: string | null
+          severity: string
+        }
+        Insert: {
+          actual_rows?: number | null
+          ad_account_id: string
+          alert_type: string
+          created_at?: string
+          expected_rows?: number | null
+          id?: string
+          message?: string | null
+          missing_date_from?: string | null
+          missing_date_to?: string | null
+          org_id?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
+          severity?: string
+        }
+        Update: {
+          actual_rows?: number | null
+          ad_account_id?: string
+          alert_type?: string
+          created_at?: string
+          expected_rows?: number | null
+          id?: string
+          message?: string | null
+          missing_date_from?: string | null
+          missing_date_to?: string | null
+          org_id?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_integrity_alerts_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_integrity_alerts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_jobs: {
         Row: {
           ad_account_id: string
           attempts: number
+          chunk_index: number | null
+          chunk_strategy: string
+          chunk_total: number | null
           completed_at: string | null
           created_at: string
+          date_from: string | null
+          date_to: string | null
           error_code: string | null
           function_name: string
           id: string
           last_error: string | null
           max_attempts: number
           org_id: string | null
+          parent_job_id: string | null
           rows_synced: number | null
           scheduled_at: string
           started_at: string | null
@@ -3411,14 +3531,20 @@ export type Database = {
         Insert: {
           ad_account_id: string
           attempts?: number
+          chunk_index?: number | null
+          chunk_strategy?: string
+          chunk_total?: number | null
           completed_at?: string | null
           created_at?: string
+          date_from?: string | null
+          date_to?: string | null
           error_code?: string | null
           function_name: string
           id?: string
           last_error?: string | null
           max_attempts?: number
           org_id?: string | null
+          parent_job_id?: string | null
           rows_synced?: number | null
           scheduled_at?: string
           started_at?: string | null
@@ -3427,14 +3553,20 @@ export type Database = {
         Update: {
           ad_account_id?: string
           attempts?: number
+          chunk_index?: number | null
+          chunk_strategy?: string
+          chunk_total?: number | null
           completed_at?: string | null
           created_at?: string
+          date_from?: string | null
+          date_to?: string | null
           error_code?: string | null
           function_name?: string
           id?: string
           last_error?: string | null
           max_attempts?: number
           org_id?: string | null
+          parent_job_id?: string | null
           rows_synced?: number | null
           scheduled_at?: string
           started_at?: string | null
@@ -3841,13 +3973,20 @@ export type Database = {
         Returns: {
           ad_account_id: string
           attempts: number
+          chunk_index: number
+          chunk_strategy: string
+          chunk_total: number
+          date_from: string
+          date_to: string
           function_name: string
           id: string
           max_attempts: number
           org_id: string
+          parent_job_id: string
         }[]
       }
       cleanup_old_notifications: { Args: never; Returns: undefined }
+      compute_chunk_days: { Args: { p_ad_account_id: string }; Returns: number }
       get_admin_dashboard_summary:
         | { Args: { p_date_from: string; p_date_to: string }; Returns: Json }
         | {
@@ -3870,6 +4009,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_parent_complete: { Args: { p_job_id: string }; Returns: Json }
       normalize_spend: {
         Args: { rate: number; raw_amount: number; raw_currency: string }
         Returns: number
