@@ -63,7 +63,7 @@ export function SyncQueueHealthCard() {
       });
 
       // Enrich failed jobs with account name
-      const failed = (jobsRes.data ?? []) as FailedJob[];
+      const failed = (jobsRes.data ?? []) as unknown as FailedJob[];
       const accountIds = [...new Set(failed.map(j => j.ad_account_id))];
       if (accountIds.length > 0) {
         const { data: accounts } = await supabase.from("ad_accounts").select("id, account_name").in("id", accountIds);
