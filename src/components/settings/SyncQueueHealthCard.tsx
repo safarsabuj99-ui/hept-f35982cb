@@ -213,7 +213,7 @@ export function SyncQueueHealthCard() {
 
         {!loading && stats.pending === 0 && stats.processing === 0 && failedJobs.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             Queue idle — all jobs processed
           </div>
         )}
