@@ -6,6 +6,38 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const TOTAL_WINDOW_DAYS = 25;
+const PARALLEL_WORKER_TRIGGERS = 4;
+
+/** Format date as YYYY-MM-DD (UTC) */
+function fmt(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+/** Build chunk windows for the last `totalDays` ending today, each `chunkDays` long. */
+function buildChunks(totalDays: number, chunkDays: number): Array<{ from: string; to: string }> {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - (totalDays - 1));
+
+  const chunks: Array<{ from: string; to: string }> = [];
+  let cursor = new Date(start);
+  while (cursor <= today) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + chunkDays - 1);
+    if (chunkEnd > today) chunkEnd.setTime(today.getTime());
+    // ±1 day overlap buffer for late attribution
+    const fromBuf = new Date(cursor); fromBuf.setUTCDate(fromBuf.getUTCDate() - 1);
+    const toBuf = new Date(chunkEnd); toBuf.setUTCDate(toBuf.getUTCDate() + 1);
+    if (toBuf > today) toBuf.setTime(today.getTime());
+    chunks.push({ from: fmt(fromBuf < start ? cursor : fromBuf), to: fmt(toBuf) });
+    cursor = new Date(chunkEnd);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return chunks;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -60,35 +92,78 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Find which accounts already have an active job (pending/processing) for this function
+    // Load per-account stats for adaptive chunking
+    const { data: stats } = await supabase
+      .from("sync_account_stats")
+      .select("ad_account_id, recommended_chunk_days, consecutive_failures")
+      .in("ad_account_id", accounts.map(a => a.id));
+    const statsMap = new Map((stats ?? []).map((s: any) => [s.ad_account_id, s]));
+
+    // Find existing pending/processing jobs per account so we don't duplicate
     const { data: existingJobs } = await supabase
       .from("sync_jobs")
-      .select("ad_account_id")
+      .select("ad_account_id, date_from, date_to, parent_job_id")
       .eq("function_name", targetFunction)
       .in("status", ["pending", "processing"]);
 
-    const alreadyQueued = new Set((existingJobs || []).map(j => j.ad_account_id));
-    const toEnqueue = accounts.filter(a => !alreadyQueued.has(a.id));
+    const existingByAccount = new Map<string, Set<string>>();
+    for (const j of existingJobs ?? []) {
+      const key = j.ad_account_id;
+      if (!existingByAccount.has(key)) existingByAccount.set(key, new Set());
+      const w = `${j.date_from || ''}_${j.date_to || ''}`;
+      existingByAccount.get(key)!.add(w);
+    }
 
-    let enqueued = 0;
-    if (toEnqueue.length > 0) {
-      const rows = toEnqueue.map(a => ({
-        ad_account_id: a.id,
-        function_name: targetFunction,
-        status: "pending",
-        org_id: a.org_id,
-      }));
+    let totalEnqueued = 0;
+    let chunkedAccounts = 0;
+    let fullAccounts = 0;
 
-      // Insert with conflict handling (unique partial index protects us)
-      const { data: inserted, error: insertError } = await supabase
-        .from("sync_jobs")
-        .insert(rows)
-        .select("id");
+    // For sync-fast-lane (today-only), we still single-shot since it's a 1-day window
+    const isFastLane = targetFunction === "sync-fast-lane";
 
-      if (insertError) {
-        console.error("Enqueue error:", insertError);
+    for (const acc of accounts) {
+      const stat = statsMap.get(acc.id) as any;
+      // Fast-lane: always 1-day full job
+      const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 5);
+      const useChunking = !isFastLane && chunkDays < TOTAL_WINDOW_DAYS;
+
+      if (!useChunking) {
+        // Single full-window job (light account or fast-lane)
+        const w = `_`; // no chunk dates → single key
+        if (existingByAccount.get(acc.id)?.has(w)) continue;
+
+        const { error } = await supabase.from("sync_jobs").insert({
+          ad_account_id: acc.id,
+          function_name: targetFunction,
+          status: "pending",
+          org_id: acc.org_id,
+          chunk_strategy: "full",
+        });
+        if (!error) { totalEnqueued++; fullAccounts++; }
       } else {
-        enqueued = inserted?.length ?? 0;
+        // Build chunks
+        const chunks = buildChunks(TOTAL_WINDOW_DAYS, chunkDays);
+        const parentId = crypto.randomUUID();
+        const rows = chunks.map((c, idx) => ({
+          ad_account_id: acc.id,
+          function_name: targetFunction,
+          status: "pending",
+          org_id: acc.org_id,
+          parent_job_id: parentId,
+          chunk_index: idx,
+          chunk_total: chunks.length,
+          date_from: c.from,
+          date_to: c.to,
+          chunk_strategy: "chunked",
+        }));
+
+        // Filter out already-queued chunks (same date window)
+        const fresh = rows.filter(r => !existingByAccount.get(acc.id)?.has(`${r.date_from}_${r.date_to}`));
+        if (fresh.length === 0) continue;
+
+        const { data: inserted } = await supabase.from("sync_jobs").insert(fresh).select("id");
+        const cnt = inserted?.length ?? 0;
+        if (cnt > 0) { totalEnqueued += cnt; chunkedAccounts++; }
       }
     }
 
@@ -148,15 +223,17 @@ Deno.serve(async (req) => {
       .select("id", { count: "exact", head: true })
       .eq("status", "pending");
 
-    // Fire-and-forget trigger first worker run for instant start
-    fetch(`${supabaseUrl}/functions/v1/sync-queue-worker`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${anonKey}`,
-      },
-      body: JSON.stringify({}),
-    }).catch(err => console.error("Worker trigger failed:", err));
+    // Fire-and-forget trigger MULTIPLE workers for parallelism
+    for (let i = 0; i < PARALLEL_WORKER_TRIGGERS; i++) {
+      fetch(`${supabaseUrl}/functions/v1/sync-queue-worker`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({}),
+      }).catch(err => console.error(`Worker ${i} trigger failed:`, err));
+    }
 
     // Cleanup old sync_logs (>30 days) and old done/failed jobs (>7 days)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -164,15 +241,16 @@ Deno.serve(async (req) => {
     await supabase.from("sync_logs").delete().lt("created_at", thirtyDaysAgo);
     await supabase.from("sync_jobs").delete().in("status", ["done", "failed"]).lt("completed_at", sevenDaysAgo);
 
-    console.log(`Orchestrator: enqueued ${enqueued} new jobs, queue depth: ${queueDepth ?? 0}`);
+    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}), queue depth: ${queueDepth ?? 0}`);
 
     return new Response(
       JSON.stringify({
         ok: true,
         function: targetFunction,
         accounts_total: accounts.length,
-        skipped_already_queued: alreadyQueued.size,
-        enqueued,
+        chunked_accounts: chunkedAccounts,
+        full_accounts: fullAccounts,
+        enqueued: totalEnqueued,
         queue_depth: queueDepth ?? 0,
         timestamp: new Date().toISOString(),
       }),

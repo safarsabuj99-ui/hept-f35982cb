@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, ListChecks, Trash2, RotateCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, RefreshCw, ListChecks, Trash2, RotateCw, AlertCircle, CheckCircle2, Activity, ShieldAlert } from "lucide-react";
 
 interface QueueStats {
   pending: number;
@@ -23,13 +24,32 @@ interface FailedJob {
   last_error: string | null;
   error_code: string | null;
   completed_at: string | null;
+  date_from: string | null;
+  date_to: string | null;
+  chunk_index: number | null;
+  chunk_total: number | null;
   account_name?: string;
+}
+
+interface AccountProgress {
+  ad_account_id: string;
+  account_name: string;
+  total: number;
+  done: number;
+  failed: number;
+  pending: number;
+  processing: number;
+  avg_rows_per_day?: number;
+  recommended_chunk_days?: number;
+  last_full_sync_at?: string | null;
+  has_alert?: boolean;
 }
 
 export function SyncQueueHealthCard() {
   const { toast } = useToast();
   const [stats, setStats] = useState<QueueStats>({ pending: 0, processing: 0, failed_24h: 0, done_24h: 0, avg_ms: 0 });
   const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
+  const [accountProgress, setAccountProgress] = useState<AccountProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -37,12 +57,15 @@ export function SyncQueueHealthCard() {
     setLoading(true);
     try {
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [pendingRes, processingRes, failedRes, doneRes, jobsRes] = await Promise.all([
+      const [pendingRes, processingRes, failedRes, doneRes, jobsRes, activeJobsRes, statsRes, alertsRes] = await Promise.all([
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "processing"),
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "failed").gte("completed_at", since24h),
         supabase.from("sync_jobs" as any).select("id, started_at, completed_at", { count: "exact" }).eq("status", "done").gte("completed_at", since24h).limit(100),
-        supabase.from("sync_jobs" as any).select("id, ad_account_id, function_name, attempts, last_error, error_code, completed_at").eq("status", "failed").order("completed_at", { ascending: false }).limit(20),
+        supabase.from("sync_jobs" as any).select("id, ad_account_id, function_name, attempts, last_error, error_code, completed_at, date_from, date_to, chunk_index, chunk_total").eq("status", "failed").order("completed_at", { ascending: false }).limit(20),
+        supabase.from("sync_jobs" as any).select("ad_account_id, status, parent_job_id").in("status", ["pending", "processing", "done", "failed"]).gte("scheduled_at", since24h),
+        supabase.from("sync_account_stats" as any).select("ad_account_id, avg_rows_per_day, recommended_chunk_days, last_full_sync_at"),
+        supabase.from("sync_integrity_alerts" as any).select("ad_account_id").eq("resolved", false),
       ]);
 
       const doneRows = (doneRes.data ?? []) as any[];
@@ -62,16 +85,59 @@ export function SyncQueueHealthCard() {
         avg_ms: avgMs,
       });
 
-      // Enrich failed jobs with account name
-      const failed = (jobsRes.data ?? []) as unknown as FailedJob[];
-      const accountIds = [...new Set(failed.map(j => j.ad_account_id))];
-      if (accountIds.length > 0) {
-        const { data: accounts } = await supabase.from("ad_accounts").select("id, account_name").in("id", accountIds);
-        const nameMap = new Map((accounts ?? []).map(a => [a.id, a.account_name]));
-        setFailedJobs(failed.map(j => ({ ...j, account_name: nameMap.get(j.ad_account_id) ?? j.ad_account_id })));
-      } else {
-        setFailedJobs([]);
+      // Build per-account progress map
+      const activeJobs = (activeJobsRes.data ?? []) as any[];
+      const statsRows = (statsRes.data ?? []) as any[];
+      const alertSet = new Set(((alertsRes.data ?? []) as any[]).map(a => a.ad_account_id));
+      const statsMap = new Map(statsRows.map(s => [s.ad_account_id, s]));
+
+      const progMap = new Map<string, AccountProgress>();
+      for (const j of activeJobs) {
+        if (!j.parent_job_id) continue; // only chunked
+        const acc = j.ad_account_id;
+        if (!progMap.has(acc)) {
+          const st = statsMap.get(acc) as any;
+          progMap.set(acc, {
+            ad_account_id: acc,
+            account_name: acc,
+            total: 0, done: 0, failed: 0, pending: 0, processing: 0,
+            avg_rows_per_day: st?.avg_rows_per_day,
+            recommended_chunk_days: st?.recommended_chunk_days,
+            last_full_sync_at: st?.last_full_sync_at,
+            has_alert: alertSet.has(acc),
+          });
+        }
+        const p = progMap.get(acc)!;
+        p.total++;
+        if (j.status === "done") p.done++;
+        else if (j.status === "failed") p.failed++;
+        else if (j.status === "pending") p.pending++;
+        else if (j.status === "processing") p.processing++;
       }
+
+      // Enrich with account names
+      const allAccountIds = [
+        ...new Set([
+          ...((jobsRes.data ?? []) as any[]).map(j => j.ad_account_id),
+          ...Array.from(progMap.keys()),
+        ]),
+      ];
+      let nameMap = new Map<string, string>();
+      if (allAccountIds.length > 0) {
+        const { data: accounts } = await supabase.from("ad_accounts").select("id, account_name").in("id", allAccountIds);
+        nameMap = new Map((accounts ?? []).map(a => [a.id, a.account_name]));
+      }
+
+      const failed = (jobsRes.data ?? []) as unknown as FailedJob[];
+      setFailedJobs(failed.map(j => ({ ...j, account_name: nameMap.get(j.ad_account_id) ?? j.ad_account_id })));
+
+      const progArr = Array.from(progMap.values()).map(p => ({
+        ...p,
+        account_name: nameMap.get(p.ad_account_id) ?? p.ad_account_id,
+      }));
+      // Show in-progress accounts first
+      progArr.sort((a, b) => (b.pending + b.processing) - (a.pending + a.processing));
+      setAccountProgress(progArr.slice(0, 10));
     } catch (err) {
       console.error("Failed to load queue data:", err);
     }
@@ -80,7 +146,7 @@ export function SyncQueueHealthCard() {
 
   useEffect(() => {
     fetchQueueData();
-    const interval = setInterval(fetchQueueData, 15000); // auto-refresh every 15s
+    const interval = setInterval(fetchQueueData, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -117,7 +183,20 @@ export function SyncQueueHealthCard() {
     const { error } = await supabase.functions.invoke("sync-queue-worker", { body: {} });
     setActionLoading(null);
     if (error) toast({ title: "Worker failed", description: error.message, variant: "destructive" });
-    else { toast({ title: "Worker triggered", description: "Processing 10 jobs" }); setTimeout(fetchQueueData, 2000); }
+    else { toast({ title: "Worker triggered", description: "Processing queue" }); setTimeout(fetchQueueData, 2000); }
+  };
+
+  const handleForceReSync = async (accountId: string) => {
+    setActionLoading(`force-${accountId}`);
+    // Reset stats so next orchestrator run treats as unknown (5-day chunks)
+    const { error: e1 } = await supabase.from("sync_account_stats" as any)
+      .update({ avg_rows_per_day: 0, consecutive_failures: 0, recommended_chunk_days: 5 })
+      .eq("ad_account_id", accountId);
+    // Trigger orchestrator
+    const { error: e2 } = await supabase.functions.invoke("sync-orchestrator", { body: { function: "sync-deep-dive" } });
+    setActionLoading(null);
+    if (e1 || e2) toast({ title: "Re-sync failed", description: (e1 || e2)?.message, variant: "destructive" });
+    else { toast({ title: "Full re-sync queued", description: "Account will sync in 5-day chunks" }); setTimeout(fetchQueueData, 2000); }
   };
 
   return (
@@ -130,7 +209,7 @@ export function SyncQueueHealthCard() {
             </div>
             <div>
               <CardTitle>Sync Queue</CardTitle>
-              <CardDescription>Job queue powering large-scale sync (1000+ campaigns)</CardDescription>
+              <CardDescription>Adaptive chunked sync — scales to 10,000+ rows per account</CardDescription>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={fetchQueueData} disabled={loading}>
@@ -144,7 +223,7 @@ export function SyncQueueHealthCard() {
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Pending</p>
             <p className="text-2xl font-bold mt-1">{stats.pending}</p>
-            {stats.pending > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">~{Math.ceil(stats.pending / 10)} min to drain</p>}
+            {stats.pending > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">~{Math.ceil(stats.pending / 4)} min to drain</p>}
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Processing</p>
@@ -154,7 +233,7 @@ export function SyncQueueHealthCard() {
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Done (24h)</p>
             <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.done_24h}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">avg {(stats.avg_ms / 1000).toFixed(1)}s/job</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">avg {(stats.avg_ms / 1000).toFixed(1)}s/chunk</p>
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Failed (24h)</p>
@@ -183,6 +262,67 @@ export function SyncQueueHealthCard() {
           )}
         </div>
 
+        {/* Per-account chunk progress */}
+        {accountProgress.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-primary" /> Account Sync Progress ({accountProgress.length})
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {accountProgress.map(p => {
+                const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+                const inProgress = p.pending + p.processing > 0;
+                return (
+                  <div key={p.ad_account_id} className="rounded-lg border p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium text-xs truncate">{p.account_name}</span>
+                        {p.has_alert && (
+                          <Badge variant="destructive" className="text-[9px] h-4 px-1 gap-0.5">
+                            <ShieldAlert className="h-2.5 w-2.5" /> alert
+                          </Badge>
+                        )}
+                        {inProgress ? (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1 gap-0.5 text-primary border-primary/30">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" /> syncing
+                          </Badge>
+                        ) : p.failed === 0 ? (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1 gap-0.5 text-emerald-600 border-emerald-300">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> verified
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-[9px] h-4 px-1">{p.failed} failed</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {p.done}/{p.total} {p.recommended_chunk_days ? `· ${p.recommended_chunk_days}d` : ""}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5 text-[10px]"
+                          disabled={actionLoading === `force-${p.ad_account_id}`}
+                          onClick={() => handleForceReSync(p.ad_account_id)}
+                          title="Force full re-sync (resets stats, re-chunks 25 days)"
+                        >
+                          {actionLoading === `force-${p.ad_account_id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                    {p.avg_rows_per_day != null && p.avg_rows_per_day > 0 && (
+                      <p className="text-[9px] text-muted-foreground">
+                        ~{Math.round(p.avg_rows_per_day)} rows/day · {p.last_full_sync_at ? `last full ${formatDistanceToNow(new Date(p.last_full_sync_at), { addSuffix: true })}` : "no full sync yet"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Failed jobs list */}
         {failedJobs.length > 0 && (
           <div className="space-y-2">
@@ -197,6 +337,11 @@ export function SyncQueueHealthCard() {
                       <span className="font-medium text-xs truncate">{job.account_name}</span>
                       <Badge variant="outline" className="text-[9px] h-4 px-1">{job.function_name.replace("sync-", "")}</Badge>
                       {job.error_code && <Badge variant="destructive" className="text-[9px] h-4 px-1">{job.error_code}</Badge>}
+                      {job.date_from && job.date_to && (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
+                          {job.date_from}→{job.date_to}
+                        </Badge>
+                      )}
                       <span className="text-[10px] text-muted-foreground">attempt {job.attempts}</span>
                     </div>
                     {job.last_error && <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{job.last_error}</p>}
@@ -211,10 +356,10 @@ export function SyncQueueHealthCard() {
           </div>
         )}
 
-        {!loading && stats.pending === 0 && stats.processing === 0 && failedJobs.length === 0 && (
+        {!loading && stats.pending === 0 && stats.processing === 0 && failedJobs.length === 0 && accountProgress.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            Queue idle — all jobs processed
+            Queue idle — all accounts verified
           </div>
         )}
       </CardContent>

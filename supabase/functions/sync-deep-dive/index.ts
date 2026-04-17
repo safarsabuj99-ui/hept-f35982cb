@@ -71,8 +71,12 @@ Deno.serve(async (req) => {
     try { body = await req.json(); } catch {}
     const platformFilter: string | null = body?.platform || null;
     const adAccountIdsFilter: string[] | null = body?.ad_account_ids || null;
+    // Adaptive chunking: optional date window override (per-chunk job)
+    const dateFromOverride: string | null = body?.date_from || null;
+    const dateToOverride: string | null = body?.date_to || null;
     if (platformFilter) console.log(`Platform filter active: ${platformFilter}`);
     if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
+    if (dateFromOverride && dateToOverride) console.log(`Chunk window: ${dateFromOverride} → ${dateToOverride}`);
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
@@ -127,8 +131,8 @@ Deno.serve(async (req) => {
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
     const globalStartDate = dateSetting?.value || "2025-01-01";
-    // Use Asia/Dhaka timezone for "today"
-    const endDateStr = getDhakaToday();
+    // Use Asia/Dhaka timezone for "today" — overridable by chunk window
+    const endDateStr = dateToOverride || getDhakaToday();
 
     // Load client profiles for per-client start dates
     const allClientIds = [...new Set(mappedAssignments.map(r => r.client_id))];
@@ -194,7 +198,11 @@ Deno.serve(async (req) => {
           effectiveStartDate = clientDates[0]; // earliest
         }
 
-        const startDateStr = effectiveStartDate;
+        // Adaptive chunking override: when worker passes a chunk window, use it
+        // (clamp to per-account effective start to honor client data_fetch_start_date)
+        const startDateStr = dateFromOverride
+          ? (dateFromOverride > effectiveStartDate ? dateFromOverride : effectiveStartDate)
+          : effectiveStartDate;
 
         // Helper: resolve client_id for a campaign name using keyword matching
         const resolveClientId = (campaignName: string, rawCampaignId: string): string | null => {
