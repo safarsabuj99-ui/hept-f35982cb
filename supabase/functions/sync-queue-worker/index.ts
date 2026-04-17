@@ -228,6 +228,33 @@ Deno.serve(async (req) => {
         failed++;
         console.error(`❌ Job ${job.id}${chunkLabel}: ${jobErrorCode} - ${jobError} (attempt ${job.attempts}/${job.max_attempts}, status: ${finalStatus})`);
 
+        // SELF-HEAL: when a non-chunked ("full") job times out OR exhausts
+        // retries, demote the account so the next orchestrator run chunks it.
+        // This prevents heavy accounts from being stuck on "full" forever.
+        const shouldDemote =
+          !isChunked &&
+          (jobErrorCode === "cpu_timeout" || finalStatus === "failed");
+        if (shouldDemote) {
+          const { data: curStat } = await supabase
+            .from("sync_account_stats")
+            .select("consecutive_failures")
+            .eq("ad_account_id", job.ad_account_id)
+            .maybeSingle();
+          const nextFailures = (curStat?.consecutive_failures ?? 0) + 1;
+          await supabase.from("sync_account_stats").upsert(
+            {
+              ad_account_id: job.ad_account_id,
+              org_id: job.org_id,
+              recommended_chunk_days: 5,
+              consecutive_failures: nextFailures,
+              last_error: jobError.substring(0, 500),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "ad_account_id" }
+          );
+          console.log(`⬇️  Demoted ${job.ad_account_id}: chunk_days=5, failures=${nextFailures}`);
+        }
+
         // If chunk permanently failed, trigger parent completion check
         if (finalStatus === "failed") {
           await supabase.rpc("mark_parent_complete", { p_job_id: job.id });
