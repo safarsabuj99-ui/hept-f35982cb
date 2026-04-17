@@ -3391,6 +3391,72 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_jobs: {
+        Row: {
+          ad_account_id: string
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          function_name: string
+          id: string
+          last_error: string | null
+          max_attempts: number
+          org_id: string | null
+          rows_synced: number | null
+          scheduled_at: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          ad_account_id: string
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          function_name: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          org_id?: string | null
+          rows_synced?: number | null
+          scheduled_at?: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          ad_account_id?: string
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          function_name?: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          org_id?: string | null
+          rows_synced?: number | null
+          scheduled_at?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_jobs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_logs: {
         Row: {
           ad_account_id: string
@@ -3770,6 +3836,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_sync_jobs: {
+        Args: { p_limit?: number }
+        Returns: {
+          ad_account_id: string
+          attempts: number
+          function_name: string
+          id: string
+          max_attempts: number
+          org_id: string
+        }[]
+      }
       cleanup_old_notifications: { Args: never; Returns: undefined }
       get_admin_dashboard_summary:
         | { Args: { p_date_from: string; p_date_to: string }; Returns: Json }
