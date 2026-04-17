@@ -6,9 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const BATCH_SIZE = 10; // jobs per worker invocation
-const HARD_TIMEOUT_MS = 20000; // exit cleanly under 25s edge limit
-const PER_JOB_TIMEOUT_MS = 18000;
+const BATCH_SIZE = 1; // 1 job per worker — sync-deep-dive is heavy (~20s/account)
+const HARD_TIMEOUT_MS = 23000; // exit cleanly under 25s edge limit
+const PER_JOB_TIMEOUT_MS = 22000;
 
 function classifyError(errorMsg: string, errorCode?: string): string {
   if (!errorMsg) return "unknown";
