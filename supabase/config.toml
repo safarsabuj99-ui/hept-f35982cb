@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.pause-campaign]
 verify_jwt = false
+
+[functions.sync-queue-worker]
+verify_jwt = false

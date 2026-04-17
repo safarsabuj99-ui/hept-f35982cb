@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Loader2, Zap, RefreshCw, BarChart3, Bell, Target, Activity, CheckCircle2, XCircle, Clock, Info, Save } from "lucide-react";
+import { SyncQueueHealthCard } from "./SyncQueueHealthCard";
 
 type SyncFunction = "sync-fast-lane" | "sync-deep-dive" | "billing-radar";
 
@@ -136,6 +137,9 @@ export function SyncTab() {
 
   return (
     <div className="space-y-6">
+      {/* Sync Queue Health */}
+      <SyncQueueHealthCard />
+
       {/* Schedule Card */}
       <Card>
         <CardHeader>
