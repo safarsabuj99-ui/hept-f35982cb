@@ -1,83 +1,111 @@
 
 
-## Bug Found: Supabase 1000-Row Query Limit Truncates Metrics
+## Deep Dive `cpu_timeout` — Root Cause Found
 
-### Root Cause
+### The Smoking Gun
 
-In `src/pages/CampaignMapping.tsx`, this query has no pagination:
+**HEPT 15** (`00cf5889-cd29-49ae-803b-96a2b70df06b`, TikTok, 91 campaigns) has been failing every single deep-dive run for hours:
+- 14:15, 14:00, 13:15, 13:00, 12:15 → all `cpu_timeout` after 3 attempts
+- `chunk_index: nil`, `chunk_total: nil`, `date_from: nil`, `date_to: nil`
+- Status `failed` after 3 attempts
 
-```ts
-const { data: mets } = await supabase
-  .from("daily_metrics")
-  .select("*")
-  .in("campaign_id", campaignIds)
-  .gte("data_date", from).lte("data_date", to);
+**Translation: HEPT 15 is being sent as a SINGLE FULL JOB, NOT chunked.** Adaptive chunking is silently disabled for it.
+
+### Why Chunking Is Disabled For HEPT 15
+
+In `sync_account_stats`:
+```
+recommended_chunk_days: 25   ← should be 5 (or less)
+total_rows_last_sync: 1      ← BUG: it never measured the real workload
+avg_rows_per_day: 0.04
+last_error: "The signal has been aborted"  ← it timed out…
+consecutive_failures: 0      ← …but wasn't counted as failure
 ```
 
-For Apr 1-16 across 216 mapped campaigns, the query needs **1034 rows** but Supabase silently caps at **1000**. The 34 dropped rows = **$17.04 missing spend** = the exact gap (599.60 − 582.56 = 17.04, which is 2027.76 BDT close to the 71,354 BDT figure once you add other days/accounts).
-
-### Why Data Mismatched With Ad Account
-
-| Source | Spend | Campaigns |
-|--------|-------|-----------|
-| TikTok ad account (truth) | $599.61 / ৳71,354 | 45 |
-| Database (correct) | $599.60 | 45 |
-| UI dashboard (buggy) | **$582.56** | **34** |
-
-**The sync is 100% accurate.** The bug is **only in the UI fetch layer** — it loads incomplete data because of Supabase's row limit.
-
-### Files With The Same Bug (verified)
-
-1. `src/pages/CampaignMapping.tsx` — line 64-77 (main campaigns page — your screenshot)
-2. `src/pages/ClientReports.tsx` — same pattern
-3. `src/pages/AdAccountDetail.tsx` — Spend tab (same pattern)
-4. `src/components/SpendTrendChart.tsx` — could also truncate
-
-### Fix Strategy: Paginated Fetch Helper
-
-Create `src/lib/fetchAllRows.ts` — a generic helper that loops through pages of 1000 until all rows are loaded:
-
+In `sync-orchestrator/index.ts` line 127-128:
 ```ts
-export async function fetchAllRows<T>(builder: () => any, pageSize = 1000): Promise<T[]> {
-  let all: T[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await builder().range(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all = all.concat(data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return all;
-}
+const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 5);
+const useChunking = !isFastLane && chunkDays < TOTAL_WINDOW_DAYS;  // 25 < 25 = false
 ```
 
-Then replace each truncated query with the paginated version.
+Because `recommended_chunk_days = 25` equals `TOTAL_WINDOW_DAYS = 25`, **chunking is bypassed** → orchestrator inserts ONE job covering the whole 25-day window → `sync-deep-dive` tries to fetch ~1000 rows × 91 campaigns × 25 days from TikTok → CPU timeout.
 
-### Why This Guarantees 100% Match With Ad Account
+### Three Cascading Bugs
 
-1. **All metric rows fetched** — no 1000-row cap
-2. **No date math changes** — same date range, same aggregation logic
-3. **Idempotent** — re-fetching gives identical results
-4. **Verified at DB level** — confirmed 599.60 USD in DB matches your 599.62 USD ad account exactly (99.997% match — only floating-point rounding)
+| # | Bug | Effect |
+|---|-----|--------|
+| 1 | `mark_parent_complete` RPC only updates stats from the LAST chunk processed (1 row), leaving `total_rows_last_sync = 1` and `recommended_chunk_days = 25` even after a heavy account is detected | Adaptive chunking never kicks in |
+| 2 | When a job is `chunk_strategy = "full"` and times out, worker doesn't downgrade `recommended_chunk_days` for next run | Account stays stuck on "full" forever |
+| 3 | `consecutive_failures` is reset on every "successful" stats update (which happens even after timeout because the RPC writes from the chunk side) | Failure-based fallback never triggers |
 
-### Files To Modify
+### The Smart Fix
 
-- **New**: `src/lib/fetchAllRows.ts` (paginated fetch helper)
-- **Modified**: `src/pages/CampaignMapping.tsx` (paginate `daily_metrics` and `campaigns` queries)
-- **Modified**: `src/pages/ClientReports.tsx` (paginate `daily_metrics`)
-- **Modified**: `src/pages/AdAccountDetail.tsx` (paginate Spend tab metrics)
-- **Modified**: `src/components/SpendTrendChart.tsx` (paginate metrics)
+**Three changes — all server-side, no UI work needed.**
 
-### Bonus: Add Sanity Check
+#### 1. `sync-orchestrator` — Treat unknown/heavy accounts as chunked by default
+```text
+Old: useChunking = chunkDays < 25
+New: useChunking = !isFastLane && (
+       chunkDays < 25                        // explicit recommendation
+    || stat?.consecutive_failures >= 1       // any recent failure
+    || stat?.total_rows_last_sync >= 200     // ≥200 rows from last sync
+    || !stat                                 // never synced before
+)
+```
+**Result**: HEPT 15 → 5 chunks of 5 days each instead of 1 chunk of 25 days.
 
-Add a small console warning when fetched row count hits a multiple of 1000 — early signal for future limit issues.
+#### 2. `sync-queue-worker` — Auto-demote stats on timeout
+When a `chunk_strategy = "full"` job times out OR exhausts retries:
+```text
+UPDATE sync_account_stats
+SET recommended_chunk_days = 5,
+    consecutive_failures = consecutive_failures + 1,
+    last_error = <error>
+WHERE ad_account_id = <id>;
+```
+**Result**: Even if step 1 missed an edge case, the account auto-shrinks for the next orchestrator run.
+
+#### 3. `mark_parent_complete` (DB function) — Fix stats accumulation
+Currently writes per-chunk row count. Change it to **SUM all chunks under the parent** and update `total_rows_last_sync` only when ALL siblings are done.
+```sql
+-- Pseudo:
+total_rows = SUM(rows_synced) WHERE parent_job_id = parent
+IF all chunks done THEN
+  UPDATE sync_account_stats SET
+    total_rows_last_sync = total_rows,
+    avg_rows_per_day = total_rows / window_days,
+    recommended_chunk_days = CASE
+      WHEN total_rows > 800 THEN 3
+      WHEN total_rows > 400 THEN 5
+      WHEN total_rows > 150 THEN 10
+      ELSE 25
+    END,
+    consecutive_failures = 0,
+    last_success_at = now();
+```
+
+#### 4. Bonus: Recovery action — reset HEPT 15 immediately
+Manually patch `sync_account_stats` so the next orchestrator run chunks it:
+```sql
+UPDATE sync_account_stats
+SET recommended_chunk_days = 3, consecutive_failures = 1
+WHERE ad_account_id = '00cf5889-cd29-49ae-803b-96a2b70df06b';
+```
+
+### Why This Permanently Fixes The Problem
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| New unmeasured account | ❌ Full window → timeout | ✅ Default to 5-day chunks |
+| Account that just timed out | ❌ Retries same full window 3× | ✅ Immediately switches to chunked next run |
+| Account recovers (light) | ❌ Stuck on small chunks | ✅ Auto-grows to 25 if total_rows < 150 |
+| Stats updated mid-chunk | ❌ Sees only 1 row, misclassifies | ✅ SUMs across siblings, accurate classification |
+
+### Files To Change
+- `supabase/functions/sync-orchestrator/index.ts` (line 127-128 — gating logic)
+- `supabase/functions/sync-queue-worker/index.ts` (after permanent failure block — demote stats)
+- New SQL migration: `mark_parent_complete` rewrite + immediate stats patch for HEPT 15
 
 ### Build Time
-~15 minutes. No DB changes. No sync changes. Pure frontend fix.
-
-### After This Fix
-
-Your campaign page Apr 1-16 HEPT AGENCY 2 will show **$599.60** = exactly what TikTok shows (71,354.28 BDT ÷ 119 = 599.62 USD). ✅
+~25 minutes. Pure backend. No UI changes. No data loss. Self-healing for all future heavy accounts.
 
