@@ -90,7 +90,8 @@ export default function ClientDashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [adSpend, setAdSpend] = useState<any[]>([]);
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
   const [pricingConfig, setPricingConfig] = useState<any>(null);
