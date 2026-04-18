@@ -483,13 +483,7 @@ export default function ClientList() {
                   </TableBody>
                 </Table>
               </div>
-              <TablePagination
-                totalItems={sorted.length}
-                pageSize={pageSize}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onPageSizeChange={setPageSize}
-              />
+              {paginationFooter}
             </>
           )}
         </CardContent>
