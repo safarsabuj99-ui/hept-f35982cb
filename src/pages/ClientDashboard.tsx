@@ -135,7 +135,8 @@ export default function ClientDashboard() {
         if (enriched[0]?.synced_at) setLastSynced(new Date(enriched[0].synced_at).toLocaleString());
       }
     }
-    setLoading(false);
+    setInitialLoading(false);
+    initialLoadingRef.current = false;
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -144,20 +145,22 @@ export default function ClientDashboard() {
 
   // Deep-link: show resumed toast
   useEffect(() => {
-    if (highlightId === "resumed" && !loading) {
+    if (highlightId === "resumed" && !initialLoading) {
       toast({ title: "✅ Campaigns Resumed", description: "Your campaigns have been auto-resumed after balance top-up." });
     }
-  }, [highlightId, loading]);
+  }, [highlightId, initialLoading]);
 
+  // Filtered + debounced realtime — only fires for THIS client's data, and at most once per 1.5s.
   useEffect(() => {
     if (!effectiveClientId) return;
+    const debounced = debounce(() => fetchAll(), 1500);
     const channel = supabase
       .channel('client-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `client_id=eq.${effectiveClientId}` }, debounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, debounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `client_id=eq.${effectiveClientId}` }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
