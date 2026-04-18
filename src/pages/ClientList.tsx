@@ -283,6 +283,17 @@ export default function ClientList() {
 
   const paginatedData = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // Memoize pagination footer to prevent Radix Select portal from remounting on every parent rerender
+  const paginationFooter = useMemo(() => (
+    <TablePagination
+      totalItems={sorted.length}
+      pageSize={pageSize}
+      currentPage={currentPage}
+      onPageChange={setCurrentPage}
+      onPageSizeChange={setPageSize}
+    />
+  ), [sorted.length, pageSize, currentPage]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up-fade">
