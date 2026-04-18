@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { debounce } from "@/lib/debounce";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export default function AdAccounts() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [assignments, setAssignments] = useState<AccountClientAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -111,17 +113,19 @@ export default function AdAccounts() {
     setAssignments(assigns ?? []);
     setIntegrations(ints ?? []);
     setLoading(false);
+    initialLoadingRef.current = false;
   };
 
   useEffect(() => { fetchData(); }, []);
 
   useEffect(() => {
+    const debounced = debounce(() => fetchData(), 1500);
     const channel = supabase
       .channel("ad-accounts-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ad_accounts" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "ad_account_clients" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "ad_accounts" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ad_account_clients" }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, []);
 
   // Clear selection on search/filter/page change

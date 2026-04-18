@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { debounce } from "@/lib/debounce";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -110,12 +111,13 @@ export default function OrderManagement() {
   }, [highlightId, loading, requests]);
 
   useEffect(() => {
+    const debounced = debounce(() => fetchAll(), 1500);
     const channel = supabase
       .channel("admin-campaign-requests")
-      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests" }, () => fetchAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_tasks" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_requests" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_tasks" }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, [fetchAll]);
 
   const updateRequestStatus = async (id: string, status: string, rejectionReason?: string) => {
