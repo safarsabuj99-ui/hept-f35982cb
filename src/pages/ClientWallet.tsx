@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/ui/premium-skeletons";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { cn } from "@/lib/utils";
+import { debounce } from "@/lib/debounce";
 import {
   Wallet, Plus, ArrowDown, ArrowUp, Banknote
 } from "lucide-react";
@@ -37,7 +38,7 @@ export default function ClientWallet() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<any[]>([]);
   const [pricingConfig, setPricingConfig] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [depositOpen, setDepositOpen] = useState(false);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [datePreset, setDatePreset] = useState<ClientDatePreset>("today");
@@ -56,14 +57,14 @@ export default function ClientWallet() {
     ]);
     setTransactions((txData as Transaction[]) ?? []);
     setPaymentRequests(prs ?? []);
-    setLoading(false);
+    setInitialLoading(false);
   }, [effectiveClientId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // Deep-link: show guard toast or highlight payment request
   useEffect(() => {
-    if (!highlightId || loading) return;
+    if (!highlightId || initialLoading) return;
     if (highlightId === "guard") {
       toast({ title: "⚠️ Campaigns Paused", description: "Your campaigns were paused due to low balance. Add funds to resume." });
     } else {
@@ -71,16 +72,18 @@ export default function ClientWallet() {
         document.getElementById(`wallet-pr-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 500);
     }
-  }, [highlightId, loading]);
+  }, [highlightId, initialLoading]);
 
+  // Filtered + debounced realtime — only this client's data, max once per 1.5s.
   useEffect(() => {
     if (!effectiveClientId) return;
+    const debounced = debounce(() => fetchAll(), 1500);
     const channel = supabase
       .channel('client-wallet-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `client_id=eq.${effectiveClientId}` }, debounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_requests', filter: `client_id=eq.${effectiveClientId}` }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
@@ -135,7 +138,7 @@ export default function ClientWallet() {
     }, 0);
   }, [platformBalances, balance, pricingConfig]);
 
-  if (loading) return <DashboardSkeleton />;
+  if (initialLoading) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto animate-fade-in">

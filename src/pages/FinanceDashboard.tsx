@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
+import { debounce } from "@/lib/debounce";
 interface ClientProfit {
   name: string;
   totalSpendUsd: number;
@@ -29,13 +30,16 @@ export default function FinanceDashboard() {
   const [ownerDraw, setOwnerDraw] = useState(0);
   const [clientProfits, setClientProfits] = useState<ClientProfit[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [dateRange, setDateRange] = useState<DateRange | null>(() => { const t = getLocalToday(); return { from: t, to: t }; });
   const [periodLabel, setPeriodLabel] = useState("Today");
 
   // Import premium skeletons
 
   const fetchAll = useCallback(async (range: DateRange | null) => {
-    setLoading(true);
+    // Only show the page-level skeleton on the very first fetch.
+    // Realtime invalidations and date-range changes refresh in the background.
+    if (initialLoadingRef.current) setLoading(true);
 
     let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
     let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date");
@@ -90,6 +94,7 @@ export default function FinanceDashboard() {
 
     if (!allCampaigns?.length) {
       setLoading(false);
+      initialLoadingRef.current = false;
       return;
     }
 
@@ -166,19 +171,21 @@ export default function FinanceDashboard() {
     setNetProfit(Math.round(aggRevenue - aggCogs - opex));
     setClientProfits(profits.sort((a, b) => b.netProfit - a.netProfit));
     setLoading(false);
+    initialLoadingRef.current = false;
   }, []);
 
   useEffect(() => { fetchAll(dateRange); }, []);
 
   useEffect(() => {
+    const debounced = debounce(() => fetchAll(dateRange), 1500);
     const channel = supabase
       .channel("finance-dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => fetchAll(dateRange))
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => fetchAll(dateRange))
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchAll(dateRange))
-      .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, () => fetchAll(dateRange))
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_expenses" }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, [fetchAll, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {

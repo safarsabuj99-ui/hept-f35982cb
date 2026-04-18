@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { DateRange, toISODate } from "@/components/DateRangeFilter";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { debounce } from "@/lib/debounce";
 
 interface ClientWithBalance {
   user_id: string;
@@ -88,19 +89,21 @@ export function useAdminDashboardData(dateRange: DateRange | null) {
     refetchOnWindowFocus: false,
   });
 
-  // Realtime invalidation
+  // Realtime invalidation — debounced so a burst of inserts (e.g. sync workers
+  // writing 200 daily_metrics rows) only triggers ONE refetch instead of 200.
   useEffect(() => {
     if (!authReady || !session) return;
+    const invalidate = debounce(() => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }), 1500);
     const channel = supabase
       .channel("admin-dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
-      .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, () => queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, invalidate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_requests" }, invalidate)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { invalidate.cancel(); supabase.removeChannel(channel); };
   }, [queryClient, authReady, session]);
 
   return query;

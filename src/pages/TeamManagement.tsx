@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { debounce } from "@/lib/debounce";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,6 +39,7 @@ interface ManagerRow {
 export default function TeamManagement() {
   const [managers, setManagers] = useState<ManagerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [editManager, setEditManager] = useState<ManagerRow | null>(null);
   const [editPerms, setEditPerms] = useState<Record<string, boolean>>({});
   const [fullAccess, setFullAccess] = useState(false);
@@ -50,10 +52,16 @@ export default function TeamManagement() {
   const { toast } = useToast();
 
   const fetchManagers = async () => {
-    setLoading(true);
+    // Only show full skeleton on first mount; realtime updates refresh silently.
+    if (initialLoadingRef.current) setLoading(true);
     const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "manager");
     const managerIds = roles?.map((r) => r.user_id) ?? [];
-    if (managerIds.length === 0) { setManagers([]); setLoading(false); return; }
+    if (managerIds.length === 0) {
+      setManagers([]);
+      setLoading(false);
+      initialLoadingRef.current = false;
+      return;
+    }
 
     const { data: profiles } = await supabase
       .from("profiles")
@@ -82,16 +90,18 @@ export default function TeamManagement() {
 
     setManagers(rows);
     setLoading(false);
+    initialLoadingRef.current = false;
   };
 
   useEffect(() => { fetchManagers(); }, []);
 
   useEffect(() => {
+    const debounced = debounce(() => fetchManagers(), 1500);
     const channel = supabase
       .channel("team-management-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchManagers())
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, []);
 
   const filteredManagers = useMemo(() => {
