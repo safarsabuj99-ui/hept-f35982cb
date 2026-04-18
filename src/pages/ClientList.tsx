@@ -69,7 +69,7 @@ export default function ClientList() {
         .select("user_id")
         .eq("role", "client");
 
-      if (!roles?.length) { setLoading(false); return; }
+      if (!roles?.length) { setLoading(false); setInitialLoading(false); initialLoadingRef.current = false; return; }
 
       const ids = roles.map((r) => r.user_id);
       const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes, txnsRes] = await Promise.all([
