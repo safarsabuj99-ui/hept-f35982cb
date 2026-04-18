@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
 import { format } from "date-fns";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
+import { debounce } from "@/lib/debounce";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ClientNoticeBanner } from "@/components/ClientNoticeBanner";
