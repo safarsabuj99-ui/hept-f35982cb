@@ -70,24 +70,23 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Only re-apply CSS variables when the actual color values change.
+  // Depend on the primitive hex strings — not the org object identity —
+  // so realtime react-query invalidations don't cause a full color repaint flash.
   useEffect(() => {
     if (!org) return;
     const root = document.documentElement;
     const primaryHsl = hexToHsl(org.primary_color || "#2655cc");
     const accentHsl = hexToHsl(org.accent_color || "#e8eef8");
-    if (primaryHsl) {
+    if (primaryHsl && root.style.getPropertyValue("--primary").trim() !== primaryHsl) {
       root.style.setProperty("--primary", primaryHsl);
       root.style.setProperty("--sidebar-primary", primaryHsl);
     }
-    if (accentHsl) {
+    if (accentHsl && root.style.getPropertyValue("--accent").trim() !== accentHsl) {
       root.style.setProperty("--accent", accentHsl);
     }
-    return () => {
-      root.style.removeProperty("--primary");
-      root.style.removeProperty("--sidebar-primary");
-      root.style.removeProperty("--accent");
-    };
-  }, [org]);
+    // No cleanup — removing vars on every effect run causes the visible flash.
+  }, [org?.primary_color, org?.accent_color]);
 
   const refetch = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["branding"] });
