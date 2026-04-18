@@ -236,7 +236,7 @@ export default function ClientDashboard() {
     .map(([platform, value]) => ({ name: PLATFORM_LABELS[platform] || platform, value, platform }))
     .sort((a, b) => b.value - a.value);
 
-  if (loading) return <DashboardSkeleton />;
+  if (initialLoading) return <DashboardSkeleton />;
 
   const kpis = [
     {
