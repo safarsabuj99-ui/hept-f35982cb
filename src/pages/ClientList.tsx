@@ -181,20 +181,23 @@ export default function ClientList() {
       setBdtBalances(bdtMap);
 
       setLoading(false);
+      setInitialLoading(false);
+      initialLoadingRef.current = false;
   }, []);
 
-  useEffect(() => { load(); }, [location.key, load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Realtime subscription
+  // Realtime subscription — debounced to prevent thrashing during bulk inserts
+  const debouncedLoad = useMemo(() => debounce(load, 1500), [load]);
   useEffect(() => {
     const channel = supabase
       .channel("client-list-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debouncedLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, debouncedLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, debouncedLoad)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [load]);
+    return () => { debouncedLoad.cancel(); supabase.removeChannel(channel); };
+  }, [debouncedLoad]);
 
   const getPricingLabel = (config: any) => {
     const pr = config?.flat_rates || config?.platform_rates;
