@@ -322,7 +322,7 @@ export default function ClientList() {
           <CardTitle className="text-sm font-medium text-muted-foreground">All Clients</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {initialLoading ? (
             <DataPageSkeleton title={false} />
           ) : filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
