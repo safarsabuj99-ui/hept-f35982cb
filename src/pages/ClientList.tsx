@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { debounce } from "@/lib/debounce";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,8 @@ export default function ClientList() {
   const { loading: prefsLoading, getUiPref, setUiPref } = usePresetPreferences();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [search, setSearch] = useState("");
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositClientId, setDepositClientId] = useState<string>("");
@@ -48,7 +51,6 @@ export default function ClientList() {
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortAsc, setSortAsc] = useState(false);
   const [sortInitialized, setSortInitialized] = useState(false);
-  const location = useLocation();
 
   // Load saved sort preference
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function ClientList() {
         .select("user_id")
         .eq("role", "client");
 
-      if (!roles?.length) { setLoading(false); return; }
+      if (!roles?.length) { setLoading(false); setInitialLoading(false); initialLoadingRef.current = false; return; }
 
       const ids = roles.map((r) => r.user_id);
       const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes, txnsRes] = await Promise.all([
@@ -179,20 +181,23 @@ export default function ClientList() {
       setBdtBalances(bdtMap);
 
       setLoading(false);
+      setInitialLoading(false);
+      initialLoadingRef.current = false;
   }, []);
 
-  useEffect(() => { load(); }, [location.key, load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Realtime subscription
+  // Realtime subscription — debounced to prevent thrashing during bulk inserts
+  const debouncedLoad = useMemo(() => debounce(load, 1500), [load]);
   useEffect(() => {
     const channel = supabase
       .channel("client-list-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debouncedLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, debouncedLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_ad_spend" }, debouncedLoad)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [load]);
+    return () => { debouncedLoad.cancel(); supabase.removeChannel(channel); };
+  }, [debouncedLoad]);
 
   const getPricingLabel = (config: any) => {
     const pr = config?.flat_rates || config?.platform_rates;
@@ -278,6 +283,17 @@ export default function ClientList() {
 
   const paginatedData = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // Memoize pagination footer to prevent Radix Select portal from remounting on every parent rerender
+  const paginationFooter = useMemo(() => (
+    <TablePagination
+      totalItems={sorted.length}
+      pageSize={pageSize}
+      currentPage={currentPage}
+      onPageChange={setCurrentPage}
+      onPageSizeChange={setPageSize}
+    />
+  ), [sorted.length, pageSize, currentPage]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up-fade">
@@ -317,7 +333,7 @@ export default function ClientList() {
           <CardTitle className="text-sm font-medium text-muted-foreground">All Clients</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {initialLoading ? (
             <DataPageSkeleton title={false} />
           ) : filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
@@ -467,13 +483,7 @@ export default function ClientList() {
                   </TableBody>
                 </Table>
               </div>
-              <TablePagination
-                totalItems={sorted.length}
-                pageSize={pageSize}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                onPageSizeChange={setPageSize}
-              />
+              {paginationFooter}
             </>
           )}
         </CardContent>
