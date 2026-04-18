@@ -38,6 +38,8 @@ export default function ClientList() {
   const { loading: prefsLoading, getUiPref, setUiPref } = usePresetPreferences();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [search, setSearch] = useState("");
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositClientId, setDepositClientId] = useState<string>("");
@@ -49,7 +51,6 @@ export default function ClientList() {
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortAsc, setSortAsc] = useState(false);
   const [sortInitialized, setSortInitialized] = useState(false);
-  const location = useLocation();
 
   // Load saved sort preference
   useEffect(() => {
