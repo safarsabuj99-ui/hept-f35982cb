@@ -114,15 +114,17 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg press-effect">
-          <Bell className="h-4 w-4" />
-          {unreadCount > 0 && (
-            <span className={cn(
-              "absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-destructive-foreground animate-in zoom-in-50",
-              urgentCount > 0 ? "bg-destructive notif-urgent-badge" : "bg-primary"
-            )}>
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
+          <span className="relative inline-flex">
+            <Bell className="h-4 w-4" />
+            {unreadCount > 0 && (
+              <span className={cn(
+                "absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none text-destructive-foreground ring-2 ring-card animate-in zoom-in-50",
+                urgentCount > 0 ? "bg-destructive notif-urgent-badge" : "bg-primary"
+              )}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 md:w-[420px] p-0 glass-card" sideOffset={8}>
