@@ -634,17 +634,60 @@ Deno.serve(async (req) => {
         .in("ad_account_id", accountIds);
       const existingMap = new Map((existingStats ?? []).map((s: any) => [s.ad_account_id, s]));
 
+      // ===== Activity backstop: check daily_metrics for real recent spend =====
+      // If Deep-Dive populated rows in the last 3 days even when Fast-Lane saw zero,
+      // the account IS active — reset the counter so Deep-Dive keeps running.
+      const threeDaysAgo = (() => {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - 3);
+        return d.toISOString().split("T")[0];
+      })();
+
+      const activeAccountIds = new Set<string>();
+      try {
+        const { data: recentCampaigns } = await supabase
+          .from("campaigns")
+          .select("id, ad_account_id")
+          .in("ad_account_id", accountIds);
+        const campaignToAccount = new Map<string, string>();
+        for (const c of recentCampaigns ?? []) campaignToAccount.set(c.id, c.ad_account_id);
+        const campaignIds = Array.from(campaignToAccount.keys());
+
+        if (campaignIds.length > 0) {
+          // Chunk to avoid IN-list limits
+          const CHUNK = 500;
+          for (let i = 0; i < campaignIds.length; i += CHUNK) {
+            const slice = campaignIds.slice(i, i + CHUNK);
+            const { data: metrics } = await supabase
+              .from("daily_metrics")
+              .select("campaign_id, spend")
+              .in("campaign_id", slice)
+              .gte("data_date", threeDaysAgo)
+              .gt("spend", 0);
+            for (const m of metrics ?? []) {
+              const accId = campaignToAccount.get(m.campaign_id);
+              if (accId) activeAccountIds.add(accId);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.error("Activity backstop check failed:", e?.message);
+      }
+
       const upserts = accountIds.map((accId) => {
         const rows = accountRowCounts[accId];
         const prev = existingMap.get(accId) as any;
         const prevZero = prev?.consecutive_zero_runs ?? 0;
         const orgId = accounts.find((a) => a.id === accId)?.org_id ?? prev?.org_id ?? null;
+        const isActiveByMetrics = activeAccountIds.has(accId);
+        // Reset counter if Fast-Lane saw rows OR daily_metrics shows real recent spend
+        const shouldReset = rows > 0 || isActiveByMetrics;
         return {
           ad_account_id: accId,
           org_id: orgId,
           last_fast_lane_at: nowIso,
           last_fast_lane_rows: rows,
-          consecutive_zero_runs: rows > 0 ? 0 : prevZero + 1,
+          consecutive_zero_runs: shouldReset ? 0 : prevZero + 1,
           updated_at: nowIso,
         };
       });
@@ -653,7 +696,7 @@ Deno.serve(async (req) => {
         .from("sync_account_stats")
         .upsert(upserts, { onConflict: "ad_account_id" });
       if (actErr) console.error("Activity stats upsert failed:", actErr.message);
-      else console.log(`Activity stats updated for ${upserts.length} accounts`);
+      else console.log(`Activity stats updated for ${upserts.length} accounts (${activeAccountIds.size} active by metrics backstop)`);
     }
 
     return new Response(
