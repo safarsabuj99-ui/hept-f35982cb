@@ -3396,7 +3396,10 @@ export type Database = {
           ad_account_id: string
           avg_rows_per_day: number | null
           consecutive_failures: number | null
+          consecutive_zero_runs: number
           last_error: string | null
+          last_fast_lane_at: string | null
+          last_fast_lane_rows: number
           last_full_sync_at: string | null
           org_id: string | null
           recommended_chunk_days: number | null
@@ -3407,7 +3410,10 @@ export type Database = {
           ad_account_id: string
           avg_rows_per_day?: number | null
           consecutive_failures?: number | null
+          consecutive_zero_runs?: number
           last_error?: string | null
+          last_fast_lane_at?: string | null
+          last_fast_lane_rows?: number
           last_full_sync_at?: string | null
           org_id?: string | null
           recommended_chunk_days?: number | null
@@ -3418,7 +3424,10 @@ export type Database = {
           ad_account_id?: string
           avg_rows_per_day?: number | null
           consecutive_failures?: number | null
+          consecutive_zero_runs?: number
           last_error?: string | null
+          last_fast_lane_at?: string | null
+          last_fast_lane_rows?: number
           last_full_sync_at?: string | null
           org_id?: string | null
           recommended_chunk_days?: number | null

@@ -6,7 +6,7 @@ import { SyncControlsAccordion } from "./sync/SyncControlsAccordion";
 import { FailedJob } from "./sync/SyncErrorPanel";
 import { SyncHealthMatrix } from "./sync/SyncHealthMatrix";
 import { AccountHealth } from "./sync/SyncHealthRow";
-import { computeLaneHealth, summarizeIssue, LaneJobStats } from "./sync/healthScore";
+import { computeLaneHealth, summarizeIssue, computeActivitySignal, LaneJobStats } from "./sync/healthScore";
 
 interface QueueStats {
   pending: number;
@@ -43,7 +43,7 @@ export function SyncTab() {
         supabase.from("sync_jobs" as any).select("id, started_at, completed_at", { count: "exact" }).eq("status", "done").gte("completed_at", since24h).limit(100),
         supabase.from("sync_jobs" as any).select("id, ad_account_id, function_name, attempts, last_error, error_code, completed_at, date_from, date_to, chunk_index, chunk_total").eq("status", "failed").order("completed_at", { ascending: false }).limit(20),
         supabase.from("sync_jobs" as any).select("ad_account_id, status, parent_job_id").in("status", ["pending", "processing", "done", "failed"]).gte("scheduled_at", since24h),
-        supabase.from("sync_account_stats" as any).select("ad_account_id, avg_rows_per_day, recommended_chunk_days, last_full_sync_at, consecutive_failures, last_error"),
+        supabase.from("sync_account_stats" as any).select("ad_account_id, avg_rows_per_day, recommended_chunk_days, last_full_sync_at, consecutive_failures, last_error, last_fast_lane_at, last_fast_lane_rows, consecutive_zero_runs"),
         supabase.from("sync_integrity_alerts" as any).select("ad_account_id").eq("resolved", false),
         supabase.from("sync_jobs" as any).select("ad_account_id, function_name, status, completed_at, last_error, error_code").gte("scheduled_at", since24h),
         supabase.from("api_integrations").select("id, platform, token_expiry_date, connection_status"),
@@ -135,11 +135,16 @@ export function SyncTab() {
           const tokenExpired = tokenExpiringInDays !== null && tokenExpiringInDays <= 0;
           const fast = computeLaneHealth(lanes.fast, { tokenExpired });
           const deep = computeLaneHealth(lanes.deep, { tokenExpired });
+          const activity = computeActivitySignal({
+            last_fast_lane_at: st?.last_fast_lane_at ?? null,
+            last_fast_lane_rows: st?.last_fast_lane_rows ?? 0,
+            consecutive_zero_runs: st?.consecutive_zero_runs ?? 0,
+          });
           return {
             ad_account_id: a.id,
             account_name: a.account_name || a.id,
             platform: a.platform_name ?? null,
-            fast, deep,
+            fast, deep, activity,
             issue: summarizeIssue(fast, deep, tokenExpiringInDays),
             token_expiring_in_days: tokenExpiringInDays,
           };

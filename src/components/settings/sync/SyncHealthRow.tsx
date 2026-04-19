@@ -3,10 +3,11 @@ import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers } from "lucide-react";
-import { LaneHealth, TIER_META } from "./healthScore";
+import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers, Activity, SkipForward, CheckCircle2 } from "lucide-react";
+import { LaneHealth, TIER_META, ActivitySignal, ACTIVITY_META } from "./healthScore";
 
 export interface AccountHealth {
   ad_account_id: string;
@@ -14,6 +15,7 @@ export interface AccountHealth {
   platform: string | null;
   fast: LaneHealth;
   deep: LaneHealth;
+  activity: ActivitySignal;
   issue: string | null;
   token_expiring_in_days: number | null;
 }
@@ -58,6 +60,69 @@ function LanePill({ lane, label, icon: Icon }: { lane: LaneHealth; label: string
   );
 }
 
+function ActivityPill({ activity }: { activity: ActivitySignal }) {
+  const meta = ACTIVITY_META[activity.tier];
+  const ago = activity.last_fast_lane_at
+    ? formatDistanceToNow(new Date(activity.last_fast_lane_at), { addSuffix: false })
+    : null;
+
+  const subline = (() => {
+    if (activity.tier === "live") return `${activity.last_fast_lane_rows} row${activity.last_fast_lane_rows === 1 ? "" : "s"}`;
+    if (activity.tier === "quiet") return `${activity.consecutive_zero_runs} silent run${activity.consecutive_zero_runs === 1 ? "" : "s"}`;
+    if (activity.tier === "silent") {
+      const hh = activity.hours_until_heartbeat;
+      return hh !== null ? `Heartbeat in ${hh < 1 ? "<1" : Math.floor(hh)}h` : "Skipped";
+    }
+    if (activity.tier === "dormant") return "Heartbeat fires";
+    return "Awaiting first run";
+  })();
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn(
+            "rounded-lg border p-2.5 transition-all cursor-help",
+            (activity.tier === "silent" || activity.tier === "dormant") && "border-amber-500/20 bg-amber-500/5",
+          )}>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide">
+                <Activity className="h-3 w-3" /> Activity
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("inline-flex h-2 w-2 rounded-full", meta.dot)} />
+                <span className={cn("text-xs font-semibold", meta.tone)}>{meta.label}</span>
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] font-medium truncate">{subline}</span>
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {ago ? `${ago} ago` : "never"}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1 text-[10px]">
+              {activity.deep_dive_will_run ? (
+                <>
+                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Deep-Dive on</span>
+                </>
+              ) : (
+                <>
+                  <SkipForward className="h-2.5 w-2.5 text-amber-500" />
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">Deep-Dive skipped</span>
+                </>
+              )}
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          {meta.description}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefresh: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -73,6 +138,7 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
   };
 
   const isCritical = acc.fast.tier === "critical" || acc.deep.tier === "critical";
+  const isSkipped = !acc.activity.deep_dive_will_run;
 
   return (
     <div className={cn(
@@ -84,21 +150,30 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
         className="w-full p-3.5 text-left hover:bg-muted/30 transition-colors"
       >
         <div className="grid grid-cols-12 gap-3 items-center">
-          <div className="col-span-12 md:col-span-3 min-w-0">
+          <div className="col-span-12 md:col-span-2 min-w-0">
             <div className="flex items-center gap-2">
               <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
               <span className="font-medium text-sm truncate">{acc.account_name}</span>
             </div>
             {acc.platform && <span className="text-[10px] text-muted-foreground capitalize ml-5">{acc.platform}</span>}
           </div>
-          <div className="col-span-6 md:col-span-3"><LanePill lane={acc.fast} label="Fast-Lane" icon={Zap} /></div>
-          <div className="col-span-6 md:col-span-3"><LanePill lane={acc.deep} label="Deep-Dive" icon={Layers} /></div>
-          <div className="col-span-12 md:col-span-3 min-w-0">
+          <div className="col-span-6 md:col-span-2"><LanePill lane={acc.fast} label="Fast-Lane" icon={Zap} /></div>
+          <div className="col-span-6 md:col-span-3">
+            <div className={cn(isSkipped && "opacity-60")}>
+              <LanePill lane={acc.deep} label="Deep-Dive" icon={Layers} />
+            </div>
+          </div>
+          <div className="col-span-6 md:col-span-3"><ActivityPill activity={acc.activity} /></div>
+          <div className="col-span-6 md:col-span-2 min-w-0">
             {acc.issue ? (
               <Badge variant={isCritical ? "destructive" : "outline"} className="gap-1 max-w-full">
                 <AlertTriangle className="h-3 w-3 shrink-0" />
                 <span className="truncate text-[10px]">{acc.issue}</span>
               </Badge>
+            ) : isSkipped ? (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <SkipForward className="h-3 w-3" /> Saving quota
+              </span>
             ) : (
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400">— No issues</span>
             )}
@@ -124,11 +199,18 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-semibold flex items-center gap-1.5"><Layers className="h-3 w-3" /> Deep-Dive (24h)</span>
+                <span className="font-semibold flex items-center gap-1.5">
+                  <Layers className="h-3 w-3" /> Deep-Dive (24h)
+                  {isSkipped && (
+                    <Badge variant="outline" className="h-4 text-[9px] gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+                      <SkipForward className="h-2.5 w-2.5" /> Skipped
+                    </Badge>
+                  )}
+                </span>
                 <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1"
                   disabled={retrying === "deep"} onClick={(e) => { e.stopPropagation(); handleRetry("deep"); }}>
                   {retrying === "deep" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
-                  Re-sync
+                  Force Run
                 </Button>
               </div>
               <Stat l="Done" v={acc.deep.done} /><Stat l="Failed" v={acc.deep.failed} tone={acc.deep.failed > 0 ? "destructive" : undefined} />
@@ -136,6 +218,21 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
               {acc.deep.last_error && <p className="text-[10px] text-destructive break-words">⚠ {acc.deep.last_error}</p>}
             </div>
           </div>
+
+          {/* Activity intelligence panel */}
+          <div className="mt-3 rounded-md p-2.5 bg-background/60 border border-border/40 text-[11px]">
+            <div className="flex items-center gap-1.5 mb-1.5 font-semibold">
+              <Activity className="h-3 w-3 text-primary" />
+              Smart Deep-Dive Gating
+            </div>
+            <p className="text-muted-foreground leading-relaxed">
+              {ACTIVITY_META[acc.activity.tier].description}.{" "}
+              {acc.activity.last_fast_lane_at && (
+                <>Last Fast-Lane returned <span className="font-semibold text-foreground">{acc.activity.last_fast_lane_rows}</span> row{acc.activity.last_fast_lane_rows === 1 ? "" : "s"}{acc.activity.consecutive_zero_runs > 0 && <> · <span className="text-amber-600 dark:text-amber-400">{acc.activity.consecutive_zero_runs}</span> consecutive zero-run{acc.activity.consecutive_zero_runs === 1 ? "" : "s"}</>}.</>
+              )}
+            </p>
+          </div>
+
           {acc.token_expiring_in_days !== null && acc.token_expiring_in_days <= 14 && (
             <div className={cn("mt-3 rounded-md p-2 text-[11px] flex items-center gap-2",
               acc.token_expiring_in_days <= 0 ? "bg-destructive/10 text-destructive" : "bg-amber-500/10 text-amber-700 dark:text-amber-400")}>
