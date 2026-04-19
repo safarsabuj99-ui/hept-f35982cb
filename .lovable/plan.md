@@ -1,59 +1,55 @@
 
 
-## Smart Sync Gating — 3 Critical Bug Fixes
+## Fix Sync Health Matrix — Overflow + Refresh Feedback + Heartbeat Bug
 
-### Bug Diagnosis
+### Issues Identified
 
-FARISH 2 has $18+ active spend in `daily_metrics` today, but Deep-Dive is being skipped because `consecutive_zero_runs = 105`. Three compounding bugs:
-
-| # | Bug | Impact |
+| # | Bug | Where |
 |---|---|---|
-| **1** | Fast-Lane Meta API requests **16-month window** (Jan 2025 → today) instead of today-only, missing today's small/late-arriving rows | Fast-Lane reports 0 even when account has spend |
-| **2** | `consecutive_zero_runs` counter only resets when Fast-Lane sees rows — never when Deep-Dive succeeds or `daily_metrics` shows fresh data | Counter climbs to 100+ forever for low-spend accounts |
-| **3** | 24-hour heartbeat is too long — accounts can miss a full day of Deep-Dive sync | Unacceptable data lag |
+| **1** | Text overflow — "about 17 hours ago", "23 minutes ago" wraps inside narrow Fast-Lane/Deep-Dive pills, breaking the tight grid | `SyncHealthRow.tsx` (LanePill subline) |
+| **2** | **Heartbeat countdown wrong** — UI shows "Heartbeat in 23h" but actual cron fires at **6h** (we already changed `HEARTBEAT_HOURS = 6` in orchestrator, forgot to update the helper) | `healthScore.ts` line 157 hardcodes `24 - hoursSince` |
+| **3** | Refresh button gives no feedback — clicking it appears to do nothing because: no spinner, no disabled state, no row opacity change. Users can't tell if it ran | `SyncHealthMatrix.tsx` Refresh button |
+| **4** | "about" prefix from `formatDistanceToNow` adds noise ("about 17 hours ago") | `SyncHealthRow.tsx` ago formatter |
 
-### Fixes
+### Fixes (Pure Frontend, ~5 min)
 
-**Fix 1 — Fast-Lane: Narrow Meta window to last 3 days**
-- Change `startDateStr` for Meta path from `getAccountStartDate()` to **last 3 days** (catches today + late attribution from yesterday + day-before)
-- Keeps API response small (~3 rows per campaign instead of hundreds), reliable, and ensures today's data is included
-- Other platforms (Google/TikTok) already chunk properly — only Meta needs this
+**Fix 1 — Compact "ago" formatter**
+Replace `formatDistanceToNow(date, { addSuffix: false })` with a tight custom formatter:
+- `< 1m` → `now`
+- `< 60m` → `5m`
+- `< 24h` → `3h`
+- `< 30d` → `2d`
 
-**Fix 2 — Counter resets based on REAL activity (not just Fast-Lane)**
-After Fast-Lane completes its run, also check `daily_metrics` for fresh data per account:
-```typescript
-// After main sync loop, query daily_metrics for last 24h activity per account
-const { data: recentMetrics } = await supabase
-  .from('daily_metrics')
-  .select('campaign_id, spend')
-  .gte('data_date', threeDaysAgo)
-  .gt('spend', 0);
-// Map campaign_id → ad_account_id via campaigns table
-// If account has ANY recent spend in daily_metrics → treat as "active" → reset counter
+Strips "about", "minutes", "hours" → fits inside narrow pills, no wrap.
+
+**Fix 2 — Sync HEARTBEAT_HOURS constant**
+Export `HEARTBEAT_HOURS = 6` from `healthScore.ts`, use it in `computeActivitySignal` instead of hardcoded `24`. Update the dormant/silent threshold accordingly:
+```ts
+export const HEARTBEAT_HOURS = 6;
+// ...
+const hoursUntilHeartbeat = Math.max(0, HEARTBEAT_HOURS - hoursSince);
+if (hoursSince >= HEARTBEAT_HOURS) tier = "dormant";
 ```
-This way, even if Fast-Lane misses, Deep-Dive's own success will reset the counter on the next Fast-Lane tick.
+Now "Heartbeat in 5h" matches the actual orchestrator behavior.
 
-**Fix 3 — Tighter heartbeat: 6 hours instead of 24**
-In `sync-orchestrator`, change `HEARTBEAT_HOURS = 24` → `HEARTBEAT_HOURS = 6`. Even "silent" accounts get a Deep-Dive every 6h max, ensuring no account can drift more than 6h behind.
+**Fix 3 — Visible refresh feedback**
+- Add `loading` prop to `SyncHealthMatrix` (already received via parent state)
+- Refresh button: show `Loader2` spinner when loading, disable click during refresh
+- Add subtle `opacity-60 transition` on the rows container while refreshing
+- Pass `loading` down from `SyncTab` (already tracked)
 
-**Fix 4 — One-shot reset for stuck accounts**
-Run a one-time SQL update to reset `consecutive_zero_runs = 0` for any account that has ANY `daily_metrics` row in the last 24 hours with spend > 0. This immediately unblocks FARISH, FARISH 2, and any other stuck accounts so Deep-Dive resumes on the next orchestrator tick.
+**Fix 4 — Hard text truncation safeguard**
+On every "ago" / subline span, add `truncate` + `min-w-0` on parents so even if the formatter misses, no wrap happens. Reduce gap inside LanePill header from `gap-2` to `gap-1.5`.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/sync-fast-lane/index.ts` | Meta path: use 3-day window. Add `daily_metrics` activity check that resets counter based on real spend |
-| `supabase/functions/sync-orchestrator/index.ts` | `HEARTBEAT_HOURS = 6` (was 24) |
-| Migration | One-shot `UPDATE sync_account_stats SET consecutive_zero_runs = 0 WHERE ad_account_id IN (accounts with recent daily_metrics activity)` |
-
-### Why This Is Bulletproof
-
-- **Self-healing from 3 angles**: Fast-Lane sees rows → reset. Deep-Dive populates `daily_metrics` → next Fast-Lane resets the counter. Heartbeat every 6h forces a sync regardless.
-- **No false skips**: Real spend in `daily_metrics` is the ultimate truth — if it's there, the account is alive.
-- **Backward compatible**: All gating logic stays; we just plug the holes that caused false negatives.
-- **Immediate recovery**: One-shot SQL reset clears the current backlog instantly.
+| `src/components/settings/sync/healthScore.ts` | Export `HEARTBEAT_HOURS = 6`, use it in `computeActivitySignal`. Add `formatAgoCompact()` helper. |
+| `src/components/settings/sync/SyncHealthRow.tsx` | Use `formatAgoCompact`, add `truncate min-w-0` safeguards |
+| `src/components/settings/sync/SyncHealthMatrix.tsx` | Accept `loading` prop, spinner on Refresh, opacity on rows during refresh |
+| `src/components/settings/SyncTab.tsx` | Pass `loading` to `SyncHealthMatrix` |
 
 ### Build Time
-~10 minutes. Zero schema risk — pure logic fixes + a data correction.
+~5 minutes. Pure UI polish + 1 logic constant fix. Zero schema, zero edge function changes.
 
