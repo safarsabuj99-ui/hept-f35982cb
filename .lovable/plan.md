@@ -1,97 +1,75 @@
 
 
-## Sync Health Panel — Per-Account Health Matrix
+The user is reinforcing the plan from my previous turn but with a sharper, simpler rule: **Deep-Dive should only run for accounts where Fast-Lane just returned data**. No data in Fast-Lane = skip Deep-Dive entirely.
 
-### What To Add
+This is even cleaner than my previous "tier-based" proposal. Let me simplify.
 
-A new **Tier 2.5** section between the Live Accounts Rail and the Controls Accordion: a **"Account Health Matrix"** showing per-account health scores for both Fast-Lane and Deep-Dive lanes side-by-side.
+## Smart Deep-Dive Gating — Fast-Lane Drives Deep-Dive
 
-### Design
+### The Rule (Simple & Clear)
+- **Fast-Lane runs always** for all mapped accounts (it's cheap, 1-day window)
+- **Deep-Dive runs ONLY for accounts where Fast-Lane returned ≥1 row in the last run**
+- No data in Fast-Lane = account is silent/dead/paused → **skip Deep-Dive**
+- Auto-recovery: the moment Fast-Lane sees data again → Deep-Dive resumes next cycle
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│  ⚡ Account Health Matrix                          [All ▾] [Refresh ↻] │
-│  ────────────────────────────────────────────────────────────────────  │
-│  Account              Fast-Lane         Deep-Dive        Last Issue   │
-│  ─────────────────    ──────────────    ──────────────   ──────────── │
-│  Sabuj Meta Pro    │  ●  Excellent  │  ●  Excellent  │  —            │
-│                    │  100% · 2m ago │  100% · 1h ago │               │
-│  ─────────────────────────────────────────────────────────────────────│
-│  Rahim Tiktok BC   │  ●  Healthy    │  ◐  Degraded   │  Geo 41000    │
-│                    │  92% · 5m ago  │  60% · 6h ago  │  3 chunks failed│
-│  ─────────────────────────────────────────────────────────────────────│
-│  Karim Google Ads  │  ●  Critical   │  ●  Critical   │  Token expired│
-│                    │  0% · 2d ago   │  0% · 2d ago   │  Refresh now →│
-└────────────────────────────────────────────────────────────────────────┘
+### Why This Is Smart
+- Saves ~50-80% of Deep-Dive API calls (most accounts are silent at any given hour)
+- Self-healing — no manual flagging needed
+- Token errors stay separate (those are "Critical", not "no data")
+- Reflects reality: if today has no spend, the 25-day historical pull is wasted compute
+
+### Implementation
+
+**1. Track Fast-Lane signal per account** (1 small migration)
+
+Add 3 columns to `sync_account_stats`:
+- `last_fast_lane_at` — timestamp of last fast-lane run
+- `last_fast_lane_rows` — rows returned (0 = silent)
+- `consecutive_zero_runs` — counter (resets on any rows)
+
+**2. Update `sync-fast-lane`** — at end of each run, upsert these stats per account.
+
+**3. Update `sync-orchestrator`** — when enqueuing Deep-Dive jobs:
+```
+For each mapped account:
+  - If last_fast_lane_rows > 0 → enqueue Deep-Dive ✓
+  - If last_fast_lane_rows = 0 AND consecutive_zero_runs < 3 → enqueue (grace period)
+  - If consecutive_zero_runs >= 3 → SKIP Deep-Dive
+  - If never had a fast-lane run → enqueue (first-time accounts)
+  - Heartbeat: every 24h, force one Deep-Dive even for skipped accounts (catch reactivations)
 ```
 
-### Health Score Logic (computed client-side from `sync_jobs` last 24h)
+**4. UI surface in Sync Health Matrix** — add a 3rd pill per row:
 
-| Status | Score | Color | Trigger |
-|--------|-------|-------|---------|
-| **Excellent** | 95-100% | emerald | All chunks done, 0 failures, last sync <30min |
-| **Healthy** | 75-94% | green | <2 failures, last sync <2h |
-| **Degraded** | 40-74% | amber | Failures present OR last sync 2-24h |
-| **Critical** | <40% | red | Token expired / >3 consecutive failures / no sync >24h |
-| **Idle** | — | muted | No jobs in 24h (paused account) |
-
-Score formula per lane:
 ```
-score = (done / (done + failed + pending_old)) * 100
-       - (consecutive_failures × 10)
-       - (hours_since_last_sync > 2 ? 20 : 0)
+Account            Fast-Lane      Deep-Dive       Activity        Issue
+Sabuj Meta Pro  │  ● Healthy   │  ● Healthy    │  ● Live        │  —
+Rahim TT BC     │  ● Healthy   │  ◐ Pending    │  ● Live (12 rows) │  —
+Old Test Acct   │  ● Healthy   │  ⊘ Skipped    │  ○ Silent (3 runs)│  No spend today
+Dead Acct       │  ● Healthy   │  ⊘ Skipped    │  ● Dormant 26h │  Heartbeat in 14h
 ```
 
-### What Each Row Shows
-
-Per account, two side-by-side health pills (Fast-Lane | Deep-Dive):
-- Status dot (with pulse animation if currently syncing)
-- Score % + relative time of last successful sync
-- Tiny chunks completed/total mini-bar
-- **Issue summary** column: error code (e.g., "Geo 41000", "Token expired", "Rate limited") + suggested action
-
-### Filters & Interactions
-- **Top filter**: All / Critical / Degraded / Healthy (counts shown)
-- **Sort**: Worst-first by default
-- **Click row** → expandable drawer showing last 10 jobs per lane with timestamps, durations, errors
-- **Quick action**: per-row "Force Re-sync" (Fast-Lane or Deep-Dive button)
-
-### Data Source (no schema changes)
-
-Single query per refresh, joins:
-- `sync_jobs` last 24h grouped by `(ad_account_id, function_name)`
-- `sync_account_stats` for `consecutive_failures`, `last_full_sync_at`
-- `api_integrations` for token expiry → marks "Critical: token expires in Nd"
-- `ad_accounts` for `account_name` and `is_active`
-
-Compute health entirely in React — no edge function needed.
+**5. Admin override** — per row, "Force Deep-Dive Now" button bypasses the skip for one cycle (for manual debugging).
 
 ### Files To Change
 
 | File | Change |
 |------|--------|
-| `src/components/settings/sync/SyncHealthMatrix.tsx` | **NEW** — matrix table with health pills |
-| `src/components/settings/sync/SyncHealthRow.tsx` | **NEW** — single row component (account + 2 lane pills + issue) |
-| `src/components/settings/sync/healthScore.ts` | **NEW** — pure scoring helpers |
-| `src/components/settings/SyncTab.tsx` | Add data fetch for per-lane stats + render `<SyncHealthMatrix />` between Rail and Controls |
+| Migration | Add 3 columns to `sync_account_stats` |
+| `supabase/functions/sync-fast-lane/index.ts` | Update `last_fast_lane_rows` + `consecutive_zero_runs` after each run |
+| `supabase/functions/sync-orchestrator/index.ts` | Gate Deep-Dive enqueue on Fast-Lane signal + 24h heartbeat |
+| `src/components/settings/sync/healthScore.ts` | Add `ActivityTier` (live/silent/dormant) + helper |
+| `src/components/settings/sync/SyncHealthRow.tsx` | Add "Activity" pill column |
+| `src/components/settings/sync/SyncHealthMatrix.tsx` | Fetch activity stats, add filter chip "Show silent/dormant" |
+| `src/components/settings/SyncTab.tsx` | Pass activity data to matrix |
 
-### Premium Touches
-- Glassmorphic panel matching existing Pulse Card style
-- Pulsing dot on actively-syncing accounts (subtle, not distracting)
-- Critical rows have soft red glow border
-- Empty state when no accounts mapped: "No accounts connected — connect Meta/TikTok/Google to start tracking health"
-- All updates piggyback on existing 1s-debounced realtime + 15s poll already wired up
-
-### Why This Beats The Previous Health Card
-
-| Old | New |
-|-----|-----|
-| Single global "queue health" number | Per-account, per-lane breakdown |
-| No distinction between Fast-Lane/Deep-Dive | Side-by-side comparison reveals lane-specific issues |
-| Errors buried in failed-jobs list | Issue summary inline with suggested fix |
-| No quick action | Force re-sync button per row |
-| No filtering | Filter by status, sort by worst |
+### Edge Cases Handled
+- **New accounts**: no record yet → enqueue Deep-Dive normally (first run gathers baseline)
+- **Off-hours quiet**: 1-2 zero runs is normal → grace period prevents false skip
+- **Reactivation**: any non-zero Fast-Lane immediately resets → Deep-Dive resumes next cycle
+- **Heartbeat safety**: even "skipped" accounts get one Deep-Dive every 24h → catches accounts that came alive without spend (e.g., metadata-only changes)
+- **Token expired**: still flagged Critical separately (this gating is purely about "no data", not failures)
 
 ### Build Time
-~12 minutes. Pure frontend additions. Zero schema, zero edge function changes. Reuses existing realtime subscription and refresh cycle.
+~20 minutes. 1 migration (3 additive columns), 2 edge function tweaks, 4 frontend updates. Zero breaking changes — existing accounts default to enqueuing until first fast-lane signal.
 
