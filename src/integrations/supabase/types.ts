@@ -2076,12 +2076,39 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_mutes: {
+        Row: {
+          created_at: string
+          group_key: string
+          id: string
+          muted_until: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_key: string
+          id?: string
+          muted_until: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_key?: string
+          id?: string
+          muted_until?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_preferences: {
         Row: {
           channel: string
           created_at: string
+          email_enabled: boolean
           enabled: boolean
           id: string
+          min_priority: string
+          sound_enabled: boolean
           type: string
           updated_at: string
           user_id: string
@@ -2089,8 +2116,11 @@ export type Database = {
         Insert: {
           channel?: string
           created_at?: string
+          email_enabled?: boolean
           enabled?: boolean
           id?: string
+          min_priority?: string
+          sound_enabled?: boolean
           type?: string
           updated_at?: string
           user_id: string
@@ -2098,9 +2128,48 @@ export type Database = {
         Update: {
           channel?: string
           created_at?: string
+          email_enabled?: boolean
           enabled?: boolean
           id?: string
+          min_priority?: string
+          sound_enabled?: boolean
           type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_user_settings: {
+        Row: {
+          created_at: string
+          digest_enabled: boolean
+          digest_hour: number
+          dnd_until: string | null
+          quiet_end: string | null
+          quiet_start: string | null
+          quiet_timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          digest_enabled?: boolean
+          digest_hour?: number
+          dnd_until?: string | null
+          quiet_end?: string | null
+          quiet_start?: string | null
+          quiet_timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          digest_enabled?: boolean
+          digest_hour?: number
+          dnd_until?: string | null
+          quiet_end?: string | null
+          quiet_start?: string | null
+          quiet_timezone?: string
           updated_at?: string
           user_id?: string
         }
@@ -2108,40 +2177,49 @@ export type Database = {
       }
       notifications: {
         Row: {
+          archived_at: string | null
           body: string
           created_at: string
           group_key: string | null
           id: string
+          is_pinned: boolean
           is_read: boolean
           link: string | null
           org_id: string | null
           priority: string
+          snoozed_until: string | null
           title: string
           type: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           body?: string
           created_at?: string
           group_key?: string | null
           id?: string
+          is_pinned?: boolean
           is_read?: boolean
           link?: string | null
           org_id?: string | null
           priority?: string
+          snoozed_until?: string | null
           title: string
           type?: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           body?: string
           created_at?: string
           group_key?: string | null
           id?: string
+          is_pinned?: boolean
           is_read?: boolean
           link?: string | null
           org_id?: string | null
           priority?: string
+          snoozed_until?: string | null
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
