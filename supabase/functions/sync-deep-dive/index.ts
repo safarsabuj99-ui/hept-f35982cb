@@ -8,15 +8,18 @@ const corsHeaders = {
 
 const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
 
-/** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
+// Bulletproof sync limits
+const MAX_PAGES_META = 50;
+const MAX_PAGES_TIKTOK = 20;
+const FLUSH_THRESHOLD = 2000;        // Flush bulk arrays when they reach this size
+const BULK_UPSERT_CHUNK = 500;       // Upsert in 500-row sub-batches (Postgres-safe)
+const RECONCILIATION_TOLERANCE = 0.10; // $0.10 drift tolerance before alerting
+
 function getTikTokBaseUrl(proxyUrl: string | null): string {
-  if (proxyUrl) {
-    return proxyUrl.replace(/\/+$/, "");
-  }
+  if (proxyUrl) return proxyUrl.replace(/\/+$/, "");
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on 41000 geo-restriction errors */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, { headers });
@@ -30,7 +33,6 @@ async function tiktokFetchWithRetry(url: string, headers: Record<string, string>
   }
 }
 
-/** Split a date range into 30-day chunks for TikTok API compatibility */
 function generateDateChunks(startDate: string, endDate: string, maxDays = 30): Array<{start: string, end: string}> {
   const chunks: Array<{start: string, end: string}> = [];
   let current = new Date(startDate + "T00:00:00Z");
@@ -49,36 +51,48 @@ function generateDateChunks(startDate: string, endDate: string, maxDays = 30): A
   return chunks;
 }
 
-/** Get today's date string in Asia/Dhaka timezone */
 function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
 }
 
-// Force redeploy v2 - proxy + 30-day chunking fix
+// Bulk-upsert helper: chunked, with onConflict, returns error count.
+async function bulkUpsert(
+  supabase: any,
+  table: string,
+  rows: any[],
+  onConflict: string,
+  errors: string[],
+  label: string,
+): Promise<void> {
+  if (rows.length === 0) return;
+  for (let i = 0; i < rows.length; i += BULK_UPSERT_CHUNK) {
+    const slice = rows.slice(i, i + BULK_UPSERT_CHUNK);
+    const { error } = await supabase.from(table).upsert(slice, { onConflict, ignoreDuplicates: false });
+    if (error) {
+      errors.push(`${label} bulk upsert (${slice.length} rows): ${error.message}`);
+      console.error(`${label} bulk upsert error:`, error.message);
+    }
+  }
+}
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Parse optional filters from request body
     let body: any = {};
     try { body = await req.json(); } catch {}
     const platformFilter: string | null = body?.platform || null;
     const adAccountIdsFilter: string[] | null = body?.ad_account_ids || null;
-    // Adaptive chunking: optional date window override (per-chunk job)
     const dateFromOverride: string | null = body?.date_from || null;
     const dateToOverride: string | null = body?.date_to || null;
     if (platformFilter) console.log(`Platform filter active: ${platformFilter}`);
-    if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
+    if (adAccountIdsFilter) console.log(`Ad account IDs filter: ${adAccountIdsFilter.join(", ")}`);
     if (dateFromOverride && dateToOverride) console.log(`Chunk window: ${dateFromOverride} → ${dateToOverride}`);
 
-    // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
       .from("ad_account_clients")
       .select("ad_account_id, client_id, mapping_keyword")
@@ -92,8 +106,6 @@ Deno.serve(async (req) => {
     }
 
     const mappedAccountIds = [...new Set(mappedAssignments.map(r => r.ad_account_id))];
-
-    // Build a map: ad_account_id -> [{ client_id, keyword }]
     const accountKeywordMap: Record<string, { client_id: string; keyword: string }[]> = {};
     for (const ac of mappedAssignments) {
       if (!accountKeywordMap[ac.ad_account_id]) accountKeywordMap[ac.ad_account_id] = [];
@@ -103,7 +115,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get active ad accounts with integration tokens - ONLY MAPPED ACCOUNTS
     let accountsQuery = supabase
       .from("ad_accounts")
       .select("id, ad_account_id, platform_name, client_id, api_integration_id, account_currency, exchange_rate, account_name, org_id, api_integrations!ad_accounts_api_integration_id_fkey(api_token, app_id, platform)")
@@ -118,7 +129,6 @@ Deno.serve(async (req) => {
     }
 
     const { data: accounts, error: accErr } = await accountsQuery;
-
     if (accErr) throw accErr;
     if (!accounts || accounts.length === 0) {
       return new Response(
@@ -127,14 +137,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Read global sync start date
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
     const globalStartDate = dateSetting?.value || "2025-01-01";
-    // Use Asia/Dhaka timezone for "today" — overridable by chunk window
     const endDateStr = dateToOverride || getDhakaToday();
 
-    // Load client profiles for per-client start dates
     const allClientIds = [...new Set(mappedAssignments.map(r => r.client_id))];
     const clientConfigs: Record<string, { start_date: string | null; timezone: string }> = {};
 
@@ -152,27 +159,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get global exchange rate setting (fallback for BDT accounts without per-account rate)
     const { data: rateSetting } = await supabase
       .from("settings").select("value").eq("key", "exchange_rate").maybeSingle();
     const globalExchangeRate = rateSetting?.value ? Number(rateSetting.value) : 120;
 
-    // Also load campaign mappings for legacy client_id resolution
     const { data: campaignMappings } = await supabase
       .from("campaign_mappings")
       .select("campaign_id, client_id")
       .eq("is_active", true);
 
     const campaignClientMap: Record<string, string | null> = {};
-    for (const m of campaignMappings ?? []) {
-      campaignClientMap[m.campaign_id] = m.client_id;
-    }
+    for (const m of campaignMappings ?? []) campaignClientMap[m.campaign_id] = m.client_id;
 
     let totalSynced = 0;
     let skippedCampaigns = 0;
     const errors: string[] = [];
 
-    // Get TikTok proxy URL setting
     const { data: proxySetting } = await supabase
       .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
     const tiktokProxyUrl = proxySetting?.value || null;
@@ -185,37 +187,29 @@ Deno.serve(async (req) => {
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
       try {
-        // Determine per-account start date from linked clients
         const linkedClientIds = accountAssignments.map(a => a.client_id);
         let effectiveStartDate = globalStartDate;
-
         const clientDates = linkedClientIds
           .map(cid => clientConfigs[cid]?.start_date)
           .filter((d): d is string => !!d && d >= globalStartDate);
-
         if (clientDates.length > 0) {
           clientDates.sort();
-          effectiveStartDate = clientDates[0]; // earliest
+          effectiveStartDate = clientDates[0];
         }
 
-        // Adaptive chunking override: when worker passes a chunk window, use it
-        // (clamp to per-account effective start to honor client data_fetch_start_date)
         const startDateStr = dateFromOverride
           ? (dateFromOverride > effectiveStartDate ? dateFromOverride : effectiveStartDate)
           : effectiveStartDate;
 
-        // Helper: resolve client_id for a campaign name using keyword matching
         const resolveClientId = (campaignName: string, rawCampaignId: string): string | null => {
           const nameLower = campaignName.toLowerCase();
           for (const { client_id, keyword } of accountAssignments) {
             if (nameLower.includes(keyword)) return client_id;
           }
-          // Fallback to legacy campaign mappings
           if (campaignClientMap[rawCampaignId]) return campaignClientMap[rawCampaignId];
-          return null; // NO MATCH = return null
+          return null;
         };
 
-        // Helper: convert BDT spend to USD using per-account or global rate
         const isBDT = (account as any).account_currency === "BDT";
         const bdtRate = isBDT ? ((account as any).exchange_rate ?? globalExchangeRate) : 1;
         const convertSpend = (rawSpend: number): number => {
@@ -223,63 +217,76 @@ Deno.serve(async (req) => {
           return Math.round((rawSpend / bdtRate) * 100) / 100;
         };
 
-        // Helper: upsert campaign into campaigns table (ID locking)
-        // statusConfirmed: true = status came directly from platform API; false = fallback "active"
-        // Build a set of guard-locked campaign IDs to prevent sync from overwriting
+        // Build guard-locked campaign ID set so we never overwrite Ad Guard pauses
         const guardLockedIds = new Set<string>();
-        {
-          const linkedClientIds = accountAssignments.map(a => a.client_id);
-          if (linkedClientIds.length > 0) {
-            const { data: clientProfiles } = await supabase
-              .from("profiles")
-              .select("system_paused_campaigns")
-              .in("user_id", linkedClientIds);
-            for (const p of clientProfiles ?? []) {
-              const paused = p.system_paused_campaigns;
-              if (Array.isArray(paused)) {
-                for (const id of paused) guardLockedIds.add(String(id));
-              }
+        if (linkedClientIds.length > 0) {
+          const { data: clientProfiles } = await supabase
+            .from("profiles")
+            .select("system_paused_campaigns")
+            .in("user_id", linkedClientIds);
+          for (const p of clientProfiles ?? []) {
+            const paused = p.system_paused_campaigns;
+            if (Array.isArray(paused)) {
+              for (const id of paused) guardLockedIds.add(String(id));
             }
           }
         }
 
-        const upsertCampaign = async (
+        // ====== BULK BATCH BUFFERS ======
+        // Collected during platform loop, bulk-upserted at end (or mid-flushed if huge).
+        const campaignsBatch: any[] = [];        // upsert -> public.campaigns
+        const mappingsBatch: any[] = [];         // upsert -> campaign_mappings (deduped)
+        const metricsBatch: any[] = [];          // upsert -> daily_metrics
+        const performanceBatch: any[] = [];      // upsert -> campaign_performance (legacy)
+        const seenMappingIds = new Set<string>(); // dedupe mappings within this run
+        let apiTotalSpend = 0;                    // for reconciliation log
+
+        // Cache existing campaigns for ID lookup (avoid per-row select)
+        const existingCampaigns = new Map<string, { id: string; status: string }>();
+        {
+          const { data: existRows } = await supabase
+            .from("campaigns")
+            .select("id, platform_id, status")
+            .eq("ad_account_id", account.id);
+          for (const c of existRows ?? []) {
+            existingCampaigns.set(c.platform_id, { id: c.id, status: c.status });
+          }
+        }
+
+        // Queue a campaign upsert with guard-protection logic, return the resolved DB id.
+        // For NEW campaigns we need to insert immediately to get the id (single round-trip
+        // with .select().single()), then subsequent metrics rows reference that id.
+        const queueCampaign = async (
           platformId: string,
           name: string,
           status: string,
           clientId: string | null,
           statusConfirmed: boolean = true,
           objective: string = ""
-        ) => {
-          // Try to find existing
-          const { data: existing } = await supabase
-            .from("campaigns")
-            .select("id, original_name_tag, status")
-            .eq("platform_id", platformId)
-            .maybeSingle();
-
+        ): Promise<{ id: string; status: string } | null> => {
+          const existing = existingCampaigns.get(platformId);
           if (existing) {
-            // GUARD PROTECTION: Never overwrite guard_paused/paused status if campaign is guard-locked
             const isGuardLocked = guardLockedIds.has(existing.id) || existing.status === "guard_paused";
-            let finalStatus: string;
-            if (isGuardLocked) {
-              // Preserve the guard state — sync must NOT undo Ad Guard
-              finalStatus = existing.status;
-              console.log(`Guard-locked: preserving status "${existing.status}" for campaign ${existing.id} (platform says: ${status})`);
-            } else if (!statusConfirmed) {
-              finalStatus = existing.status;
-            } else {
-              finalStatus = status;
-            }
-            const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
-            if (objective) updatePayload.objective = objective;
-            await supabase
-              .from("campaigns")
-              .update(updatePayload)
-              .eq("id", existing.id);
+            const finalStatus = isGuardLocked
+              ? existing.status
+              : (statusConfirmed ? status : existing.status);
+            // Queue update via bulk upsert (uses platform_id as conflict key)
+            const upd: any = {
+              platform_id: platformId,
+              name,
+              status: finalStatus,
+              client_id: clientId,
+              platform,
+              ad_account_id: account.id,
+              org_id: account.org_id,
+              original_name_tag: name, // upsert needs all NOT NULL columns; preserved via DB default if exists
+              updated_at: new Date().toISOString(),
+            };
+            if (objective) upd.objective = objective;
+            campaignsBatch.push(upd);
             return { id: existing.id, status: finalStatus };
           } else {
-            // Insert new with original_name_tag = current name
+            // New campaign: insert immediately to get the DB id (single call)
             const { data: inserted, error: insErr } = await supabase
               .from("campaigns")
               .insert({
@@ -295,99 +302,59 @@ Deno.serve(async (req) => {
               })
               .select("id")
               .single();
-
             if (insErr) {
-              // Could be a race condition, try select again
               const { data: retry } = await supabase
                 .from("campaigns")
                 .select("id, status")
                 .eq("platform_id", platformId)
-                .single();
-              return retry ? { id: retry.id, status: retry.status } : null;
+                .maybeSingle();
+              if (retry) {
+                existingCampaigns.set(platformId, { id: retry.id, status: retry.status });
+                return { id: retry.id, status: retry.status };
+              }
+              return null;
             }
-            return inserted ? { id: inserted.id, status } : null;
+            existingCampaigns.set(platformId, { id: inserted.id, status });
+            return { id: inserted.id, status };
           }
         };
 
-        // Helper: upsert daily metrics
-        const upsertMetrics = async (
-          campaignDbId: string,
-          dataDate: string,
-          metrics: {
-            spend: number;
-            impressions: number;
-            clicks: number;
-            results: number;
-            conversion_value: number;
-            ctr: number;
-            cpc: number;
-            roas: number;
-            view_content?: number;
-            add_to_cart?: number;
-            initiate_checkout?: number;
-            purchase?: number;
-            messaging_conversations?: number;
-            cost_per_purchase?: number;
-            cost_per_message?: number;
-            cpm?: number;
-            reach?: number;
-            new_messaging_contacts?: number;
-            create_order?: number;
-            budget?: number;
-            conversations_tiktok_dm?: number;
-            leads_tiktok_dm?: number;
-            conversations_instant_msg?: number;
+        const queueMapping = (platformId: string, campaignName: string, clientId: string) => {
+          if (seenMappingIds.has(platformId)) return;
+          seenMappingIds.add(platformId);
+          mappingsBatch.push({
+            campaign_id: platformId,
+            campaign_name: campaignName,
+            platform,
+            client_id: clientId,
+            ad_account_id: account.id,
+            is_active: true,
+            org_id: account.org_id,
+          });
+        };
+
+        // Mid-loop flush helper: prevents OOM on very large pulls.
+        const maybeFlush = async () => {
+          if (metricsBatch.length >= FLUSH_THRESHOLD || performanceBatch.length >= FLUSH_THRESHOLD) {
+            console.log(`Mid-flush: metrics=${metricsBatch.length}, perf=${performanceBatch.length}, campaigns=${campaignsBatch.length}`);
+            await bulkUpsert(supabase, "campaigns", campaignsBatch, "platform_id", errors, "campaigns");
+            await bulkUpsert(supabase, "daily_metrics", metricsBatch, "campaign_id,data_date", errors, "daily_metrics");
+            await bulkUpsert(supabase, "campaign_performance", performanceBatch, "campaign_id,date", errors, "campaign_performance");
+            campaignsBatch.length = 0;
+            metricsBatch.length = 0;
+            performanceBatch.length = 0;
           }
-        ) => {
-          const { error } = await supabase
-            .from("daily_metrics")
-            .upsert(
-              {
-                campaign_id: campaignDbId,
-                data_date: dataDate,
-                spend: metrics.spend,
-                impressions: metrics.impressions,
-                clicks: metrics.clicks,
-                results: metrics.results,
-                conversion_value: metrics.conversion_value,
-                ctr: metrics.ctr,
-                cpc: metrics.cpc,
-                roas: metrics.roas,
-                view_content: metrics.view_content ?? 0,
-                add_to_cart: metrics.add_to_cart ?? 0,
-                initiate_checkout: metrics.initiate_checkout ?? 0,
-                purchase: metrics.purchase ?? 0,
-                messaging_conversations: metrics.messaging_conversations ?? 0,
-                cost_per_purchase: metrics.cost_per_purchase ?? 0,
-                cost_per_message: metrics.cost_per_message ?? 0,
-                cpm: metrics.cpm ?? 0,
-                reach: metrics.reach ?? 0,
-                new_messaging_contacts: metrics.new_messaging_contacts ?? 0,
-                create_order: metrics.create_order ?? 0,
-                budget: metrics.budget ?? 0,
-                conversations_tiktok_dm: metrics.conversations_tiktok_dm ?? 0,
-                leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
-                conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,data_date", ignoreDuplicates: false }
-            );
-          if (error) errors.push(`Metrics upsert: ${error.message}`);
         };
 
         if (platform === "meta") {
-          if (!integration?.api_token) {
-            errors.push(`Meta ${account.ad_account_id}: No API token`);
-            continue;
-          }
+          if (!integration?.api_token) { errors.push(`Meta ${account.ad_account_id}: No API token`); continue; }
 
-          // Fetch real campaign statuses AND objectives from Meta
           const metaStatusMap: Record<string, string> = {};
           const metaObjectiveMap: Record<string, string> = {};
           try {
             let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status,objective&limit=500&access_token=${integration.api_token}`;
-            while (statusNextUrl) {
+            let pageCount = 0;
+            while (statusNextUrl && pageCount < MAX_PAGES_META) {
               const statusRes = await fetch(statusNextUrl);
               const statusJson = await statusRes.json();
               if (statusJson.data) {
@@ -404,29 +371,21 @@ Deno.serve(async (req) => {
                   else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
                   else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
 
-                  // Map Meta objective to simplified label
                   const rawObj = (c.objective || "").toUpperCase();
-                  if (rawObj === "OUTCOME_SALES" || rawObj === "PRODUCT_CATALOG_SALES" || rawObj === "CONVERSIONS") {
-                    metaObjectiveMap[c.id] = "sales";
-                  } else if (rawObj === "MESSAGES") {
-                    metaObjectiveMap[c.id] = "messages";
-                  } else if (rawObj === "OUTCOME_TRAFFIC" || rawObj === "LINK_CLICKS") {
-                    metaObjectiveMap[c.id] = "traffic";
-                  } else if (rawObj === "OUTCOME_LEADS" || rawObj === "LEAD_GENERATION") {
-                    metaObjectiveMap[c.id] = "leads";
-                  } else if (rawObj === "OUTCOME_ENGAGEMENT" || rawObj === "POST_ENGAGEMENT" || rawObj === "PAGE_LIKES") {
-                    metaObjectiveMap[c.id] = "engagement";
-                  } else if (rawObj === "OUTCOME_AWARENESS" || rawObj === "BRAND_AWARENESS" || rawObj === "REACH") {
-                    metaObjectiveMap[c.id] = "awareness";
-                  } else if (rawObj === "VIDEO_VIEWS") {
-                    metaObjectiveMap[c.id] = "video_views";
-                  } else if (rawObj) {
-                    metaObjectiveMap[c.id] = rawObj.toLowerCase().replace(/_/g, " ");
-                  }
+                  if (rawObj === "OUTCOME_SALES" || rawObj === "PRODUCT_CATALOG_SALES" || rawObj === "CONVERSIONS") metaObjectiveMap[c.id] = "sales";
+                  else if (rawObj === "MESSAGES") metaObjectiveMap[c.id] = "messages";
+                  else if (rawObj === "OUTCOME_TRAFFIC" || rawObj === "LINK_CLICKS") metaObjectiveMap[c.id] = "traffic";
+                  else if (rawObj === "OUTCOME_LEADS" || rawObj === "LEAD_GENERATION") metaObjectiveMap[c.id] = "leads";
+                  else if (rawObj === "OUTCOME_ENGAGEMENT" || rawObj === "POST_ENGAGEMENT" || rawObj === "PAGE_LIKES") metaObjectiveMap[c.id] = "engagement";
+                  else if (rawObj === "OUTCOME_AWARENESS" || rawObj === "BRAND_AWARENESS" || rawObj === "REACH") metaObjectiveMap[c.id] = "awareness";
+                  else if (rawObj === "VIDEO_VIEWS") metaObjectiveMap[c.id] = "video_views";
+                  else if (rawObj) metaObjectiveMap[c.id] = rawObj.toLowerCase().replace(/_/g, " ");
                 }
               }
               statusNextUrl = statusJson.paging?.next || null;
+              pageCount++;
             }
+            if (pageCount >= MAX_PAGES_META) console.warn(`Meta status: hit MAX_PAGES (${MAX_PAGES_META}) for ${account.ad_account_id}`);
           } catch (e: any) {
             errors.push(`Meta status fetch: ${e.message}`);
           }
@@ -435,16 +394,17 @@ Deno.serve(async (req) => {
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
-
-          while (nextUrl) {
+          let insightsPageCount = 0;
+          while (nextUrl && insightsPageCount < MAX_PAGES_META) {
             const res = await fetch(nextUrl);
             const json = await res.json();
             if (json.error) { errors.push(`Meta ${account.ad_account_id}: ${json.error.message}`); break; }
             if (json.data?.length > 0) allInsights = allInsights.concat(json.data);
             nextUrl = json.paging?.next || null;
+            insightsPageCount++;
           }
+          if (insightsPageCount >= MAX_PAGES_META) console.warn(`Meta insights: hit MAX_PAGES (${MAX_PAGES_META}) for ${account.ad_account_id}`);
 
-          let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
@@ -454,53 +414,31 @@ Deno.serve(async (req) => {
             const cpc = parseFloat(row.cpc || "0");
             const rawCampaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
             const campaignName = row.campaign_name || "Unknown Campaign";
-            const dataDate = row.date_start; // API's actual date
+            const dataDate = row.date_start;
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const clientId = resolveClientId(campaignName, rawCampaignId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
+            if (!clientId) { skippedCampaigns++; continue; }
 
-            // Extract results, conversion_value, and granular funnel actions
-            let results = 0;
-            let conversionValue = 0;
-            let viewContent = 0;
-            let addToCart = 0;
-            let initiateCheckout = 0;
-            let purchaseCount = 0;
-            let messagingConversations = 0;
-            let newMessagingContacts = 0;
-            let createOrder = 0;
+            let results = 0, conversionValue = 0, viewContent = 0, addToCart = 0;
+            let initiateCheckout = 0, purchaseCount = 0, messagingConversations = 0;
+            let newMessagingContacts = 0, createOrder = 0;
 
             if (row.actions) {
-              // Debug: log all action types for the first row of each account
-              if (metaRowIndex < 3) {
-                const allTypes = row.actions.map((a: any) => `${a.action_type}=${a.value}`);
-                console.log(`Meta actions [${account.ad_account_id}] campaign="${campaignName}" date=${row.date_start}: ${allTypes.join(', ')}`);
-              }
               for (const action of row.actions) {
                 const at = action.action_type;
                 const val = parseInt(action.value || "0", 10);
-                // Generic results
-                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) {
-                  results += val;
-                }
-                // Granular funnel actions
+                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) results += val;
                 if (at === "offsite_conversion.fb_pixel_view_content") viewContent += val;
                 if (at === "offsite_conversion.fb_pixel_add_to_cart") addToCart += val;
                 if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
-                // Broad match for create_order - covers multiple possible Meta action types
                 if (at === "onsite_conversion.messaging_order_created_v2" || at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order") || at.includes("order_created")) {
                   createOrder += val;
                 }
               }
             }
-            metaRowIndex++;
             if (row.action_values) {
               for (const av of row.action_values) {
                 if (av.action_type === "offsite_conversion.fb_pixel_purchase") {
@@ -518,70 +456,54 @@ Deno.serve(async (req) => {
             const platformId = `meta_${rawCampaignId}`;
             const objective = metaObjectiveMap[rawCampaignId] || "";
 
-            // ID Locking: upsert into campaigns table
             const statusConfirmed = rawCampaignId in metaStatusMap;
             const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
-            const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
+            const campaignResult = await queueCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalStatus = campaignResult.status;
 
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(platformId, campaignName, clientId);
+            apiTotalSpend += spendUsd;
 
-            // Upsert daily metrics with funnel actions
-            await upsertMetrics(campaignDbId, dataDate, {
-              spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
-              view_content: viewContent,
-              add_to_cart: addToCart,
-              initiate_checkout: initiateCheckout,
-              purchase: purchaseCount,
+            metricsBatch.push({
+              campaign_id: campaignResult.id,
+              data_date: dataDate,
+              spend: spendUsd, impressions, clicks, results,
+              conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
+              view_content: viewContent, add_to_cart: addToCart,
+              initiate_checkout: initiateCheckout, purchase: purchaseCount,
               messaging_conversations: messagingConversations,
               new_messaging_contacts: newMessagingContacts,
-              create_order: createOrder,
-              reach,
+              create_order: createOrder, reach,
               cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
               cost_per_message: Math.round(costPerMessage * 100) / 100,
               cpm: Math.round(cpmValue * 100) / 100,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
 
-            // Also write to legacy campaign_performance for backward compatibility
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: rawCampaignId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate,
-                impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
-                conversion_value: conversionValue, roas,
-                status: finalStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`Meta legacy upsert: ${error.message}`);
+            performanceBatch.push({
+              campaign_id: rawCampaignId,
+              campaign_name: campaignName,
+              ad_account_id: account.id,
+              client_id: clientId,
+              date: dataDate,
+              impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
+              conversion_value: conversionValue, roas,
+              status: campaignResult.status,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
+            });
+
+            await maybeFlush();
           }
 
           console.log(`Meta deep-dive: ${allInsights.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "google") {
-          if (!integration?.api_token) {
-            errors.push(`Google ${account.ad_account_id}: No API token`);
-            continue;
-          }
+          if (!integration?.api_token) { errors.push(`Google ${account.ad_account_id}: No API token`); continue; }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}' LIMIT 10000`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
@@ -619,131 +541,106 @@ Deno.serve(async (req) => {
             const cpcUsd = convertSpend(cpc);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const platformId = `google_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
+            if (!clientId) { skippedCampaigns++; continue; }
 
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
             const googleStatusConfirmed = !!row.campaign?.status;
             const status = statusMap[row.campaign?.status] || "active";
 
-            const campaignResult = await upsertCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
+            const campaignResult = await queueCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalStatus = campaignResult.status;
 
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(platformId, campaignName, clientId);
+            apiTotalSpend += spendUsd;
 
-            await upsertMetrics(campaignDbId, dataDate, {
+            metricsBatch.push({
+              campaign_id: campaignResult.id,
+              data_date: dataDate,
               spend: spendUsd, impressions, clicks, results: Math.round(conversions),
               conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
 
-            // Legacy write
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: platformId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
-                results: Math.round(conversions), conversion_value: conversionValue,
-                roas, status: finalStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`Google legacy upsert: ${error.message}`);
+            performanceBatch.push({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              ad_account_id: account.id,
+              client_id: clientId,
+              date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
+              results: Math.round(conversions), conversion_value: conversionValue,
+              roas, status: campaignResult.status,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
+            });
+
+            await maybeFlush();
           }
 
           console.log(`Google deep-dive: ${gResults.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "tiktok") {
-          if (!integration?.api_token) {
-            errors.push(`TikTok ${account.ad_account_id}: No API token`);
-            continue;
-          }
+          if (!integration?.api_token) { errors.push(`TikTok ${account.ad_account_id}: No API token`); continue; }
 
           const bcId = integration.app_id || "";
-          let json: any = null;
-
-          // Split into 30-day chunks for TikTok API compatibility
           const dateChunks = generateDateChunks(startDateStr, endDateStr);
           console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${endDateStr}], base=${tiktokBase}`);
           let allTiktokRows: any[] = [];
           let tiktokFailed = false;
 
           for (const chunk of dateChunks) {
-            // Pagination loop for each chunk
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
 
             do {
+              if (page > MAX_PAGES_TIKTOK) {
+                console.warn(`TikTok ${account.ad_account_id}: hit MAX_PAGES (${MAX_PAGES_TIKTOK}) on chunk ${chunk.start}-${chunk.end}`);
+                break;
+              }
               let cJson: any = null;
-              let usedBc = false;
-
               if (bcId) {
-          const bcParams = new URLSearchParams({
+                const bcParams = new URLSearchParams({
                   bc_id: bcId,
                   advertiser_ids: JSON.stringify([account.ad_account_id]),
                   service_type: "AUCTION",
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
                   page: String(page),
                 });
-
                 const bcRes = await tiktokFetchWithRetry(
                   `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
                   { "Access-Token": integration.api_token, "Content-Type": "application/json" }
                 );
-
                 cJson = bcRes;
                 if (cJson.code !== 0) {
                   console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
                   cJson = null;
-                } else {
-                  usedBc = true;
                 }
               }
-
               if (!cJson) {
-              const params = new URLSearchParams({
+                const params = new URLSearchParams({
                   advertiser_id: account.ad_account_id,
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
+                  metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
                   page: String(page),
                 });
-
                 const directRes = await tiktokFetchWithRetry(
                   `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
                   { "Access-Token": integration.api_token, "Content-Type": "application/json" }
                 );
-
                 cJson = directRes;
                 if (cJson.code !== 0) {
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
@@ -752,7 +649,6 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   break;
                 }
               }
-
               const pageRows = cJson.data?.list || [];
               allTiktokRows = allTiktokRows.concat(pageRows);
               chunkRows += pageRows.length;
@@ -765,33 +661,23 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
           }
 
           if (tiktokFailed) continue;
-          json = { data: { list: allTiktokRows } };
 
-          // Fetch real campaign statuses AND budgets from TikTok
+          // Fetch TikTok campaign statuses + budgets
           const tiktokStatusMap: Record<string, string> = {};
           const tiktokBudgetMap: Record<string, number> = {};
-          let tiktokStatusFetchFailed = false;
           try {
-            const statusParams = new URLSearchParams({
-              advertiser_id: account.ad_account_id,
-              page_size: "500",
-            });
+            const statusParams = new URLSearchParams({ advertiser_id: account.ad_account_id, page_size: "500" });
             const statusRes = await tiktokFetchWithRetry(
               `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
               { "Access-Token": integration.api_token, "Content-Type": "application/json" }
             );
-            const statusJson = statusRes;
-            console.log(`TikTok status fetch response code: ${statusJson.code}, campaigns found: ${statusJson.data?.list?.length ?? 0}`);
-            if (statusJson.code === 0 && statusJson.data?.list) {
-              for (const c of statusJson.data.list) {
+            if (statusRes.code === 0 && statusRes.data?.list) {
+              for (const c of statusRes.data.list) {
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
-                console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
-                // Extract budget (TikTok returns budget in currency units)
                 if (c.budget !== undefined && c.budget !== null) {
                   tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
                 }
-
                 const activeStatuses = [
                   "CAMPAIGN_STATUS_ENABLE",
                   "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL",
@@ -799,39 +685,23 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   "CAMPAIGN_STATUS_BUDGET_EXCEED",
                   "CAMPAIGN_STATUS_NOT_START",
                 ];
-                const deletedStatuses = ["CAMPAIGN_STATUS_DELETE"];
-
-                if (deletedStatuses.includes(opStatus)) {
-                  tiktokStatusMap[c.campaign_id] = "deleted";
-                } else if (opStatus === "CAMPAIGN_STATUS_DISABLE") {
-                  tiktokStatusMap[c.campaign_id] = "paused";
-                } else if (activeStatuses.includes(opStatus)) {
-                  if (secStatus.includes("ALL_ADGROUP_PAUSED") || opStatus === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED") {
-                    tiktokStatusMap[c.campaign_id] = "active - ad groups paused";
-                  } else if (secStatus.includes("BUDGET_EXCEED") || opStatus === "CAMPAIGN_STATUS_BUDGET_EXCEED") {
-                    tiktokStatusMap[c.campaign_id] = "active - budget exceeded";
-                  } else if (secStatus.includes("NOT_START") || opStatus === "CAMPAIGN_STATUS_NOT_START") {
-                    tiktokStatusMap[c.campaign_id] = "active - not started";
-                  } else {
-                    tiktokStatusMap[c.campaign_id] = "active";
-                  }
+                if (opStatus === "CAMPAIGN_STATUS_DELETE") tiktokStatusMap[c.campaign_id] = "deleted";
+                else if (opStatus === "CAMPAIGN_STATUS_DISABLE") tiktokStatusMap[c.campaign_id] = "paused";
+                else if (activeStatuses.includes(opStatus)) {
+                  if (secStatus.includes("ALL_ADGROUP_PAUSED") || opStatus === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED") tiktokStatusMap[c.campaign_id] = "active - ad groups paused";
+                  else if (secStatus.includes("BUDGET_EXCEED") || opStatus === "CAMPAIGN_STATUS_BUDGET_EXCEED") tiktokStatusMap[c.campaign_id] = "active - budget exceeded";
+                  else if (secStatus.includes("NOT_START") || opStatus === "CAMPAIGN_STATUS_NOT_START") tiktokStatusMap[c.campaign_id] = "active - not started";
+                  else tiktokStatusMap[c.campaign_id] = "active";
                 } else {
                   tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
                 }
               }
-            } else {
-              // API returned non-zero code or no data — treat as failed
-              console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || 'unknown error'}`);
-              tiktokStatusFetchFailed = true;
             }
           } catch (e: any) {
-            console.error(`TikTok status fetch exception: ${e.message}`);
             errors.push(`TikTok status fetch: ${e.message}`);
-            tiktokStatusFetchFailed = true;
           }
 
-          const rows = json.data?.list || [];
-          for (const row of rows) {
+          for (const row of allTiktokRows) {
             const spend = parseFloat(row.metrics?.spend || "0");
             const impressions = parseInt(row.metrics?.impressions || "0", 10);
             const clicks = parseInt(row.metrics?.clicks || "0", 10);
@@ -840,47 +710,32 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
             const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
-            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10); // Real "Conversations (TikTok DM)" from API
-            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0; // Attribute leads only when DM conversations exist
+            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10);
+            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0;
             const rawCampaignId = row.dimensions?.campaign_id;
             const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const platformId = `tiktok_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
+            if (!clientId) { skippedCampaigns++; continue; }
 
-            // If status fetch failed and map is empty, force "active" to overwrite stale "paused"
-            // If status fetch succeeded, use the map (confirmed) or default "active" (also confirmed since API worked)
-            const tiktokStatusConfirmed = tiktokStatusFetchFailed ? true : true; // Always confirmed — either from API or forced active
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
-            const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed);
+            const campaignResult = await queueCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, true);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalTiktokStatus = campaignResult.status;
 
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(platformId, campaignName, clientId);
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
             const tiktokBudget = tiktokBudgetMap[rawCampaignId] ?? 0;
             const tiktokBudgetUsd = convertSpend(tiktokBudget);
             const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
+            apiTotalSpend += spendUsd;
 
-            await upsertMetrics(campaignDbId, dataDate, {
+            metricsBatch.push({
+              campaign_id: campaignResult.id,
+              data_date: dataDate,
               spend: spendUsd, impressions, clicks, results: conversions,
               conversion_value: 0, ctr, cpc: cpcUsd, roas,
               reach: tiktokReach,
@@ -889,27 +744,69 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               conversations_tiktok_dm: tiktokConvDm,
               leads_tiktok_dm: tiktokLeadsDm,
               conversations_instant_msg: 0,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
             });
 
-            // Legacy write
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: platformId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
-                results: conversions, conversion_value: 0, roas,
-                status: finalTiktokStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`TikTok legacy upsert: ${error.message}`);
+            performanceBatch.push({
+              campaign_id: platformId,
+              campaign_name: campaignName,
+              ad_account_id: account.id,
+              client_id: clientId,
+              date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
+              results: conversions, conversion_value: 0, roas,
+              status: campaignResult.status,
+              synced_at: new Date().toISOString(),
+              org_id: account.org_id,
+            });
+
+            await maybeFlush();
           }
 
-          console.log(`TikTok deep-dive: ${rows.length} rows for ${account.ad_account_id}`);
+          console.log(`TikTok deep-dive: ${allTiktokRows.length} rows for ${account.ad_account_id}`);
+        }
+
+        // ====== FINAL FLUSH: bulk-upsert any remaining rows ======
+        await bulkUpsert(supabase, "campaigns", campaignsBatch, "platform_id", errors, "campaigns");
+        await bulkUpsert(supabase, "campaign_mappings", mappingsBatch, "campaign_id", errors, "campaign_mappings");
+        await bulkUpsert(supabase, "daily_metrics", metricsBatch, "campaign_id,data_date", errors, "daily_metrics");
+        await bulkUpsert(supabase, "campaign_performance", performanceBatch, "campaign_id,date", errors, "campaign_performance");
+
+        // ====== RECONCILIATION LOG: detect drift ======
+        try {
+          const campaignIdsForRecon = Array.from(existingCampaigns.values()).map(c => c.id);
+          let dbTotalSpend = 0;
+          if (campaignIdsForRecon.length > 0) {
+            const CHUNK = 500;
+            for (let i = 0; i < campaignIdsForRecon.length; i += CHUNK) {
+              const slice = campaignIdsForRecon.slice(i, i + CHUNK);
+              const { data: rows } = await supabase
+                .from("daily_metrics")
+                .select("spend")
+                .in("campaign_id", slice)
+                .gte("data_date", startDateStr)
+                .lte("data_date", endDateStr);
+              for (const r of rows ?? []) dbTotalSpend += Number(r.spend) || 0;
+            }
+          }
+          const delta = Math.round((apiTotalSpend - dbTotalSpend) * 100) / 100;
+          await supabase.from("sync_reconciliation_log").insert({
+            ad_account_id: account.id,
+            org_id: account.org_id,
+            platform,
+            date_from: startDateStr,
+            date_to: endDateStr,
+            api_total_spend: Math.round(apiTotalSpend * 100) / 100,
+            db_total_spend: Math.round(dbTotalSpend * 100) / 100,
+            delta,
+            rows_processed: metricsBatch.length + performanceBatch.length,
+            notes: Math.abs(delta) > RECONCILIATION_TOLERANCE ? "DRIFT_DETECTED" : null,
+          });
+          if (Math.abs(delta) > RECONCILIATION_TOLERANCE) {
+            console.warn(`Drift on ${account.account_name || account.id}: API=$${apiTotalSpend}, DB=$${dbTotalSpend}, delta=$${delta}`);
+          }
+        } catch (e: any) {
+          console.error(`Reconciliation log failed for ${account.id}:`, e?.message);
         }
 
         totalSynced++;
@@ -918,15 +815,9 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
       }
     }
 
-    // Update last_synced_at
-    const integrationIds = [
-      ...new Set(accounts.map((a) => a.api_integration_id).filter(Boolean)),
-    ];
+    const integrationIds = [...new Set(accounts.map((a) => a.api_integration_id).filter(Boolean))];
     if (integrationIds.length > 0) {
-      await supabase
-        .from("api_integrations")
-        .update({ last_synced_at: new Date().toISOString() })
-        .in("id", integrationIds);
+      await supabase.from("api_integrations").update({ last_synced_at: new Date().toISOString() }).in("id", integrationIds);
     }
 
     return new Response(
