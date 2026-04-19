@@ -1,55 +1,101 @@
 
 
-## Fix Sync Health Matrix — Overflow + Refresh Feedback + Heartbeat Bug
+## Smart Notifications v2 — Intelligent Hub
 
-### Issues Identified
+### Why upgrade
+Current system: solid foundation (realtime + push + grouping + 4 priorities). What's missing: **user control over noise**, **delivery intelligence**, **richer context**, **organization at scale**.
 
-| # | Bug | Where |
-|---|---|---|
-| **1** | Text overflow — "about 17 hours ago", "23 minutes ago" wraps inside narrow Fast-Lane/Deep-Dive pills, breaking the tight grid | `SyncHealthRow.tsx` (LanePill subline) |
-| **2** | **Heartbeat countdown wrong** — UI shows "Heartbeat in 23h" but actual cron fires at **6h** (we already changed `HEARTBEAT_HOURS = 6` in orchestrator, forgot to update the helper) | `healthScore.ts` line 157 hardcodes `24 - hoursSince` |
-| **3** | Refresh button gives no feedback — clicking it appears to do nothing because: no spinner, no disabled state, no row opacity change. Users can't tell if it ran | `SyncHealthMatrix.tsx` Refresh button |
-| **4** | "about" prefix from `formatDistanceToNow` adds noise ("about 17 hours ago") | `SyncHealthRow.tsx` ago formatter |
+### What gets built (5 pillars)
 
-### Fixes (Pure Frontend, ~5 min)
+**1. Quiet Hours + Do Not Disturb**
+- Per-user nightly window (e.g. 11pm–7am Asia/Dhaka). During quiet hours, only `urgent` triggers push/sound; `normal` & `low` queue silently for in-app delivery.
+- One-tap "Snooze 1h / Until tomorrow" from bell header.
+- Stored in `notification_preferences_v2` (extends current table with `quiet_start`, `quiet_end`, `snoozed_until`, `dnd_enabled`).
 
-**Fix 1 — Compact "ago" formatter**
-Replace `formatDistanceToNow(date, { addSuffix: false })` with a tight custom formatter:
-- `< 1m` → `now`
-- `< 60m` → `5m`
-- `< 24h` → `3h`
-- `< 30d` → `2d`
+**2. Smart Daily Digest**
+- New cron job (`notification-digest`, runs 9am Dhaka) bundles all unread `low`/`normal` notifications from last 24h into ONE summary notification: *"You have 12 updates: 4 payments, 6 guard alerts, 2 campaigns"* — clicking opens the inbox pre-filtered.
+- User toggle in Settings → Notifications: "Daily digest instead of individual alerts" (opt-in).
+- Reduces 50+ daily pings to 1, while keeping urgent ones instant.
 
-Strips "about", "minutes", "hours" → fits inside narrow pills, no wrap.
+**3. Granular Smart Rules (per-type x per-priority)**
+Replace the current 4-type x 2-channel grid with a richer matrix:
 
-**Fix 2 — Sync HEARTBEAT_HOURS constant**
-Export `HEARTBEAT_HOURS = 6` from `healthScore.ts`, use it in `computeActivitySignal` instead of hardcoded `24`. Update the dormant/silent threshold accordingly:
-```ts
-export const HEARTBEAT_HOURS = 6;
-// ...
-const hoursUntilHeartbeat = Math.max(0, HEARTBEAT_HOURS - hoursSince);
-if (hoursSince >= HEARTBEAT_HOURS) tier = "dormant";
+| Type | In-App | Push | Sound | Email* | Min Priority |
+|---|---|---|---|---|---|
+| Payment | ✓ | ✓ | ✓ | ✓ | normal |
+| Guard | ✓ | ✓ | ✓ | — | high |
+| Campaign | ✓ | — | — | — | normal |
+
+(*Email channel scaffolded but disabled until domain verified — wired through existing `send-email` function.)
+
+User can set "only push me when ≥ high priority" per type, eliminating routine noise.
+
+**4. Snooze + Pin + Archive (per-notification actions)**
+- Add `snoozed_until`, `is_pinned`, `archived_at` columns to `notifications`.
+- Bell + inbox: swipe-right to snooze (1h/4h/tomorrow), swipe-left to delete (existing), tap-pin to keep at top.
+- Snoozed items hide from bell until time elapses, then re-surface as fresh.
+
+**5. Inbox 2.0 — Smart Sections**
+Reorganize `/admin/notifications` page:
+- **Pinned** (sticky top)
+- **Action Required** — unread urgent/high (red accent)
+- **Today** — unread normal/low
+- **Snoozed** — countdown timer per item
+- **Earlier** — read history, infinite scroll
+
+Plus: **mute by group_key** (e.g. mute `guard_pause_<clientId>` for 24h after first pause to stop spam during balance recharges).
+
+### Backend changes
+
+**Schema (migration):**
+```sql
+-- notifications: add lifecycle columns
+ALTER TABLE notifications
+  ADD COLUMN snoozed_until timestamptz,
+  ADD COLUMN is_pinned boolean DEFAULT false,
+  ADD COLUMN archived_at timestamptz;
+
+-- preferences: extend with smart settings
+ALTER TABLE notification_preferences
+  ADD COLUMN min_priority text DEFAULT 'low',  -- low | normal | high | urgent
+  ADD COLUMN quiet_start time,
+  ADD COLUMN quiet_end time,
+  ADD COLUMN dnd_until timestamptz,
+  ADD COLUMN digest_enabled boolean DEFAULT false;
+
+-- mutes table: group_key suppression
+CREATE TABLE notification_mutes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  group_key text NOT NULL,
+  muted_until timestamptz NOT NULL,
+  UNIQUE(user_id, group_key)
+);
 ```
-Now "Heartbeat in 5h" matches the actual orchestrator behavior.
 
-**Fix 3 — Visible refresh feedback**
-- Add `loading` prop to `SyncHealthMatrix` (already received via parent state)
-- Refresh button: show `Loader2` spinner when loading, disable click during refresh
-- Add subtle `opacity-60 transition` on the rows container while refreshing
-- Pass `loading` down from `SyncTab` (already tracked)
+**Edge functions:**
+- `notification-digest` (new, cron 9am daily) — bundles low/normal unreads into 1 summary.
+- `send-push` (modify) — check `quiet_start/end`, `dnd_until`, `min_priority`, and `notification_mutes` before sending. Skip if filtered (still inserts in-app).
+- DB trigger `trigger_send_push` (modify) — pass priority through; skip route if mute exists.
 
-**Fix 4 — Hard text truncation safeguard**
-On every "ago" / subline span, add `truncate` + `min-w-0` on parents so even if the formatter misses, no wrap happens. Reduce gap inside LanePill header from `gap-2` to `gap-1.5`.
-
-### Files Changed
+### Frontend changes
 
 | File | Change |
 |---|---|
-| `src/components/settings/sync/healthScore.ts` | Export `HEARTBEAT_HOURS = 6`, use it in `computeActivitySignal`. Add `formatAgoCompact()` helper. |
-| `src/components/settings/sync/SyncHealthRow.tsx` | Use `formatAgoCompact`, add `truncate min-w-0` safeguards |
-| `src/components/settings/sync/SyncHealthMatrix.tsx` | Accept `loading` prop, spinner on Refresh, opacity on rows during refresh |
-| `src/components/settings/SyncTab.tsx` | Pass `loading` to `SyncHealthMatrix` |
+| `src/hooks/useNotifications.tsx` | Add `snoozeNotification`, `pinNotification`, `muteGroup` actions. Filter out snoozed items from bell list. |
+| `src/components/NotificationBell.tsx` | New "Snooze all" button, swipe-right to snooze gesture, pinned section pinned at top, DND indicator when active. |
+| `src/pages/Notifications.tsx` | Rebuild as Inbox 2.0 with Pinned / Action Required / Today / Snoozed / Earlier sections. |
+| `src/components/settings/NotificationsTab.tsx` | New rich matrix with min-priority dropdown per type, quiet hours time pickers, digest toggle, DND quick-set. |
+| `supabase/functions/notification-digest/index.ts` | New: bundles low/normal unreads, single push at 9am. |
+| `supabase/functions/send-push/index.ts` | Add quiet-hours/DND/priority/mute gating before web-push send. |
 
-### Build Time
-~5 minutes. Pure UI polish + 1 logic constant fix. Zero schema, zero edge function changes.
+### Why this is "most advanced"
+- **User-driven noise reduction** (digest, quiet hours, min-priority) — each user tunes their own signal/noise ratio.
+- **Lifecycle actions** (snooze, pin, mute, archive) — treats notifications as a first-class inbox.
+- **Smart routing** at delivery time (send-push checks gates) — no wasted pushes during quiet hours.
+- **Organized inbox** — sections by intent, not just chronological.
+- **Backward compatible** — existing notifications keep working; new columns default-off.
+
+### Build time
+~45 min: 1 migration, 2 edge function changes (1 new, 1 patch), 4 frontend files. Zero breaking changes.
 
