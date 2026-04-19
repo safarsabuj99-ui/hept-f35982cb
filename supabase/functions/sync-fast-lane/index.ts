@@ -613,6 +613,38 @@ Deno.serve(async (req) => {
         .in("id", integrationIds);
     }
 
+    // ===== Persist per-account Fast-Lane activity stats (gates Deep-Dive scheduling) =====
+    const nowIso = new Date().toISOString();
+    const accountIds = Object.keys(accountRowCounts);
+    if (accountIds.length > 0) {
+      const { data: existingStats } = await supabase
+        .from("sync_account_stats")
+        .select("ad_account_id, consecutive_zero_runs, org_id")
+        .in("ad_account_id", accountIds);
+      const existingMap = new Map((existingStats ?? []).map((s: any) => [s.ad_account_id, s]));
+
+      const upserts = accountIds.map((accId) => {
+        const rows = accountRowCounts[accId];
+        const prev = existingMap.get(accId) as any;
+        const prevZero = prev?.consecutive_zero_runs ?? 0;
+        const orgId = accounts.find((a) => a.id === accId)?.org_id ?? prev?.org_id ?? null;
+        return {
+          ad_account_id: accId,
+          org_id: orgId,
+          last_fast_lane_at: nowIso,
+          last_fast_lane_rows: rows,
+          consecutive_zero_runs: rows > 0 ? 0 : prevZero + 1,
+          updated_at: nowIso,
+        };
+      });
+
+      const { error: actErr } = await supabase
+        .from("sync_account_stats")
+        .upsert(upserts, { onConflict: "ad_account_id" });
+      if (actErr) console.error("Activity stats upsert failed:", actErr.message);
+      else console.log(`Activity stats updated for ${upserts.length} accounts`);
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,

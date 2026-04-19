@@ -92,10 +92,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Load per-account stats for adaptive chunking
+    // Load per-account stats for adaptive chunking + activity gating
     const { data: stats } = await supabase
       .from("sync_account_stats")
-      .select("ad_account_id, recommended_chunk_days, consecutive_failures")
+      .select("ad_account_id, recommended_chunk_days, consecutive_failures, total_rows_last_sync, last_fast_lane_at, last_fast_lane_rows, consecutive_zero_runs, last_full_sync_at")
       .in("ad_account_id", accounts.map(a => a.id));
     const statsMap = new Map((stats ?? []).map((s: any) => [s.ad_account_id, s]));
 
@@ -117,21 +117,46 @@ Deno.serve(async (req) => {
     let totalEnqueued = 0;
     let chunkedAccounts = 0;
     let fullAccounts = 0;
+    let skippedSilent = 0;
+    let heartbeatRuns = 0;
 
     // For sync-fast-lane (today-only), we still single-shot since it's a 1-day window
     const isFastLane = targetFunction === "sync-fast-lane";
+    const isDeepDive = targetFunction === "sync-deep-dive";
+    const ZERO_RUN_GRACE = 3;
+    const HEARTBEAT_HOURS = 24;
+    const nowMs = Date.now();
 
     for (const acc of accounts) {
       const stat = statsMap.get(acc.id) as any;
+
+      // ===== ACTIVITY GATING for Deep-Dive =====
+      // Rule: skip Deep-Dive when Fast-Lane has shown no data for >= ZERO_RUN_GRACE consecutive runs.
+      // Heartbeat: still run once every 24h to catch reactivations.
+      if (isDeepDive && stat?.last_fast_lane_at) {
+        const zeroRuns = stat.consecutive_zero_runs ?? 0;
+        const lastRows = stat.last_fast_lane_rows ?? 0;
+        if (lastRows === 0 && zeroRuns >= ZERO_RUN_GRACE) {
+          const lastFullSyncMs = stat.last_full_sync_at ? new Date(stat.last_full_sync_at).getTime() : 0;
+          const hoursSinceFullSync = lastFullSyncMs > 0 ? (nowMs - lastFullSyncMs) / 3600_000 : 999;
+          if (hoursSinceFullSync < HEARTBEAT_HOURS) {
+            skippedSilent++;
+            console.log(`Skipping Deep-Dive for ${acc.account_name} (${zeroRuns} zero-runs, last sync ${hoursSinceFullSync.toFixed(1)}h ago)`);
+            continue;
+          } else {
+            heartbeatRuns++;
+            console.log(`Heartbeat Deep-Dive for ${acc.account_name} (silent ${zeroRuns} runs, last full sync ${hoursSinceFullSync.toFixed(1)}h ago)`);
+          }
+        }
+      }
+
       // Fast-lane: always 1-day full job
       const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 5);
-      // Smart chunking gate: chunk whenever we have ANY signal that a full
-      // 25-day pull will be heavy. Defaults to chunking for unknown accounts.
       const useChunking = !isFastLane && (
-        chunkDays < TOTAL_WINDOW_DAYS ||                    // explicit recommendation
-        (stat?.consecutive_failures ?? 0) >= 1 ||           // any recent failure
-        (stat?.total_rows_last_sync ?? 0) >= 200 ||         // measured as heavy
-        !stat                                                // never measured before
+        chunkDays < TOTAL_WINDOW_DAYS ||
+        (stat?.consecutive_failures ?? 0) >= 1 ||
+        (stat?.total_rows_last_sync ?? 0) >= 200 ||
+        !stat
       );
 
       if (!useChunking) {
@@ -248,7 +273,7 @@ Deno.serve(async (req) => {
     await supabase.from("sync_logs").delete().lt("created_at", thirtyDaysAgo);
     await supabase.from("sync_jobs").delete().in("status", ["done", "failed"]).lt("completed_at", sevenDaysAgo);
 
-    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}), queue depth: ${queueDepth ?? 0}`);
+    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}, skipped silent: ${skippedSilent}, heartbeat: ${heartbeatRuns}), queue depth: ${queueDepth ?? 0}`);
 
     return new Response(
       JSON.stringify({
@@ -257,6 +282,8 @@ Deno.serve(async (req) => {
         accounts_total: accounts.length,
         chunked_accounts: chunkedAccounts,
         full_accounts: fullAccounts,
+        skipped_silent: skippedSilent,
+        heartbeat_runs: heartbeatRuns,
         enqueued: totalEnqueued,
         queue_depth: queueDepth ?? 0,
         timestamp: new Date().toISOString(),
