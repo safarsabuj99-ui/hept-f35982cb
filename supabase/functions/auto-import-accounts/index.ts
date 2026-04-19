@@ -485,6 +485,7 @@ Deno.serve(async (req) => {
           account_spending_limit: 250,
           is_active: true,
           account_currency: account.account_currency,
+          org_id: orgId ?? integration.org_id ?? null,
         });
         existingSet.add(key);
       }
