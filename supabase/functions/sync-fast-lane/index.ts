@@ -196,6 +196,17 @@ Deno.serve(async (req) => {
       const startDateStr = getAccountStartDate(account.id);
       accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
+      // Fast-Lane Meta: narrow window to last 3 days (today + 2 days late attribution).
+      // Reason: a 16-month range causes Meta to return huge paginated payloads that
+      // often time out or return empty for low-volume accounts, falsely tripping
+      // the zero-run counter. 3 days is enough to catch fresh + late-arriving spend;
+      // historical backfill is the Deep-Dive's job.
+      const metaFastLaneStart = (() => {
+        const d = new Date(endDateStr + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() - 2);
+        return d.toISOString().split("T")[0];
+      })();
+
       try {
         if (platform === "meta") {
           // ===== META: Real API with time_increment=1 =====
@@ -204,7 +215,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_name,spend,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
