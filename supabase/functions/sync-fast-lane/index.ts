@@ -369,17 +369,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Auto-create campaign_mappings entry for Google
+            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
             const googlePlatformId = `google_${row.campaign?.id || ''}`;
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: googlePlatformId,
-              campaign_name: campaignName,
-              platform: "google" as any,
-              client_id: matchedClientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(googlePlatformId, campaignName, matchedClientId, "google");
 
             const isBDTGoogle = currency === "BDT";
             const googleAccountRate = isBDTGoogle ? (account.exchange_rate ?? 1) : 1;
@@ -532,17 +524,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Auto-create campaign_mappings entry for TikTok
+            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
             const tiktokPlatformId = `tiktok_${row.dimensions?.campaign_id || ''}`;
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: tiktokPlatformId,
-              campaign_name: campaignName,
-              platform: "tiktok" as any,
-              client_id: matchedClientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(tiktokPlatformId, campaignName, matchedClientId, "tiktok");
 
             const isBDTTiktok = currency === "BDT";
             const tiktokAccountRate = isBDTTiktok ? (account.exchange_rate ?? 1) : 1;
@@ -581,6 +565,17 @@ Deno.serve(async (req) => {
 
           accountRowCounts[account.id] += spendRecords.length;
           console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+        }
+
+        // ===== Bulk-flush deduped mappings for this account (1 round-trip vs N) =====
+        if (mappingsBatch.length > 0) {
+          for (let i = 0; i < mappingsBatch.length; i += 500) {
+            const slice = mappingsBatch.slice(i, i + 500);
+            const { error } = await supabase
+              .from("campaign_mappings")
+              .upsert(slice, { onConflict: "campaign_id", ignoreDuplicates: false });
+            if (error) errors.push(`Mappings flush ${account.ad_account_id}: ${error.message}`);
+          }
         }
 
         syncedCount++;
