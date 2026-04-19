@@ -8,10 +8,6 @@ const corsHeaders = {
 
 const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
 
-// Bulletproof Fast-Lane limits
-const MAX_PAGES_META = 30;
-const MAX_PAGES_TIKTOK = 10;
-
 /** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
 function getTikTokBaseUrl(proxyUrl: string | null): string {
   if (proxyUrl) {
@@ -200,23 +196,6 @@ Deno.serve(async (req) => {
       const startDateStr = getAccountStartDate(account.id);
       accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
-      // Per-run mapping cache: dedupe campaign_mappings writes
-      const seenMappingIds = new Set<string>();
-      const mappingsBatch: any[] = [];
-      const queueMapping = (platformId: string, campaignName: string, clientId: string, plat: string) => {
-        if (seenMappingIds.has(platformId)) return;
-        seenMappingIds.add(platformId);
-        mappingsBatch.push({
-          campaign_id: platformId,
-          campaign_name: campaignName,
-          platform: plat as any,
-          client_id: clientId,
-          ad_account_id: account.id,
-          is_active: true,
-          org_id: account.org_id,
-        });
-      };
-
       // Fast-Lane Meta: narrow window to last 3 days (today + 2 days late attribution).
       // Reason: a 16-month range causes Meta to return huge paginated payloads that
       // often time out or return empty for low-volume accounts, falsely tripping
@@ -240,12 +219,10 @@ Deno.serve(async (req) => {
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
-          let metaPageCount = 0;
 
-          while (nextUrl && metaPageCount < MAX_PAGES_META) {
+          while (nextUrl) {
             const res = await fetch(nextUrl);
             const json = await res.json();
-            metaPageCount++;
             if (json.error) { errors.push(`Meta ${account.ad_account_id}: ${json.error.message}`); break; }
             if (json.data?.length > 0) allInsights = allInsights.concat(json.data);
             nextUrl = json.paging?.next || null;
@@ -273,9 +250,17 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
+            // Auto-create campaign_mappings entry for Meta
             const metaPlatformId = `meta_${row.campaign_id || ''}`;
-            queueMapping(metaPlatformId, campaignName, matchedClientId, "meta");
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: metaPlatformId,
+              campaign_name: campaignName,
+              platform: "meta" as any,
+              client_id: matchedClientId,
+              ad_account_id: account.id,
+              is_active: true,
+              org_id: account.org_id,
+            }, { onConflict: "campaign_id" });
 
             const isBDT = currency === "BDT";
             const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
@@ -369,9 +354,17 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
+            // Auto-create campaign_mappings entry for Google
             const googlePlatformId = `google_${row.campaign?.id || ''}`;
-            queueMapping(googlePlatformId, campaignName, matchedClientId, "google");
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: googlePlatformId,
+              campaign_name: campaignName,
+              platform: "google" as any,
+              client_id: matchedClientId,
+              ad_account_id: account.id,
+              is_active: true,
+              org_id: account.org_id,
+            }, { onConflict: "campaign_id" });
 
             const isBDTGoogle = currency === "BDT";
             const googleAccountRate = isBDTGoogle ? (account.exchange_rate ?? 1) : 1;
@@ -524,9 +517,17 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
+            // Auto-create campaign_mappings entry for TikTok
             const tiktokPlatformId = `tiktok_${row.dimensions?.campaign_id || ''}`;
-            queueMapping(tiktokPlatformId, campaignName, matchedClientId, "tiktok");
+            await supabase.from("campaign_mappings").upsert({
+              campaign_id: tiktokPlatformId,
+              campaign_name: campaignName,
+              platform: "tiktok" as any,
+              client_id: matchedClientId,
+              ad_account_id: account.id,
+              is_active: true,
+              org_id: account.org_id,
+            }, { onConflict: "campaign_id" });
 
             const isBDTTiktok = currency === "BDT";
             const tiktokAccountRate = isBDTTiktok ? (account.exchange_rate ?? 1) : 1;
@@ -565,17 +566,6 @@ Deno.serve(async (req) => {
 
           accountRowCounts[account.id] += spendRecords.length;
           console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
-        }
-
-        // ===== Bulk-flush deduped mappings for this account (1 round-trip vs N) =====
-        if (mappingsBatch.length > 0) {
-          for (let i = 0; i < mappingsBatch.length; i += 500) {
-            const slice = mappingsBatch.slice(i, i + 500);
-            const { error } = await supabase
-              .from("campaign_mappings")
-              .upsert(slice, { onConflict: "campaign_id", ignoreDuplicates: false });
-            if (error) errors.push(`Mappings flush ${account.ad_account_id}: ${error.message}`);
-          }
         }
 
         syncedCount++;
