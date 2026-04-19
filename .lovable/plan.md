@@ -1,101 +1,86 @@
 
 
-## Smart Notifications v2 — Intelligent Hub
+## Auto-Import Bug — Wrong org_id Assignment
 
-### Why upgrade
-Current system: solid foundation (realtime + push + grouping + 4 priorities). What's missing: **user control over noise**, **delivery intelligence**, **richer context**, **organization at scale**.
+### Root Cause (Confirmed via DB)
 
-### What gets built (5 pillars)
+When the auto-import edge function inserts new ad_accounts:
+1. It uses the **service role client** → `auth.uid()` is NULL inside the BEFORE INSERT trigger
+2. Trigger `set_org_id_for_ad_accounts` calls `get_user_org_id(auth.uid())` → returns NULL
+3. Trigger falls through to the last-resort fallback: `SELECT id FROM organizations LIMIT 1` → returns the **wrong org** (currently "Test1", `f0544331...`)
+4. Account is inserted with the wrong `org_id` → **invisible to the actual importer's RLS scope**
 
-**1. Quiet Hours + Do Not Disturb**
-- Per-user nightly window (e.g. 11pm–7am Asia/Dhaka). During quiet hours, only `urgent` triggers push/sound; `normal` & `low` queue silently for in-app delivery.
-- One-tap "Snooze 1h / Until tomorrow" from bell header.
-- Stored in `notification_preferences_v2` (extends current table with `quiet_start`, `quiet_end`, `snoozed_until`, `dnd_enabled`).
+Verified: The "EMON (HEPT)" account just imported by SABUJ admin (org `a1b2c3d4...`) was actually written to org `f0544331...` (Test1). That's why:
+- Dialog shows "Already imported" (the dialog's existing-set query has no org filter — checks all rows globally)
+- Page list & search don't show it (RLS filters by org_id)
 
-**2. Smart Daily Digest**
-- New cron job (`notification-digest`, runs 9am Dhaka) bundles all unread `low`/`normal` notifications from last 24h into ONE summary notification: *"You have 12 updates: 4 payments, 6 guard alerts, 2 campaigns"* — clicking opens the inbox pre-filtered.
-- User toggle in Settings → Notifications: "Daily digest instead of individual alerts" (opt-in).
-- Reduces 50+ daily pings to 1, while keeping urgent ones instant.
+### The Fix (Two Layers — Defense in Depth)
 
-**3. Granular Smart Rules (per-type x per-priority)**
-Replace the current 4-type x 2-channel grid with a richer matrix:
+**Layer 1 — Edge function: explicitly set `org_id` on insert (PRIMARY FIX)**
 
-| Type | In-App | Push | Sound | Email* | Min Priority |
-|---|---|---|---|---|---|
-| Payment | ✓ | ✓ | ✓ | ✓ | normal |
-| Guard | ✓ | ✓ | ✓ | — | high |
-| Campaign | ✓ | — | — | — | normal |
+In `supabase/functions/auto-import-accounts/index.ts`, the function already fetches `orgId` near line 335 from the calling user's profile. Pass it through to every insert payload:
 
-(*Email channel scaffolded but disabled until domain verified — wired through existing `send-email` function.)
-
-User can set "only push me when ≥ high priority" per type, eliminating routine noise.
-
-**4. Snooze + Pin + Archive (per-notification actions)**
-- Add `snoozed_until`, `is_pinned`, `archived_at` columns to `notifications`.
-- Bell + inbox: swipe-right to snooze (1h/4h/tomorrow), swipe-left to delete (existing), tap-pin to keep at top.
-- Snoozed items hide from bell until time elapses, then re-surface as fresh.
-
-**5. Inbox 2.0 — Smart Sections**
-Reorganize `/admin/notifications` page:
-- **Pinned** (sticky top)
-- **Action Required** — unread urgent/high (red accent)
-- **Today** — unread normal/low
-- **Snoozed** — countdown timer per item
-- **Earlier** — read history, infinite scroll
-
-Plus: **mute by group_key** (e.g. mute `guard_pause_<clientId>` for 24h after first pause to stop spam during balance recharges).
-
-### Backend changes
-
-**Schema (migration):**
-```sql
--- notifications: add lifecycle columns
-ALTER TABLE notifications
-  ADD COLUMN snoozed_until timestamptz,
-  ADD COLUMN is_pinned boolean DEFAULT false,
-  ADD COLUMN archived_at timestamptz;
-
--- preferences: extend with smart settings
-ALTER TABLE notification_preferences
-  ADD COLUMN min_priority text DEFAULT 'low',  -- low | normal | high | urgent
-  ADD COLUMN quiet_start time,
-  ADD COLUMN quiet_end time,
-  ADD COLUMN dnd_until timestamptz,
-  ADD COLUMN digest_enabled boolean DEFAULT false;
-
--- mutes table: group_key suppression
-CREATE TABLE notification_mutes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  group_key text NOT NULL,
-  muted_until timestamptz NOT NULL,
-  UNIQUE(user_id, group_key)
-);
+```ts
+newAccounts.push({
+  // ...existing fields,
+  org_id: orgId,  // ← add this in BOTH insert blocks (selected_accounts mode + legacy mode)
+});
 ```
 
-**Edge functions:**
-- `notification-digest` (new, cron 9am daily) — bundles low/normal unreads into 1 summary.
-- `send-push` (modify) — check `quiet_start/end`, `dnd_until`, `min_priority`, and `notification_mutes` before sending. Skip if filtered (still inserts in-app).
-- DB trigger `trigger_send_push` (modify) — pass priority through; skip route if mute exists.
+This is the authoritative source — the importer's own org. Bypasses the broken trigger fallback entirely.
 
-### Frontend changes
+**Layer 2 — Existing-set check should be org-scoped**
+
+Currently the "already imported" check queries ALL ad_accounts across all orgs, leading to false positives across tenants. Scope it to the importer's org:
+
+```ts
+const { data: existingAccounts } = await adminClient
+  .from("ad_accounts")
+  .select("ad_account_id, platform_name")
+  .eq("org_id", orgId);  // ← add org filter
+```
+
+This makes the "Already imported" badge match what the user can actually see, and prevents cross-tenant skip-as-duplicate bugs.
+
+**Layer 3 — Harden the trigger (safety net)**
+
+Update `set_org_id_for_ad_accounts` to use the row's `api_integration_id` to derive `org_id` when `auth.uid()` is NULL (service-role contexts), instead of falling back to `organizations LIMIT 1`:
+
+```sql
+-- New fallback chain:
+-- 1. NEW.org_id (if explicitly provided)  ← what we now do in edge fn
+-- 2. get_user_org_id(auth.uid())
+-- 3. Look up via NEW.api_integration_id → api_integrations.org_id
+-- 4. RAISE EXCEPTION (no more silent wrong assignment)
+```
+
+Eliminates the silent-corruption mode for any future service-role inserter.
+
+**Layer 4 — One-shot data correction**
+
+Fix the EMON account already in the wrong org:
+```sql
+UPDATE ad_accounts a
+SET org_id = i.org_id
+FROM api_integrations i
+WHERE a.api_integration_id = i.id
+  AND a.org_id <> i.org_id;
+```
+Reassigns any mis-orged ad_account back to the org of its source integration.
+
+### Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useNotifications.tsx` | Add `snoozeNotification`, `pinNotification`, `muteGroup` actions. Filter out snoozed items from bell list. |
-| `src/components/NotificationBell.tsx` | New "Snooze all" button, swipe-right to snooze gesture, pinned section pinned at top, DND indicator when active. |
-| `src/pages/Notifications.tsx` | Rebuild as Inbox 2.0 with Pinned / Action Required / Today / Snoozed / Earlier sections. |
-| `src/components/settings/NotificationsTab.tsx` | New rich matrix with min-priority dropdown per type, quiet hours time pickers, digest toggle, DND quick-set. |
-| `supabase/functions/notification-digest/index.ts` | New: bundles low/normal unreads, single push at 9am. |
-| `supabase/functions/send-push/index.ts` | Add quiet-hours/DND/priority/mute gating before web-push send. |
+| `supabase/functions/auto-import-accounts/index.ts` | Add `org_id: orgId` to both insert payloads; add `.eq("org_id", orgId)` to existing-set query |
+| Migration | Harden `set_org_id_for_ad_accounts` (use api_integration_id fallback, drop org-LIMIT-1); one-shot UPDATE to repair mis-orged accounts |
 
-### Why this is "most advanced"
-- **User-driven noise reduction** (digest, quiet hours, min-priority) — each user tunes their own signal/noise ratio.
-- **Lifecycle actions** (snooze, pin, mute, archive) — treats notifications as a first-class inbox.
-- **Smart routing** at delivery time (send-push checks gates) — no wasted pushes during quiet hours.
-- **Organized inbox** — sections by intent, not just chronological.
-- **Backward compatible** — existing notifications keep working; new columns default-off.
+### Why This Is Bulletproof
+- **Primary fix** writes the correct org_id explicitly — no reliance on triggers.
+- **Defense in depth**: hardened trigger ensures future service-role inserters can't silently corrupt either.
+- **Self-healing**: the data-repair UPDATE immediately surfaces lost accounts (EMON + any others) to their rightful owners.
+- **Cross-tenant correctness**: the existing-set scope-fix prevents one org's accounts from blocking another's import.
 
-### Build time
-~45 min: 1 migration, 2 edge function changes (1 new, 1 patch), 4 frontend files. Zero breaking changes.
+### Build Time
+~5 minutes. 1 edge function patch + 1 migration. Zero breaking changes.
 
