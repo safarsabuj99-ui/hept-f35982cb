@@ -200,6 +200,23 @@ Deno.serve(async (req) => {
       const startDateStr = getAccountStartDate(account.id);
       accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
+      // Per-run mapping cache: dedupe campaign_mappings writes
+      const seenMappingIds = new Set<string>();
+      const mappingsBatch: any[] = [];
+      const queueMapping = (platformId: string, campaignName: string, clientId: string, plat: string) => {
+        if (seenMappingIds.has(platformId)) return;
+        seenMappingIds.add(platformId);
+        mappingsBatch.push({
+          campaign_id: platformId,
+          campaign_name: campaignName,
+          platform: plat as any,
+          client_id: clientId,
+          ad_account_id: account.id,
+          is_active: true,
+          org_id: account.org_id,
+        });
+      };
+
       // Fast-Lane Meta: narrow window to last 3 days (today + 2 days late attribution).
       // Reason: a 16-month range causes Meta to return huge paginated payloads that
       // often time out or return empty for low-volume accounts, falsely tripping
