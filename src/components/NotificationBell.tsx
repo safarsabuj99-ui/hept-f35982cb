@@ -1,25 +1,26 @@
 import {
   Bell, Check, CheckCheck, Trash2, ExternalLink, BellRing, BellOff,
   Shield, CreditCard, Megaphone, Settings2, Volume2, VolumeX,
-  AlertTriangle, ChevronDown
+  AlertTriangle, ChevronDown, Pin, Clock, Moon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { useNotifications, type Notification, setNotifSoundEnabled } from "@/hooks/useNotifications";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
 
 const typeIcons: Record<string, React.ElementType> = {
-  guard: Shield,
-  payment: CreditCard,
-  campaign: Megaphone,
-  system: Settings2,
+  guard: Shield, payment: CreditCard, campaign: Megaphone, system: Settings2,
 };
 
 const typeColors: Record<string, string> = {
@@ -32,26 +33,38 @@ const typeColors: Record<string, string> = {
 const priorityBorder: Record<string, string> = {
   urgent: "border-l-[3px] border-l-destructive",
   high: "border-l-[3px] border-l-warning",
-  normal: "",
-  low: "",
+  normal: "", low: "",
 };
 
-interface NotificationBellProps {
-  allNotificationsPath?: string;
-}
+interface NotificationBellProps { allNotificationsPath?: string; }
 
 export function NotificationBell({ allNotificationsPath = "/admin/notifications" }: NotificationBellProps) {
-  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+  const { user } = useAuth();
+  const {
+    notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification,
+    snoozeNotification, togglePin,
+  } = useNotifications();
   const { isSupported, permission, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "unread" | "urgent">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "urgent" | "pinned">("all");
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem("notif_sound_enabled") !== "false");
+  const [dndUntil, setDndUntil] = useState<string | null>(null);
 
   // Touch handling for swipe-to-dismiss
   const touchStartX = useRef(0);
   const [swipingId, setSwipingId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
+
+  // Load DND state
+  useEffect(() => {
+    if (!user?.id) return;
+    (supabase.from("notification_user_settings" as any) as any)
+      .select("dnd_until").eq("user_id", user.id).maybeSingle()
+      .then(({ data }: any) => setDndUntil(data?.dnd_until || null));
+  }, [user?.id]);
+
+  const dndActive = dndUntil && new Date(dndUntil) > new Date();
 
   const handleTouchStart = useCallback((id: string, e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -66,21 +79,16 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
   }, [swipingId]);
 
   const handleTouchEnd = useCallback(() => {
-    if (swipingId && swipeOffset < -80) {
-      deleteNotification(swipingId);
-    }
+    if (swipingId && swipeOffset < -80) deleteNotification(swipingId);
     setSwipingId(null);
     setSwipeOffset(0);
   }, [swipingId, swipeOffset, deleteNotification]);
 
   const handleTogglePush = async () => {
-    if (isSubscribed) {
-      await unsubscribe();
-      toast.success("Push notifications disabled");
-    } else {
+    if (isSubscribed) { await unsubscribe(); toast.success("Push notifications disabled"); }
+    else {
       const ok = await subscribe();
-      if (ok) toast.success("Push notifications enabled!");
-      else toast.error("Could not enable push notifications");
+      if (ok) toast.success("Push notifications enabled!"); else toast.error("Could not enable push notifications");
     }
   };
 
@@ -91,31 +99,46 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
     toast.success(next ? "Sound enabled" : "Sound muted");
   };
 
-  const handleClick = (notif: Notification) => {
-    if (!notif.is_read) markAsRead(notif.id);
-    if (notif.link) {
-      setOpen(false);
-      navigate(notif.link);
-    }
+  const setDnd = async (hours: number | null) => {
+    if (!user?.id) return;
+    const until = hours ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() : null;
+    await (supabase.from("notification_user_settings" as any) as any).upsert(
+      { user_id: user.id, dnd_until: until },
+      { onConflict: "user_id" }
+    );
+    setDndUntil(until);
+    toast.success(hours ? `Do Not Disturb for ${hours}h` : "DND cleared");
   };
 
-  // Group notifications by group_key
+  const handleClick = (notif: Notification) => {
+    if (!notif.is_read) markAsRead(notif.id);
+    if (notif.link) { setOpen(false); navigate(notif.link); }
+  };
+
   const grouped = groupNotifications(notifications);
 
   const filtered = grouped.filter((item) => {
     if (filter === "unread") return !item.is_read;
     if (filter === "urgent") return item.priority === "urgent" || item.priority === "high";
+    if (filter === "pinned") return item.is_pinned;
     return true;
   });
 
+  // Sort: pinned first
+  filtered.sort((a, b) => {
+    if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
+    return 0;
+  });
+
   const urgentCount = notifications.filter((n) => !n.is_read && (n.priority === "urgent" || n.priority === "high")).length;
+  const pinnedCount = notifications.filter((n) => n.is_pinned).length;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg press-effect">
           <span className="relative inline-flex">
-            <Bell className="h-4 w-4" />
+            {dndActive ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Bell className="h-4 w-4" />}
             {unreadCount > 0 && (
               <span className={cn(
                 "absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none text-destructive-foreground ring-2 ring-card animate-in zoom-in-50",
@@ -128,7 +151,6 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 md:w-[420px] p-0 glass-card" sideOffset={8}>
-        {/* Push prompt for new users */}
         {isSupported && !isSubscribed && permission === "default" && (
           <div className="border-b px-4 py-2.5 bg-primary/5 flex items-center gap-2">
             <BellRing className="h-4 w-4 text-primary shrink-0" />
@@ -139,11 +161,39 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
           </div>
         )}
 
+        {dndActive && (
+          <div className="border-b px-4 py-2 bg-muted/40 flex items-center gap-2">
+            <Moon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground flex-1">DND active until {new Date(dndUntil!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setDnd(null)}>End</Button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="border-b px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold">Notifications</h4>
             <div className="flex items-center gap-0.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Do Not Disturb">
+                    <Moon className={cn("h-3.5 w-3.5", dndActive && "text-primary")} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuLabel className="text-[11px]">Do Not Disturb</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setDnd(1)}>For 1 hour</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDnd(4)}>For 4 hours</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDnd(8)}>Until tomorrow</DropdownMenuItem>
+                  {dndActive && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setDnd(null)} className="text-destructive">End DND</DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleToggleSound}>
                 {soundOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />}
               </Button>
@@ -160,19 +210,17 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
             </div>
           </div>
           {/* Filter tabs */}
-          <div className="flex gap-1">
-            {(["all", "unread", "urgent"] as const).map((f) => (
+          <div className="flex gap-1 flex-wrap">
+            {(["all", "unread", "urgent", "pinned"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={cn(
                   "px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors",
-                  filter === f
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
+                  filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
                 )}
               >
-                {f === "all" ? "All" : f === "unread" ? `Unread (${unreadCount})` : `Urgent (${urgentCount})`}
+                {f === "all" ? "All" : f === "unread" ? `Unread (${unreadCount})` : f === "urgent" ? `Urgent (${urgentCount})` : `Pinned (${pinnedCount})`}
               </button>
             ))}
           </div>
@@ -197,8 +245,9 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
                   <div
                     key={item.id}
                     className={cn(
-                      "flex gap-3 px-4 py-3 cursor-pointer transition-all hover:bg-accent/50",
+                      "flex gap-3 px-4 py-3 cursor-pointer transition-all hover:bg-accent/50 group",
                       !item.is_read && "bg-primary/5",
+                      item.is_pinned && "bg-warning/5",
                       priorityBorder[item.priority] || ""
                     )}
                     style={swipingId === item.id ? { transform: `translateX(${swipeOffset}px)`, transition: "none" } : undefined}
@@ -212,6 +261,7 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
+                        {item.is_pinned && <Pin className="h-3 w-3 shrink-0 text-warning fill-warning" />}
                         <p className={cn("text-sm truncate", !item.is_read && "font-semibold")}>{item.title}</p>
                         {(item.priority === "urgent" || item.priority === "high") && (
                           <AlertTriangle className={cn("h-3 w-3 shrink-0", item.priority === "urgent" ? "text-destructive" : "text-warning")} />
@@ -222,7 +272,23 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
                         {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                       </p>
                     </div>
-                    <div className="flex flex-col gap-1 shrink-0">
+                    <div className="flex flex-col gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); togglePin(item.id); }} title={item.is_pinned ? "Unpin" : "Pin"}>
+                        <Pin className={cn("h-3 w-3", item.is_pinned && "fill-warning text-warning")} />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => e.stopPropagation()} title="Snooze">
+                            <Clock className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuLabel className="text-[11px]">Snooze for</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => snoozeNotification(item.id, 1)}>1 hour</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => snoozeNotification(item.id, 4)}>4 hours</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => snoozeNotification(item.id, 24)}>Until tomorrow</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       {!item.is_read && (
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); markAsRead(item.id); }}>
                           <Check className="h-3 w-3" />
@@ -239,7 +305,6 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
           )}
         </ScrollArea>
 
-        {/* Footer */}
         {notifications.length > 0 && (
           <div className="border-t px-4 py-2">
             <Button variant="ghost" size="sm" className="w-full text-xs gap-1" onClick={() => { setOpen(false); navigate(allNotificationsPath); }}>
@@ -251,8 +316,6 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
     </Popover>
   );
 }
-
-// --- Grouping logic ---
 
 interface GroupedItem extends Notification {
   _isGroup?: boolean;
@@ -266,11 +329,8 @@ function groupNotifications(notifs: Notification[]): GroupedItem[] {
   const standalone: GroupedItem[] = [];
 
   for (const n of notifs) {
-    if (n.group_key) {
-      (groups[n.group_key] ??= []).push(n);
-    } else {
-      standalone.push(n);
-    }
+    if (n.group_key) (groups[n.group_key] ??= []).push(n);
+    else standalone.push(n);
   }
 
   const result: GroupedItem[] = [];
@@ -278,16 +338,10 @@ function groupNotifications(notifs: Notification[]): GroupedItem[] {
     if (items.length >= 3) {
       const latest = items[0];
       result.push({
-        ...latest,
-        _isGroup: true,
-        _groupKey: key,
-        _children: items,
-        _count: items.length,
+        ...latest, _isGroup: true, _groupKey: key, _children: items, _count: items.length,
         is_read: items.every((i) => i.is_read),
       });
-    } else {
-      result.push(...items);
-    }
+    } else result.push(...items);
   }
   result.push(...standalone);
   result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
