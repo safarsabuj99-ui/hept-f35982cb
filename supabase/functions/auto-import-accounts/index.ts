@@ -376,10 +376,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get existing account IDs to mark as already imported
-    const { data: existingAccounts } = await adminClient
+    // Get existing account IDs to mark as already imported (org-scoped to prevent cross-tenant false positives)
+    let existingQuery = adminClient
       .from("ad_accounts")
       .select("ad_account_id, platform_name");
+    if (orgId) {
+      existingQuery = existingQuery.eq("org_id", orgId);
+    }
+    const { data: existingAccounts } = await existingQuery;
 
     const existingSet = new Set(
       (existingAccounts ?? []).map((a: any) => `${a.platform_name}:${a.ad_account_id}`)
