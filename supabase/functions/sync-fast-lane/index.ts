@@ -286,6 +286,7 @@ Deno.serve(async (req) => {
             if (error) errors.push(`Meta ${account.ad_account_id} upsert: ${error.message}`);
           }
 
+          accountRowCounts[account.id] += spendRecords.length;
           console.log(`Meta fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "google") {
@@ -389,6 +390,7 @@ Deno.serve(async (req) => {
             if (error) errors.push(`Google ${account.ad_account_id} upsert: ${error.message}`);
           }
 
+          accountRowCounts[account.id] += spendRecords.length;
           console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
 
         } else if (platform === "tiktok") {
@@ -551,6 +553,7 @@ Deno.serve(async (req) => {
             if (error) errors.push(`TikTok ${account.ad_account_id} upsert: ${error.message}`);
           }
 
+          accountRowCounts[account.id] += spendRecords.length;
           console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
         }
 
