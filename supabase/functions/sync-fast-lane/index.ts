@@ -8,6 +8,10 @@ const corsHeaders = {
 
 const TIKTOK_BASE_URL = "https://business-api.tiktok.com";
 
+// Bulletproof Fast-Lane limits
+const MAX_PAGES_META = 30;
+const MAX_PAGES_TIKTOK = 10;
+
 /** Get TikTok API base URL - uses proxy if configured to bypass geo-restrictions */
 function getTikTokBaseUrl(proxyUrl: string | null): string {
   if (proxyUrl) {
