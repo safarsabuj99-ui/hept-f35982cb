@@ -1,75 +1,59 @@
 
 
-The user is reinforcing the plan from my previous turn but with a sharper, simpler rule: **Deep-Dive should only run for accounts where Fast-Lane just returned data**. No data in Fast-Lane = skip Deep-Dive entirely.
+## Smart Sync Gating — 3 Critical Bug Fixes
 
-This is even cleaner than my previous "tier-based" proposal. Let me simplify.
+### Bug Diagnosis
 
-## Smart Deep-Dive Gating — Fast-Lane Drives Deep-Dive
+FARISH 2 has $18+ active spend in `daily_metrics` today, but Deep-Dive is being skipped because `consecutive_zero_runs = 105`. Three compounding bugs:
 
-### The Rule (Simple & Clear)
-- **Fast-Lane runs always** for all mapped accounts (it's cheap, 1-day window)
-- **Deep-Dive runs ONLY for accounts where Fast-Lane returned ≥1 row in the last run**
-- No data in Fast-Lane = account is silent/dead/paused → **skip Deep-Dive**
-- Auto-recovery: the moment Fast-Lane sees data again → Deep-Dive resumes next cycle
+| # | Bug | Impact |
+|---|---|---|
+| **1** | Fast-Lane Meta API requests **16-month window** (Jan 2025 → today) instead of today-only, missing today's small/late-arriving rows | Fast-Lane reports 0 even when account has spend |
+| **2** | `consecutive_zero_runs` counter only resets when Fast-Lane sees rows — never when Deep-Dive succeeds or `daily_metrics` shows fresh data | Counter climbs to 100+ forever for low-spend accounts |
+| **3** | 24-hour heartbeat is too long — accounts can miss a full day of Deep-Dive sync | Unacceptable data lag |
 
-### Why This Is Smart
-- Saves ~50-80% of Deep-Dive API calls (most accounts are silent at any given hour)
-- Self-healing — no manual flagging needed
-- Token errors stay separate (those are "Critical", not "no data")
-- Reflects reality: if today has no spend, the 25-day historical pull is wasted compute
+### Fixes
 
-### Implementation
+**Fix 1 — Fast-Lane: Narrow Meta window to last 3 days**
+- Change `startDateStr` for Meta path from `getAccountStartDate()` to **last 3 days** (catches today + late attribution from yesterday + day-before)
+- Keeps API response small (~3 rows per campaign instead of hundreds), reliable, and ensures today's data is included
+- Other platforms (Google/TikTok) already chunk properly — only Meta needs this
 
-**1. Track Fast-Lane signal per account** (1 small migration)
-
-Add 3 columns to `sync_account_stats`:
-- `last_fast_lane_at` — timestamp of last fast-lane run
-- `last_fast_lane_rows` — rows returned (0 = silent)
-- `consecutive_zero_runs` — counter (resets on any rows)
-
-**2. Update `sync-fast-lane`** — at end of each run, upsert these stats per account.
-
-**3. Update `sync-orchestrator`** — when enqueuing Deep-Dive jobs:
+**Fix 2 — Counter resets based on REAL activity (not just Fast-Lane)**
+After Fast-Lane completes its run, also check `daily_metrics` for fresh data per account:
+```typescript
+// After main sync loop, query daily_metrics for last 24h activity per account
+const { data: recentMetrics } = await supabase
+  .from('daily_metrics')
+  .select('campaign_id, spend')
+  .gte('data_date', threeDaysAgo)
+  .gt('spend', 0);
+// Map campaign_id → ad_account_id via campaigns table
+// If account has ANY recent spend in daily_metrics → treat as "active" → reset counter
 ```
-For each mapped account:
-  - If last_fast_lane_rows > 0 → enqueue Deep-Dive ✓
-  - If last_fast_lane_rows = 0 AND consecutive_zero_runs < 3 → enqueue (grace period)
-  - If consecutive_zero_runs >= 3 → SKIP Deep-Dive
-  - If never had a fast-lane run → enqueue (first-time accounts)
-  - Heartbeat: every 24h, force one Deep-Dive even for skipped accounts (catch reactivations)
-```
+This way, even if Fast-Lane misses, Deep-Dive's own success will reset the counter on the next Fast-Lane tick.
 
-**4. UI surface in Sync Health Matrix** — add a 3rd pill per row:
+**Fix 3 — Tighter heartbeat: 6 hours instead of 24**
+In `sync-orchestrator`, change `HEARTBEAT_HOURS = 24` → `HEARTBEAT_HOURS = 6`. Even "silent" accounts get a Deep-Dive every 6h max, ensuring no account can drift more than 6h behind.
 
-```
-Account            Fast-Lane      Deep-Dive       Activity        Issue
-Sabuj Meta Pro  │  ● Healthy   │  ● Healthy    │  ● Live        │  —
-Rahim TT BC     │  ● Healthy   │  ◐ Pending    │  ● Live (12 rows) │  —
-Old Test Acct   │  ● Healthy   │  ⊘ Skipped    │  ○ Silent (3 runs)│  No spend today
-Dead Acct       │  ● Healthy   │  ⊘ Skipped    │  ● Dormant 26h │  Heartbeat in 14h
-```
+**Fix 4 — One-shot reset for stuck accounts**
+Run a one-time SQL update to reset `consecutive_zero_runs = 0` for any account that has ANY `daily_metrics` row in the last 24 hours with spend > 0. This immediately unblocks FARISH, FARISH 2, and any other stuck accounts so Deep-Dive resumes on the next orchestrator tick.
 
-**5. Admin override** — per row, "Force Deep-Dive Now" button bypasses the skip for one cycle (for manual debugging).
-
-### Files To Change
+### Files Changed
 
 | File | Change |
-|------|--------|
-| Migration | Add 3 columns to `sync_account_stats` |
-| `supabase/functions/sync-fast-lane/index.ts` | Update `last_fast_lane_rows` + `consecutive_zero_runs` after each run |
-| `supabase/functions/sync-orchestrator/index.ts` | Gate Deep-Dive enqueue on Fast-Lane signal + 24h heartbeat |
-| `src/components/settings/sync/healthScore.ts` | Add `ActivityTier` (live/silent/dormant) + helper |
-| `src/components/settings/sync/SyncHealthRow.tsx` | Add "Activity" pill column |
-| `src/components/settings/sync/SyncHealthMatrix.tsx` | Fetch activity stats, add filter chip "Show silent/dormant" |
-| `src/components/settings/SyncTab.tsx` | Pass activity data to matrix |
+|---|---|
+| `supabase/functions/sync-fast-lane/index.ts` | Meta path: use 3-day window. Add `daily_metrics` activity check that resets counter based on real spend |
+| `supabase/functions/sync-orchestrator/index.ts` | `HEARTBEAT_HOURS = 6` (was 24) |
+| Migration | One-shot `UPDATE sync_account_stats SET consecutive_zero_runs = 0 WHERE ad_account_id IN (accounts with recent daily_metrics activity)` |
 
-### Edge Cases Handled
-- **New accounts**: no record yet → enqueue Deep-Dive normally (first run gathers baseline)
-- **Off-hours quiet**: 1-2 zero runs is normal → grace period prevents false skip
-- **Reactivation**: any non-zero Fast-Lane immediately resets → Deep-Dive resumes next cycle
-- **Heartbeat safety**: even "skipped" accounts get one Deep-Dive every 24h → catches accounts that came alive without spend (e.g., metadata-only changes)
-- **Token expired**: still flagged Critical separately (this gating is purely about "no data", not failures)
+### Why This Is Bulletproof
+
+- **Self-healing from 3 angles**: Fast-Lane sees rows → reset. Deep-Dive populates `daily_metrics` → next Fast-Lane resets the counter. Heartbeat every 6h forces a sync regardless.
+- **No false skips**: Real spend in `daily_metrics` is the ultimate truth — if it's there, the account is alive.
+- **Backward compatible**: All gating logic stays; we just plug the holes that caused false negatives.
+- **Immediate recovery**: One-shot SQL reset clears the current backlog instantly.
 
 ### Build Time
-~20 minutes. 1 migration (3 additive columns), 2 edge function tweaks, 4 frontend updates. Zero breaking changes — existing accounts default to enqueuing until first fast-lane signal.
+~10 minutes. Zero schema risk — pure logic fixes + a data correction.
 
