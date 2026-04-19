@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
     const isFastLane = targetFunction === "sync-fast-lane";
     const isDeepDive = targetFunction === "sync-deep-dive";
     const ZERO_RUN_GRACE = 3;
-    const HEARTBEAT_HOURS = 24;
+    const HEARTBEAT_HOURS = 6;
     const nowMs = Date.now();
 
     for (const acc of accounts) {
