@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Activity, RotateCw, ServerOff, SkipForward } from "lucide-react";
+import { Activity, RotateCw, ServerOff, SkipForward, Loader2 } from "lucide-react";
 import { SyncHealthRow, AccountHealth } from "./SyncHealthRow";
 import { HealthTier } from "./healthScore";
 
@@ -23,10 +23,11 @@ const TIER_RANK: Record<HealthTier, number> = { critical: 0, degraded: 1, health
 interface Props {
   accounts: AccountHealth[];
   initialLoading: boolean;
+  loading?: boolean;
   onRefresh: () => void;
 }
 
-export function SyncHealthMatrix({ accounts, initialLoading, onRefresh }: Props) {
+export function SyncHealthMatrix({ accounts, initialLoading, loading = false, onRefresh }: Props) {
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const counts = useMemo(() => {
@@ -96,8 +97,15 @@ export function SyncHealthMatrix({ accounts, initialLoading, onRefresh }: Props)
             </Badge>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={onRefresh} className="h-7 text-xs gap-1">
-          <RotateCw className="h-3 w-3" /> Refresh
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRefresh}
+          disabled={loading}
+          className="h-7 text-xs gap-1"
+        >
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
+          {loading ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
 
@@ -132,7 +140,10 @@ export function SyncHealthMatrix({ accounts, initialLoading, onRefresh }: Props)
         <div className="col-span-2">Status</div>
       </div>
 
-      <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
+      <div className={cn(
+        "space-y-2 max-h-[560px] overflow-y-auto pr-1 transition-opacity",
+        loading && "opacity-60 pointer-events-none",
+      )}>
         {filtered.map(acc => (
           <SyncHealthRow key={acc.ad_account_id} acc={acc} onRefresh={onRefresh} />
         ))}
