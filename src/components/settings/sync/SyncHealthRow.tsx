@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers, Activity, SkipForward, CheckCircle2 } from "lucide-react";
-import { LaneHealth, TIER_META, ActivitySignal, ACTIVITY_META } from "./healthScore";
+import { LaneHealth, TIER_META, ActivitySignal, ACTIVITY_META, formatAgoCompact } from "./healthScore";
 
 export interface AccountHealth {
   ad_account_id: string;
@@ -23,15 +22,15 @@ export interface AccountHealth {
 function LanePill({ lane, label, icon: Icon }: { lane: LaneHealth; label: string; icon: React.ElementType }) {
   const meta = TIER_META[lane.tier];
   const pct = lane.total > 0 ? Math.round((lane.done / lane.total) * 100) : 0;
-  const ago = lane.last_done_at ? formatDistanceToNow(new Date(lane.last_done_at), { addSuffix: false }) : "—";
+  const ago = lane.last_done_at ? formatAgoCompact(lane.last_done_at) : "—";
 
   return (
-    <div className={cn("rounded-lg border p-2.5 transition-all", lane.tier === "critical" && "border-destructive/30 bg-destructive/5")}>
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide">
-          <Icon className="h-3 w-3" /> {label}
+    <div className={cn("rounded-lg border p-2.5 transition-all min-w-0", lane.tier === "critical" && "border-destructive/30 bg-destructive/5")}>
+      <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide min-w-0 truncate">
+          <Icon className="h-3 w-3 shrink-0" /> <span className="truncate">{label}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className={cn("relative inline-flex h-2 w-2 rounded-full", meta.dot)}>
             {lane.is_syncing && (
               <span className={cn("absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping", meta.dot)} />
@@ -40,9 +39,9 @@ function LanePill({ lane, label, icon: Icon }: { lane: LaneHealth; label: string
           <span className={cn("text-xs font-semibold", meta.tone)}>{meta.label}</span>
         </div>
       </div>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-bold tabular-nums">{lane.tier === "idle" ? "—" : `${lane.score}%`}</span>
-        <span className="text-[10px] text-muted-foreground">
+      <div className="flex items-baseline justify-between gap-2 min-w-0">
+        <span className="text-sm font-bold tabular-nums shrink-0">{lane.tier === "idle" ? "—" : `${lane.score}%`}</span>
+        <span className="text-[10px] text-muted-foreground truncate min-w-0 text-right tabular-nums">
           {lane.tier === "idle" ? "no jobs 24h" : lane.last_done_at ? `${ago} ago` : "never"}
         </span>
       </div>
@@ -62,9 +61,7 @@ function LanePill({ lane, label, icon: Icon }: { lane: LaneHealth; label: string
 
 function ActivityPill({ activity }: { activity: ActivitySignal }) {
   const meta = ACTIVITY_META[activity.tier];
-  const ago = activity.last_fast_lane_at
-    ? formatDistanceToNow(new Date(activity.last_fast_lane_at), { addSuffix: false })
-    : null;
+  const ago = activity.last_fast_lane_at ? formatAgoCompact(activity.last_fast_lane_at) : null;
 
   const subline = (() => {
     if (activity.tier === "live") return `${activity.last_fast_lane_rows} row${activity.last_fast_lane_rows === 1 ? "" : "s"}`;
@@ -94,9 +91,9 @@ function ActivityPill({ activity }: { activity: ActivitySignal }) {
                 <span className={cn("text-xs font-semibold", meta.tone)}>{meta.label}</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] font-medium truncate">{subline}</span>
-              <span className="text-[10px] text-muted-foreground shrink-0">
+            <div className="flex items-baseline justify-between gap-2 min-w-0">
+              <span className="text-[11px] font-medium truncate min-w-0">{subline}</span>
+              <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
                 {ago ? `${ago} ago` : "never"}
               </span>
             </div>

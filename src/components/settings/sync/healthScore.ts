@@ -55,6 +55,24 @@ export const ACTIVITY_META: Record<ActivityTier, { label: string; tone: string; 
 };
 
 export const ZERO_RUN_GRACE = 3; // <3 zero runs = grace period, deep-dive still runs
+export const HEARTBEAT_HOURS = 6; // matches sync-orchestrator HEARTBEAT_HOURS
+
+/** Compact "ago" string (no "about", no "minutes"): now / 5m / 3h / 2d */
+export function formatAgoCompact(date: string | Date | null): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const ms = Date.now() - d.getTime();
+  if (ms < 60_000) return "now";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(months / 12)}y`;
+}
 
 export function computeLaneHealth(stats: LaneJobStats, opts?: { tokenExpired?: boolean }): LaneHealth {
   const total = stats.done + stats.failed + stats.pending + stats.processing;
@@ -154,8 +172,8 @@ export function computeActivitySignal(input: {
   }
 
   // Past grace period: silent or dormant
-  const hoursUntilHeartbeat = Math.max(0, 24 - hoursSince);
-  if (hoursSince >= 24) {
+  const hoursUntilHeartbeat = Math.max(0, HEARTBEAT_HOURS - hoursSince);
+  if (hoursSince >= HEARTBEAT_HOURS) {
     return {
       tier: "dormant",
       last_fast_lane_at,

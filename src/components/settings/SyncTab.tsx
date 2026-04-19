@@ -207,6 +207,7 @@ export function SyncTab() {
       <SyncHealthMatrix
         accounts={accountHealth}
         initialLoading={initialLoading}
+        loading={loading}
         onRefresh={fetchData}
       />
       <SyncControlsAccordion
