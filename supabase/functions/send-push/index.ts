@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { user_id, title, body, link, type } = await req.json();
+    const { user_id, title, body, link, type, priority, group_key } = await req.json();
 
     if (!user_id || !title) {
       return new Response(JSON.stringify({ error: "user_id and title required" }), {
@@ -33,6 +33,75 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // ===== SMART GATING (v2) =====
+    const effectivePriority = (priority || "normal") as "low" | "normal" | "high" | "urgent";
+    const effectiveType = (type || "system") as string;
+    const PRIORITY_RANK: Record<string, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
+
+    // 1. Check user-global settings: DND + quiet hours + digest
+    const { data: settings } = await supabase
+      .from("notification_user_settings")
+      .select("*")
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    if (settings) {
+      // DND active → only urgent gets through
+      if (settings.dnd_until && new Date(settings.dnd_until) > new Date() && effectivePriority !== "urgent") {
+        console.log(`[gate] DND active for ${user_id}, skipping push (priority=${effectivePriority})`);
+        return new Response(JSON.stringify({ sent: 0, skipped: "dnd" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      // Quiet hours → only urgent gets through
+      if (settings.quiet_start && settings.quiet_end && effectivePriority !== "urgent") {
+        const tz = settings.quiet_timezone || "Asia/Dhaka";
+        if (isInQuietHours(settings.quiet_start, settings.quiet_end, tz)) {
+          console.log(`[gate] Quiet hours for ${user_id}, skipping push`);
+          return new Response(JSON.stringify({ sent: 0, skipped: "quiet_hours" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+      // Digest mode → suppress non-urgent
+      if (settings.digest_enabled && effectivePriority !== "urgent" && effectivePriority !== "high") {
+        console.log(`[gate] Digest mode on for ${user_id}, suppressing push`);
+        return new Response(JSON.stringify({ sent: 0, skipped: "digest_mode" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    // 2. Per-type preferences: enabled + min_priority
+    const { data: pref } = await supabase
+      .from("notification_preferences")
+      .select("*")
+      .eq("user_id", user_id)
+      .eq("type", effectiveType)
+      .eq("channel", "push")
+      .maybeSingle();
+
+    if (pref) {
+      if (!pref.enabled) {
+        console.log(`[gate] Push disabled for type=${effectiveType}`);
+        return new Response(JSON.stringify({ sent: 0, skipped: "type_disabled" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const minRank = PRIORITY_RANK[pref.min_priority || "low"] ?? 0;
+      if (PRIORITY_RANK[effectivePriority] < minRank) {
+        console.log(`[gate] Below min_priority for ${effectiveType} (${effectivePriority} < ${pref.min_priority})`);
+        return new Response(JSON.stringify({ sent: 0, skipped: "below_min_priority" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    // 3. Group-key mute
+    if (group_key) {
+      const { data: mute } = await supabase
+        .from("notification_mutes")
+        .select("muted_until")
+        .eq("user_id", user_id)
+        .eq("group_key", group_key)
+        .maybeSingle();
+      if (mute && new Date(mute.muted_until) > new Date()) {
+        console.log(`[gate] Group muted: ${group_key}`);
+        return new Response(JSON.stringify({ sent: 0, skipped: "group_muted" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    // ===== END GATING =====
 
     const { data: subs, error } = await supabase
       .from("push_subscriptions")
@@ -98,6 +167,24 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ----- Quiet Hours helper (TZ-aware) -----
+function isInQuietHours(startStr: string, endStr: string, timezone: string): boolean {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+    const parts = fmt.formatToParts(new Date());
+    const hh = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+    const mm = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+    const nowMin = hh * 60 + mm;
+    const [sh, sm] = startStr.split(":").map(Number);
+    const [eh, em] = endStr.split(":").map(Number);
+    const start = sh * 60 + sm;
+    const end = eh * 60 + em;
+    return start <= end ? (nowMin >= start && nowMin < end) : (nowMin >= start || nowMin < end);
+  } catch { return false; }
+}
 
 // ----- Web Push Implementation (RFC 8291 / RFC 8188) -----
 

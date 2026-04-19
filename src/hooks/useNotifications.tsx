@@ -17,6 +17,9 @@ export interface Notification {
   is_read: boolean;
   link: string | null;
   created_at: string;
+  snoozed_until?: string | null;
+  is_pinned?: boolean;
+  archived_at?: string | null;
 }
 
 const NOTIFICATION_SOUND_KEY = "notif_sound_enabled";
@@ -70,6 +73,7 @@ export function useNotifications() {
       .from("notifications")
       .select("*")
       .eq("user_id", user.id)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -88,7 +92,8 @@ export function useNotifications() {
           .from("notifications")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
-          .eq("is_read", false);
+          .eq("is_read", false)
+          .is("archived_at", null);
         setUnreadCount(count ?? 0);
       }
     }
@@ -99,7 +104,6 @@ export function useNotifications() {
     if (hasMore) fetchNotifications(false);
   }, [hasMore, fetchNotifications]);
 
-  // Only fetch when authReady and user exists
   useEffect(() => {
     if (!authReady || !user?.id) {
       if (authReady) {
@@ -120,12 +124,7 @@ export function useNotifications() {
       .channel("notifications-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
         (payload) => {
           const newNotif = payload.new as unknown as Notification;
           setNotifications((prev) => [newNotif, ...prev]);
@@ -155,30 +154,20 @@ export function useNotifications() {
             });
             playNotifSound();
           } else if (priority === "low") {
-            toast.info(newNotif.title, {
-              description: newNotif.body,
-              duration: 3000,
-            });
+            toast.info(newNotif.title, { description: newNotif.body, duration: 3000 });
           } else {
-            toast.success(newNotif.title, {
-              description: newNotif.body,
-              duration: 4000,
-            });
+            toast.success(newNotif.title, { description: newNotif.body, duration: 4000 });
           }
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [authReady, user?.id]);
 
   const markAsRead = useCallback(async (id: string) => {
     await supabase.from("notifications").update({ is_read: true } as any).eq("id", id);
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     setUnreadCount((prev) => Math.max(0, prev - 1));
   }, []);
 
@@ -210,14 +199,52 @@ export function useNotifications() {
   const bulkMarkRead = useCallback(async (ids: string[]) => {
     await supabase.from("notifications").update({ is_read: true } as any).in("id", ids);
     const unreadMarked = notifications.filter((n) => ids.includes(n.id) && !n.is_read).length;
-    setNotifications((prev) =>
-      prev.map((n) => (ids.includes(n.id) ? { ...n, is_read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (ids.includes(n.id) ? { ...n, is_read: true } : n)));
     setUnreadCount((prev) => Math.max(0, prev - unreadMarked));
   }, [notifications]);
 
+  // ===== v2 lifecycle actions =====
+  const snoozeNotification = useCallback(async (id: string, hours: number) => {
+    const until = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    await (supabase.from("notifications") as any).update({ snoozed_until: until }).eq("id", id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, snoozed_until: until } : n)));
+    toast.success(`Snoozed for ${hours < 24 ? `${hours}h` : "1 day"}`);
+  }, []);
+
+  const togglePin = useCallback(async (id: string) => {
+    const notif = notifications.find((n) => n.id === id);
+    if (!notif) return;
+    const next = !notif.is_pinned;
+    await (supabase.from("notifications") as any).update({ is_pinned: next }).eq("id", id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_pinned: next } : n)));
+    toast.success(next ? "Pinned" : "Unpinned");
+  }, [notifications]);
+
+  const archiveNotification = useCallback(async (id: string) => {
+    const notif = notifications.find((n) => n.id === id);
+    await (supabase.from("notifications") as any).update({ archived_at: new Date().toISOString() }).eq("id", id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (notif && !notif.is_read) setUnreadCount((prev) => Math.max(0, prev - 1));
+  }, [notifications]);
+
+  const muteGroup = useCallback(async (groupKey: string, hours: number) => {
+    if (!user?.id) return;
+    const until = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    await (supabase.from("notification_mutes") as any).upsert(
+      { user_id: user.id, group_key: groupKey, muted_until: until },
+      { onConflict: "user_id,group_key" }
+    );
+    toast.success(`Muted similar alerts for ${hours}h`);
+  }, [user?.id]);
+
+  // Bell-list filter: hide currently snoozed items
+  const visibleNotifications = notifications.filter(
+    (n) => !n.snoozed_until || new Date(n.snoozed_until) <= new Date()
+  );
+
   return {
-    notifications,
+    notifications: visibleNotifications,
+    allNotifications: notifications,
     unreadCount,
     loading,
     hasMore,
@@ -227,6 +254,10 @@ export function useNotifications() {
     bulkDelete,
     bulkMarkRead,
     loadMore,
+    snoozeNotification,
+    togglePin,
+    archiveNotification,
+    muteGroup,
     refetch: fetchNotifications,
   };
 }
