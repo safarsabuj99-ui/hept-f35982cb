@@ -376,10 +376,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get existing account IDs to mark as already imported
-    const { data: existingAccounts } = await adminClient
+    // Get existing account IDs to mark as already imported (org-scoped to prevent cross-tenant false positives)
+    let existingQuery = adminClient
       .from("ad_accounts")
       .select("ad_account_id, platform_name");
+    if (orgId) {
+      existingQuery = existingQuery.eq("org_id", orgId);
+    }
+    const { data: existingAccounts } = await existingQuery;
 
     const existingSet = new Set(
       (existingAccounts ?? []).map((a: any) => `${a.platform_name}:${a.ad_account_id}`)
@@ -481,6 +485,7 @@ Deno.serve(async (req) => {
           account_spending_limit: 250,
           is_active: true,
           account_currency: account.account_currency,
+          org_id: orgId ?? integration.org_id ?? null,
         });
         existingSet.add(key);
       }
@@ -537,6 +542,7 @@ Deno.serve(async (req) => {
               account_spending_limit: 250,
               is_active: true,
               account_currency: account.account_currency,
+              org_id: orgId ?? integration.org_id ?? null,
             });
             existingSet.add(key);
           }
