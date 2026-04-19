@@ -240,10 +240,12 @@ Deno.serve(async (req) => {
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
+          let metaPageCount = 0;
 
-          while (nextUrl) {
+          while (nextUrl && metaPageCount < MAX_PAGES_META) {
             const res = await fetch(nextUrl);
             const json = await res.json();
+            metaPageCount++;
             if (json.error) { errors.push(`Meta ${account.ad_account_id}: ${json.error.message}`); break; }
             if (json.data?.length > 0) allInsights = allInsights.concat(json.data);
             nextUrl = json.paging?.next || null;
@@ -271,17 +273,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Auto-create campaign_mappings entry for Meta
+            // Queue campaign_mappings entry (deduped, bulk-flushed at end)
             const metaPlatformId = `meta_${row.campaign_id || ''}`;
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: metaPlatformId,
-              campaign_name: campaignName,
-              platform: "meta" as any,
-              client_id: matchedClientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
+            queueMapping(metaPlatformId, campaignName, matchedClientId, "meta");
 
             const isBDT = currency === "BDT";
             const accountRate = isBDT ? (account.exchange_rate ?? exchangeRate) : 1;
