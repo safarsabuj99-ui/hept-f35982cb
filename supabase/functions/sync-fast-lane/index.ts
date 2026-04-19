@@ -184,6 +184,8 @@ Deno.serve(async (req) => {
     let syncedCount = 0;
     let skipped = 0;
     const errors: string[] = [];
+    // Track per-account row counts for activity gating (drives deep-dive scheduling)
+    const accountRowCounts: Record<string, number> = {};
 
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
@@ -192,6 +194,7 @@ Deno.serve(async (req) => {
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
       const startDateStr = getAccountStartDate(account.id);
+      accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
       try {
         if (platform === "meta") {
