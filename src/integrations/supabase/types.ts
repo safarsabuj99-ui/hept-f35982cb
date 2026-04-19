@@ -3648,6 +3648,66 @@ export type Database = {
           },
         ]
       }
+      sync_reconciliation_log: {
+        Row: {
+          ad_account_id: string
+          api_total_spend: number
+          created_at: string
+          date_from: string
+          date_to: string
+          db_total_spend: number
+          delta: number
+          id: string
+          notes: string | null
+          org_id: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          rows_processed: number
+        }
+        Insert: {
+          ad_account_id: string
+          api_total_spend?: number
+          created_at?: string
+          date_from: string
+          date_to: string
+          db_total_spend?: number
+          delta?: number
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          rows_processed?: number
+        }
+        Update: {
+          ad_account_id?: string
+          api_total_spend?: number
+          created_at?: string
+          date_from?: string
+          date_to?: string
+          db_total_spend?: number
+          delta?: number
+          id?: string
+          notes?: string | null
+          org_id?: string | null
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          rows_processed?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_reconciliation_log_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_reconciliation_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_health_scores: {
         Row: {
           activity_score: number
