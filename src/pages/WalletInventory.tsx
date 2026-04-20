@@ -195,9 +195,12 @@ export default function WalletInventory() {
   useEffect(() => {
     fetchPurchases(dateRange);
     fetchManualSpends(dateRange);
-    fetchOverview();
     fetchAgencyAccounts();
   }, []);
+
+  useEffect(() => {
+    if (profile?.org_id) fetchOverview();
+  }, [profile?.org_id, fetchOverview]);
 
   useEffect(() => {
     const channel = supabase
