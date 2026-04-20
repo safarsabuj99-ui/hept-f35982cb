@@ -99,7 +99,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       </div>
 
       {/* Platform Tabs — Premium Styling */}
-      <Tabs defaultValue="all" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PlatformTab)} className="space-y-4">
         <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
           <TabsList className="inline-flex w-auto gap-1 bg-muted/40 backdrop-blur-sm border border-border/50 p-1 rounded-xl">
             <TabsTrigger
