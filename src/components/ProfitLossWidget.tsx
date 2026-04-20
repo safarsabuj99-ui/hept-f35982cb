@@ -35,32 +35,36 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
     const fetchData = async () => {
       setLoading(true);
 
-      // Step 1: Fetch purchases (date-filtered if range provided)
-      let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
-      if (dateRange) {
-        purchasesQuery = purchasesQuery
-          .gte("date", toISODate(dateRange.from))
-          .lte("date", toISODate(dateRange.to));
-      }
+      // Step 1: Fetch purchases (date-filtered if range provided) — paginated
+      const purchasesData = await fetchAllRows<{ bdt_amount_paid: number; usd_received: number; date: string }>(() => {
+        let q = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
+        if (dateRange) {
+          q = q.gte("date", toISODate(dateRange.from)).lte("date", toISODate(dateRange.to));
+        }
+        return q;
+      });
 
-      // Fetch expenses (excluding Owner_Draw, date-filtered)
-      let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date").neq("category", "Owner_Draw");
-      if (dateRange) {
-        expensesQuery = expensesQuery
-          .gte("date", toISODate(dateRange.from))
-          .lte("date", toISODate(dateRange.to));
-      }
+      // Fetch expenses (excluding Owner_Draw, date-filtered) — paginated
+      const expensesData = await fetchAllRows<{ amount_bdt: number; category: string; date: string }>(() => {
+        let q = supabase.from("agency_expenses").select("amount_bdt, category, date").neq("category", "Owner_Draw");
+        if (dateRange) {
+          q = q.gte("date", toISODate(dateRange.from)).lte("date", toISODate(dateRange.to));
+        }
+        return q;
+      });
 
-      const [purchasesRes, profilesRes, rolesRes, expensesRes] = await Promise.all([
-        purchasesQuery,
-        supabase.from("profiles").select("user_id, pricing_config"),
-        supabase.from("user_roles").select("user_id").eq("role", "client"),
-        expensesQuery,
+      const [profilesData, rolesData] = await Promise.all([
+        fetchAllRows<{ user_id: string; pricing_config: any }>(() =>
+          supabase.from("profiles").select("user_id, pricing_config")
+        ),
+        fetchAllRows<{ user_id: string }>(() =>
+          supabase.from("user_roles").select("user_id").eq("role", "client")
+        ),
       ]);
 
       // Calculate OpEx
       let totalOpexBdt = 0;
-      for (const e of (expensesRes.data ?? []) as any[]) {
+      for (const e of expensesData) {
         totalOpexBdt += Number(e.amount_bdt);
       }
 
@@ -71,35 +75,40 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         return usd > 0 ? Math.round((bdt / usd) * 100) / 100 : 0;
       };
 
-      let wac = calcWac(purchasesRes.data);
+      let wac = calcWac(purchasesData);
 
       if (wac === 0) {
         const today = getLocalToday();
         const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const { data: monthPurchases } = await supabase.from("usd_purchases")
-          .select("bdt_amount_paid, usd_received")
-          .gte("date", toISODate(firstOfMonth))
-          .lte("date", toISODate(today));
+        const monthPurchases = await fetchAllRows<{ bdt_amount_paid: number; usd_received: number }>(() =>
+          supabase.from("usd_purchases")
+            .select("bdt_amount_paid, usd_received")
+            .gte("date", toISODate(firstOfMonth))
+            .lte("date", toISODate(today))
+        );
         wac = calcWac(monthPurchases);
       }
 
       if (wac === 0) {
-        const { data: allPurchases } = await supabase.from("usd_purchases")
-          .select("bdt_amount_paid, usd_received");
+        const allPurchases = await fetchAllRows<{ bdt_amount_paid: number; usd_received: number }>(() =>
+          supabase.from("usd_purchases").select("bdt_amount_paid, usd_received")
+        );
         wac = calcWac(allPurchases);
       }
 
       // Step 3: Build client profile map
-      const clientIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
+      const clientIds = new Set(rolesData.map((r: any) => r.user_id));
       const profileMap: Record<string, any> = {};
-      for (const p of (profilesRes.data ?? []) as any[]) {
+      for (const p of profilesData) {
         if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
       }
 
-      // Step 4: Get campaigns with client_id
-      const { data: allCampaigns } = await supabase.from("campaigns").select("id, platform, client_id");
+      // Step 4: Get campaigns with client_id — paginated
+      const allCampaigns = await fetchAllRows<{ id: string; platform: string; client_id: string | null }>(() =>
+        supabase.from("campaigns").select("id, platform, client_id")
+      );
 
-      if (!allCampaigns?.length) {
+      if (!allCampaigns.length) {
         setData({ totalRevenueBdt: 0, totalCogsBdt: 0, grossProfitBdt: 0, totalOpexBdt: Math.round(totalOpexBdt), netProfitBdt: -Math.round(totalOpexBdt), wac });
         setLoading(false);
         return;
@@ -112,14 +121,14 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         if (c.client_id) campaignToClient[c.id] = c.client_id;
       }
 
-      // Step 5: Fetch daily_metrics with date range filter
-      let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
-      if (dateRange) {
-        metricsQuery = metricsQuery
-          .gte("data_date", toISODate(dateRange.from))
-          .lte("data_date", toISODate(dateRange.to));
-      }
-      const { data: metricsData } = await metricsQuery;
+      // Step 5: Fetch daily_metrics with date range filter — paginated (fixes silent 1000-row truncation)
+      const metricsData = await fetchAllRows<{ campaign_id: string; spend: number }>(() => {
+        let q = supabase.from("daily_metrics").select("campaign_id, spend");
+        if (dateRange) {
+          q = q.gte("data_date", toISODate(dateRange.from)).lte("data_date", toISODate(dateRange.to));
+        }
+        return q;
+      });
 
       // Step 6: Aggregate spend per client per platform
       const clientPlatformSpend: Record<string, Record<string, number>> = {};
