@@ -21,10 +21,20 @@ type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
 export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true, isAdmin = false }: CampaignAnalyticsPanelProps) {
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
+  const [activeTab, setActiveTab] = useState<PlatformTab>("all");
+
+  const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
+  const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
+  const googleRows = useMemo(() => campaignRows.filter(r => r.platform === "google"), [campaignRows]);
+
+  const activeRows = activeTab === "meta" ? metaRows
+                   : activeTab === "tiktok" ? tiktokRows
+                   : activeTab === "google" ? googleRows
+                   : campaignRows;
 
   const totals = useMemo(() => {
     const t = { spend: 0, results: 0, createOrder: 0, leads: 0, messages: 0 };
-    for (const r of campaignRows) {
+    for (const r of activeRows) {
       t.spend += r.spend;
       t.results += r.results;
       t.createOrder += r.create_order ?? 0;
@@ -32,11 +42,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       t.messages += (r.messaging_conversations ?? 0) + (r.conversations_tiktok_dm ?? 0) + (r.conversations_instant_msg ?? 0);
     }
     return t;
-  }, [campaignRows]);
-
-  const metaRows = useMemo(() => campaignRows.filter(r => r.platform === "meta"), [campaignRows]);
-  const tiktokRows = useMemo(() => campaignRows.filter(r => r.platform === "tiktok"), [campaignRows]);
-  const googleRows = useMemo(() => campaignRows.filter(r => r.platform === "google"), [campaignRows]);
+  }, [activeRows]);
 
   const renderDeepDiveTable = (data: CampaignRow[], platform: PlatformTab) => (
     <DeepDiveTable
@@ -93,7 +99,7 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       </div>
 
       {/* Platform Tabs — Premium Styling */}
-      <Tabs defaultValue="all" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PlatformTab)} className="space-y-4">
         <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
           <TabsList className="inline-flex w-auto gap-1 bg-muted/40 backdrop-blur-sm border border-border/50 p-1 rounded-xl">
             <TabsTrigger
