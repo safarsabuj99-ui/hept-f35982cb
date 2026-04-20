@@ -440,7 +440,7 @@ export default function FinanceDashboard() {
         <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
           <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 text-center">
               <div className="py-2">
                 <p className="text-xs text-muted-foreground mb-1">Revenue</p>
                 {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
