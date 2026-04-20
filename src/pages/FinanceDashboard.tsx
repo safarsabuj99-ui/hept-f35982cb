@@ -189,18 +189,21 @@ export default function FinanceDashboard() {
     const draw = expenses.filter(e => e.category === "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
 
     // ===== Balance Change calculation =====
-    // End = current sum of all agency_accounts. Start = end - (inflows-outflows) within range.
+    // End balance = current sum of active agency_accounts.
+    // Start balance = end - net cash delta within the period.
+    // Sources of agency BDT cash movement:
+    //   INFLOWS:  liquid_fund_entries (BDT received, e.g. client deposits/loans),
+    //             cash_withdrawal_returns (returned cash flows back into accounts)
+    //   OUTFLOWS: agency_expenses (opex + owner_draw),
+    //             usd_purchases.bdt_amount_paid (BDT spent buying USD),
+    //             cash_withdrawals (cash taken out of accounts)
+    //   fund_transfers are internal A→A moves, net zero on total balance.
     const accountsP = supabase.from("agency_accounts").select("current_balance_bdt").eq("is_active", true);
     const isoFrom = range ? toISODate(range.from) : null;
     const isoTo = range ? toISODate(range.to) : null;
 
-    const txInflowP = fetchAllRows<{ amount_bdt: number }>(() => {
-      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "credit");
-      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
-      return q;
-    });
-    const txOutflowP = fetchAllRows<{ amount_bdt: number }>(() => {
-      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "debit");
+    const liquidInP = fetchAllRows<{ amount_bdt: number }>(() => {
+      let q = supabase.from("liquid_fund_entries").select("amount_bdt, type, date").eq("type", "inflow");
       if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
       return q;
     });
@@ -220,15 +223,14 @@ export default function FinanceDashboard() {
       return q;
     });
 
-    const [{ data: accountsData }, txIn, txOut, withdrawals, wReturns, usdPurchSpend] = await Promise.all([
-      accountsP, txInflowP, txOutflowP, withdrawalsP, withdrawalReturnsP, usdPurchaseSpendP,
+    const [{ data: accountsData }, liquidIn, withdrawals, wReturns, usdPurchSpend] = await Promise.all([
+      accountsP, liquidInP, withdrawalsP, withdrawalReturnsP, usdPurchaseSpendP,
     ]);
 
     const sum = (arr: any[], key: string) => arr.reduce((s, r) => s + Number(r[key] || 0), 0);
     const currentEnd = (accountsData ?? []).reduce((s: number, a: any) => s + Number(a.current_balance_bdt || 0), 0);
-    const inflows = sum(txIn, "amount_bdt") + sum(wReturns, "amount_bdt");
-    const outflows = sum(txOut, "amount_bdt")
-      + sum(withdrawals, "amount_bdt")
+    const inflows = sum(liquidIn, "amount_bdt") + sum(wReturns, "amount_bdt");
+    const outflows = sum(withdrawals, "amount_bdt")
       + sum(usdPurchSpend, "bdt_amount_paid")
       + opex + draw;
     const netDelta = inflows - outflows;
