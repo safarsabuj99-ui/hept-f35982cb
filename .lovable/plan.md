@@ -1,67 +1,73 @@
 
 
-## Restore "Net Profit" KPI to Finance Overview
+## Add per-task Product / Campaign Name
 
-### What's missing
+### What's changing
 
-In the previous layout, Finance Overview showed a **Net Profit** card (= Revenue − COGS − OpEx). When the new 6-card waterfall was added, that card got replaced by **Take-Home Profit** (= Revenue − COGS − OpEx − Owner's Draw). Both numbers are useful and meaningfully different:
+Right now the request form has **one** "Campaign / Product Name" at the top, and each task only carries link + platform + objective + budget + caption. Since a single request can bundle tasks for **different products** (e.g., Task 1 = Product A, Task 2 = Product B), each task needs its own product name.
 
-| Metric | Formula | Tells you |
-|---|---|---|
-| **Net Profit** (business profit) | Revenue − COGS − OpEx | What the business earned this period — before paying yourself |
-| **Take-Home Profit** (owner profit) | Net Profit − Owner's Draw | What's left in the business after you withdrew your share |
+### The fix (3 small changes)
 
-Right now only Take-Home is displayed. The `netProfit` value is still being calculated in state (line 248) — it's just not rendered. So this is a pure UI restore, no math changes.
+**1. Database — add column**
 
-### New layout (7-card waterfall)
+Migration adds an optional `product_name` column to `campaign_tasks`:
 
-```
-┌───────────────┬───────────────┬───────────────┐
-│ Total Revenue │  Total COGS   │ Gross Profit  │
-├───────────────┼───────────────┼───────────────┤
-│  Total OpEx   │  Net Profit   │ Owner's Draw  │  ← Net Profit reintroduced
-├───────────────┴───────────────┼───────────────┤
-│                               │ Take-Home     │
-│                               │ Profit        │
-└───────────────────────────────┴───────────────┘
+```sql
+ALTER TABLE public.campaign_tasks
+  ADD COLUMN IF NOT EXISTS product_name TEXT;
 ```
 
-On `lg:` screens this becomes a clean 3-column grid with 7 cards (the 7th wraps to a new row, which is fine — it visually emphasizes Take-Home as the final answer).
+Nullable + no default — old tasks stay untouched, no data migration needed.
 
-The **P&L Summary** strip below grows from 6 columns to 7, inserting `= Net Profit` between `− OpEx` and `− Owner's Draw`:
+**2. Client form — `src/pages/NewCampaignRequest.tsx`**
+
+- Add `productName: string` to the `TaskEntry` interface and `EMPTY_TASK`.
+- Add a new input as the **first field** inside each Task card (above "Post / Video Link"):
+  ```
+  Label: "Product / Campaign Name *"  (icon: Package)
+  Placeholder: "e.g. Summer Tee, iPhone Case Launch"
+  ```
+- Make it **required** in `isTaskValid()` (`!!t.productName.trim()`).
+- Keep the parent-level "Campaign / Product Name" field — relabel it to **"Request Title *"** with placeholder `"e.g. Week 47 Campaigns"` so users understand it's the umbrella label, while each task gets its own product name.
+- Include `product_name: t.productName.trim()` in the `taskRows` insert.
+
+**3. Display — `OrderManagement.tsx` (admin) & `MyCampaignRequests.tsx` (client)**
+
+In each task sub-row, show the product name prominently next to the task index:
+```
+#1  [Product Name]  · Meta · Message · ×2
+```
+Falls back gracefully to "—" for legacy tasks without a product name.
+
+### Layout of a task card (after change)
 
 ```
-Revenue → − COGS → = Gross → − OpEx → = Net Profit → − Owner's Draw → = Take-Home
-```
-
-This is now a fully accurate P&L waterfall that reads top-to-bottom like a real income statement.
-
-### Calculation logic
-
-No changes. Both numbers already exist:
-```ts
-const np = aggRevenue - aggCogs - opex;   // Net Profit (already in state)
-setNetProfit(Math.round(np));             // Already set
-setTakeHomeProfit(Math.round(np - draw)); // Already set
+┌─ TASK 1 ────────────────────────────── 🗑
+│  📦 Product / Campaign Name *
+│  [ Summer Sale Tee                   ]
+│
+│  🔗 Post / Video Link *
+│  [ https://tiktok.com/...            ]
+│
+│  Platform * | Objective * | Budget * | Qty
+│  [Meta  ▾]   [Message ▾]   [10.00]    [1]
+│
+│  Ad Caption / Notes
+│  [ ...                                ]
+└────────────────────────────────────────
 ```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/FinanceDashboard.tsx` | (a) Insert a "Net Profit ({period})" card between the OpEx card and the Owner's Draw card in the 6-card grid (becomes 7 cards). (b) Insert a `= Net Profit` column in the Profit & Loss Summary strip (6 → 7 columns). (c) Both gated on `canViewProfit`, styled like Take-Home: success/destructive coloring based on sign, `TrendingUp` icon, mono font. |
+| `supabase/migrations/<new>.sql` | `ALTER TABLE campaign_tasks ADD COLUMN product_name TEXT` |
+| `src/pages/NewCampaignRequest.tsx` | Add `productName` to TaskEntry; add input as first field in each task card; require it in validation; relabel parent field to "Request Title"; include in insert payload |
+| `src/pages/OrderManagement.tsx` | Render `task.product_name` (with `—` fallback) in the expanded task sub-rows |
+| `src/pages/MyCampaignRequests.tsx` | Render `task.product_name` (with `—` fallback) in the expanded task list |
 
-Zero schema changes. Zero new state. Pure render addition using existing `netProfit` value.
-
-### What you'll see immediately
-
-For Today's data in your screenshot:
-- Revenue ৳22,198 → − COGS ৳19,471 → = Gross ৳2,727
-- − OpEx ৳0 → **= Net Profit ৳2,727** ← restored
-- − Owner's Draw ৳0 → = Take-Home ৳2,727
-
-When you have OpEx and Owner's Draw entries, the difference between Net Profit and Take-Home will become meaningful and visible side by side.
+Zero changes to status flow, notifications, or RLS. No breaking change for old requests — `product_name` is nullable.
 
 ### Build time
-~2 minutes. One file. Two small UI additions.
+~5 minutes. One migration + three file edits.
 
