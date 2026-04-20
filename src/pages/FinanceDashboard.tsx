@@ -342,7 +342,25 @@ export default function FinanceDashboard() {
             </div>
           </CardContent>
         </div>
-        {/* 5. Owner's Draw */}
+        {/* 5. Net Profit (business profit, before owner draw) */}
+        {canViewProfit && (
+          <div className="glass-card glow-border">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
+                  {loading ? <Skeleton className="h-8 w-28" /> : (
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                      ৳{netProfit.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
+        {/* 6. Owner's Draw */}
         <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
