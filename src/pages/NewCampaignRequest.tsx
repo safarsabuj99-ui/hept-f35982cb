@@ -14,6 +14,7 @@ import { Loader2, Plus, Trash2, Send, Link2, Sparkles, Package } from "lucide-re
 import { cn } from "@/lib/utils";
 
 interface TaskEntry {
+  productName: string;
   creativeLink: string;
   platform: string;
   objective: string;
@@ -23,6 +24,7 @@ interface TaskEntry {
 }
 
 const EMPTY_TASK: TaskEntry = {
+  productName: "",
   creativeLink: "",
   platform: "",
   objective: "",
@@ -52,7 +54,7 @@ function detectPlatform(url: string): string {
 }
 
 function isTaskValid(t: TaskEntry): boolean {
-  return !!t.creativeLink && !!t.platform && !!t.objective && Number(t.dailyBudget) > 0 && Number(t.quantity) >= 1;
+  return !!t.productName.trim() && !!t.creativeLink && !!t.platform && !!t.objective && Number(t.dailyBudget) > 0 && Number(t.quantity) >= 1;
 }
 
 export default function NewCampaignRequest() {
@@ -127,6 +129,7 @@ export default function NewCampaignRequest() {
       creative_link: t.creativeLink,
       ad_caption: t.adCaption || null,
       quantity: Number(t.quantity) || 1,
+      product_name: t.productName.trim() || null,
     }));
 
     const { error: taskError } = await (supabase.from("campaign_tasks" as any).insert(taskRows) as any);
@@ -155,8 +158,8 @@ export default function NewCampaignRequest() {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Info</span>
           </div>
           <div className="space-y-1.5">
-            <Label>Campaign / Product Name *</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Summer Sale 2026, Product X Launch" />
+            <Label>Request Title *</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Week 47 Campaigns" />
           </div>
           <div className="space-y-1.5">
             <Label>General Notes</Label>
@@ -185,6 +188,16 @@ export default function NewCampaignRequest() {
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
+              </div>
+
+              {/* Product / Campaign Name */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5"><Package className="h-3.5 w-3.5" /> Product / Campaign Name *</Label>
+                <Input
+                  value={t.productName}
+                  onChange={e => updateTask(i, "productName", e.target.value)}
+                  placeholder="e.g. Summer Tee, iPhone Case Launch"
+                />
               </div>
 
               {/* Creative Link */}

@@ -475,10 +475,11 @@ export default function OrderManagement() {
                                 <TableRow key={task.id} className="bg-muted/30 hover:bg-muted/50">
                                   <TableCell className="w-8 px-2" />
                                   <TableCell colSpan={2}>
-                                    <div className="flex items-center gap-2 pl-2">
+                                    <div className="flex items-center gap-2 pl-2 flex-wrap">
                                       <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                                      <span className="text-sm font-semibold">{task.product_name || "—"}</span>
                                       <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
-                                      <span className="text-sm">{task.objective}</span>
+                                      <span className="text-sm text-muted-foreground">{task.objective}</span>
                                       {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
                                     </div>
                                   </TableCell>
@@ -582,13 +583,14 @@ export default function OrderManagement() {
                     return (
                       <div key={task.id} className="rounded-lg border p-3 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                            <span className="text-sm font-semibold">{task.product_name || "—"}</span>
                             <Badge variant="secondary">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
-                            <span className="text-sm">{task.objective}</span>
+                            <span className="text-sm text-muted-foreground">{task.objective}</span>
                             {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className="font-mono text-sm">${Number(task.budget_usd).toFixed(2)}</span>
                             <Badge variant="outline" className={cn("text-[10px]", taskBadge.className)}>{taskBadge.label}</Badge>
                           </div>
@@ -695,6 +697,7 @@ function InlineTaskCard({ task, idx, canManage, actionLoading, onStart, onComple
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+          <span className="text-xs font-semibold truncate max-w-[160px]">{task.product_name || "—"}</span>
           <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
           <span className="text-xs">{task.objective}</span>
           {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}

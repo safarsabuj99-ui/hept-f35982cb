@@ -815,6 +815,7 @@ export type Database = {
           id: string
           objective: Database["public"]["Enums"]["campaign_objective"]
           platform: Database["public"]["Enums"]["ad_platform"]
+          product_name: string | null
           quantity: number
           rejection_reason: string | null
           request_id: string
@@ -828,6 +829,7 @@ export type Database = {
           id?: string
           objective: Database["public"]["Enums"]["campaign_objective"]
           platform: Database["public"]["Enums"]["ad_platform"]
+          product_name?: string | null
           quantity?: number
           rejection_reason?: string | null
           request_id: string
@@ -841,6 +843,7 @@ export type Database = {
           id?: string
           objective?: Database["public"]["Enums"]["campaign_objective"]
           platform?: Database["public"]["Enums"]["ad_platform"]
+          product_name?: string | null
           quantity?: number
           rejection_reason?: string | null
           request_id?: string
