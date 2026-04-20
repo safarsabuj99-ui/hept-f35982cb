@@ -144,11 +144,13 @@ export default function WalletInventory() {
   }, []);
 
   const fetchOverview = useCallback(async () => {
+    if (!profile?.org_id) return;
     setOverview(prev => ({ ...prev, loading: true }));
 
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
+      .eq("org_id", profile.org_id)
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
