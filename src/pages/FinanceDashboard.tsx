@@ -282,51 +282,53 @@ export default function FinanceDashboard() {
         <DateRangeFilter onRangeChange={handleRangeChange} />
       </div>
 
-      {/* Main KPI Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 opacity-0 animate-slide-up-fade stagger-2">
-        {canViewProfit && (
-          <div className="glass-card glow-border border-success/30">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
-                  {loading ? <Skeleton className="h-8 w-28" /> : (
-                    <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
-                      ৳{netProfit.toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </div>
-        )}
+      {/* P&L Waterfall — 6-card flow: Revenue → COGS → Gross → OpEx → Draw → Take-Home */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 opacity-0 animate-slide-up-fade stagger-2">
+        {/* 1. Revenue */}
         <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground truncate">Avg. Cost ({periodLabel})</p>
-                {loading ? <Skeleton className="h-8 w-24" /> : (
-                  <p className="text-xl sm:text-2xl font-bold font-mono">{wac} <span className="text-sm text-muted-foreground">BDT</span></p>
+                <p className="text-xs text-muted-foreground truncate">Total Revenue ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-28" /> : (
+                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
                 )}
               </div>
             </div>
           </CardContent>
         </div>
+        {/* 2. COGS */}
         <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
+              <div className="hidden sm:block rounded-lg bg-destructive/10 p-2"><ArrowDownRight className="h-5 w-5 text-destructive" /></div>
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground truncate">Owner's Draw ({periodLabel})</p>
-                {loading ? <Skeleton className="h-8 w-24" /> : (
-                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{ownerDraw.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground truncate">Total COGS ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-28" /> : (
+                  <p className="text-xl sm:text-2xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
                 )}
               </div>
             </div>
           </CardContent>
         </div>
+        {/* 3. Gross Profit */}
+        <div className="glass-card glow-border border-success/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Gross Profit ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-28" /> : (
+                  <p className={`text-xl sm:text-2xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{(totalRevenue - totalCogs).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </div>
+        {/* 4. OpEx */}
         <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -340,6 +342,79 @@ export default function FinanceDashboard() {
             </div>
           </CardContent>
         </div>
+        {/* 5. Owner's Draw */}
+        <div className="glass-card glow-border">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block rounded-lg bg-warning/10 p-2"><Banknote className="h-5 w-5 text-warning" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Owner's Draw ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-24" /> : (
+                  <p className="text-xl sm:text-2xl font-bold font-mono">৳{ownerDraw.toLocaleString()}</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </div>
+        {/* 6. Take-Home Profit */}
+        {canViewProfit && (
+          <div className="glass-card glow-border border-success/30">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block rounded-lg bg-success/10 p-2"><Wallet className="h-5 w-5 text-success" /></div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Take-Home Profit ({periodLabel})</p>
+                  {loading ? <Skeleton className="h-8 w-28" /> : (
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${takeHomeProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                      ৳{takeHomeProfit.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
+      </div>
+
+      {/* Secondary KPIs: Avg Cost + Balance Change */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 opacity-0 animate-slide-up-fade stagger-3">
+        <div className="glass-card glow-border">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block rounded-lg bg-primary/10 p-2"><DollarSign className="h-5 w-5 text-primary" /></div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">Avg. Cost ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-24" /> : (
+                  <p className="text-xl sm:text-2xl font-bold font-mono">{wac} <span className="text-sm text-muted-foreground">BDT/USD</span></p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </div>
+        <div className={`glass-card glow-border ${balanceChange >= 0 ? "border-success/20" : "border-destructive/20"}`}>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className={`hidden sm:block rounded-lg p-2 ${balanceChange >= 0 ? "bg-success/10" : "bg-destructive/10"}`}>
+                {balanceChange >= 0
+                  ? <ArrowUpRight className="h-5 w-5 text-success" />
+                  : <ArrowDownRight className="h-5 w-5 text-destructive" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground truncate">Balance Change ({periodLabel})</p>
+                {loading ? <Skeleton className="h-8 w-32" /> : (
+                  <>
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${balanceChange >= 0 ? "text-success" : "text-destructive"}`}>
+                      {balanceChange >= 0 ? "+" : ""}৳{balanceChange.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1 font-mono truncate">
+                      Start: ৳{startBalance.toLocaleString()} → End: ৳{endBalance.toLocaleString()}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </div>
       </div>
 
       {/* P&L Summary */}
@@ -347,24 +422,44 @@ export default function FinanceDashboard() {
         <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
           <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-              <div className="py-2 border-b sm:border-b-0">
-                <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
-                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                  <p className="text-xl font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
-                )}
-              </div>
-              <div className="py-2 border-b sm:border-b-0">
-                <p className="text-xs text-muted-foreground mb-1">Total COGS</p>
-                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                  <p className="text-xl font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">Revenue</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className="text-base sm:text-lg font-bold font-mono">৳{totalRevenue.toLocaleString()}</p>
                 )}
               </div>
               <div className="py-2">
-                <p className="text-xs text-muted-foreground mb-1">Gross Profit</p>
-                {loading ? <Skeleton className="h-7 w-32 mx-auto" /> : (
-                  <p className={`text-xl font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
+                <p className="text-xs text-muted-foreground mb-1">− COGS</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className="text-base sm:text-lg font-bold font-mono text-destructive">৳{totalCogs.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">= Gross Profit</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className={`text-base sm:text-lg font-bold font-mono ${(totalRevenue - totalCogs) >= 0 ? "text-success" : "text-destructive"}`}>
                     ৳{(totalRevenue - totalCogs).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">− OpEx</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className="text-base sm:text-lg font-bold font-mono text-destructive">৳{totalOpex.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">− Owner's Draw</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className="text-base sm:text-lg font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2 rounded-lg bg-success/5">
+                <p className="text-xs text-muted-foreground mb-1">= Take-Home</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className={`text-base sm:text-lg font-bold font-mono ${takeHomeProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{takeHomeProfit.toLocaleString()}
                   </p>
                 )}
               </div>
