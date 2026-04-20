@@ -42,21 +42,33 @@ export default function FinanceDashboard() {
     // Realtime invalidations and date-range changes refresh in the background.
     if (initialLoadingRef.current) setLoading(true);
 
-    let purchasesQuery = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
-    let expensesQuery = supabase.from("agency_expenses").select("amount_bdt, category, date");
+    // Build paginated fetchers (bypass Supabase's silent 1000-row cap)
+    const purchasesP = fetchAllRows<{ bdt_amount_paid: number; usd_received: number; date: string }>(() => {
+      let q = supabase.from("usd_purchases").select("bdt_amount_paid, usd_received, date");
+      if (range) {
+        q = q.gte("date", toISODate(range.from)).lte("date", toISODate(range.to));
+      }
+      return q;
+    });
 
-    if (range) {
-      const from = toISODate(range.from);
-      const to = toISODate(range.to);
-      purchasesQuery = purchasesQuery.gte("date", from).lte("date", to);
-      expensesQuery = expensesQuery.gte("date", from).lte("date", to);
-    }
+    const expensesP = fetchAllRows<{ amount_bdt: number; category: string; date: string }>(() => {
+      let q = supabase.from("agency_expenses").select("amount_bdt, category, date");
+      if (range) {
+        q = q.gte("date", toISODate(range.from)).lte("date", toISODate(range.to));
+      }
+      return q;
+    });
 
-    const [purchasesRes, profilesRes, rolesRes, expensesRes] = await Promise.all([
-      purchasesQuery,
-      supabase.from("profiles").select("user_id, full_name, pricing_config"),
-      supabase.from("user_roles").select("user_id").eq("role", "client"),
-      expensesQuery,
+    const profilesP = fetchAllRows<{ user_id: string; full_name: string; pricing_config: any }>(() =>
+      supabase.from("profiles").select("user_id, full_name, pricing_config")
+    );
+
+    const rolesP = fetchAllRows<{ user_id: string }>(() =>
+      supabase.from("user_roles").select("user_id").eq("role", "client")
+    );
+
+    const [purchasesData, profilesData, rolesData, expensesData] = await Promise.all([
+      purchasesP, profilesP, rolesP, expensesP,
     ]);
 
     const calcWac = (data: any[] | null) => {
@@ -65,35 +77,40 @@ export default function FinanceDashboard() {
       return usd > 0 ? Math.round((bdt / usd) * 100) / 100 : 0;
     };
 
-    let calculatedWac = calcWac(purchasesRes.data);
+    let calculatedWac = calcWac(purchasesData);
 
     if (calculatedWac === 0) {
       const today = getLocalToday();
       const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const { data: monthPurchases } = await supabase.from("usd_purchases")
-        .select("bdt_amount_paid, usd_received")
-        .gte("date", toISODate(firstOfMonth))
-        .lte("date", toISODate(today));
+      const monthPurchases = await fetchAllRows<{ bdt_amount_paid: number; usd_received: number }>(() =>
+        supabase.from("usd_purchases")
+          .select("bdt_amount_paid, usd_received")
+          .gte("date", toISODate(firstOfMonth))
+          .lte("date", toISODate(today))
+      );
       calculatedWac = calcWac(monthPurchases);
     }
 
     if (calculatedWac === 0) {
-      const { data: allPurchases } = await supabase.from("usd_purchases")
-        .select("bdt_amount_paid, usd_received");
+      const allPurchases = await fetchAllRows<{ bdt_amount_paid: number; usd_received: number }>(() =>
+        supabase.from("usd_purchases").select("bdt_amount_paid, usd_received")
+      );
       calculatedWac = calcWac(allPurchases);
     }
 
     setWac(calculatedWac);
 
-    const clientIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
+    const clientIds = new Set(rolesData.map((r: any) => r.user_id));
     const profileMap: Record<string, any> = {};
-    for (const p of (profilesRes.data ?? []) as any[]) {
+    for (const p of profilesData) {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    const { data: allCampaigns } = await supabase.from("campaigns").select("id, ad_account_id, platform, client_id");
+    const allCampaigns = await fetchAllRows<{ id: string; ad_account_id: string; platform: string; client_id: string | null }>(() =>
+      supabase.from("campaigns").select("id, ad_account_id, platform, client_id")
+    );
 
-    if (!allCampaigns?.length) {
+    if (!allCampaigns.length) {
       setLoading(false);
       initialLoadingRef.current = false;
       return;
@@ -106,11 +123,13 @@ export default function FinanceDashboard() {
       if (c.client_id) campaignToClient[c.id] = c.client_id;
     }
 
-    let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
-    if (range) {
-      metricsQuery = metricsQuery.gte("data_date", toISODate(range.from)).lte("data_date", toISODate(range.to));
-    }
-    const { data: metricsData } = await metricsQuery;
+    const metricsData = await fetchAllRows<{ campaign_id: string; spend: number; data_date: string }>(() => {
+      let q = supabase.from("daily_metrics").select("campaign_id, spend, data_date");
+      if (range) {
+        q = q.gte("data_date", toISODate(range.from)).lte("data_date", toISODate(range.to));
+      }
+      return q;
+    });
 
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
     for (const m of (metricsData ?? []) as any[]) {
