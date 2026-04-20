@@ -190,6 +190,16 @@ export default function NewCampaignRequest() {
                 )}
               </div>
 
+              {/* Product / Campaign Name */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5"><Package className="h-3.5 w-3.5" /> Product / Campaign Name *</Label>
+                <Input
+                  value={t.productName}
+                  onChange={e => updateTask(i, "productName", e.target.value)}
+                  placeholder="e.g. Summer Tee, iPhone Case Launch"
+                />
+              </div>
+
               {/* Creative Link */}
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5" /> Post / Video Link *</Label>
