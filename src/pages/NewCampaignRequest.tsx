@@ -129,6 +129,7 @@ export default function NewCampaignRequest() {
       creative_link: t.creativeLink,
       ad_caption: t.adCaption || null,
       quantity: Number(t.quantity) || 1,
+      product_name: t.productName.trim() || null,
     }));
 
     const { error: taskError } = await (supabase.from("campaign_tasks" as any).insert(taskRows) as any);
