@@ -342,7 +342,25 @@ export default function FinanceDashboard() {
             </div>
           </CardContent>
         </div>
-        {/* 5. Owner's Draw */}
+        {/* 5. Net Profit (business profit, before owner draw) */}
+        {canViewProfit && (
+          <div className="glass-card glow-border">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:block rounded-lg bg-success/10 p-2"><TrendingUp className="h-5 w-5 text-success" /></div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Net Profit ({periodLabel})</p>
+                  {loading ? <Skeleton className="h-8 w-28" /> : (
+                    <p className={`text-xl sm:text-2xl font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                      ৳{netProfit.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
+        {/* 6. Owner's Draw */}
         <div className="glass-card glow-border">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -422,7 +440,7 @@ export default function FinanceDashboard() {
         <div className="glass-card glow-border opacity-0 animate-slide-up-fade stagger-3">
           <CardHeader><CardTitle className="text-base">Profit & Loss Summary</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 text-center">
               <div className="py-2">
                 <p className="text-xs text-muted-foreground mb-1">Revenue</p>
                 {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
@@ -447,6 +465,14 @@ export default function FinanceDashboard() {
                 <p className="text-xs text-muted-foreground mb-1">− OpEx</p>
                 {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
                   <p className="text-base sm:text-lg font-bold font-mono text-destructive">৳{totalOpex.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">= Net Profit</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className={`text-base sm:text-lg font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{netProfit.toLocaleString()}
+                  </p>
                 )}
               </div>
               <div className="py-2">
