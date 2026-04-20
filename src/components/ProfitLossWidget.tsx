@@ -9,6 +9,7 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toISODate, getLocalToday } from "@/components/DateRangeFilter";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 
 interface ProfitData {
   totalRevenueBdt: number;
