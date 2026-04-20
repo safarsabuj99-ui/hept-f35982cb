@@ -144,11 +144,13 @@ export default function WalletInventory() {
   }, []);
 
   const fetchOverview = useCallback(async () => {
+    if (!profile?.org_id) return;
     setOverview(prev => ({ ...prev, loading: true }));
 
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
+      .eq("org_id", profile.org_id)
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
@@ -171,7 +173,7 @@ export default function WalletInventory() {
       loading: false,
       clientBalances: (metrics.client_balances as ClientBalance[]) ?? [],
     });
-  }, []);
+  }, [profile?.org_id]);
 
   const handleRefreshNow = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
@@ -193,9 +195,12 @@ export default function WalletInventory() {
   useEffect(() => {
     fetchPurchases(dateRange);
     fetchManualSpends(dateRange);
-    fetchOverview();
     fetchAgencyAccounts();
   }, []);
+
+  useEffect(() => {
+    if (profile?.org_id) fetchOverview();
+  }, [profile?.org_id, fetchOverview]);
 
   useEffect(() => {
     const channel = supabase
