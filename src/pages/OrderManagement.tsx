@@ -475,10 +475,11 @@ export default function OrderManagement() {
                                 <TableRow key={task.id} className="bg-muted/30 hover:bg-muted/50">
                                   <TableCell className="w-8 px-2" />
                                   <TableCell colSpan={2}>
-                                    <div className="flex items-center gap-2 pl-2">
+                                    <div className="flex items-center gap-2 pl-2 flex-wrap">
                                       <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                                      <span className="text-sm font-semibold">{task.product_name || "—"}</span>
                                       <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
-                                      <span className="text-sm">{task.objective}</span>
+                                      <span className="text-sm text-muted-foreground">{task.objective}</span>
                                       {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
                                     </div>
                                   </TableCell>
