@@ -54,7 +54,7 @@ function detectPlatform(url: string): string {
 }
 
 function isTaskValid(t: TaskEntry): boolean {
-  return !!t.creativeLink && !!t.platform && !!t.objective && Number(t.dailyBudget) > 0 && Number(t.quantity) >= 1;
+  return !!t.productName.trim() && !!t.creativeLink && !!t.platform && !!t.objective && Number(t.dailyBudget) > 0 && Number(t.quantity) >= 1;
 }
 
 export default function NewCampaignRequest() {
