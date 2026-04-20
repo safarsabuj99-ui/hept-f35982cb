@@ -695,6 +695,7 @@ function InlineTaskCard({ task, idx, canManage, actionLoading, onStart, onComple
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+          <span className="text-xs font-semibold truncate max-w-[160px]">{task.product_name || "—"}</span>
           <Badge variant="secondary" className="text-[10px]">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
           <span className="text-xs">{task.objective}</span>
           {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
