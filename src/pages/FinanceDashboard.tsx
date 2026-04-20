@@ -195,12 +195,12 @@ export default function FinanceDashboard() {
     const isoTo = range ? toISODate(range.to) : null;
 
     const txInflowP = fetchAllRows<{ amount_bdt: number }>(() => {
-      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "inflow");
+      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "credit");
       if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
       return q;
     });
     const txOutflowP = fetchAllRows<{ amount_bdt: number }>(() => {
-      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "outflow");
+      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "debit");
       if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
       return q;
     });
