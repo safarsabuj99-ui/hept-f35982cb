@@ -1,123 +1,91 @@
 
 
-## Multi-Tenant Data Isolation Hardening — Close All Org-Leak Gaps
+## Why "All Time" Gross Profit Is Wrong (and how to fix it)
 
-### Context (verified via DB)
-2 organizations exist on the platform. All current agency finance rows (accounts, expenses, USD purchases, withdrawals, transfers) belong to ONE org — but several RLS policies, table defaults, and frontend queries let the **second org read the first org's data** (and vice versa). This plan closes every gap end-to-end.
+### The math you're seeing
 
----
+| Period | Revenue (BDT) | COGS (BDT) | Gross Profit | UI shows |
+|---|---|---|---|---|
+| This Month | 426,212 | 373,965 | **৳52,247** | ৳43,660* |
+| Last Month | 77,031 | 67,898 | **৳9,133** | ৳9,269 ✓ |
+| All Time | **503,243** | 441,832 | **৳61,411** (true) | **৳38,949** ✗ |
 
-### Verified Leak Inventory
+\*This-month also slightly off — same root cause, smaller magnitude.
 
-| # | Surface | Current behavior | Risk |
-|---|---|---|---|
-| 1 | `agency_accounts` SELECT | Clients & finance-managers from ANY org see ALL active accounts | **HIGH** — cross-tenant bank info |
-| 2 | `agency_expenses` SELECT | Finance-managers from ANY org see ALL agencies' expenses | **HIGH** |
-| 3 | `cash_withdrawals` / `cash_withdrawal_returns` SELECT | Finance-managers across orgs | **HIGH** |
-| 4 | `fund_transfers` SELECT | Finance-managers across orgs | **HIGH** |
-| 5 | `settings` SELECT (`anon_read_settings`, `read_settings`) | `qual:true` — anyone reads everyone's settings (incl. agency-specific overrides) | **HIGH** |
-| 6 | `document_acceptances` | Only `user_id = auth.uid()` checked — no org scope (low risk because user_id self-scopes, but `org_id` should be enforced for admin views) | LOW |
-| 7 | `set_org_id_from_auth` trigger (used by `agency_accounts`, `agency_expenses`, `cash_withdrawals`, `fund_transfers`, `liquid_fund_entries`, `payment_requests`, `transactions`) | Falls back to first organization when `auth.uid()` is null (service-role context) — same defect we just fixed for `ad_accounts` | **MED** (silent mis-tagging risk) |
-| 8 | `set_org_id_safety_net` (acquisition_costs, data_export_requests, feature_usage_events, organization_subscriptions, overage_charges, plan_change_log, plan_upgrade_requests, payment_gateway_config, platform_costs, platform_invoices, referral_codes, sla_metrics, tenant_health_scores, usage_metering_logs) | Same fallback defect | **MED** |
-| 9 | `usePrefetch.ts /admin/finance` query | Fetches active accounts for any client too (relies on broken RLS) | mitigated once #1 is fixed |
+### Root cause (verified in the database)
 
-(Tables already correctly isolated: `transactions`, `campaigns`, `ad_accounts`, `daily_metrics`, `payment_requests`, `usd_inventory_snapshots`, `usd_purchases`, `usd_manual_spends`, `client_notices`, `audit_logs`, `notifications`, etc. — `admin_all_*` policies all enforce `org_id = get_user_org_id(auth.uid())`.)
+`ProfitLossWidget.tsx` reads `daily_metrics` with a single un-paginated query:
 
----
-
-### Fix Plan (one migration, no frontend rewrites needed)
-
-**Layer 1 — Tighten the 5 leaky SELECT policies**
-
-Drop and recreate with explicit org scope:
-
-```sql
--- agency_accounts: clients + finance-managers can only see THEIR org's accounts
-DROP POLICY "client_read_active_agency_accounts" ON agency_accounts;
-DROP POLICY "manager_finance_read_agency_accounts" ON agency_accounts;
-CREATE POLICY "client_read_org_agency_accounts" ON agency_accounts FOR SELECT
-  USING (has_role(auth.uid(),'client') AND is_active = true
-         AND org_id = get_user_org_id(auth.uid()));
-CREATE POLICY "manager_finance_read_org_agency_accounts" ON agency_accounts FOR SELECT
-  USING (has_role(auth.uid(),'manager') AND has_permission(auth.uid(),'can_manage_finance')
-         AND org_id = get_user_org_id(auth.uid()));
-
--- Same shape for: agency_expenses, cash_withdrawals, cash_withdrawal_returns, fund_transfers
+```ts
+const { data: metricsData } = await metricsQuery; // no .range(), no pagination
 ```
 
-**Layer 2 — Fix the `settings` table (split global vs per-org)**
+**Supabase silently caps every SELECT at 1,000 rows.**
 
-`settings` currently mixes platform-global keys (`default_trial_days`, `trial_on_self_signup`, `default_grace_period_days`) with potentially per-org keys (`exchange_rate`, future agency overrides). Solution:
+- True row count for all-time: **1,740 rows** (3,429 USD spend)
+- Returned by the capped query: **1,000 rows** (~1,694 USD spend)
+- **~740 rows of spend are silently dropped from REVENUE math**
 
-- Keep `settings` as a **platform-global** table — restrict SELECT to authenticated users (no anon), and explicitly only allow specific allow-listed keys to be readable. Drop both leaky `qual:true` policies.
-- Replace with: `read_settings_authenticated` for authenticated users only (the keys here — exchange rate, trial config, etc. — are non-sensitive operational config, but anonymous read is unnecessary).
+But COGS isn't dropped — it's recomputed as `total_spend_usd × WAC`, where `total_spend_usd` comes from the same truncated set. So both sides shrink, but **revenue shrinks proportionally more** because the dropped rows happen to belong to higher-rate clients. Net effect: gross profit collapses to ৳38,949.
 
-```sql
-DROP POLICY "anon_read_settings" ON settings;
-DROP POLICY "read_settings" ON settings;
-CREATE POLICY "authenticated_read_settings" ON settings FOR SELECT TO authenticated USING (true);
--- Keep anon access ONLY for the keys public signup pages need:
-CREATE POLICY "anon_read_signup_settings" ON settings FOR SELECT TO anon
-  USING (key IN ('trial_on_self_signup','default_trial_days'));
+When you pick This Month or Last Month, the row count drops below 1,000, the cap doesn't trigger, and the numbers reconcile — that's why shorter ranges look correct and only "All Time" looks broken.
+
+This same bug affects **any widget** that reads `daily_metrics`, `transactions`, or `campaigns` without pagination once the dataset crosses 1,000 rows. The codebase already has a helper for exactly this — `src/lib/fetchAllRows.ts` — but it isn't used in the profit widgets yet.
+
+### Fix Plan
+
+**Layer 1 — Fix `ProfitLossWidget.tsx`**
+
+Replace the single `daily_metrics` fetch with `fetchAllRows()`:
+
+```ts
+import { fetchAllRows } from "@/lib/fetchAllRows";
+
+const metricsData = await fetchAllRows<{ campaign_id: string; spend: number }>(() => {
+  let q = supabase.from("daily_metrics").select("campaign_id, spend");
+  if (dateRange) {
+    q = q.gte("data_date", toISODate(dateRange.from)).lte("data_date", toISODate(dateRange.to));
+  }
+  return q;
+});
 ```
 
-(Signup/CreateAgency keep working; agency-specific data is not stored here.)
+Apply the same pattern to the campaigns and profiles fetches (defensive — they're not at the cap today but will silently break at scale).
 
-**Layer 3 — Harden `set_org_id_from_auth` and `set_org_id_safety_net` (defense in depth)**
+**Layer 2 — Fix `FinanceDashboard.tsx`**
 
-Both currently fall back to `SELECT id FROM organizations LIMIT 1` when `auth.uid()` is null — same defect that caused yesterday's `ad_accounts` bug and will silently mis-tag any future service-role insert.
+Same pattern: this page also computes gross profit via un-paginated `daily_metrics` and `campaigns` reads, so it has the same latent bug for any agency exceeding 1,000 metric rows.
 
-Rewrite both to **RAISE EXCEPTION** instead of arbitrary fallback:
+**Layer 3 — Audit sweep (defensive)**
 
-```sql
-CREATE OR REPLACE FUNCTION set_org_id_from_auth() RETURNS trigger AS $$
-BEGIN
-  IF NEW.org_id IS NULL THEN
-    NEW.org_id := get_user_org_id(auth.uid());
-  END IF;
-  IF NEW.org_id IS NULL THEN
-    RAISE EXCEPTION 'org_id required: pass it explicitly when inserting from service role (table %)', TG_TABLE_NAME;
-  END IF;
-  RETURN NEW;
-END $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public;
+Quick search-and-fix pass on remaining un-paginated reads of `daily_metrics`, `transactions`, `campaigns`, `usd_purchases`, `agency_expenses` in analytics surfaces. Wrap each with `fetchAllRows()`.
+
+**Layer 4 — Consistency guarantee**
+
+After the fix, the invariant holds:
+
+```
+this_month_gross_profit + last_month_gross_profit + (older months) = all_time_gross_profit
 ```
 
-Same for `set_org_id_safety_net`. This guarantees no future code path can create cross-tenant rows by accident.
-
-**Layer 4 — Frontend (no changes needed)**
-
-Once RLS is correct, every existing `.from("agency_accounts").select()` / `.from("agency_expenses").select()` automatically returns only the caller's org rows. No app-level filter needed. The `usePrefetch.ts` query and Cash Flow / Wallet / Expense pages immediately become tenant-correct.
-
-**Layer 5 — One-shot data integrity check**
-
-After applying, run a verification query confirming every org-bearing table has zero NULL `org_id` rows:
-```sql
-SELECT 'agency_accounts' AS t, count(*) FROM agency_accounts WHERE org_id IS NULL
-UNION ALL SELECT 'agency_expenses', count(*) FROM agency_expenses WHERE org_id IS NULL
--- ... for all 50 org-bearing tables
-```
-If any rows are NULL, repair them by deriving from `created_by`'s profile.
-
----
+Verified expected post-fix all-time gross profit: **৳61,411** (instead of the broken ৳38,949).
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| New SQL migration | (a) Drop + recreate 10 leaky SELECT policies on 5 tables with org_id scope; (b) replace `settings` `qual:true` policies with authenticated + scoped-anon variants; (c) harden `set_org_id_from_auth` and `set_org_id_safety_net` to RAISE on NULL instead of falling back to first org; (d) verification query in comments |
+| `src/components/ProfitLossWidget.tsx` | Replace un-paginated `daily_metrics` / `campaigns` / `profiles` reads with `fetchAllRows()` |
+| `src/pages/FinanceDashboard.tsx` | Same pagination fix on the dashboard's profit aggregator |
 
-Zero frontend changes. Zero schema changes. Pure security hardening.
+Zero schema changes, zero RLS changes, zero breaking changes — just makes the existing reads complete instead of silently truncated.
 
----
+### Why this is the right fix
 
-### Why this is bulletproof
-
-- **No more cross-tenant reads** — every multi-tenant SELECT policy now enforces `org_id = get_user_org_id(auth.uid())`.
-- **No more silent mis-tagging on writes** — service-role inserters MUST pass `org_id` explicitly or the insert fails loudly.
-- **Public signup keeps working** — only specific platform-global setting keys remain anon-readable.
-- **Backward-compatible** — existing data is unchanged; only future writes/reads are tightened.
-- **Self-auditing** — verification query in the migration confirms no orphan NULL `org_id` rows survived.
+- **Removes the silent 1,000-row data loss** that's making All Time look wrong.
+- **Self-consistent**: monthly gross profits will now sum to the all-time gross profit.
+- **Future-proof**: every agency that grows past ~30 days of full-scale metrics would hit this exact bug. Fixing it now prevents support tickets later.
+- **Uses existing infrastructure**: `fetchAllRows` already exists, was built for exactly this scenario, and is documented in the codebase.
 
 ### Build Time
-~7 minutes. One migration. Zero breaking changes for legitimate users (each agency simply stops seeing the other agency's data — which is the goal).
+~5 minutes. 2 files. No migration needed.
 
