@@ -583,13 +583,14 @@ export default function OrderManagement() {
                     return (
                       <div key={task.id} className="rounded-lg border p-3 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                            <span className="text-sm font-semibold">{task.product_name || "—"}</span>
                             <Badge variant="secondary">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
-                            <span className="text-sm">{task.objective}</span>
+                            <span className="text-sm text-muted-foreground">{task.objective}</span>
                             {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className="font-mono text-sm">${Number(task.budget_usd).toFixed(2)}</span>
                             <Badge variant="outline" className={cn("text-[10px]", taskBadge.className)}>{taskBadge.label}</Badge>
                           </div>
