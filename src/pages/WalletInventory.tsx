@@ -173,7 +173,7 @@ export default function WalletInventory() {
       loading: false,
       clientBalances: (metrics.client_balances as ClientBalance[]) ?? [],
     });
-  }, []);
+  }, [profile?.org_id]);
 
   const handleRefreshNow = useCallback(async () => {
     setOverview(prev => ({ ...prev, loading: true }));
