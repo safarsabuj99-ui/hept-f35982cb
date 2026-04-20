@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, DollarSign, Banknote, AlertTriangle } from "lucide-react";
+import { TrendingUp, DollarSign, Banknote, AlertTriangle, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from "@/components/DateRangeFilter";
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
