@@ -158,8 +158,8 @@ export default function NewCampaignRequest() {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Info</span>
           </div>
           <div className="space-y-1.5">
-            <Label>Campaign / Product Name *</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Summer Sale 2026, Product X Launch" />
+            <Label>Request Title *</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Week 47 Campaigns" />
           </div>
           <div className="space-y-1.5">
             <Label>General Notes</Label>
