@@ -10,6 +10,7 @@ import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday } from
 import { TableSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
 import { debounce } from "@/lib/debounce";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 interface ClientProfit {
   name: string;
   totalSpendUsd: number;
