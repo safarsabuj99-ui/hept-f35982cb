@@ -468,6 +468,14 @@ export default function FinanceDashboard() {
                 )}
               </div>
               <div className="py-2">
+                <p className="text-xs text-muted-foreground mb-1">= Net Profit</p>
+                {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
+                  <p className={`text-base sm:text-lg font-bold font-mono ${netProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                    ৳{netProfit.toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="py-2">
                 <p className="text-xs text-muted-foreground mb-1">− Owner's Draw</p>
                 {loading ? <Skeleton className="h-7 w-24 mx-auto" /> : (
                   <p className="text-base sm:text-lg font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
