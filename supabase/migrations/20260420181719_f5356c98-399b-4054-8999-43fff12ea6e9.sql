@@ -1,0 +1,1 @@
+ALTER TABLE public.campaign_tasks ADD COLUMN IF NOT EXISTS product_name TEXT;
