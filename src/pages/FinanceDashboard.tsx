@@ -29,6 +29,10 @@ export default function FinanceDashboard() {
   const [totalCogs, setTotalCogs] = useState(0);
   const [totalOpex, setTotalOpex] = useState(0);
   const [ownerDraw, setOwnerDraw] = useState(0);
+  const [takeHomeProfit, setTakeHomeProfit] = useState(0);
+  const [endBalance, setEndBalance] = useState(0);
+  const [startBalance, setStartBalance] = useState(0);
+  const [balanceChange, setBalanceChange] = useState(0);
   const [clientProfits, setClientProfits] = useState<ClientProfit[]>([]);
   const [loading, setLoading] = useState(true);
   const initialLoadingRef = useRef(true);
