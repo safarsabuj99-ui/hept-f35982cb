@@ -203,32 +203,53 @@ export default function ExpenseManager() {
 
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
-      {/* Summary Cards */}
+      {/* Summary Cards — clickable filters */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 opacity-0 animate-slide-up-fade stagger-2">
-        <div className="glass-card glow-border">
+        <button
+          type="button"
+          onClick={() => toggleFilter("all")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "all" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
-        <div className="glass-card glow-border">
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleFilter("opex")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "opex" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
-        <div className="glass-card glow-border">
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleFilter("owner_draw")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "owner_draw" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
+        </button>
       </div>
 
       {/* Pie Chart + Expenses */}
@@ -254,30 +275,25 @@ export default function ExpenseManager() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Expenses ({periodLabel})</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Expenses ({periodLabel}){filterLabel}</CardTitle></CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : expenses.length === 0 ? (
+            ) : filteredExpenses.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No expenses in this period</p>
             ) : (
               <>
                 {/* Mobile card view */}
                 <div className="flex flex-col gap-3 md:hidden max-h-[400px] overflow-y-auto">
-                  {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
-                    <div key={e.id} className="rounded-xl border p-3 space-y-1 bg-card flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"} className="text-xs">
-                            {e.category.replace("_", " ")}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground font-mono">{e.date}</span>
-                        </div>
-                        <p className="font-mono font-semibold">৳{Number(e.amount_bdt).toLocaleString()}</p>
+                  {filteredExpenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                    <div key={e.id} className="rounded-xl border p-3 space-y-1 bg-card">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"} className="text-xs">
+                          {e.category.replace("_", " ")}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-mono">{e.date}</span>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="flex-shrink-0">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                      <p className="font-mono font-semibold">৳{Number(e.amount_bdt).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>
@@ -290,11 +306,10 @@ export default function ExpenseManager() {
                         <TableHead>Date</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
-                        <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                      {filteredExpenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
                         <TableRow key={e.id}>
                           <TableCell className="font-mono text-sm">{e.date}</TableCell>
                           <TableCell>
@@ -303,18 +318,13 @@ export default function ExpenseManager() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-mono">৳{Number(e.amount_bdt).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}>
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
                 <TablePagination
-                  totalItems={expenses.length}
+                  totalItems={filteredExpenses.length}
                   pageSize={pageSize}
                   currentPage={currentPage}
                   onPageChange={setCurrentPage}
