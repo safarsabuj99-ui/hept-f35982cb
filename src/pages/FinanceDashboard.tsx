@@ -188,11 +188,63 @@ export default function FinanceDashboard() {
     const opex = expenses.filter(e => e.category !== "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
     const draw = expenses.filter(e => e.category === "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
 
+    // ===== Balance Change calculation =====
+    // End = current sum of all agency_accounts. Start = end - (inflows-outflows) within range.
+    const accountsP = supabase.from("agency_accounts").select("current_balance_bdt").eq("is_active", true);
+    const isoFrom = range ? toISODate(range.from) : null;
+    const isoTo = range ? toISODate(range.to) : null;
+
+    const txInflowP = fetchAllRows<{ amount_bdt: number }>(() => {
+      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "inflow");
+      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
+      return q;
+    });
+    const txOutflowP = fetchAllRows<{ amount_bdt: number }>(() => {
+      let q = supabase.from("transactions").select("amount_bdt, type, date").eq("type", "outflow");
+      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
+      return q;
+    });
+    const withdrawalsP = fetchAllRows<{ amount_bdt: number }>(() => {
+      let q = supabase.from("cash_withdrawals").select("amount_bdt, date");
+      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
+      return q;
+    });
+    const withdrawalReturnsP = fetchAllRows<{ amount_bdt: number }>(() => {
+      let q = supabase.from("cash_withdrawal_returns").select("amount_bdt, date");
+      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
+      return q;
+    });
+    const usdPurchaseSpendP = fetchAllRows<{ bdt_amount_paid: number }>(() => {
+      let q = supabase.from("usd_purchases").select("bdt_amount_paid, date");
+      if (range) q = q.gte("date", isoFrom!).lte("date", isoTo!);
+      return q;
+    });
+
+    const [{ data: accountsData }, txIn, txOut, withdrawals, wReturns, usdPurchSpend] = await Promise.all([
+      accountsP, txInflowP, txOutflowP, withdrawalsP, withdrawalReturnsP, usdPurchaseSpendP,
+    ]);
+
+    const sum = (arr: any[], key: string) => arr.reduce((s, r) => s + Number(r[key] || 0), 0);
+    const currentEnd = (accountsData ?? []).reduce((s: number, a: any) => s + Number(a.current_balance_bdt || 0), 0);
+    const inflows = sum(txIn, "amount_bdt") + sum(wReturns, "amount_bdt");
+    const outflows = sum(txOut, "amount_bdt")
+      + sum(withdrawals, "amount_bdt")
+      + sum(usdPurchSpend, "bdt_amount_paid")
+      + opex + draw;
+    const netDelta = inflows - outflows;
+    const periodStart = currentEnd - netDelta;
+
+    setEndBalance(Math.round(currentEnd));
+    setStartBalance(Math.round(periodStart));
+    setBalanceChange(Math.round(netDelta));
+
     setTotalRevenue(Math.round(aggRevenue));
     setTotalCogs(Math.round(aggCogs));
     setTotalOpex(Math.round(opex));
     setOwnerDraw(Math.round(draw));
-    setNetProfit(Math.round(aggRevenue - aggCogs - opex));
+    const np = aggRevenue - aggCogs - opex;
+    setNetProfit(Math.round(np));
+    setTakeHomeProfit(Math.round(np - draw));
     setClientProfits(profits.sort((a, b) => b.netProfit - a.netProfit));
     setLoading(false);
     initialLoadingRef.current = false;
