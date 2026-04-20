@@ -1,36 +1,59 @@
 
 
-## Platform-Aware KPI Widgets
+## Fix Client Obligations — Multi-Tenant Snapshot Bug
 
-### Current behavior
-KPI cards (Spend / Results / Create Order / Leads / Messages) always show **totals across all platforms**, regardless of which platform tab (Meta / TikTok / Google) is active. Switching tabs only filters the table below — the KPIs above stay static.
+### Root Cause (Confirmed via DB)
 
-### New behavior
-KPIs reflect the **currently selected platform tab**:
-- **All** tab → totals across all platforms (current behavior)
-- **Meta** tab → only Meta campaigns counted in KPIs
-- **TikTok** tab → only TikTok campaigns counted
-- **Google** tab → only Google campaigns counted
+The `auto-snapshot-usd` edge function has **three multi-tenant defects**:
 
-KPI numbers animate/update instantly on tab switch.
+1. **No org filter on transactions** — sums `client balances` across ALL organizations into one obligations number
+2. **One snapshot row per day globally** — `(snapshot_date)` is unique, so only ONE org's snapshot exists per day; whichever org runs the function last "wins"
+3. **`LIMIT 1` org picker** — service-role context arbitrarily picks the first org row, mis-tagging snapshots
 
-### Implementation (single file: `src/components/client-analytics/CampaignAnalyticsPanel.tsx`)
+### Verified Symptoms
+- Real org (`a1b2c3d4…`): true obligations = **$295.08 / 16 clients** (computed live from transactions)
+- Today's snapshot was overwritten with **Test1 org's** numbers
+- The widget on `/admin/finance?tab=wallet` shows **$393.61 / 17 clients** — yesterday's stale snapshot for the real org
+- Refresh re-runs the function → which writes the OTHER org's data → number never matches
 
-1. **Lift Tabs to controlled state**: Convert `<Tabs defaultValue="all">` to controlled with `const [activeTab, setActiveTab] = useState<PlatformTab>("all")`.
+### Fix Plan
 
-2. **Make `totals` reactive to `activeTab`**: Replace the single `totals` memo with a function that takes a row set, then derive `activeRows` from `activeTab`:
-   ```ts
-   const activeRows = activeTab === "meta" ? metaRows
-                    : activeTab === "tiktok" ? tiktokRows
-                    : activeTab === "google" ? googleRows
-                    : campaignRows;
-   const totals = useMemo(() => computeTotals(activeRows), [activeRows]);
-   ```
+**Layer 1 — Make `auto-snapshot-usd` org-aware (loop per org)**
 
-3. **Wire `onValueChange={setActiveTab}`** on the `<Tabs>` component so the state stays in sync.
+Rewrite the function to:
+- Fetch all active organizations
+- For EACH org, run the existing pipeline scoped with `.eq("org_id", orgId)` on:
+  - `usd_purchases`, `daily_metrics`, `usd_manual_spends`
+  - `transactions` (CRITICAL — this fixes the obligations leakage)
+  - `usd_inventory_snapshots` reads (baseline lookup, today's snapshot check)
+- Write ONE snapshot row per `(snapshot_date, org_id)` — not just per `snapshot_date`
 
-No other files touched. No schema, no logic risk — pure UI reactivity. Per-platform tabs (table contents, badges, presets) all keep working exactly as before.
+**Layer 2 — DB schema: composite uniqueness**
 
-### Build time
-~2 minutes. One file, ~10 lines changed.
+Add unique index on `usd_inventory_snapshots(snapshot_date, org_id)` and drop the old `(snapshot_date)` constraint. This permits multi-org coexistence per day. Update the upsert `onConflict` accordingly.
+
+**Layer 3 — Frontend: read snapshot for the user's own org**
+
+In `WalletInventory.tsx` `fetchOverview()`, scope the snapshot read with `.eq("org_id", profile.org_id)` so each agency reads ITS row, never another org's.
+
+**Layer 4 — One-shot data correction**
+
+Delete today's mis-orged snapshot rows and re-run `auto-snapshot-usd` for each org so the displayed numbers immediately reconcile to the live transaction totals.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `supabase/functions/auto-snapshot-usd/index.ts` | Loop per organization; org-scope every query; write per-org snapshots |
+| `src/pages/WalletInventory.tsx` | Add `.eq("org_id", profile.org_id)` to snapshot fetch; gate on `profile.org_id` |
+| New migration | Composite unique `(snapshot_date, org_id)`; backfill correction; data cleanup |
+
+### Why This Is Bulletproof
+- **Tenant isolation**: Each agency sees only its own client obligations, computed from its own transactions
+- **Stable refresh**: Repeated refreshes write to the right row — number stops changing between reloads
+- **Self-healing**: One-shot rerun fixes today's snapshot; tomorrow's nightly cron is correct from day one
+- **Matches dashboard**: `client_obligations` will now equal the sum of positive client balances shown in `get_admin_dashboard_summary` — the existing trusted source
+
+### Build Time
+~6 minutes. 1 edge function rewrite + 1 frontend tweak + 1 migration. Zero breaking changes (just adds correctness).
 
