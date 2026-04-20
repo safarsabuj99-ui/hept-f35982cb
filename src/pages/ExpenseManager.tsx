@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Loader2, Trash2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
@@ -53,6 +54,7 @@ export default function ExpenseManager() {
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "opex" | "owner_draw">("all");
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
@@ -120,31 +122,30 @@ export default function ExpenseManager() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    // Fetch expense details first to restore balance
-    const { data: expense } = await supabase.from("agency_expenses").select("amount_bdt, paid_from_account_id").eq("id", id).single();
-    const { error } = await supabase.from("agency_expenses").delete().eq("id", id);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      // Restore balance to the account if expense was paid from one
-      if (expense && (expense as any).paid_from_account_id) {
-        await adjustAccountBalance((expense as any).paid_from_account_id, Number((expense as any).amount_bdt));
-      }
-      fetchExpenses(dateRange);
-      fetchAgencyAccounts();
-    }
-  };
+  const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount_bdt), 0);
+  const opex = expenses.filter(e => e.category !== "Owner_Draw").reduce((s, e) => s + Number(e.amount_bdt), 0);
+  const ownerDraw = expenses.filter(e => e.category === "Owner_Draw").reduce((s, e) => s + Number(e.amount_bdt), 0);
+
+  // Apply category filter to displayed list + pie chart (KPI totals stay full)
+  const filteredExpenses = expenses.filter(e => {
+    if (categoryFilter === "all") return true;
+    if (categoryFilter === "opex") return e.category !== "Owner_Draw";
+    if (categoryFilter === "owner_draw") return e.category === "Owner_Draw";
+    return true;
+  });
 
   const categoryTotals: Record<string, number> = {};
-  for (const e of expenses) {
+  for (const e of filteredExpenses) {
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.amount_bdt);
   }
   const pieData = Object.entries(categoryTotals).map(([name, value]) => ({ name, value }));
 
-  const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount_bdt), 0);
-  const opex = expenses.filter(e => e.category !== "Owner_Draw").reduce((s, e) => s + Number(e.amount_bdt), 0);
-  const ownerDraw = expenses.filter(e => e.category === "Owner_Draw").reduce((s, e) => s + Number(e.amount_bdt), 0);
+  const toggleFilter = (next: "all" | "opex" | "owner_draw") => {
+    setCategoryFilter(prev => (prev === next ? "all" : next));
+    setCurrentPage(1);
+  };
+
+  const filterLabel = categoryFilter === "opex" ? " — OpEx" : categoryFilter === "owner_draw" ? " — Owner's Draw" : "";
 
   return (
     <div className="space-y-6">
@@ -202,32 +203,53 @@ export default function ExpenseManager() {
 
       <DateRangeFilter onRangeChange={handleRangeChange} />
 
-      {/* Summary Cards */}
+      {/* Summary Cards — clickable filters */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 opacity-0 animate-slide-up-fade stagger-2">
-        <div className="glass-card glow-border">
+        <button
+          type="button"
+          onClick={() => toggleFilter("all")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "all" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Total Expenses ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{totalExpenses.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
-        <div className="glass-card glow-border">
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleFilter("opex")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "opex" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">OpEx ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono">৳{opex.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
-        <div className="glass-card glow-border">
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleFilter("owner_draw")}
+          className={cn(
+            "glass-card glow-border text-left transition-all hover:scale-[1.01] focus:outline-none",
+            categoryFilter === "owner_draw" && "ring-2 ring-primary"
+          )}
+        >
           <CardContent className="pt-6 text-center">
             <p className="text-xs text-muted-foreground">Owner's Draw ({periodLabel})</p>
             {loading ? <Skeleton className="h-8 w-32 mx-auto" /> : (
               <p className="text-xl sm:text-2xl font-bold font-mono text-warning">৳{ownerDraw.toLocaleString()}</p>
             )}
           </CardContent>
-        </div>
+        </button>
       </div>
 
       {/* Pie Chart + Expenses */}
@@ -253,30 +275,25 @@ export default function ExpenseManager() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Expenses ({periodLabel})</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Expenses ({periodLabel}){filterLabel}</CardTitle></CardHeader>
           <CardContent>
             {loading ? (
               <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : expenses.length === 0 ? (
+            ) : filteredExpenses.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No expenses in this period</p>
             ) : (
               <>
                 {/* Mobile card view */}
                 <div className="flex flex-col gap-3 md:hidden max-h-[400px] overflow-y-auto">
-                  {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
-                    <div key={e.id} className="rounded-xl border p-3 space-y-1 bg-card flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"} className="text-xs">
-                            {e.category.replace("_", " ")}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground font-mono">{e.date}</span>
-                        </div>
-                        <p className="font-mono font-semibold">৳{Number(e.amount_bdt).toLocaleString()}</p>
+                  {filteredExpenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                    <div key={e.id} className="rounded-xl border p-3 space-y-1 bg-card">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={e.category === "Owner_Draw" ? "outline" : "secondary"} className="text-xs">
+                          {e.category.replace("_", " ")}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground font-mono">{e.date}</span>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="flex-shrink-0">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                      <p className="font-mono font-semibold">৳{Number(e.amount_bdt).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>
@@ -289,11 +306,10 @@ export default function ExpenseManager() {
                         <TableHead>Date</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
-                        <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {expenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
+                      {filteredExpenses.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(e => (
                         <TableRow key={e.id}>
                           <TableCell className="font-mono text-sm">{e.date}</TableCell>
                           <TableCell>
@@ -302,18 +318,13 @@ export default function ExpenseManager() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-mono">৳{Number(e.amount_bdt).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}>
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
                 <TablePagination
-                  totalItems={expenses.length}
+                  totalItems={filteredExpenses.length}
                   pageSize={pageSize}
                   currentPage={currentPage}
                   onPageChange={setCurrentPage}
