@@ -14,6 +14,7 @@ import { Loader2, Plus, Trash2, Send, Link2, Sparkles, Package } from "lucide-re
 import { cn } from "@/lib/utils";
 
 interface TaskEntry {
+  productName: string;
   creativeLink: string;
   platform: string;
   objective: string;
@@ -23,6 +24,7 @@ interface TaskEntry {
 }
 
 const EMPTY_TASK: TaskEntry = {
+  productName: "",
   creativeLink: "",
   platform: "",
   objective: "",
