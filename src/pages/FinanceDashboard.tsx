@@ -180,7 +180,7 @@ export default function FinanceDashboard() {
       });
     }
 
-    const expenses = (expensesRes.data as any[]) ?? [];
+    const expenses = expensesData;
     const opex = expenses.filter(e => e.category !== "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
     const draw = expenses.filter(e => e.category === "Owner_Draw").reduce((s: number, e: any) => s + Number(e.amount_bdt), 0);
 
