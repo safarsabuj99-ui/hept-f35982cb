@@ -552,7 +552,7 @@ export default function OrderManagement() {
             </DialogTitle>
           </DialogHeader>
           {selectedRequest && (
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0">
               <div className="flex items-center gap-2 min-w-0 pr-6">
                 <Badge variant="outline" className={cn("shrink-0", STATUS_BADGE[selectedRequest.status]?.className)}>{STATUS_BADGE[selectedRequest.status]?.label}</Badge>
                 <span className="text-sm font-medium truncate">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
@@ -596,10 +596,10 @@ export default function OrderManagement() {
                           </div>
                         </div>
                         {task.creative_link && (
-                          <div className="min-w-0 max-w-full">
-                            <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 min-w-0">
+                          <div className="min-w-0 w-full">
+                            <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 max-w-full min-w-0">
                               <ExternalLink className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{task.creative_link}</span>
+                              <span className="truncate min-w-0 block">{task.creative_link}</span>
                             </a>
                           </div>
                         )}
