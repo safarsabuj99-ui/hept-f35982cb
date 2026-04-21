@@ -544,7 +544,7 @@ export default function OrderManagement() {
 
       {/* Detail Modal with Tasks */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl sm:max-w-3xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
