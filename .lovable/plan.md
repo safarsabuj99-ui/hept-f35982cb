@@ -1,73 +1,81 @@
 
 
-## Add per-task Product / Campaign Name
+## Fix: Campaign Request Details modal overflow / cut-off
 
-### What's changing
+### What's wrong (from your two screenshots)
 
-Right now the request form has **one** "Campaign / Product Name" at the top, and each task only carries link + platform + objective + budget + caption. Since a single request can bundle tasks for **different products** (e.g., Task 1 = Product A, Task 2 = Product B), each task needs its own product name.
+**Image 1 (works)**: Short title `"1."`, no creative URLs in tasks → fits cleanly.
+**Image 2 (broken)**: Long title `"LAJBOTI/LINE PATA"` + tasks containing **very long TikTok URLs** (`https://www.tiktok.com/@alhaya567/video/7630206607942602005?is_from_webapp=1&sender_device=pc&...`) → the URL string has no whitespace, ignores `truncate`, pushes the task card wider than the modal → right side ($25.00 + Pending badge + close X) gets clipped, content visibly cut at the right edge.
 
-### The fix (3 small changes)
+### Root causes (verified in `OrderManagement.tsx`)
 
-**1. Database — add column**
+1. **Task creative link** (line 598-602): `<a className="...truncate">` is inside a `space-y-2` block but its parent has no `min-w-0` and no `max-w-full`. `truncate` requires a constrained parent — long URLs blow out the card width.
+2. **Task header row** (line 585-597): `flex items-center justify-between` with both sides being `flex flex-wrap`. When the task name is long, both sides compete and the right side (price + status badge) gets pushed out.
+3. **Top title row** (line 556-559): Status badge + long title on one line with no `min-w-0` / `truncate` → pushes the dialog's built-in close X button against the edge.
+4. **DetailItem "Notes"** (line 565): Single-column full-width — fine. But for very long single-word inputs it relies on `break-words` which is OK.
 
-Migration adds an optional `product_name` column to `campaign_tasks`:
+### The fix (single file: `src/pages/OrderManagement.tsx`)
 
-```sql
-ALTER TABLE public.campaign_tasks
-  ADD COLUMN IF NOT EXISTS product_name TEXT;
+**1. Top title row — let title truncate, free up space for X:**
+```tsx
+<div className="flex items-center gap-2 min-w-0 pr-2">
+  <Badge ... className="shrink-0">{label}</Badge>
+  <span className="text-sm font-medium truncate">{title}</span>
+</div>
 ```
 
-Nullable + no default — old tasks stay untouched, no data migration needed.
+**2. Task card header — split into 2 rows on overflow, keep price+status pinned right:**
 
-**2. Client form — `src/pages/NewCampaignRequest.tsx`**
+Change the single `flex justify-between` row into a structure that:
+- Lets the left side (`#1 · Product · Platform · Objective`) wrap freely with `min-w-0 flex-1`
+- Keeps the right side (`$10.00 + Pending`) on its own line / right-aligned with `shrink-0 ml-auto`
+- Wraps `product_name` with `truncate max-w-[180px] sm:max-w-[260px]` so very long product names don't bully the layout
 
-- Add `productName: string` to the `TaskEntry` interface and `EMPTY_TASK`.
-- Add a new input as the **first field** inside each Task card (above "Post / Video Link"):
-  ```
-  Label: "Product / Campaign Name *"  (icon: Package)
-  Placeholder: "e.g. Summer Tee, iPhone Case Launch"
-  ```
-- Make it **required** in `isTaskValid()` (`!!t.productName.trim()`).
-- Keep the parent-level "Campaign / Product Name" field — relabel it to **"Request Title *"** with placeholder `"e.g. Week 47 Campaigns"` so users understand it's the umbrella label, while each task gets its own product name.
-- Include `product_name: t.productName.trim()` in the `taskRows` insert.
-
-**3. Display — `OrderManagement.tsx` (admin) & `MyCampaignRequests.tsx` (client)**
-
-In each task sub-row, show the product name prominently next to the task index:
+**3. Creative link — actually truncate long URLs:**
+```tsx
+<div className="min-w-0 max-w-full">
+  <a className="text-xs text-primary hover:underline flex items-center gap-1 min-w-0">
+    <ExternalLink className="h-3 w-3 shrink-0" />
+    <span className="truncate">{task.creative_link}</span>
+  </a>
+</div>
 ```
-#1  [Product Name]  · Meta · Message · ×2
-```
-Falls back gracefully to "—" for legacy tasks without a product name.
+This is the **main fix** — wraps the anchor in a `min-w-0` container and moves `truncate` onto an inner `<span>` so the icon stays visible while the URL ellipsizes.
 
-### Layout of a task card (after change)
+**4. Task card root — defensive overflow guard:**
+Add `overflow-hidden` to `rounded-lg border p-3 space-y-2` so even if anything else escapes, it can't break the card width.
 
+**5. Dialog width on bigger screens — use available room:**
+Bump `max-w-2xl` → `max-w-2xl sm:max-w-3xl` so on the desktop viewport (1657px shown) the modal has more horizontal room without becoming oversized on mobile.
+
+### Visual outcome
+
+Before (image 2):
 ```
-┌─ TASK 1 ────────────────────────────── 🗑
-│  📦 Product / Campaign Name *
-│  [ Summer Sale Tee                   ]
-│
-│  🔗 Post / Video Link *
-│  [ https://tiktok.com/...            ]
-│
-│  Platform * | Objective * | Budget * | Qty
-│  [Meta  ▾]   [Message ▾]   [10.00]    [1]
-│
-│  Ad Caption / Notes
-│  [ ...                                ]
-└────────────────────────────────────────
+│ Completed  LAJBOTI/LINE PATA          [X]
+│ #1 — TikTok Message
+│ 🔗 https://www.tiktok.com/@alhaya567/video/7630206607942602005?is_from_w  ← cuts off here
+│                                                              $25.00 Pe…  ← clipped
+```
+
+After:
+```
+│ Completed  LAJBOTI/LINE PATA                                           [X]
+│ ┌───────────────────────────────────────────────────────────────────────┐
+│ │ #1  MASSAGE CAMPING  [TikTok]  Message              $25.00  Completed │
+│ │ 🔗 https://www.tiktok.com/@alhaya567/video/7630206607942602005?is_… │ ← truncates
+│ │ MASSAGE CAMPING                                                       │
+│ └───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/migrations/<new>.sql` | `ALTER TABLE campaign_tasks ADD COLUMN product_name TEXT` |
-| `src/pages/NewCampaignRequest.tsx` | Add `productName` to TaskEntry; add input as first field in each task card; require it in validation; relabel parent field to "Request Title"; include in insert payload |
-| `src/pages/OrderManagement.tsx` | Render `task.product_name` (with `—` fallback) in the expanded task sub-rows |
-| `src/pages/MyCampaignRequests.tsx` | Render `task.product_name` (with `—` fallback) in the expanded task list |
+| `src/pages/OrderManagement.tsx` | (a) `DialogContent` width: `max-w-2xl sm:max-w-3xl`. (b) Top title row: add `min-w-0` + `truncate` on title span, `shrink-0` on status badge. (c) Task card root (line 584): add `overflow-hidden`. (d) Task header (line 585-597): wrap left side in `min-w-0 flex-1`, add `truncate max-w-[200px]` to product name, keep right cluster `shrink-0`. (e) Creative link (line 598-602): wrap in `min-w-0 max-w-full` container, move `truncate` to inner `<span>` with the icon as a sibling `shrink-0`. |
 
-Zero changes to status flow, notifications, or RLS. No breaking change for old requests — `product_name` is nullable.
+Zero logic, data, or behavior changes. Pure CSS layout hardening. Same fix pattern can be applied to `MyCampaignRequests.tsx` if you confirm it has the same symptom — but your screenshots are admin-only so I'm scoping to one file unless you say otherwise.
 
 ### Build time
-~5 minutes. One migration + three file edits.
+~2 minutes. One file. Five small className tweaks.
 
