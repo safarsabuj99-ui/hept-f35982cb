@@ -544,7 +544,7 @@ export default function OrderManagement() {
 
       {/* Detail Modal with Tasks */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl sm:max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
@@ -553,9 +553,9 @@ export default function OrderManagement() {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className={STATUS_BADGE[selectedRequest.status]?.className}>{STATUS_BADGE[selectedRequest.status]?.label}</Badge>
-                <span className="text-sm font-medium">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
+              <div className="flex items-center gap-2 min-w-0 pr-6">
+                <Badge variant="outline" className={cn("shrink-0", STATUS_BADGE[selectedRequest.status]?.className)}>{STATUS_BADGE[selectedRequest.status]?.label}</Badge>
+                <span className="text-sm font-medium truncate">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <DetailItem label="Client" value={profiles[selectedRequest.client_id]?.full_name || "Unknown"} />
@@ -581,11 +581,11 @@ export default function OrderManagement() {
                   {selectedTasks.map((task: any, idx: number) => {
                     const taskBadge = STATUS_BADGE[task.status] || STATUS_BADGE.pending;
                     return (
-                      <div key={task.id} className="rounded-lg border p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
+                      <div key={task.id} className="rounded-lg border p-3 space-y-2 overflow-hidden">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
                             <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
-                            <span className="text-sm font-semibold">{task.product_name || "—"}</span>
+                            <span className="text-sm font-semibold truncate max-w-[180px] sm:max-w-[260px]">{task.product_name || "—"}</span>
                             <Badge variant="secondary">{PLATFORM_LABELS[task.platform] || task.platform}</Badge>
                             <span className="text-sm text-muted-foreground">{task.objective}</span>
                             {task.quantity > 1 && <Badge variant="outline" className="text-[10px]">×{task.quantity}</Badge>}
@@ -596,9 +596,12 @@ export default function OrderManagement() {
                           </div>
                         </div>
                         {task.creative_link && (
-                          <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 truncate">
-                            <ExternalLink className="h-3 w-3 shrink-0" /> {task.creative_link}
-                          </a>
+                          <div className="min-w-0 max-w-full">
+                            <a href={task.creative_link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1 min-w-0">
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{task.creative_link}</span>
+                            </a>
+                          </div>
                         )}
                         {task.ad_caption && <p className="text-xs text-muted-foreground">{task.ad_caption}</p>}
                         {task.rejection_reason && (
