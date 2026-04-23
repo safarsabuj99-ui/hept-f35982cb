@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, useCallback } from "react";
+import { useEffect, useState, memo } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,80 +30,21 @@ import {
 } from "lucide-react";
 import { content as t, type Lang } from "@/lib/landingContent";
 
-/* ─── shared IntersectionObserver singleton ─── */
-type ObserverCallback = (entry: IntersectionObserverEntry) => void;
-const observerCallbacks = new Map<Element, ObserverCallback>();
-let sharedObserver: IntersectionObserver | null = null;
-
-function getSharedObserver() {
-  if (!sharedObserver) {
-    sharedObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const cb = observerCallbacks.get(entry.target);
-          if (cb) cb(entry);
-        });
-      },
-      { threshold: 0.15 }
-    );
-  }
-  return sharedObserver;
-}
-
-function useReveal() {
-  const ref = useRef<HTMLDivElement>(null);
-  // Start visible to avoid layout shift + observer work blocking LCP.
-  // Animations gracefully no-op for already-visible items.
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Defer observer wiring until browser is idle — keeps it off the LCP critical path.
-    const ric: (cb: () => void) => number =
-      (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 1));
-    const handle = ric(() => {
-      const obs = getSharedObserver();
-      const callback: ObserverCallback = (entry) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          obs.unobserve(el);
-          observerCallbacks.delete(el);
-        }
-      };
-      observerCallbacks.set(el, callback);
-      obs.observe(el);
-    });
-    return () => {
-      const cic = (window as any).cancelIdleCallback;
-      if (cic) cic(handle);
-      observerCallbacks.delete(el);
-      if (sharedObserver) sharedObserver.unobserve(el);
-    };
-  }, []);
-  return { ref, visible };
-}
-
+/* ─── Reveal wrapper ───
+ * Content is rendered visible from the start to avoid CLS and the forced
+ * reflows that IntersectionObserver.observe() caused when many wrappers
+ * mounted at once (Lighthouse measured ~700ms of layout work).
+ * The `delay` prop is preserved as a no-op so call sites don't need to change.
+ */
 function Reveal({
   children,
   className = "",
-  delay = 0,
 }: {
   children: React.ReactNode;
   className?: string;
   delay?: number;
 }) {
-  const { ref, visible } = useReveal();
-  return (
-    <div
-      ref={ref}
-      className={`transition-all duration-700 ${
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-      } ${className}`}
-      style={{ transitionDelay: `${delay}ms` }}
-    >
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 const featureIcons = [FileText, BarChart3, Wallet, TrendingUp];
