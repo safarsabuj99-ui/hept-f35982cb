@@ -95,7 +95,11 @@ export default function NewClient() {
 
     setIsLoading(false);
     if (res.error || res.data?.error) {
-      toast({ title: "Error", description: res.data?.error || res.error?.message || "Failed to create account", variant: "destructive" });
+      const rawMsg = res.data?.error || res.error?.message || "Failed to create account";
+      const friendly = /Keyword .* is already used/i.test(rawMsg)
+        ? rawMsg
+        : rawMsg;
+      toast({ title: "Error", description: friendly, variant: "destructive" });
     } else {
       toast({ title: "Success", description: `${role === "manager" ? "Manager" : "Client"} ${fullName} created` });
       navigate("/admin");
