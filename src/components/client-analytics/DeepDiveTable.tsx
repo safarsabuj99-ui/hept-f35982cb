@@ -129,6 +129,258 @@ interface DeepDiveTableProps {
   isAdmin?: boolean;
 }
 
+// ============================================================================
+// Top-level memoized mobile card component
+// Defined OUTSIDE DeepDiveTable so its identity is stable across renders.
+// Previously this was declared inside the parent function, which caused React
+// to remount every card on every state update (e.g. selecting a checkbox),
+// destroying scroll position. Memoization keeps the list DOM stable so taps
+// on individual cards no longer scroll the page back to the top.
+// ============================================================================
+interface MobileCampaignCardProps {
+  row: CampaignRow;
+  selectedPreset: PresetType;
+  canToggleCampaigns: boolean;
+  isSelectable: boolean;
+  isSelected: boolean;
+  isToggling: boolean;
+  onToggleSelect: (id: string) => void;
+  onRequestToggleCampaign: (row: CampaignRow, action: "pause" | "enable") => void;
+}
+
+const MobileCampaignCard = memo(function MobileCampaignCard({
+  row,
+  selectedPreset,
+  canToggleCampaigns,
+  isSelectable,
+  isSelected,
+  isToggling,
+  onToggleSelect,
+  onRequestToggleCampaign,
+}: MobileCampaignCardProps) {
+  const roas = safeDivide(row.conversion_value, row.spend);
+  const cpo = safeDivide(row.spend, row.results);
+  const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
+  const active = isActiveStatus(row.status);
+  const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+  const canToggle = canToggleCampaigns && !!row.campaign_id && (active || isPaused);
+
+  const normalized = normalizeStatus(row.status);
+  const redStatuses = ["not delivering", "disapproved", "with issues"];
+  const yellowStatuses = ["in process", "pending review", "active - ad groups paused", "active - budget exceeded", "active - not started"];
+  let dotClass = "bg-muted-foreground/40";
+  if (active) dotClass = "bg-emerald-500";
+  if (redStatuses.includes(normalized)) dotClass = "bg-red-500";
+  if (yellowStatuses.includes(normalized)) dotClass = "bg-amber-500";
+  if (normalized.startsWith("active -")) dotClass = "bg-amber-500";
+
+  let roasClass = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
+  if (roas > 3) roasClass = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+  else if (roas < 1.5) roasClass = "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
+
+  const showMobileSales = selectedPreset === "sales" || (selectedPreset === "auto" && row.objective === "sales");
+  const showMobileMessages = selectedPreset === "messages" || (selectedPreset === "auto" && row.objective === "messages");
+  const showMobilePerformance = selectedPreset === "performance" || (selectedPreset === "auto" && row.objective !== "sales" && row.objective !== "messages");
+  const showMobileTiktokMessages = selectedPreset === "tiktok_messages";
+
+  return (
+    <div className={cn(
+      "rounded-xl border border-border/50 bg-card p-4 transition-all duration-200",
+      isSelected && "ring-1 ring-primary/50 bg-primary/5"
+    )}>
+      <div className="flex items-start gap-2.5">
+        {isSelectable ? (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onToggleSelect(row.campaign_id!)}
+            className="mt-0.5 shrink-0"
+          />
+        ) : (
+          <div className="w-4 shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold truncate text-foreground">{row.campaign_name}</span>
+            <Badge variant="outline" className={`text-[10px] font-medium rounded-md shrink-0 ${pb.className}`}>{pb.label}</Badge>
+          </div>
+          {row.ad_account_name && (
+            <p className="text-[10px] text-muted-foreground/60 truncate mt-0.5">{row.ad_account_name}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mt-3 mb-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+          <span className="text-xs text-muted-foreground capitalize">{normalizeStatus(row.status)}</span>
+        </div>
+        {canToggle && (
+          <div className="flex items-center gap-1">
+            {isToggling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <Switch
+                checked={active}
+                onCheckedChange={() => {
+                  const action = active ? "pause" : "enable";
+                  onRequestToggleCampaign(row, action);
+                }}
+                className="scale-[0.7]"
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 border-t border-border/30">
+        <div className="flex justify-between">
+          <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Spend</span>
+          <span className="font-mono text-xs font-semibold tabular-nums">{fmt(row.spend)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Reach</span>
+          <span className="font-mono text-xs tabular-nums">{fmtNum(row.reach ?? 0)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Impr.</span>
+          <span className="font-mono text-xs tabular-nums">{fmtNum(row.impressions)}</span>
+        </div>
+
+        {showMobileSales && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">View Content</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.view_content ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Add to Cart</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.add_to_cart ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Checkout</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.initiate_checkout ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Purchase</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.purchase ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Purchase</span>
+              <span className="font-mono text-xs tabular-nums">{fmt((row.purchase ?? 0) > 0 ? row.spend / row.purchase! : 0)}</span>
+            </div>
+          </>
+        )}
+
+        {showMobileMessages && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Messages</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.messaging_conversations ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">New Contacts</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.new_messaging_contacts ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Returning</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(Math.max(0, (row.messaging_conversations ?? 0) - (row.new_messaging_contacts ?? 0)))}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Create Order</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.create_order ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Message</span>
+              <span className="font-mono text-xs tabular-nums">{fmt((row.messaging_conversations ?? 0) > 0 ? row.spend / row.messaging_conversations! : 0)}</span>
+            </div>
+          </>
+        )}
+
+        {showMobilePerformance && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CTR</span>
+              <span className="font-mono text-xs tabular-nums">{(row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0).toFixed(2)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPC</span>
+              <span className="font-mono text-xs tabular-nums">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Results</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{row.results.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPR</span>
+              <span className="font-mono text-xs tabular-nums">{fmt(cpo)}</span>
+            </div>
+          </>
+        )}
+
+        {showMobileTiktokMessages && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Budget</span>
+              <span className="font-mono text-xs tabular-nums">{fmt(row.budget ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPM</span>
+              <span className="font-mono text-xs tabular-nums">{fmt(row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks (Dest)</span>
+              <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">CPC (Dest)</span>
+              <span className="font-mono text-xs tabular-nums">{fmt(row.clicks > 0 ? row.spend / row.clicks : 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (TikTok DM)</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_tiktok_dm ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (DM)</span>
+              <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_tiktok_dm ?? 0) > 0 ? row.spend / row.conversations_tiktok_dm! : 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Leads (TikTok DM)</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.leads_tiktok_dm ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Lead (DM)</span>
+              <span className="font-mono text-xs tabular-nums">{fmt((row.leads_tiktok_dm ?? 0) > 0 ? row.spend / row.leads_tiktok_dm! : 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Conv. (Instant Msg)</span>
+              <span className="font-mono text-xs font-semibold tabular-nums">{fmtNum(row.conversations_instant_msg ?? 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Cost/Conv (IM)</span>
+              <span className="font-mono text-xs tabular-nums">{fmt((row.conversations_instant_msg ?? 0) > 0 ? row.spend / row.conversations_instant_msg! : 0)}</span>
+            </div>
+          </>
+        )}
+
+        <div className="flex justify-between">
+          <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">ROAS</span>
+          <Badge variant="outline" className={`text-[10px] font-mono h-5 rounded-md ${roasClass}`}>{roas.toFixed(2)}x</Badge>
+        </div>
+        {!showMobilePerformance && (
+          <div className="flex justify-between">
+            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Clicks</span>
+            <span className="font-mono text-xs tabular-nums">{fmtNum(row.clicks)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function DeepDiveTable({
   data,
   onCampaignPaused,
