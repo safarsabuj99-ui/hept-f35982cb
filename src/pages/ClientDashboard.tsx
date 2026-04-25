@@ -355,7 +355,7 @@ export default function ClientDashboard() {
             key={kpi.label}
             className={cn(
               "glass-card glow-border p-4 md:p-5 min-w-[150px] snap-start shrink-0 md:min-w-0 md:shrink flex flex-col gap-3",
-              `stagger-${i + 1}`
+              anim(`stagger-${i + 1}`)
             )}
             style={{ animationFillMode: 'both' }}
           >
