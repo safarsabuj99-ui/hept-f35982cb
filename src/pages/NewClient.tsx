@@ -37,6 +37,11 @@ export default function NewClient() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  const keywordAvailability = useKeywordAvailability({
+    keyword: mappingKeyword,
+    selfClientId: null, // brand-new client
+    enabled: role === "client",
+  });
   useEffect(() => {
     const fetchManagers = async () => {
       const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "manager");
