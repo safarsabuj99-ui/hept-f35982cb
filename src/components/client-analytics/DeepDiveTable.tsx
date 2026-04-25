@@ -239,6 +239,20 @@ export function DeepDiveTable({
     }
   }, [selectableRows, selectedIds]);
 
+  const activeSelectableRows = useMemo(
+    () => selectableRows.filter(r => isActiveStatus(r.status)),
+    [selectableRows]
+  );
+
+  const selectActiveOnPage = useCallback(() => {
+    const activeIds = activeSelectableRows.map(r => r.campaign_id!);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      activeIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [activeSelectableRows]);
+
   const handleToggle = async (row: CampaignRow, action: "pause" | "enable") => {
     if (!row.campaign_id) return;
     setTogglingId(row.campaign_id);
