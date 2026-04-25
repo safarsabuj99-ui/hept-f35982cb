@@ -73,6 +73,12 @@ export default function AdAccountDetail() {
   const [assignSaving, setAssignSaving] = useState(false);
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
+  const newKeywordAvailability = useKeywordAvailability({
+    keyword: newKeyword,
+    selfClientId: selectedClientIds.length === 1 ? selectedClientIds[0] : null,
+    enabled: true,
+  });
+
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
