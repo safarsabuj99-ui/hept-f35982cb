@@ -1,82 +1,64 @@
+## Goal
 
+On the Campaigns analytics table (`DeepDiveTable`), two mobile issues:
 
-## Fix: Modal still overflows — Dialog grid + URL truncation chain
+1. **Missing "Select all / Select active" control on mobile.** Desktop has a header checkbox to select all selectable rows on the page, but the mobile card view has no equivalent — users have to tap each card one-by-one.
+2. **Scroll jumps to the top when toggling a checkbox.** When you tap the checkbox on the bottom card and then continue selecting, the page scrolls back to the first campaign.
 
-### The real bug (not the previous one)
+## Root cause of the scroll bug
 
-The previous fix added `truncate` and `min-w-0` to the URL container, but the modal **still clips on the right** (visible in your screenshot 161 — the `$5.00`, `$20.00`, and progress bar are cut at the right edge, and the dialog is shifted left of center).
+In `src/components/client-analytics/DeepDiveTable.tsx` (line ~837), the `MobileCampaignCard` component is defined **inside** the `DeepDiveTable` function body. Every time `selectedIds` (or any other state) updates, a brand-new `MobileCampaignCard` function reference is created, so React treats every card as a different component type and unmounts/remounts the whole list. The remount destroys/recreates DOM nodes on each tap, which makes the browser reset scroll near the top of the freshly-mounted list.
 
-Verified root cause:
+Fix: stop redefining the card component on every render. Move it out of the parent function (or wrap with `React.memo`) so taps only re-render the card whose `isSelected` actually changed, leaving the list DOM stable and scroll position intact.
 
-**1. `DialogContent` uses CSS Grid (`grid w-full max-w-lg`)** in `src/components/ui/dialog.tsx`. CSS Grid items default to `min-width: auto`, meaning **a long unbreakable string (the TikTok URL) forces the implicit grid track wider than `max-w-3xl`**. The dialog then becomes wider than its declared max-width, and `translate-x-[-50%]` shifts this wider element off-center to the left → right side gets clipped.
+## Changes
 
-**2. The `<a>` truncation chain is broken**: line 600 has `<a className="...flex items-center gap-1 min-w-0">` with an inner `<span class="truncate">`. But `<a>` is a flex container here — for the inner `<span>` to truncate, the `<a>` needs `w-full` AND its own flex parent needs `min-w-0`. Right now the `<a>` only fills its content, then expands beyond the wrapper.
+**File: `src/components/client-analytics/DeepDiveTable.tsx`**
 
-### The fix (2 surgical changes, single file)
+1. **Extract `MobileCampaignCard` out of the component body.**
+   - Move it to a top-level component in the same file.
+   - Pass the values it currently closes over as props: `row`, `selectedPreset`, `canToggleCampaigns`, `isAdmin`, `togglingId`, `isSelected`, `isSelectable`, `onToggleSelect`, `onToggleCampaign` (opens confirm dialog).
+   - Wrap with `React.memo` so a card only re-renders when its own `isSelected` / `togglingId` / `row` actually changes.
 
-**File: `src/pages/OrderManagement.tsx`**
+2. **Add a mobile bulk-select toolbar above the card list.**
+   - Render only on mobile (`md:hidden`), only when `paginatedData` has at least one selectable row.
+   - Layout: a small pill/bar with:
+     - A tri-state `Checkbox` (checked / indeterminate / unchecked) bound to the same `toggleSelectAll` already used by the desktop header.
+     - Label: "Select all on page" (shows count of selectable rows, e.g. "Select all (8)").
+     - A secondary text button "Active only" that selects only the active selectable rows on the current page (uses existing `isActiveStatus` helper). Hidden when there are no active rows on the page.
+   - Reuses the existing `selectableRows` memo and `selectedIds` state — no new selection logic.
 
-**Change A — line 555**: Add `min-w-0` to the dialog content wrapper so the grid track honors `max-w-3xl`:
-```tsx
-<div className="space-y-5 min-w-0">
+3. **Keep the existing floating bulk action bar** (Pause All / Activate All / Clear) unchanged — it already works on mobile via `bottom-16` sticky positioning.
+
+## Visual layout (mobile)
+
+```text
+┌──────────────────────────────────────┐
+│ Search…             [Status] [Preset]│  ← existing toolbar
+├──────────────────────────────────────┤
+│ [☐] Select all (8)      Active only  │  ← NEW mobile select bar
+├──────────────────────────────────────┤
+│ [☐] Campaign A           [Meta]      │
+│      • active            ───●        │
+│      Spend  $12.34 …                 │
+├──────────────────────────────────────┤
+│ [☑] Campaign B           [TikTok]    │
+│ …                                    │
+└──────────────────────────────────────┘
+        ┌─────────────────────────┐
+        │ 2 selected   Clear  Pause All │  ← existing floating bar
+        └─────────────────────────┘
 ```
 
-**Change B — line 598-605**: Make the URL anchor fill its container with `w-full` so the inner span actually has bounded width to truncate against:
-```tsx
-{task.creative_link && (
-  <div className="min-w-0 w-full">
-    <a 
-      href={task.creative_link} 
-      target="_blank" 
-      rel="noopener noreferrer" 
-      className="text-xs text-primary hover:underline inline-flex items-center gap-1 max-w-full min-w-0"
-    >
-      <ExternalLink className="h-3 w-3 shrink-0" />
-      <span className="truncate min-w-0 block">{task.creative_link}</span>
-    </a>
-  </div>
-)}
-```
+## Out of scope
 
-Key change: `inline-flex` + `max-w-full` on `<a>` plus `block` + `min-w-0` on the inner `<span>` — this is the proven pattern for truncating long URLs inside flex layouts.
+- No backend changes.
+- No changes to desktop table behavior, pagination, or bulk pause/activate flow.
+- No styling overhaul — only adds one small bar and reuses existing components (`Checkbox`, `Button`).
 
-**Change C — line 547 (insurance)**: Add `overflow-hidden` to DialogContent so even if anything else escapes, the dialog itself can't visually overflow:
-```tsx
-<DialogContent className="max-w-2xl sm:max-w-3xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
-```
+## Acceptance criteria
 
-### Why this finally works
-
-- `min-w-0` on the immediate grid child breaks the auto-min-width chain → grid track respects `max-w-3xl` → dialog stays at correct width → `translate-x-[-50%]` centers correctly → no horizontal shift.
-- `inline-flex max-w-full` on `<a>` + `block min-w-0 truncate` on `<span>` → URL ellipsizes at the card's right padding instead of pushing past it.
-- `overflow-x-hidden` on DialogContent → final safety net so nothing visually escapes the dialog rectangle.
-
-### Visual outcome
-
-```
-┌─────────── Modal (centered, max-w-3xl) ──────────────┐
-│ 📦 Campaign Request Details                       [X]│
-│ Completed  LAJBOTI/LINE PATA                         │
-│ ┌──Client──┐ ┌Total Budget┐ ┌─Submitted─┐            │
-│ │ MUSA     │ │ $25.00     │ │ 4/20/2026 │            │
-│ └──────────┘ └────────────┘ └───────────┘            │
-│ Tasks (2)                              ▰▰▱ 2/2       │
-│ ┌──────────────────────────────────────────────────┐ │
-│ │ #1 MASSAGE CAMPING [TikTok] Message  $5.00 ✓Done│ │
-│ │ 🔗 https://www.tiktok.com/@alhaya567/video/76… │ │ ← truncates
-│ │ MASSAGE CAMPING                                 │ │
-│ └──────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────┘
-```
-
-### Files Changed
-
-| File | Change |
-|---|---|
-| `src/pages/OrderManagement.tsx` | (A) Add `min-w-0` to `<div className="space-y-5">` (line 555). (B) Replace creative link block (598-605) with `inline-flex max-w-full` anchor + `block min-w-0 truncate` inner span. (C) Add `overflow-x-hidden` to DialogContent (line 547). |
-
-Zero changes to data, logic, or any other component. Pure CSS fix on the actual root cause this time (grid auto-min-width).
-
-### Build time
-~1 minute. One file. Three className tweaks.
-
+- On mobile (≤ md), a "Select all" checkbox bar appears above the cards and selects/deselects all selectable rows on the current page; tri-state behavior matches desktop.
+- "Active only" button selects just the active campaigns on the current page.
+- Tapping a checkbox on a card near the bottom of the list no longer scrolls the page back to the first card; scroll position stays put.
+- Desktop behavior unchanged.
