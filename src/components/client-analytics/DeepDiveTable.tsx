@@ -1185,11 +1185,47 @@ export function DeepDiveTable({
 
       <div className="relative">
         {/* Mobile card view */}
-        <div className="flex flex-col gap-2.5 md:hidden">
+        <div className="md:hidden flex flex-col gap-2.5">
+          {/* Mobile bulk select bar — visible only when there's at least one selectable row on the page */}
+          {selectableRows.length > 0 && (() => {
+            const allIds = selectableRows.map(r => r.campaign_id!);
+            const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+            const someSelected = allIds.some(id => selectedIds.has(id)) && !allSelected;
+            return (
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/30 backdrop-blur-sm">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                    className="shrink-0"
+                  />
+                  <span className="text-xs font-medium text-foreground truncate">
+                    {allSelected ? "Deselect all" : "Select all"} ({allIds.length})
+                  </span>
+                </label>
+                {activeSelectableRows.length > 0 && activeSelectableRows.length !== allIds.length && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectActiveOnPage}
+                    className="h-8 text-xs rounded-lg shrink-0 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10"
+                  >
+                    Active only ({activeSelectableRows.length})
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+
           {paginatedData.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground/60 text-sm">No campaign data available</div>
           ) : (
-            paginatedData.map((row, i) => <MobileCampaignCard key={`${row.campaign_name}-${i}`} row={row} />)
+            paginatedData.map((row, i) => (
+              <div key={`${row.campaign_name}-${i}`}>
+                {renderMobileCard(row)}
+              </div>
+            ))
           )}
         </div>
 
