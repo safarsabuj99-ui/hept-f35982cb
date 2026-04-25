@@ -367,7 +367,7 @@ export default function ClientDashboard() {
                 {kpi.label}
               </span>
             </div>
-            <p className="text-xl md:text-2xl font-bold font-mono count-up">{kpi.value}</p>
+            <p className={cn("text-xl md:text-2xl font-bold font-mono", anim("count-up"))}>{kpi.value}</p>
           </div>
         ))}
       </div>
