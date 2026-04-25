@@ -12,6 +12,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useKeywordAvailability } from "@/hooks/useKeywordAvailability";
+import { KeywordAvailabilityHint } from "@/components/KeywordAvailabilityHint";
 
 interface ManagerOption { user_id: string; full_name: string; }
 
