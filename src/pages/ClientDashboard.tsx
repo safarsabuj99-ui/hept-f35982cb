@@ -283,7 +283,7 @@ export default function ClientDashboard() {
   ];
 
   return (
-    <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto animate-fade-in">
+    <div className={cn("space-y-6 md:space-y-8 max-w-5xl mx-auto", anim("animate-fade-in"))}>
       {/* Urgent Notices */}
       <ClientNoticeBanner clientId={effectiveClientId!} balance={balance} />
 
