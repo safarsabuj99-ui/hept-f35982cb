@@ -28,6 +28,8 @@ import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
+import { useKeywordAvailability } from "@/hooks/useKeywordAvailability";
+import { KeywordAvailabilityHint } from "@/components/KeywordAvailabilityHint";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
 import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
