@@ -150,17 +150,28 @@ export default function ClientDashboard() {
     }
   }, [highlightId, initialLoading]);
 
-  // Filtered + debounced realtime — only fires for THIS client's data, and at most once per 1.5s.
+  // Filtered + debounced realtime — only fires for THIS client's data.
+  // NOTE: We intentionally do NOT subscribe to `daily_metrics` here because that
+  // table has no `client_id` column, so an unfiltered listener would fire for
+  // every metric write across the entire platform during agency syncs — that
+  // caused the dashboard to refetch and visually "blink" several times a minute.
+  // Spend totals are kept fresh by the campaign/transaction listeners below
+  // plus a refresh on window focus.
   useEffect(() => {
     if (!effectiveClientId) return;
-    const debounced = debounce(() => fetchAll(), 1500);
+    const debounced = debounce(() => fetchAll(), 2500);
     const channel = supabase
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `client_id=eq.${effectiveClientId}` }, debounced)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, debounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `client_id=eq.${effectiveClientId}` }, debounced)
       .subscribe();
-    return () => { debounced.cancel(); supabase.removeChannel(channel); };
+    const onFocus = () => debounced();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      debounced.cancel();
+      window.removeEventListener('focus', onFocus);
+      supabase.removeChannel(channel);
+    };
   }, [effectiveClientId, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
