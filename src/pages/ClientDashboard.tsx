@@ -250,6 +250,14 @@ export default function ClientDashboard() {
 
   if (initialLoading) return <DashboardSkeleton />;
 
+  // Disable entrance animations after the first successful render so background
+  // realtime refetches don't re-play fade/slide/count-up animations (which
+  // looked like the dashboard was reloading).
+  if (!hasAnimated) {
+    queueMicrotask(() => setHasAnimated(true));
+  }
+  const anim = (cls: string) => (hasAnimated ? "" : cls);
+
   const kpis = [
     {
       icon: Zap, label: dateRange ? "Spend (Filtered)" : "Total Spend",
