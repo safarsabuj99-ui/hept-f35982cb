@@ -325,24 +325,28 @@ export default function PaymentRequests() {
   };
 
   const filteredRequests = useMemo(() => {
-    let result = requests;
-    if (dateRange) {
-      const fromStr = format(dateRange.from, "yyyy-MM-dd");
-      const toStr = format(dateRange.to, "yyyy-MM-dd");
-      result = result.filter((r) => {
-        const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
-        return d >= fromStr && d <= toStr;
-      });
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((r) =>
-        (r.client_name || "").toLowerCase().includes(q) ||
-        (r.transaction_id || "").toLowerCase().includes(q) ||
-        (r.payment_method || "").toLowerCase().includes(q)
-      );
-    }
-    return result;
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch = (r: PaymentRequest) =>
+      !q ||
+      (r.client_name || "").toLowerCase().includes(q) ||
+      (r.transaction_id || "").toLowerCase().includes(q) ||
+      (r.payment_method || "").toLowerCase().includes(q);
+
+    const fromStr = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
+    const toStr = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
+    const inDateRange = (r: PaymentRequest) => {
+      if (!fromStr || !toStr) return true;
+      const d = ((r as any).payment_date || r.created_at)?.substring(0, 10);
+      return d >= fromStr && d <= toStr;
+    };
+
+    // Pending requests bypass the date filter so admins never miss a client submission.
+    // Approved/rejected requests still respect the selected date range.
+    const pending = requests.filter((r) => r.status === "pending" && matchesSearch(r));
+    const history = requests.filter(
+      (r) => r.status !== "pending" && matchesSearch(r) && inDateRange(r)
+    );
+    return [...pending, ...history];
   }, [requests, dateRange, searchQuery]);
 
   const filteredDeposits = useMemo(() => {
