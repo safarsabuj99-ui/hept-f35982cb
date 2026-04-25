@@ -92,6 +92,17 @@ export default function ClientDetail() {
   const [assigningSaving, setAssigningSaving] = useState(false);
   const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
 
+  const profileKeywordAvailability = useKeywordAvailability({
+    keyword: mappingKeyword,
+    selfClientId: userId ?? null,
+    enabled: !!userId,
+  });
+  const adAccountKeywordAvailability = useKeywordAvailability({
+    keyword: newAdKeyword,
+    selfClientId: userId ?? null,
+    enabled: !!userId,
+  });
+
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [spendDatePreset, setSpendDatePreset] = useState<ClientDatePreset>("today");
