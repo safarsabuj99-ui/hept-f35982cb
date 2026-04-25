@@ -1,34 +1,48 @@
-## Problem
+# Fix Client Dashboard Blinking / Constant Reload
 
-On the **Payments & Deposits** page (`/admin/payment-requests`), when an admin selects a date filter (e.g. "Today", "This Week", custom range), **pending payment requests from clients also get hidden** if their submission date falls outside the range. This means a client may submit a request that the admin never sees because their filter is set to a different period.
+## Root Cause
 
-## Goal
+The client dashboard (`src/pages/ClientDashboard.tsx`) appears to "reload" repeatedly because of two issues working together:
 
-**Pending payment requests must always be visible**, regardless of the date filter. The date filter should only narrow down **approved** and **rejected** requests (historical records), so KPI cards and history views remain useful.
-
-In short:
-- Pending requests → always shown (no date filter applied)
-- Approved / rejected requests → filtered by the selected date range
-
-## Changes
-
-### `src/pages/PaymentRequests.tsx`
-
-Update the `filteredRequests` memo so the date-range filter only applies to rows where `status !== "pending"`:
-
-```text
-filteredRequests = [
-  ...all pending requests (search-filtered only),
-  ...approved/rejected requests (search + date filtered)
-]
+### 1. Unfiltered global realtime listener (the main culprit)
+In the realtime subscription:
+```ts
+.on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, debounced)
 ```
+There is **no filter** on `daily_metrics`. So whenever the agency's sync engine writes metrics for **any client in the system**, every connected client's dashboard fires `fetchAll()`. During active syncs this happens many times a minute → constant refetch → constant re-render.
 
-- Pending rows bypass the `dateRange` check entirely.
-- Search query still applies to all rows (so admins can still search within pending).
-- Sort order preserved: pending first (newest), then approved/rejected newest first — matches current `created_at DESC` ordering from the query.
-- KPI cards (`Received BDT`, `Received USD`, `Approved Count`, `Pending Count`) keep using `filteredRequests`. Since pending is always included, the "Pending" KPI now reflects the true total of pending items (correct behavior). Approved totals still respect the date range.
+### 2. CSS entrance animations re-trigger on every state update
+Elements use the classes `animate-fade-in`, `count-up`, and `stagger-1..4`. These animations run **every time the element is rendered**. Because the realtime listener forces a refetch every ~1.5s, the balance numbers and KPI cards re-play their fade/slide animation — visually that looks exactly like the screen is "blinking" or "reloading."
 
-### Out of scope
-- The **Fund Deposits** tab is not changed in this request. If you also want pending deposits to ignore the date filter, say the word and I'll mirror the same logic in `filteredDeposits`.
-- The default date preset stays as it is — no change to `DateRangeFilter`.
-- No database, RLS, or edge function changes.
+## Fix Plan (minimal, surgical, no feature changes)
+
+### A. Scope the realtime listener to this client only
+In `src/pages/ClientDashboard.tsx`, restrict the `daily_metrics` subscription so it only fires for rows belonging to this client. We already query campaigns by `client_id`; we will add a filter so only this client's metric updates trigger a refetch.
+
+Approach: derive the client's `campaign_id` list once (we already fetch it inside `fetchAll`) and either
+- subscribe to `campaigns` filtered by `client_id` (already present) **and**
+- replace the unfiltered `daily_metrics` listener with a filter on `client_id` (the `daily_metrics` table includes `client_id` per the schema; if it doesn't on a given row we'll fall back to listening only to `campaigns` + `transactions`, which are already client-scoped).
+
+Net effect: the dashboard only refetches when *this* client's data actually changes, not on every global sync write.
+
+### B. Run the realtime refetch silently (no animation re-trigger)
+Split loading state so background refetches don't replay entrance animations:
+- Keep `initialLoading` for the very first load (skeleton).
+- Move `animate-fade-in`, `page-enter`, `count-up`, and `stagger-*` so they render **only on initial mount**, not on every data refresh. The simplest way: gate those classes behind a `hasAnimatedRef` (set to `true` after first render) so subsequent updates render without re-applying the animation classes.
+
+### C. Increase debounce window slightly
+Bump the realtime debounce from 1500 ms to 2500 ms. Sync writes often arrive in bursts; a slightly larger window collapses the burst into a single quiet refetch.
+
+## Files Touched
+- `src/pages/ClientDashboard.tsx` — scope realtime listener, gate entrance-animation classes, bump debounce.
+
+## Out of Scope (intentionally untouched)
+- No changes to data shape, KPIs, layout, colors, or business logic.
+- No schema changes, no edge-function changes.
+- Admin dashboard and other pages are not modified.
+- The existing `ClientNoticeBanner` and `SpendTrendChart` keep their own logic.
+
+## Expected Result
+- The client dashboard stops flickering/reloading during agency syncs.
+- Numbers update smoothly in place when this client's own data changes.
+- First page load still shows the premium skeleton + entrance animation exactly as today.

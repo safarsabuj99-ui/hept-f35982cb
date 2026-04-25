@@ -92,6 +92,7 @@ export default function ClientDashboard() {
   const [adAccounts, setAdAccounts] = useState<any[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const initialLoadingRef = useRef(true);
+  const [hasAnimated, setHasAnimated] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("");
   const [pricingConfig, setPricingConfig] = useState<any>(null);
@@ -150,17 +151,28 @@ export default function ClientDashboard() {
     }
   }, [highlightId, initialLoading]);
 
-  // Filtered + debounced realtime — only fires for THIS client's data, and at most once per 1.5s.
+  // Filtered + debounced realtime — only fires for THIS client's data.
+  // NOTE: We intentionally do NOT subscribe to `daily_metrics` here because that
+  // table has no `client_id` column, so an unfiltered listener would fire for
+  // every metric write across the entire platform during agency syncs — that
+  // caused the dashboard to refetch and visually "blink" several times a minute.
+  // Spend totals are kept fresh by the campaign/transaction listeners below
+  // plus a refresh on window focus.
   useEffect(() => {
     if (!effectiveClientId) return;
-    const debounced = debounce(() => fetchAll(), 1500);
+    const debounced = debounce(() => fetchAll(), 2500);
     const channel = supabase
       .channel('client-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `client_id=eq.${effectiveClientId}` }, debounced)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, debounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `client_id=eq.${effectiveClientId}` }, debounced)
       .subscribe();
-    return () => { debounced.cancel(); supabase.removeChannel(channel); };
+    const onFocus = () => debounced();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      debounced.cancel();
+      window.removeEventListener('focus', onFocus);
+      supabase.removeChannel(channel);
+    };
   }, [effectiveClientId, fetchAll]);
 
   const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
@@ -238,6 +250,14 @@ export default function ClientDashboard() {
 
   if (initialLoading) return <DashboardSkeleton />;
 
+  // Disable entrance animations after the first successful render so background
+  // realtime refetches don't re-play fade/slide/count-up animations (which
+  // looked like the dashboard was reloading).
+  if (!hasAnimated) {
+    queueMicrotask(() => setHasAnimated(true));
+  }
+  const anim = (cls: string) => (hasAnimated ? "" : cls);
+
   const kpis = [
     {
       icon: Zap, label: dateRange ? "Spend (Filtered)" : "Total Spend",
@@ -263,7 +283,7 @@ export default function ClientDashboard() {
   ];
 
   return (
-    <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto animate-fade-in">
+    <div className={cn("space-y-6 md:space-y-8 max-w-5xl mx-auto", anim("animate-fade-in"))}>
       {/* Urgent Notices */}
       <ClientNoticeBanner clientId={effectiveClientId!} balance={balance} />
 
@@ -294,7 +314,7 @@ export default function ClientDashboard() {
               </p>
               {balance < 0 ? (
                 <>
-              <p className="text-2xl md:text-4xl font-bold font-mono text-red-300 count-up">
+              <p className={cn("text-2xl md:text-4xl font-bold font-mono text-red-300", anim("count-up"))}>
                     -৳{Math.abs(balanceBdt).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                   <p className="text-sm font-mono text-red-300 mt-0.5">
@@ -303,7 +323,7 @@ export default function ClientDashboard() {
                 </>
               ) : (
                 <>
-                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                  <p className={cn("text-2xl md:text-4xl font-bold font-mono text-primary-foreground", anim("count-up"))}>
                     {fmt(balance)}
                   </p>
                   <p className="text-sm font-mono text-primary-foreground/70 mt-0.5">
@@ -335,7 +355,7 @@ export default function ClientDashboard() {
             key={kpi.label}
             className={cn(
               "glass-card glow-border p-4 md:p-5 min-w-[150px] snap-start shrink-0 md:min-w-0 md:shrink flex flex-col gap-3",
-              `stagger-${i + 1}`
+              anim(`stagger-${i + 1}`)
             )}
             style={{ animationFillMode: 'both' }}
           >
@@ -347,7 +367,7 @@ export default function ClientDashboard() {
                 {kpi.label}
               </span>
             </div>
-            <p className="text-xl md:text-2xl font-bold font-mono count-up">{kpi.value}</p>
+            <p className={cn("text-xl md:text-2xl font-bold font-mono", anim("count-up"))}>{kpi.value}</p>
           </div>
         ))}
       </div>
