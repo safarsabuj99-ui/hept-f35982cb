@@ -1,64 +1,93 @@
 ## Goal
 
-On the Campaigns analytics table (`DeepDiveTable`), two mobile issues:
+Make every mapping keyword **globally unique within an agency** (case-insensitive). If "Musa" is taken by Client A, no other client — and no other ad-account assignment — can ever use "Musa", "musa", or "MUSA" again in that org.
 
-1. **Missing "Select all / Select active" control on mobile.** Desktop has a header checkbox to select all selectable rows on the page, but the mobile card view has no equivalent — users have to tap each card one-by-one.
-2. **Scroll jumps to the top when toggling a checkbox.** When you tap the checkbox on the bottom card and then continue selecting, the page scrolls back to the first campaign.
+---
 
-## Root cause of the scroll bug
+## Why this matters
 
-In `src/components/client-analytics/DeepDiveTable.tsx` (line ~837), the `MobileCampaignCard` component is defined **inside** the `DeepDiveTable` function body. Every time `selectedIds` (or any other state) updates, a brand-new `MobileCampaignCard` function reference is created, so React treats every card as a different component type and unmounts/remounts the whole list. The remount destroys/recreates DOM nodes on each tap, which makes the browser reset scroll near the top of the freshly-mounted list.
+Right now two clients can accidentally share the same keyword (e.g. "Musa"), which causes the sync engine to attribute the same campaigns to multiple clients — corrupting spend numbers, profit reports, and Ad Guard pause behavior.
 
-Fix: stop redefining the card component on every render. Move it out of the parent function (or wrap with `React.memo`) so taps only re-render the card whose `isSelected` actually changed, leaving the list DOM stable and scroll position intact.
+---
 
-## Changes
+## What gets enforced
 
-**File: `src/components/client-analytics/DeepDiveTable.tsx`**
+The check covers **both** places a keyword can be stored:
 
-1. **Extract `MobileCampaignCard` out of the component body.**
-   - Move it to a top-level component in the same file.
-   - Pass the values it currently closes over as props: `row`, `selectedPreset`, `canToggleCampaigns`, `isAdmin`, `togglingId`, `isSelected`, `isSelectable`, `onToggleSelect`, `onToggleCampaign` (opens confirm dialog).
-   - Wrap with `React.memo` so a card only re-renders when its own `isSelected` / `togglingId` / `row` actually changes.
+1. `profiles.mapping_keyword` — the legacy default keyword set on a client profile
+2. `ad_account_clients.mapping_keyword` — the per-ad-account keyword used by sync
 
-2. **Add a mobile bulk-select toolbar above the card list.**
-   - Render only on mobile (`md:hidden`), only when `paginatedData` has at least one selectable row.
-   - Layout: a small pill/bar with:
-     - A tri-state `Checkbox` (checked / indeterminate / unchecked) bound to the same `toggleSelectAll` already used by the desktop header.
-     - Label: "Select all on page" (shows count of selectable rows, e.g. "Select all (8)").
-     - A secondary text button "Active only" that selects only the active selectable rows on the current page (uses existing `isActiveStatus` helper). Hidden when there are no active rows on the page.
-   - Reuses the existing `selectableRows` memo and `selectedIds` state — no new selection logic.
+A keyword is considered "in use" if it appears in either table for the same `org_id`. Empty keywords are always allowed (no clash).
 
-3. **Keep the existing floating bulk action bar** (Pause All / Activate All / Clear) unchanged — it already works on mobile via `bottom-16` sticky positioning.
+---
 
-## Visual layout (mobile)
+## Steps
 
+### 1. Database — uniqueness guarantee (migration)
+
+Add a Postgres trigger function `check_mapping_keyword_unique()` that runs on INSERT/UPDATE on both tables:
+
+- Skips rows where keyword is NULL or empty
+- Compares using `LOWER(TRIM(keyword))` scoped to `org_id`
+- Skips rows belonging to the same client (so a client can keep the same keyword across its own ad accounts)
+- Raises a clean error like: `Keyword "Musa" is already used by client "Rahim Trading". Please choose a different keyword.`
+
+Two triggers:
+- `BEFORE INSERT OR UPDATE OF mapping_keyword ON profiles`
+- `BEFORE INSERT OR UPDATE OF mapping_keyword ON ad_account_clients`
+
+Plus a helpful partial unique index for fast lookups:
 ```text
-┌──────────────────────────────────────┐
-│ Search…             [Status] [Preset]│  ← existing toolbar
-├──────────────────────────────────────┤
-│ [☐] Select all (8)      Active only  │  ← NEW mobile select bar
-├──────────────────────────────────────┤
-│ [☐] Campaign A           [Meta]      │
-│      • active            ───●        │
-│      Spend  $12.34 …                 │
-├──────────────────────────────────────┤
-│ [☑] Campaign B           [TikTok]    │
-│ …                                    │
-└──────────────────────────────────────┘
-        ┌─────────────────────────┐
-        │ 2 selected   Clear  Pause All │  ← existing floating bar
-        └─────────────────────────┘
+CREATE UNIQUE INDEX uniq_mapping_keyword_per_org
+  ON ad_account_clients (org_id, LOWER(TRIM(mapping_keyword)))
+  WHERE mapping_keyword IS NOT NULL AND mapping_keyword <> '';
 ```
+(The trigger handles the cross-table + same-client-allowed cases the index can't.)
 
-## Out of scope
+### 2. Pre-flight cleanup
 
-- No backend changes.
-- No changes to desktop table behavior, pagination, or bulk pause/activate flow.
-- No styling overhaul — only adds one small bar and reuses existing components (`Checkbox`, `Button`).
+Before the constraint can apply, run a one-time SELECT report (shown to you first) listing any **existing duplicates**. The migration will:
+- Print duplicates found (no auto-merge — you decide)
+- Only then activate the trigger
 
-## Acceptance criteria
+If duplicates exist, you'll get a list and we resolve them manually before locking the rule in.
 
-- On mobile (≤ md), a "Select all" checkbox bar appears above the cards and selects/deselects all selectable rows on the current page; tri-state behavior matches desktop.
-- "Active only" button selects just the active campaigns on the current page.
-- Tapping a checkbox on a card near the bottom of the list no longer scrolls the page back to the first card; scroll position stays put.
-- Desktop behavior unchanged.
+### 3. UI — friendly errors + live availability check
+
+Update three keyword input points to surface the error gracefully (toast: "Keyword already used by [Client Name]") and add a small **inline availability indicator** as the admin types:
+
+- **`src/pages/NewClient.tsx`** — Mapping Keyword field (new client form)
+- **`src/pages/ClientDetail.tsx`** — Profile mapping keyword + ad-account assignment keyword
+- **`src/pages/AdAccountDetail.tsx`** — "Assign clients" keyword field
+
+Inline check: debounced query against both tables filtered by `org_id` + `LOWER(TRIM(keyword))`. Shows:
+- ✅ green "Available"
+- ❌ red "Already used by [Client Name]"
+
+Submit buttons stay enabled (server is the source of truth), but if the user clicks while red, the toast explains it clearly.
+
+### 4. Verification
+
+- Try creating two clients with keyword "Musa" → second one blocked
+- Try assigning the same keyword to an ad account under a different client → blocked
+- Try assigning "musa" (lowercase) when "Musa" exists → blocked
+- Same client reusing their own keyword across multiple of their own ad accounts → allowed
+- Empty keyword on multiple clients → allowed
+
+---
+
+## Technical details
+
+- Trigger uses `SECURITY DEFINER` + `SET search_path = public` (matches all other triggers in the project)
+- Cross-table check inside the trigger: queries the *other* table for any conflicting `(org_id, LOWER(TRIM(keyword)))` pair where `client_id` differs from the row being written
+- Error raised with `RAISE EXCEPTION` carrying the client's `full_name` so the UI toast is informative without an extra round-trip
+- The availability check is a lightweight `SELECT client_id, full_name FROM ...` joined on profiles; debounced 400 ms on input
+- Sync functions (`sync-fast-lane`, `sync-deep-dive`, `sync-orchestrator`) need no changes — they already lowercase keywords on read
+
+## Files touched
+
+- New migration: `add_unique_mapping_keyword_constraint.sql` (function + 2 triggers + 1 index)
+- `src/pages/NewClient.tsx` — inline availability check + better error toast
+- `src/pages/ClientDetail.tsx` — inline availability for profile keyword & ad-account assign keyword
+- `src/pages/AdAccountDetail.tsx` — inline availability for "Assign clients" keyword
+- (Optional) Small shared hook `src/hooks/useKeywordAvailability.ts` to avoid repeating the debounced-check logic in three places

@@ -28,6 +28,8 @@ import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientProfitTab } from "@/components/ClientProfitTab";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { ClientDateFilter, type ClientDateRange, type ClientDatePreset, getLocalTodayClient } from "@/components/ClientDateFilter";
+import { useKeywordAvailability } from "@/hooks/useKeywordAvailability";
+import { KeywordAvailabilityHint } from "@/components/KeywordAvailabilityHint";
 import { PlatformTransferDialog } from "@/components/PlatformTransferDialog";
 import { format, startOfDay, endOfDay } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
@@ -89,6 +91,17 @@ export default function ClientDetail() {
   const [newAdKeyword, setNewAdKeyword] = useState("");
   const [assigningSaving, setAssigningSaving] = useState(false);
   const [adAccountPopoverOpen, setAdAccountPopoverOpen] = useState(false);
+
+  const profileKeywordAvailability = useKeywordAvailability({
+    keyword: mappingKeyword,
+    selfClientId: userId ?? null,
+    enabled: !!userId,
+  });
+  const adAccountKeywordAvailability = useKeywordAvailability({
+    keyword: newAdKeyword,
+    selfClientId: userId ?? null,
+    enabled: !!userId,
+  });
 
   // Spend date filter
   const [spendDateRange, setSpendDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
@@ -572,7 +585,8 @@ export default function ClientDetail() {
                 <div className="space-y-2">
                   <Label htmlFor="mappingKeyword" className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
                   <Input id="mappingKeyword" value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. alpha" />
-                  <p className="text-xs text-muted-foreground">Used to attribute ad spend from shared accounts by matching campaign names.</p>
+                  <KeywordAvailabilityHint availability={profileKeywordAvailability} />
+                  <p className="text-xs text-muted-foreground">Used to attribute ad spend from shared accounts by matching campaign names. Must be unique across the agency.</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Assigned Manager</Label>
@@ -811,6 +825,7 @@ export default function ClientDetail() {
                 <div className="space-y-2 w-full sm:w-48">
                   <Label className="text-muted-foreground text-xs uppercase tracking-wide">Mapping Keyword</Label>
                   <Input value={newAdKeyword} onChange={(e) => setNewAdKeyword(e.target.value)} placeholder="e.g. alpha" />
+                  <KeywordAvailabilityHint availability={adAccountKeywordAvailability} />
                 </div>
                 <Button onClick={handleAssignAdAccount} disabled={assigningSaving || !selectedAdAccountIds.length} className="gap-2">
                   <Plus className="h-3.5 w-3.5" /> Assign {selectedAdAccountIds.length > 1 ? `(${selectedAdAccountIds.length})` : ""}

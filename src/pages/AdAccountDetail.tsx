@@ -18,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
+import { useKeywordAvailability } from "@/hooks/useKeywordAvailability";
+import { KeywordAvailabilityHint } from "@/components/KeywordAvailabilityHint";
 import { ArrowLeft, Save, Loader2, Settings2, Users, TrendingUp, ShieldAlert, X, UserPlus, Bell, CheckCheck, RefreshCw, DollarSign, CalendarDays, CreditCard, Pencil, Check, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -70,6 +72,12 @@ export default function AdAccountDetail() {
   const [newKeyword, setNewKeyword] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
+
+  const newKeywordAvailability = useKeywordAvailability({
+    keyword: newKeyword,
+    selfClientId: selectedClientIds.length === 1 ? selectedClientIds[0] : null,
+    enabled: true,
+  });
 
   // Spend filter
   const [spendPreset, setSpendPreset] = useState<ClientDatePreset>("today");
@@ -683,6 +691,7 @@ export default function AdAccountDetail() {
                   <div className="space-y-1.5 w-full sm:min-w-[160px] sm:w-auto">
                     <Label className="text-xs">Mapping Keyword</Label>
                     <Input className="h-9" placeholder="e.g. brandname" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} />
+                    <KeywordAvailabilityHint availability={newKeywordAvailability} />
                   </div>
                   <Button size="sm" className="h-9 w-full sm:w-auto" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
                     {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}

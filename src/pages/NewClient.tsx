@@ -12,6 +12,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useKeywordAvailability } from "@/hooks/useKeywordAvailability";
+import { KeywordAvailabilityHint } from "@/components/KeywordAvailabilityHint";
 
 interface ManagerOption { user_id: string; full_name: string; }
 
@@ -35,6 +37,11 @@ export default function NewClient() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  const keywordAvailability = useKeywordAvailability({
+    keyword: mappingKeyword,
+    selfClientId: null, // brand-new client
+    enabled: role === "client",
+  });
   useEffect(() => {
     const fetchManagers = async () => {
       const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "manager");
@@ -88,7 +95,11 @@ export default function NewClient() {
 
     setIsLoading(false);
     if (res.error || res.data?.error) {
-      toast({ title: "Error", description: res.data?.error || res.error?.message || "Failed to create account", variant: "destructive" });
+      const rawMsg = res.data?.error || res.error?.message || "Failed to create account";
+      const friendly = /Keyword .* is already used/i.test(rawMsg)
+        ? rawMsg
+        : rawMsg;
+      toast({ title: "Error", description: friendly, variant: "destructive" });
     } else {
       toast({ title: "Success", description: `${role === "manager" ? "Manager" : "Client"} ${fullName} created` });
       navigate("/admin");
@@ -161,7 +172,8 @@ export default function NewClient() {
                  <div className="space-y-2">
                    <Label>Mapping Keyword</Label>
                   <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
-                  <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
+                  <KeywordAvailabilityHint availability={keywordAvailability} />
+                  <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client. Each keyword must be unique across the agency.</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-sm font-medium">Platform Rates (USD → BDT)</Label>
