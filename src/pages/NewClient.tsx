@@ -172,7 +172,8 @@ export default function NewClient() {
                  <div className="space-y-2">
                    <Label>Mapping Keyword</Label>
                   <Input value={mappingKeyword} onChange={(e) => setMappingKeyword(e.target.value)} placeholder="e.g. CL_Rahim (for auto campaign mapping)" />
-                  <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client</p>
+                  <KeywordAvailabilityHint availability={keywordAvailability} />
+                  <p className="text-xs text-muted-foreground">Campaigns containing this keyword will auto-assign to this client. Each keyword must be unique across the agency.</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-sm font-medium">Platform Rates (USD → BDT)</Label>
