@@ -691,6 +691,7 @@ export default function AdAccountDetail() {
                   <div className="space-y-1.5 w-full sm:min-w-[160px] sm:w-auto">
                     <Label className="text-xs">Mapping Keyword</Label>
                     <Input className="h-9" placeholder="e.g. brandname" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} />
+                    <KeywordAvailabilityHint availability={newKeywordAvailability} />
                   </div>
                   <Button size="sm" className="h-9 w-full sm:w-auto" disabled={assignSaving || !selectedClientIds.length || !newKeyword.trim()} onClick={addAssignment}>
                     {assignSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
