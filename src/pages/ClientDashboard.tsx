@@ -323,7 +323,7 @@ export default function ClientDashboard() {
                 </>
               ) : (
                 <>
-                  <p className="text-2xl md:text-4xl font-bold font-mono text-primary-foreground count-up">
+                  <p className={cn("text-2xl md:text-4xl font-bold font-mono text-primary-foreground", anim("count-up"))}>
                     {fmt(balance)}
                   </p>
                   <p className="text-sm font-mono text-primary-foreground/70 mt-0.5">
