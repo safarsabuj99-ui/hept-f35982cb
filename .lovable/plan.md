@@ -1,81 +1,96 @@
-# Fix global search popup — match client-side balance display rule
+# Make the global client search a real command center
 
-## The bug
+## Goal
 
-The Cmd+K **client search popup** (top of `/admin` dashboard) labels every balance as `BDT` and prints the raw USD number. So a $155 USD credit shows as `155 BDT`, and a $10 USD debt shows as `−10 BDT`. Both the unit and the magnitude are wrong for negatives.
+Turn the Cmd+K popup from a list-with-balance into a fast operational tool an agency admin can use to: find any client by anything, see who needs action right now, and jump straight to the right page — without ever leaving the keyboard.
 
-The rest of the platform (Client List, Client Detail, Client Dashboard) follows one consistent rule:
+## What's there today
 
-- **Positive balance** → USD: `$X.XX` (this IS the real stored value, no conversion)
-- **Negative balance (debt)** → BDT: `−৳Y.YY`, converted from USD using each client's **per-platform billing rate** in `pricing_config` (Meta / TikTok / Google rates, defaulting to 120 if missing)
+- Three sections: Top Balances, Needs Attention, All Clients.
+- Search across name / email / business.
+- Balance shown with the correct USD/BDT rule (just fixed).
 
-The search popup is the only place violating this rule.
+## What's missing (the actual gaps)
 
-## Why the conversion needs per-platform rates
+1. Search is too narrow — admins also know clients by **phone number**, **mapping keyword**, and **rounded balance**.
+2. No status signals — a client whose campaigns are **guard-paused** (5 right now), or who has a **pending payment request**, looks identical to a healthy client.
+3. No quick actions — clicking always goes to the client detail page; there's no shortcut to wallet, campaigns, spend, or payment requests.
+4. No collection priority — "Needs Attention" lists negatives alphabetically instead of by debt size.
+5. No portfolio summary — admin can't see total credit / total debt at a glance.
+6. No memory of recent work — frequently-opened clients aren't surfaced.
 
-A client can owe debt across multiple platforms simultaneously, and each platform may have a different rate (e.g. Meta 122, TikTok 120, Google 125). Total BDT debt is:
+## The plan — six concrete upgrades
 
-```text
-bdt_due = Σ over [meta, tiktok, google] of  max(0, -platform_balance[p]) * rate[p]
-```
+### 1. Multi-field, fuzzy search
 
-This is exactly what `ClientList.tsx` already computes (lines 162–181 of that file) using the shared helper `getPlatformRates` from `src/lib/pricing.ts`. The popup must use the same formula — not a single fallback rate — otherwise BDT debt totals will silently differ between the popup and the Client List page for the same client.
+Extend the per-row `searchValue` so cmdk can match by:
+- name, business, email (existing)
+- **phone** (last 4 digits or full)
+- **mapping keyword** (e.g. typing `MUSA` matches the mapping)
+- **rounded balance** as a string (typing `155` finds the $155 client; typing `1500` finds the ৳1,500 debt)
 
-## Root cause
+Requires adding `phone`, `mapping_keyword` to the RPC payload. Search stays fully client-side, so no perf cost.
 
-The dashboard RPC `get_admin_dashboard_summary` returns each client's **total** USD balance but does **not** return per-platform balances. So the popup currently has no way to do the per-platform BDT conversion correctly. It falls back to printing the raw USD number with a wrong "BDT" label.
+### 2. Live status badges on each row
 
-## Fix
+Right after the client name, render at most **two** tiny pill badges so urgent state is visible at a glance:
 
-### 1. Extend the RPC to return per-platform balances
+- `Paused` (red) — when `guard_paused_at IS NOT NULL` or `system_paused_campaigns` is non-empty.
+- `Pending Pay` (amber) — when the client has 1+ pending payment requests, with the count.
+- `Inactive` (gray) — when `is_active = false`.
 
-In `get_admin_dashboard_summary` (latest migration), the `client_balances` CTE only sums to a single `balance`. Add a sibling JSONB aggregation `platform_balances` keyed by platform:
+The RPC already groups admin data; we add three lightweight CTEs to attach `is_paused`, `pending_payments`, `is_active` per client. Same dataset, no extra round-trips.
 
-```text
-clients: [{
-  user_id, full_name, email, business_name, pricing_config,
-  balance,                     // total USD (unchanged)
-  platform_balances: {         // NEW
-    meta: -3.21,
-    tiktok: 0,
-    google: 1.10
-  }
-}]
-```
+### 3. Smart sorting in "Needs Attention"
 
-### 2. Pipe the new field through the hook
+Sort by **BDT debt magnitude descending** (using the per-platform conversion already wired up), so the largest debts surface first — that's what an admin actually wants to chase. Show a header subtitle like `Needs Attention · 6 · ৳12,430 due` with the org-wide debt total computed once.
 
-`useAdminDashboardData.ts`: add `platform_balances` to the typed `ClientWithBalance` shape and to the mapping function.
+### 4. Top-of-popup KPI strip
 
-`QuickActions.tsx` and `ClientSearchCommand.tsx`: widen the `ClientItem` interface to include `pricing_config` and `platform_balances`.
-
-### 3. Render per the canonical rule in the popup
-
-In `ClientSearchCommand.tsx`, replace the current single "BDT" block with the same logic ClientList uses, importing `getPlatformRates` from `@/lib/pricing`:
+A single thin row above the groups:
 
 ```text
-if balance >= 0:
-   render  $X.XX            (success color, USD)
-else:
-   rates  = getPlatformRates(client.pricing_config)
-   bdtDue = Σ p in [meta,tiktok,google]:
-              max(0, -client.platform_balances[p]) * rates[p]
-   render  −৳Y.YY            (destructive color, BDT)
+[ +$2,143.10 USD credit ]  [ −৳18,420 BDT due ]  [ 5 paused ]  [ 2 pending pay ]
 ```
 
-Sorting in the "Top Balances" / "Needs Attention" groups stays based on the USD `balance` field — the magnitude ordering is identical, no behaviour change there.
+Each chip is clickable and routes to the relevant page (wallet inventory, payment requests, attention required). Computed from the `clients` array we already have plus the new status fields — zero new queries.
 
-That's the entire fix. No animation changes, no realtime changes, no new tooltips, no extra widgets. Just bring this one popup in line with how every other balance is displayed across the platform.
+### 5. Quick-action menu per row (keyboard-driven)
+
+Right side of each row gets a chevron. Pressing `→` (or hovering) reveals four sub-actions on that client:
+
+- `Open dashboard` (default Enter behavior, unchanged)
+- `Wallet` → `/admin/clients/:id?tab=wallet`
+- `Campaigns` → `/admin/clients/:id?tab=campaigns`
+- `Payment requests` → `/admin/payment-requests?client=:id`
+
+Implemented with a nested cmdk view (toggle via state when arrow-right is pressed on a focused row). Pure client-side, ~30 lines.
+
+### 6. "Recent" section + per-user persistence
+
+Track the last 5 clients the admin opened in `localStorage` (key: `hept_recent_clients_<userId>`). Show them as the **first** group above Top Balances when the search input is empty, with a `Clear` action. This makes the popup match how admins actually work — they reopen the same 3–4 clients all day.
+
+## Out of scope (explicit)
+
+- No new realtime channels.
+- No new pages or routes.
+- No animation or visual redesign — same look, just more useful.
+- No changes to AdminDashboard KPIs, ClientList, or any unrelated component.
 
 ## Files touched
 
-- `supabase/migrations/<new>.sql` — extend `get_admin_dashboard_summary` to also emit `platform_balances` per client.
-- `src/hooks/useAdminDashboardData.ts` — surface `platform_balances` in the typed result.
-- `src/components/dashboard/QuickActions.tsx` — widen `ClientItem` type.
-- `src/components/dashboard/ClientSearchCommand.tsx` — use the USD-for-credit / BDT-for-debt rule via `getPlatformRates`.
+- `supabase/migrations/<new>.sql` — extend `get_admin_dashboard_summary` to include `phone`, `mapping_keyword`, `is_active`, `is_paused`, `pending_payments` per client.
+- `src/hooks/useAdminDashboardData.ts` — type and pass-through the new fields.
+- `src/components/dashboard/QuickActions.tsx` — widen `ClientItem` interface.
+- `src/components/dashboard/ClientSearchCommand.tsx` — KPI strip, status badges, smart sort, multi-field search, quick-action submenu, recent clients (localStorage).
 
-## Out of scope
+## Why this matters for an agency
 
-- No change to dashboard KPI cards (already correct).
-- No change to ClientList, ClientDashboard, or any other consumer.
-- No change to realtime subscriptions, sort order, or animations.
+Today the popup answers one question: "where's this client?" After this, it answers four:
+
+1. Where's this client? (search)
+2. Who do I owe a callback / collection to right now? (KPI strip + sorted attention)
+3. What state are they in? (badges)
+4. Take me directly to where I work on them. (quick actions + recents)
+
+That's the difference between a search box and a command center.
