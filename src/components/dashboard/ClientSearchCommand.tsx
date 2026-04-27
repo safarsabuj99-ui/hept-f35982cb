@@ -37,6 +37,8 @@ import { getPlatformRates } from "@/lib/pricing";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { createPortal } from "react-dom";
+import { registerMobilePill, useIsTopMobilePill } from "@/components/ui/mobile-search-pill";
 
 interface ClientItem {
   user_id: string;
