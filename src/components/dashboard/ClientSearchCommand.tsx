@@ -865,17 +865,24 @@ function MobileGlobalSearchPill({ onOpen }: { onOpen: () => void }) {
     };
   }, []);
 
+  // Auto-hide on scroll-down, reveal on scroll-up. Stays put while keyboard up.
+  const hiddenByScroll = useHideOnScroll({ enabled: keyboardOffset === 0 });
+
   if (!isTop) return null;
   if (typeof document === "undefined") return null;
 
   const node = (
     <div
-      className="fixed left-0 right-0 z-40 px-4 pointer-events-none"
+      className={cn(
+        "fixed left-0 right-0 z-40 px-4 pointer-events-none",
+        hiddenByScroll ? "translate-y-[140%] opacity-0" : "translate-y-0 opacity-100",
+      )}
       style={{
         bottom: keyboardOffset > 0
           ? `calc(${keyboardOffset}px + 0.5rem)`
           : `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-offset, 1.25rem))`,
-        transition: "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1)",
+        transition:
+          "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1), transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 250ms ease-out",
       }}
     >
       <div className="mx-auto w-full max-w-sm pointer-events-auto">
