@@ -433,7 +433,7 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
 
   return (
     <>
-      {!isHotkeyOnly && (
+      {!isHotkeyOnly && !isMobile && (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -454,6 +454,11 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
             </kbd>
           </div>
         </button>
+      )}
+
+      {/* Mobile: persistent One UI 8.5-style bottom pill trigger (only for "full" mode). */}
+      {!isHotkeyOnly && isMobile && (
+        <MobileGlobalSearchPill onOpen={() => setOpen(true)} />
       )}
 
       <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
