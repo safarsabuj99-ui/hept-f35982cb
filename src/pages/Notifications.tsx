@@ -9,7 +9,7 @@ import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Bell, Check, CheckCheck, Trash2, Shield, CreditCard, Megaphone,
-  Settings2, AlertTriangle, Search, X, Pin, Clock, Archive, Sparkles
+  Settings2, AlertTriangle, Search, Pin, Clock, Archive, Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
