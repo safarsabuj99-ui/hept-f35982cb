@@ -161,6 +161,7 @@ function pushRecent(userId: string | null | undefined, clientId: string) {
 export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchCommandProps) {
   const [open, setOpen] = useState(false);
   const isHotkeyOnly = mode === "hotkey-only";
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [activeMenuFor, setActiveMenuFor] = useState<string | null>(null);
   const [recents, setRecents] = useState<string[]>([]);
@@ -455,11 +456,31 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
         </button>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="overflow-hidden p-0 max-w-xl gap-0 rounded-2xl border-border/40 bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]">
-          <VisuallyHidden>
-            <DialogTitle>Search clients</DialogTitle>
-          </VisuallyHidden>
+      <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+          />
+          <DialogPrimitive.Content
+            onOpenAutoFocus={(e) => {
+              // On mobile we focus the bottom-pinned input ourselves; on
+              // desktop cmdk's CommandInput handles focus.
+              if (isMobile) e.preventDefault();
+            }}
+            className={cn(
+              "fixed z-50 outline-none overflow-hidden border bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)] border-border/40",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              isMobile
+                ? // One UI 8.5 bottom sheet — anchored to bottom, list flows upward.
+                  "inset-x-2 bottom-2 rounded-3xl flex flex-col-reverse data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2"
+                : // Desktop centered command palette (unchanged).
+                  "left-[50%] top-[50%] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            )}
+            style={isMobile ? { paddingBottom: "env(safe-area-inset-bottom, 0px)" } : undefined}
+          >
+            <VisuallyHidden>
+              <DialogPrimitive.Title>Search clients</DialogPrimitive.Title>
+            </VisuallyHidden>
 
           <div
             aria-hidden
