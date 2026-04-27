@@ -1,47 +1,43 @@
-# Make the Global Search Match the One UI 8.5 Pill Style
+# Hide Bottom Search Pill on Scroll Down, Reveal on Scroll Up
 
-The "Search clients…" bar highlighted in red on the admin dashboard is the **global ⌘K search trigger** (`ClientSearchCommand`). Unlike the other 9 page search bars, this one was never migrated to the new `MobileSearchPill` primitive, so on mobile it still shows as a full-width rectangular box inline in the page instead of the pill at the bottom.
+Many pages (Clients, Ad Accounts, Payments, Orders, etc.) have filter rows of buttons just above the content area. Right now the persistent bottom search pill can sit on top of those buttons while the user is scrolling through long lists. This makes it harder to scan the list and tap filters.
 
-This plan fixes that and also tunes the bottom pill's position and width per your feedback ("a little more compact, a little lower").
+We'll add a smooth auto-hide behavior, exactly like One UI 8.5 / iOS Safari toolbars:
 
-## What changes (user-facing)
-
-On mobile (<768px), on the admin dashboard (and anywhere else `ClientSearchCommand` is rendered):
-
-- The inline rectangular "Search clients…" bar disappears from the page body.
-- A glassmorphic **pill** appears pinned near the bottom of the screen, matching the same pill used everywhere else (Clients, Ad Accounts, Payments, etc.).
-- Tapping the pill expands the global search results upward (clients, navigation actions, ⌘K shortcuts) — same behavior as the current desktop ⌘K modal, just bottom-anchored.
-- The pill is slightly **narrower** (more inset from screen edges) and sits **a bit lower** for better one-hand thumb reach.
-
-On desktop (≥768px): no change — the inline trigger button with the ⌘K hint stays exactly as today.
+- Scroll **down** → the pill **slides down off-screen and fades out**.
+- Scroll **up** (even a small nudge) → the pill **slides back up and fades in**.
+- At the top of the page → pill is always visible.
+- While the on-screen keyboard is open (user actively typing) → pill stays visible regardless of scroll, so search is never hijacked.
+- When search results are expanded → pill stays visible regardless of scroll.
 
 ## Technical changes
 
-**1. `src/components/dashboard/ClientSearchCommand.tsx`**
-- Detect mobile via `useIsMobile()`.
-- On mobile, **hide the inline trigger button** (lines 437-456) entirely — render `null` in its place so the dashboard layout collapses naturally.
-- On mobile, **always render** a persistent bottom pill (via `createPortal` to `document.body`) using the same visual treatment as `MobileSearchPill`: `rounded-full h-12`, glassmorphic background, soft shadow, safe-area aware, keyboard-aware via `visualViewport`.
-- The pill's `<input>` controls a local `query` state. Typing immediately expands an upward-stacking results panel above it that reuses the existing `Command`/`CommandList`/`renderClient` rendering already in the file (no duplicate logic).
-- Keep the existing `DialogPrimitive` modal path for **desktop only** (so ⌘K still opens the centered command palette on desktop).
-- Keep `mode="hotkey-only"` working: in that mode, no inline trigger AND no bottom pill — only the ⌘K shortcut wires through (so the `GlobalSearchMount` doesn't double up).
+**1. New shared hook: `src/hooks/use-hide-on-scroll.ts`**
+- Tracks `window.scrollY` via a `requestAnimationFrame`-throttled `scroll` listener (passive + capture phase, so nested scroll containers also trigger it).
+- Computes a delta from the last recorded position; if downward delta > 8px → `hidden = true`. If upward delta > 8px → `hidden = false`.
+- Always returns `hidden = false` while `scrollY <= 64` (top-of-page guard).
+- Accepts `enabled`, `threshold`, and `topGuard` options.
 
-**2. `src/components/ui/mobile-search-pill.tsx` — small tuning**
-- Reduce pill height from `h-14` to `h-12` (more compact, matches One UI 8.5 proportions).
-- Tighten side inset from `px-3` to `px-4` on the wrapper and reduce `max-w-md` to `max-w-sm` so the pill is visibly narrower on phones.
-- Lower the resting position: change the fallback bottom offset from `var(--mobile-bottom-offset, 4.5rem)` to `var(--mobile-bottom-offset, 1.25rem)` (since this app has no mobile bottom nav, 4.5rem was lifting the pill too high). Keyboard-aware behavior is unchanged.
+**2. `src/components/ui/mobile-search-pill.tsx`**
+- Call `useHideOnScroll({ enabled: !expanded && keyboardOffset === 0 })`.
+- Apply translate + opacity transition classes to the outer fixed wrapper:
+  ```
+  transition-[transform,opacity] duration-300 ease-out
+  hidden ? "translate-y-[140%] opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+  ```
+- The existing `bottom` style transition is preserved for keyboard offset.
 
-**3. Single-instance registry interop**
-- The new bottom pill inside `ClientSearchCommand` uses the same `pillCounter`/`activeIds` registry exported from `mobile-search-pill.tsx` (export it) so that when a page like `ClientList` mounts its own `MobileSearchPill`, only the most-recently mounted pill is visible — preventing two pills stacking on screens that have both global search and a page-level search.
-
-## Files touched
-
-- `src/components/dashboard/ClientSearchCommand.tsx` — mobile branch: hide inline trigger, render bottom pill + upward results panel via portal.
-- `src/components/ui/mobile-search-pill.tsx` — export registry helpers; shrink to `h-12`, `max-w-sm`, lower default bottom offset to `1.25rem`.
-
-No other pages need changes — the 9 already-migrated pages will automatically pick up the slimmer/lower pill styling.
+**3. `src/components/dashboard/ClientSearchCommand.tsx` — `MobileGlobalSearchPill`**
+- Same hook + same translate/opacity classes on the fixed wrapper, so the global search pill on the admin dashboard hides/reveals identically.
 
 ## Out of scope
 
-- Desktop layout and ⌘K modal behavior (unchanged).
-- Other search bars on individual detail pages already work correctly via `MobileSearchPill`.
-- No database, RLS, or backend changes.
+- Desktop layout (no change).
+- The expanded results panel — when the user is actively searching/typing, the pill stays put.
+- No changes to existing keyboard-offset / safe-area / single-instance-registry logic.
+
+## Files touched
+
+- `src/hooks/use-hide-on-scroll.ts` *(new)*
+- `src/components/ui/mobile-search-pill.tsx`
+- `src/components/dashboard/ClientSearchCommand.tsx`
