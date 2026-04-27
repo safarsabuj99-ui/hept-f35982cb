@@ -39,6 +39,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { registerMobilePill, useIsTopMobilePill } from "@/components/ui/mobile-search-pill";
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 
 interface ClientItem {
   user_id: string;
