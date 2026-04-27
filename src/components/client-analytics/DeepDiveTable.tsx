@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpDown, ArrowUp, ArrowDown, Loader2, Power, Search, Filter, X, LayoutGrid, Star, GripVertical } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -1124,15 +1125,14 @@ export function DeepDiveTable({
     <>
       {/* Premium Glassmorphic Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4 p-2 rounded-xl bg-muted/30 backdrop-blur-sm border border-border/40">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-          <Input
-            placeholder="Search campaigns..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg focus-visible:ring-primary/30 placeholder:text-muted-foreground/40"
-          />
-        </div>
+        <MobileSearchPill
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search campaigns..."
+          className="flex-1"
+          inputClassName="h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg focus-visible:ring-primary/30 placeholder:text-muted-foreground/40"
+          label="Search campaigns"
+        />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-[150px] h-10 sm:h-9 text-sm bg-background/60 border-border/40 rounded-lg">
             <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/50" />

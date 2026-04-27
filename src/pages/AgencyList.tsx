@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
@@ -118,10 +119,13 @@ export default function AgencyList() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center animate-slide-up-fade" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search agencies..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
+        <MobileSearchPill
+          value={search}
+          onChange={setSearch}
+          placeholder="Search agencies..."
+          className="flex-1 min-w-[200px] max-w-xs"
+          label="Search agencies"
+        />
         <div className="flex gap-1.5">
           {statuses.map((s) => (
             <Button key={s} variant={statusFilter === s ? "default" : "outline"} size="sm" className="capitalize text-xs" onClick={() => setStatusFilter(s)}>

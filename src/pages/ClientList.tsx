@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Search, Users, ChevronRight, Plus, PlusCircle, TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Save } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
 import { TablePagination } from "@/components/TablePagination";
@@ -314,15 +315,13 @@ export default function ClientList() {
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, business, or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <MobileSearchPill
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name, business, or email…"
+          className="w-full sm:max-w-sm"
+          label="Search clients"
+        />
         <Button variant="outline" size="sm" className="gap-1.5 text-xs shrink-0 self-start" onClick={saveDefaultSort}>
           <Save className="h-3 w-3" /> Set Default Sort
         </Button>

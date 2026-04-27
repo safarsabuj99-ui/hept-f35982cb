@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -675,15 +676,13 @@ export default function AdAccounts() {
             <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by account name, ID, platform, or instance name..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            className="pl-9 w-full sm:max-w-md"
-          />
-        </div>
+        <MobileSearchPill
+          value={searchQuery}
+          onChange={(v) => { setSearchQuery(v); setCurrentPage(1); }}
+          placeholder="Search by account name, ID, platform, or instance name..."
+          className="w-full sm:max-w-md"
+          label="Search ad accounts"
+        />
       </div>
 
       {/* Content */}

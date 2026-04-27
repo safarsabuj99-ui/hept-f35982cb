@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -676,15 +677,13 @@ export default function TeamMemberDetail() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="relative w-56">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search clients..."
-                      className="pl-9"
-                      value={clientSearch}
-                      onChange={(e) => { setClientSearch(e.target.value); setClientPage(1); }}
-                    />
-                  </div>
+                  <MobileSearchPill
+                    value={clientSearch}
+                    onChange={(v) => { setClientSearch(v); setClientPage(1); }}
+                    placeholder="Search clients..."
+                    className="w-56"
+                    label="Search clients"
+                  />
                   <Button onClick={openAssignDialog}>
                     <UserPlus className="mr-2 h-4 w-4" />
                     Assign Client
@@ -797,13 +796,12 @@ export default function TeamMemberDetail() {
               <DialogHeader>
                 <DialogTitle>Assign Clients</DialogTitle>
               </DialogHeader>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search unassigned clients..."
-                  className="pl-9"
+              <div className="mb-3">
+                <MobileSearchPill
                   value={assignSearch}
-                  onChange={(e) => setAssignSearch(e.target.value)}
+                  onChange={setAssignSearch}
+                  placeholder="Search unassigned clients..."
+                  label="Search unassigned clients"
                 />
               </div>
               {loadingUnassigned ? (

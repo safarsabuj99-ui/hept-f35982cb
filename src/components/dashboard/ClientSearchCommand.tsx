@@ -31,10 +31,12 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { getPlatformRates } from "@/lib/pricing";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 interface ClientItem {
   user_id: string;
@@ -159,6 +161,7 @@ function pushRecent(userId: string | null | undefined, clientId: string) {
 export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchCommandProps) {
   const [open, setOpen] = useState(false);
   const isHotkeyOnly = mode === "hotkey-only";
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [activeMenuFor, setActiveMenuFor] = useState<string | null>(null);
   const [recents, setRecents] = useState<string[]>([]);
@@ -453,11 +456,31 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
         </button>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="overflow-hidden p-0 max-w-xl gap-0 rounded-2xl border-border/40 bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]">
-          <VisuallyHidden>
-            <DialogTitle>Search clients</DialogTitle>
-          </VisuallyHidden>
+      <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+          />
+          <DialogPrimitive.Content
+            onOpenAutoFocus={(e) => {
+              // On mobile we focus the bottom-pinned input ourselves; on
+              // desktop cmdk's CommandInput handles focus.
+              if (isMobile) e.preventDefault();
+            }}
+            className={cn(
+              "fixed z-50 outline-none overflow-hidden border bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)] border-border/40 max-h-[92vh]",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              isMobile
+                ? // One UI 8.5 bottom sheet — anchored to bottom; the Command's flex-col-reverse pushes the search input to the bottom and stacks the list upward.
+                  "inset-x-2 bottom-2 rounded-3xl data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2"
+                : // Desktop centered command palette (unchanged).
+                  "left-[50%] top-[50%] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            )}
+            style={isMobile ? { paddingBottom: "env(safe-area-inset-bottom, 0px)" } : undefined}
+          >
+            <VisuallyHidden>
+              <DialogPrimitive.Title>Search clients</DialogPrimitive.Title>
+            </VisuallyHidden>
 
           <div
             aria-hidden
@@ -474,15 +497,31 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
           />
 
           <Command
-            className="bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2"
+            className={cn(
+              "bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2",
+              isMobile && "flex flex-col-reverse max-h-[88vh]",
+            )}
           >
-            <div className="relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
-              <div className="flex items-center px-4" cmdk-input-wrapper="">
+            <div
+              className={cn(
+                "relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5",
+                // On mobile this row sits at the BOTTOM (because of flex-col-reverse on
+                // the parent Command). Style it as a One UI 8.5 pill, lifted off the list.
+                isMobile &&
+                  "mx-2 mb-1 mt-2 rounded-full border border-border/60 bg-card/95 backdrop-blur-2xl shadow-[0_-8px_32px_-8px_hsl(var(--primary)/0.4)] from-transparent via-transparent to-transparent",
+              )}
+            >
+              <div
+                className={cn("flex items-center", isMobile ? "px-4" : "px-4")}
+                cmdk-input-wrapper=""
+              >
                 <Search className="mr-3 h-4 w-4 shrink-0 text-primary/70" />
                 <CommandInput
                   value={query}
                   onValueChange={setQuery}
-                  placeholder="Name, phone, business, mapping, amount…"
+                  placeholder={
+                    isMobile ? "Search clients…" : "Name, phone, business, mapping, amount…"
+                  }
                   className="flex h-14 w-full bg-transparent py-3 text-base font-medium outline-none placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic disabled:cursor-not-allowed disabled:opacity-50 border-0"
                 />
                 <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -494,9 +533,31 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
                   <kbd className="hidden sm:inline-flex h-5 select-none items-center rounded border border-border/60 bg-muted/40 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
                     ESC
                   </kbd>
+                  {isMobile && query && (
+                    <button
+                      type="button"
+                      aria-label="Clear"
+                      onClick={() => setQuery("")}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {isMobile && !query && (
+                    <button
+                      type="button"
+                      aria-label="Close"
+                      onClick={() => setOpen(false)}
+                      className="rounded-full px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+              {!isMobile && (
+                <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+              )}
             </div>
 
             {/* Portfolio KPI strip — only when not searching */}
@@ -697,8 +758,9 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
               </div>
             </div>
           </Command>
-        </DialogContent>
-      </Dialog>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </>
   );
 }
