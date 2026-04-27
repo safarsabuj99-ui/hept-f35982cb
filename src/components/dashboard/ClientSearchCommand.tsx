@@ -720,8 +720,9 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
               </div>
             </div>
           </Command>
-        </DialogContent>
-      </Dialog>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </>
   );
 }
