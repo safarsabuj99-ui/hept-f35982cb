@@ -6,6 +6,8 @@ interface ClientItem {
   email?: string;
   business_name?: string | null;
   balance: number;
+  pricing_config?: any;
+  platform_balances?: Record<string, number>;
 }
 
 interface QuickActionsProps {
