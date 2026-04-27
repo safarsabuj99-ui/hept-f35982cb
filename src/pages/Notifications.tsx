@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Bell, Check, CheckCheck, Trash2, Shield, CreditCard, Megaphone,
@@ -175,20 +176,14 @@ export default function Notifications() {
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search notifications..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-sm"
-          />
-          {search && (
-            <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setSearch("")}>
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          )}
-        </div>
+        <MobileSearchPill
+          value={search}
+          onChange={setSearch}
+          placeholder="Search notifications..."
+          className="flex-1 min-w-[200px]"
+          inputClassName="h-9 text-sm"
+          label="Search notifications"
+        />
       </div>
 
       {/* Sections */}

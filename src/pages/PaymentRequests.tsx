@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/TablePagination";
@@ -383,20 +384,14 @@ export default function PaymentRequests() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-          <Input
-            placeholder="Search client, TXN ID, method..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); setDepositPage(1); }}
-            className="pl-9 h-9 text-sm"
-          />
-          {searchQuery && (
-            <button onClick={() => { setSearchQuery(""); setCurrentPage(1); setDepositPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2">
-              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-            </button>
-          )}
-        </div>
+        <MobileSearchPill
+          value={searchQuery}
+          onChange={(v) => { setSearchQuery(v); setCurrentPage(1); setDepositPage(1); }}
+          placeholder="Search client, TXN ID, method..."
+          className="flex-1"
+          inputClassName="h-9 text-sm"
+          label="Search payments"
+        />
         <DateRangeFilter onRangeChange={handleDateChange} />
       </div>
 

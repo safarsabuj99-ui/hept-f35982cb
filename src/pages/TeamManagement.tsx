@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -232,15 +233,13 @@ export default function TeamManagement() {
                 {managers.length} manager{managers.length !== 1 ? "s" : ""} in your team
               </CardDescription>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or email..."
-                className="pl-9"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              />
-            </div>
+            <MobileSearchPill
+              value={searchQuery}
+              onChange={(v) => { setSearchQuery(v); setCurrentPage(1); }}
+              placeholder="Search by name or email..."
+              className="w-full sm:w-64"
+              label="Search team"
+            />
           </div>
         </CardHeader>
         <CardContent>

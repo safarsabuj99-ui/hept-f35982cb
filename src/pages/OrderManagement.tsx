@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package, Search, X as XIcon, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
@@ -244,20 +245,13 @@ export default function OrderManagement() {
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
-        <Input
-          placeholder="Search client, request title, platform..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 h-9 text-sm"
-        />
-        {searchQuery && (
-          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-            <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
-      </div>
+      <MobileSearchPill
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search client, request title, platform..."
+        inputClassName="h-9 text-sm"
+        label="Search requests"
+      />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
