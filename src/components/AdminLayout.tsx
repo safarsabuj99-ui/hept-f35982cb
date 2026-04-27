@@ -9,6 +9,7 @@ import {
   UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon, CreditCard, LifeBuoy,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearchMount } from "@/components/GlobalSearchMount";
 import { useBranding } from "@/hooks/useBranding";
 import { useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -264,6 +265,7 @@ export function AdminLayout() {
               <Outlet />
             </div>
           </main>
+          <GlobalSearchMount />
         </div>
       </div>
     </SidebarProvider>

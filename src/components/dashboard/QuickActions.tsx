@@ -25,7 +25,7 @@ export function QuickActions({ clients }: QuickActionsProps) {
       className="glass-card p-3 px-4 opacity-0 animate-slide-up-fade"
       style={{ animationDelay: "300ms", animationFillMode: "forwards" }}
     >
-      <ClientSearchCommand clients={clients} />
+      <ClientSearchCommand clients={clients} mode="full" />
     </div>
   );
 }
