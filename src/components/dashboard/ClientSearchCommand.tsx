@@ -53,6 +53,13 @@ interface ClientItem {
 
 interface ClientSearchCommandProps {
   clients: ClientItem[];
+  /**
+   * "full" (default): visible trigger button + dialog. No global ⌘K listener
+   *   (the layout-mounted instance owns the hotkey to avoid double-opens).
+   * "hotkey-only": no visible trigger, only the dialog + ⌘K / Ctrl+K listener.
+   *   Use this in layouts so the popup is reachable from every page.
+   */
+  mode?: "full" | "hotkey-only";
 }
 
 const AVATAR_GRADIENTS = [
@@ -149,8 +156,9 @@ function pushRecent(userId: string | null | undefined, clientId: string) {
   }
 }
 
-export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
+export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchCommandProps) {
   const [open, setOpen] = useState(false);
+  const isHotkeyOnly = mode === "hotkey-only";
   const [query, setQuery] = useState("");
   const [activeMenuFor, setActiveMenuFor] = useState<string | null>(null);
   const [recents, setRecents] = useState<string[]>([]);
@@ -167,7 +175,11 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
     }
   }, [open, userId]);
 
+  // Only the layout-mounted ("hotkey-only") instance listens for ⌘K to avoid
+  // double-toggling when both the dashboard's visible bar and the layout mount
+  // are present at the same time.
   useEffect(() => {
+    if (!isHotkeyOnly) return;
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -176,7 +188,7 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [isHotkeyOnly]);
 
   // Pre-compute heavy fields once per client
   type EnrichedClient = ClientItem & { _bdtDebt: number; _searchValue: string };
@@ -418,26 +430,28 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="group relative flex items-center w-full md:max-w-md h-11 px-4 rounded-xl border border-border/50 bg-gradient-to-br from-card/60 to-card/30 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.35)]"
-      >
-        <Search className="h-4 w-4 text-muted-foreground mr-2.5 transition-colors group-hover:text-primary" />
-        <span className="text-sm text-muted-foreground/80 truncate">
-          <span className="hidden sm:inline">Search clients by name, phone, business…</span>
-          <span className="sm:hidden">Search clients…</span>
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="relative hidden sm:flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+      {!isHotkeyOnly && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="group relative flex items-center w-full md:max-w-md h-11 px-4 rounded-xl border border-border/50 bg-gradient-to-br from-card/60 to-card/30 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_24px_-6px_hsl(var(--primary)/0.35)]"
+        >
+          <Search className="h-4 w-4 text-muted-foreground mr-2.5 transition-colors group-hover:text-primary" />
+          <span className="text-sm text-muted-foreground/80 truncate">
+            <span className="hidden sm:inline">Search clients by name, phone, business…</span>
+            <span className="sm:hidden">Search clients…</span>
           </span>
-          <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-border/60 bg-muted/60 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </div>
-      </button>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="relative hidden sm:flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+            </span>
+            <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-border/60 bg-muted/60 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </div>
+        </button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="overflow-hidden p-0 max-w-xl gap-0 rounded-2xl border-border/40 bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]">
