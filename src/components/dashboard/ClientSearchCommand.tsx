@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -12,6 +12,15 @@ import {
   Star,
   AlertTriangle,
   CornerDownLeft,
+  Pause,
+  Clock,
+  EyeOff,
+  Wallet,
+  CreditCard,
+  History,
+  X,
+  ChevronRight,
+  Banknote,
 } from "lucide-react";
 import {
   Command,
@@ -25,6 +34,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { getPlatformRates } from "@/lib/pricing";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ClientItem {
   user_id: string;
@@ -34,13 +44,17 @@ interface ClientItem {
   balance: number;
   pricing_config?: any;
   platform_balances?: Record<string, number>;
+  phone?: string | null;
+  mapping_keyword?: string | null;
+  is_active?: boolean;
+  is_paused?: boolean;
+  pending_payments?: number;
 }
 
 interface ClientSearchCommandProps {
   clients: ClientItem[];
 }
 
-// 8 deterministic gradient pairs for avatars — semantic-feeling but unique per client
 const AVATAR_GRADIENTS = [
   "from-blue-500/80 to-indigo-600/80",
   "from-violet-500/80 to-purple-600/80",
@@ -83,12 +97,15 @@ function formatMoney(n: number): string {
   });
 }
 
+function formatCompactBdt(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 100000) return `৳${(abs / 1000).toFixed(0)}k`;
+  if (abs >= 10000) return `৳${(abs / 1000).toFixed(1)}k`;
+  return `৳${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 const KNOWN_PLATFORMS = ["meta", "tiktok", "google"] as const;
 
-/**
- * Compute BDT debt total using per-platform billing rates,
- * matching ClientList.tsx logic exactly.
- */
 function computeBdtDebt(client: ClientItem): number {
   const rates = getPlatformRates(client.pricing_config);
   const platBals = client.platform_balances ?? {};
@@ -100,8 +117,6 @@ function computeBdtDebt(client: ClientItem): number {
       bdt += Math.abs(bal) * rate;
     }
   }
-  // Fallback when no per-platform breakdown is available:
-  // use the average platform rate against the aggregate negative balance.
   if (bdt === 0 && client.balance < 0) {
     const fallbackRate =
       Number(rates.meta) || Number(rates.tiktok) || Number(rates.google) || 120;
@@ -110,9 +125,47 @@ function computeBdtDebt(client: ClientItem): number {
   return bdt;
 }
 
+const RECENTS_LIMIT = 5;
+function recentsKey(userId?: string | null) {
+  return `hept_recent_clients_${userId ?? "anon"}`;
+}
+function readRecents(userId?: string | null): string[] {
+  try {
+    const raw = localStorage.getItem(recentsKey(userId));
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string").slice(0, RECENTS_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+function pushRecent(userId: string | null | undefined, clientId: string) {
+  try {
+    const cur = readRecents(userId);
+    const next = [clientId, ...cur.filter((id) => id !== clientId)].slice(0, RECENTS_LIMIT);
+    localStorage.setItem(recentsKey(userId), JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeMenuFor, setActiveMenuFor] = useState<string | null>(null);
+  const [recents, setRecents] = useState<string[]>([]);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  // Load recents whenever popup opens or user changes
+  useEffect(() => {
+    if (open) {
+      setRecents(readRecents(userId));
+      setQuery("");
+      setActiveMenuFor(null);
+    }
+  }, [open, userId]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -125,108 +178,243 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  const { topClients, attentionClients, restClients } = useMemo(() => {
-    const sorted = [...clients].sort((a, b) =>
-      a.full_name.localeCompare(b.full_name)
-    );
-    const negatives = sorted.filter((c) => c.balance < 0);
+  // Pre-compute heavy fields once per client
+  type EnrichedClient = ClientItem & { _bdtDebt: number; _searchValue: string };
+  const enriched: EnrichedClient[] = useMemo(() => {
+    return clients.map((c) => {
+      const bdt = c.balance < 0 ? computeBdtDebt(c) : 0;
+      // Build a rich, multi-token search string
+      const tokens = [
+        c.full_name,
+        c.email ?? "",
+        c.business_name ?? "",
+        c.phone ?? "",
+        c.mapping_keyword ?? "",
+        // include amount-as-string so admins can search by rounded balance
+        c.balance > 0 ? Math.round(c.balance).toString() : "",
+        c.balance < 0 ? Math.round(bdt).toString() : "",
+        c.is_paused ? "paused" : "",
+        (c.pending_payments ?? 0) > 0 ? "pending" : "",
+        c.is_active === false ? "inactive" : "",
+      ];
+      return { ...c, _bdtDebt: bdt, _searchValue: tokens.filter(Boolean).join(" ") };
+    });
+  }, [clients]);
+
+  const { topClients, attentionClients, restClients, recentClients } = useMemo(() => {
+    const sorted = [...enriched].sort((a, b) => a.full_name.localeCompare(b.full_name));
+    const negatives = sorted
+      .filter((c) => c.balance < 0)
+      .sort((a, b) => b._bdtDebt - a._bdtDebt); // largest debt first
     const positives = sorted
       .filter((c) => c.balance > 0)
       .sort((a, b) => b.balance - a.balance);
     const top = positives.slice(0, 3);
     const topIds = new Set(top.map((c) => c.user_id));
     const negIds = new Set(negatives.map((c) => c.user_id));
-    const rest = sorted.filter(
-      (c) => !topIds.has(c.user_id) && !negIds.has(c.user_id)
-    );
-    return {
-      topClients: top,
-      attentionClients: negatives,
-      restClients: rest,
-    };
-  }, [clients]);
 
-  const handleSelect = (path: string) => {
-    setOpen(false);
-    navigate(path);
+    // Recents: only those still present, in stored order, excluded from other groups
+    const byId = new Map(enriched.map((c) => [c.user_id, c]));
+    const recentList: EnrichedClient[] = recents
+      .map((id) => byId.get(id))
+      .filter((x): x is EnrichedClient => !!x);
+    const recentIds = new Set(recentList.map((c) => c.user_id));
+
+    const rest = sorted.filter(
+      (c) => !topIds.has(c.user_id) && !negIds.has(c.user_id) && !recentIds.has(c.user_id),
+    );
+    const topFiltered = top.filter((c) => !recentIds.has(c.user_id));
+    const negFiltered = negatives.filter((c) => !recentIds.has(c.user_id));
+
+    return {
+      topClients: topFiltered,
+      attentionClients: negFiltered,
+      restClients: rest,
+      recentClients: recentList,
+    };
+  }, [enriched, recents]);
+
+  // Portfolio totals for KPI strip
+  const portfolio = useMemo(() => {
+    let usdCredit = 0;
+    let bdtDebt = 0;
+    let pausedCount = 0;
+    let pendingCount = 0;
+    for (const c of enriched) {
+      if (c.balance > 0) usdCredit += c.balance;
+      if (c.balance < 0) bdtDebt += c._bdtDebt;
+      if (c.is_paused) pausedCount++;
+      if ((c.pending_payments ?? 0) > 0) pendingCount++;
+    }
+    return { usdCredit, bdtDebt, pausedCount, pendingCount };
+  }, [enriched]);
+
+  const goTo = useCallback(
+    (path: string, clientId?: string) => {
+      if (clientId) pushRecent(userId, clientId);
+      setOpen(false);
+      navigate(path);
+    },
+    [navigate, userId],
+  );
+
+  const clearRecents = () => {
+    try {
+      localStorage.removeItem(recentsKey(userId));
+    } catch {
+      /* ignore */
+    }
+    setRecents([]);
   };
 
-  const renderClientRow = (client: ClientItem) => {
+  const renderBadges = (c: EnrichedClient) => {
+    const badges: JSX.Element[] = [];
+    if (c.is_paused) {
+      badges.push(
+        <span
+          key="paused"
+          className="inline-flex items-center gap-0.5 rounded-full border border-destructive/30 bg-destructive/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-destructive"
+        >
+          <Pause className="h-2 w-2" /> Paused
+        </span>,
+      );
+    }
+    if ((c.pending_payments ?? 0) > 0) {
+      badges.push(
+        <span
+          key="pending"
+          className="inline-flex items-center gap-0.5 rounded-full border border-warning/30 bg-warning/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning"
+        >
+          <Clock className="h-2 w-2" /> {c.pending_payments} pay
+        </span>,
+      );
+    }
+    if (c.is_active === false && badges.length < 2) {
+      badges.push(
+        <span
+          key="inactive"
+          className="inline-flex items-center gap-0.5 rounded-full border border-muted-foreground/20 bg-muted/30 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-muted-foreground"
+        >
+          <EyeOff className="h-2 w-2" /> Off
+        </span>,
+      );
+    }
+    return badges.slice(0, 2);
+  };
+
+  const renderClientRow = (client: EnrichedClient) => {
     const positive = client.balance > 0;
     const negative = client.balance < 0;
     const gradient = getAvatarGradient(client.user_id);
-    const searchValue = `${client.full_name} ${client.email ?? ""} ${client.business_name ?? ""}`;
     const TrendIcon = negative ? TrendingDown : positive ? TrendingUp : Minus;
+    const badges = renderBadges(client);
+    const isMenuOpen = activeMenuFor === client.user_id;
 
     return (
-      <CommandItem
-        key={client.user_id}
-        value={searchValue}
-        onSelect={() => handleSelect(`/admin/clients/${client.user_id}`)}
-        className="group/row relative gap-3 rounded-lg px-3 py-2.5 my-0.5 data-[selected=true]:bg-gradient-to-r data-[selected=true]:from-primary/10 data-[selected=true]:via-primary/5 data-[selected=true]:to-transparent transition-all duration-200"
-      >
-        {/* Left accent bar on hover/select */}
-        <span
-          aria-hidden
-          className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[2px] rounded-r-full bg-primary opacity-0 group-data-[selected=true]/row:opacity-100 transition-opacity"
-        />
-
-        {/* Avatar */}
-        <div
-          className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} ring-1 ring-white/10 shadow-inner`}
+      <div key={client.user_id} className="relative">
+        <CommandItem
+          value={client._searchValue}
+          onSelect={() => goTo(`/admin/clients/${client.user_id}`, client.user_id)}
+          className="group/row relative gap-3 rounded-lg px-3 py-2.5 my-0.5 data-[selected=true]:bg-gradient-to-r data-[selected=true]:from-primary/10 data-[selected=true]:via-primary/5 data-[selected=true]:to-transparent transition-all duration-200"
         >
-          <span className="text-[11px] font-semibold tracking-wide text-white drop-shadow-sm">
-            {getInitials(client.full_name)}
-          </span>
-        </div>
-
-        {/* Name + subtitle */}
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-sm font-medium text-foreground truncate">
-            {client.full_name}
-          </span>
-          <span className="text-[11px] text-muted-foreground/70 truncate">
-            {client.business_name || client.email || "—"}
-          </span>
-        </div>
-
-        {/* Balance — color only, no border */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <TrendIcon
-            className={`h-3 w-3 ${
-              positive
-                ? "text-success"
-                : negative
-                ? "text-destructive"
-                : "text-muted-foreground/50"
-            }`}
+          <span
+            aria-hidden
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[2px] rounded-r-full bg-primary opacity-0 group-data-[selected=true]/row:opacity-100 transition-opacity"
           />
-          <div className="flex flex-col items-end leading-tight">
-            <span
-              className={`text-sm font-semibold tabular-nums ${
-                positive
-                  ? "text-success"
-                  : negative
-                  ? "text-destructive"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {negative
-                ? `−৳${formatMoney(computeBdtDebt(client))}`
-                : positive
-                ? `$${formatMoney(client.balance)}`
-                : `$${formatMoney(0)}`}
-            </span>
-            <span className="text-[8px] uppercase tracking-[0.15em] text-muted-foreground/50 font-medium">
-              {negative ? "BDT" : "USD"}
+
+          <div
+            className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} ring-1 ring-white/10 shadow-inner`}
+          >
+            <span className="text-[11px] font-semibold tracking-wide text-white drop-shadow-sm">
+              {getInitials(client.full_name)}
             </span>
           </div>
-        </div>
-      </CommandItem>
+
+          <div className="flex flex-col min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm font-medium text-foreground truncate">
+                {client.full_name}
+              </span>
+              {badges.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0">{badges}</div>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground/70 truncate">
+              {client.business_name || client.email || client.phone || "—"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <TrendIcon
+              className={`h-3 w-3 ${
+                positive ? "text-success" : negative ? "text-destructive" : "text-muted-foreground/50"
+              }`}
+            />
+            <div className="flex flex-col items-end leading-tight">
+              <span
+                className={`text-sm font-semibold tabular-nums ${
+                  positive ? "text-success" : negative ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {negative
+                  ? `−৳${formatMoney(client._bdtDebt)}`
+                  : positive
+                  ? `$${formatMoney(client.balance)}`
+                  : `$${formatMoney(0)}`}
+              </span>
+              <span className="text-[8px] uppercase tracking-[0.15em] text-muted-foreground/50 font-medium">
+                {negative ? "BDT" : "USD"}
+              </span>
+            </div>
+          </div>
+
+          {/* Action toggle */}
+          <button
+            type="button"
+            aria-label="Quick actions"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setActiveMenuFor(isMenuOpen ? null : client.user_id);
+            }}
+            className={`ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted/40 transition ${
+              isMenuOpen ? "rotate-90 text-foreground bg-muted/40" : ""
+            }`}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </CommandItem>
+
+        {isMenuOpen && (
+          <div className="ml-12 mr-2 mb-1.5 grid grid-cols-2 gap-1 rounded-lg border border-border/40 bg-background/40 p-1.5 backdrop-blur-sm">
+            <ActionButton
+              icon={<ArrowRight className="h-3 w-3" />}
+              label="Open"
+              onClick={() => goTo(`/admin/clients/${client.user_id}`, client.user_id)}
+            />
+            <ActionButton
+              icon={<Banknote className="h-3 w-3" />}
+              label="Add Funds"
+              onClick={() => goTo(`/admin/add-funds`, client.user_id)}
+            />
+            <ActionButton
+              icon={<Wallet className="h-3 w-3" />}
+              label="Wallet"
+              onClick={() => goTo(`/admin/finance?tab=wallet`, client.user_id)}
+            />
+            <ActionButton
+              icon={<CreditCard className="h-3 w-3" />}
+              label="Payments"
+              onClick={() => goTo(`/admin/payment-requests`, client.user_id)}
+            />
+          </div>
+        )}
+      </div>
     );
   };
 
   const totalCount = clients.length;
+  const isSearching = query.trim().length > 0;
 
   return (
     <>
@@ -237,7 +425,7 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
       >
         <Search className="h-4 w-4 text-muted-foreground mr-2.5 transition-colors group-hover:text-primary" />
         <span className="text-sm text-muted-foreground/80 truncate">
-          <span className="hidden sm:inline">Search clients by name, email, phone…</span>
+          <span className="hidden sm:inline">Search clients by name, phone, business…</span>
           <span className="sm:hidden">Search clients…</span>
         </span>
         <div className="ml-auto flex items-center gap-2">
@@ -252,20 +440,16 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          className="overflow-hidden p-0 max-w-xl gap-0 rounded-2xl border-border/40 bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]"
-        >
+        <DialogContent className="overflow-hidden p-0 max-w-xl gap-0 rounded-2xl border-border/40 bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)]">
           <VisuallyHidden>
             <DialogTitle>Search clients</DialogTitle>
           </VisuallyHidden>
 
-          {/* Top accent gradient line */}
           <div
             aria-hidden
             className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent"
           />
 
-          {/* Subtle noise overlay */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-overlay"
@@ -278,12 +462,13 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
           <Command
             className="bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2"
           >
-            {/* Elevated input zone */}
             <div className="relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
               <div className="flex items-center px-4" cmdk-input-wrapper="">
                 <Search className="mr-3 h-4 w-4 shrink-0 text-primary/70" />
                 <CommandInput
-                  placeholder="Search by name, email, or business…"
+                  value={query}
+                  onValueChange={setQuery}
+                  placeholder="Name, phone, business, mapping, amount…"
                   className="flex h-14 w-full bg-transparent py-3 text-base font-medium outline-none placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic disabled:cursor-not-allowed disabled:opacity-50 border-0"
                 />
                 <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -297,9 +482,46 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   </kbd>
                 </div>
               </div>
-              {/* Gradient divider */}
               <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
             </div>
+
+            {/* Portfolio KPI strip — only when not searching */}
+            {!isSearching && (
+              <div className="px-3 pt-2.5 pb-1.5 flex flex-wrap gap-1.5 border-b border-border/20">
+                <KpiChip
+                  tone="success"
+                  icon={<TrendingUp className="h-2.5 w-2.5" />}
+                  label={`+$${formatMoney(portfolio.usdCredit)}`}
+                  sub="credit"
+                  onClick={() => goTo("/admin/finance?tab=wallet")}
+                />
+                <KpiChip
+                  tone="destructive"
+                  icon={<TrendingDown className="h-2.5 w-2.5" />}
+                  label={`−${formatCompactBdt(portfolio.bdtDebt)}`}
+                  sub="due"
+                  onClick={() => goTo("/admin/clients")}
+                />
+                {portfolio.pausedCount > 0 && (
+                  <KpiChip
+                    tone="destructive"
+                    icon={<Pause className="h-2.5 w-2.5" />}
+                    label={String(portfolio.pausedCount)}
+                    sub="paused"
+                    onClick={() => setQuery("paused")}
+                  />
+                )}
+                {portfolio.pendingCount > 0 && (
+                  <KpiChip
+                    tone="warning"
+                    icon={<Clock className="h-2.5 w-2.5" />}
+                    label={String(portfolio.pendingCount)}
+                    sub="pending"
+                    onClick={() => goTo("/admin/payment-requests")}
+                  />
+                )}
+              </div>
+            )}
 
             <CommandList className="max-h-[420px] overflow-y-auto overflow-x-hidden px-1 py-2">
               <CommandEmpty>
@@ -313,11 +535,11 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   <div className="text-center">
                     <p className="text-sm font-medium text-foreground">No clients match</p>
                     <p className="text-xs text-muted-foreground/70 mt-0.5">
-                      Try a different name or email
+                      Try a name, phone, mapping keyword, or amount
                     </p>
                   </div>
                   <button
-                    onClick={() => handleSelect("/admin/clients/new")}
+                    onClick={() => goTo("/admin/clients/new")}
                     className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
                   >
                     <UserPlus className="h-3 w-3" />
@@ -326,6 +548,34 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   </button>
                 </div>
               </CommandEmpty>
+
+              {!isSearching && recentClients.length > 0 && (
+                <CommandGroup
+                  heading={
+                    <span className="flex items-center gap-1.5">
+                      <History className="h-2.5 w-2.5 text-primary/70" />
+                      <span className="text-primary/80">Recent</span>
+                      <span className="ml-auto flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearRecents();
+                          }}
+                          className="text-[9px] normal-case tracking-normal font-normal text-muted-foreground/50 hover:text-foreground transition flex items-center gap-0.5"
+                        >
+                          <X className="h-2 w-2" /> clear
+                        </button>
+                        <span className="text-muted-foreground/40 normal-case tracking-normal font-normal">
+                          {recentClients.length}
+                        </span>
+                      </span>
+                    </span>
+                  }
+                >
+                  {recentClients.map(renderClientRow)}
+                </CommandGroup>
+              )}
 
               {topClients.length > 0 && (
                 <CommandGroup
@@ -349,8 +599,11 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                     <span className="flex items-center gap-1.5">
                       <AlertTriangle className="h-2.5 w-2.5 text-destructive" />
                       <span className="text-destructive/80">Needs Attention</span>
-                      <span className="ml-auto text-muted-foreground/40 normal-case tracking-normal font-normal">
-                        {attentionClients.length}
+                      <span className="ml-auto flex items-center gap-2 normal-case tracking-normal font-normal">
+                        <span className="text-destructive/70 tabular-nums">
+                          {formatCompactBdt(portfolio.bdtDebt)} due
+                        </span>
+                        <span className="text-muted-foreground/40">{attentionClients.length}</span>
                       </span>
                     </span>
                   }
@@ -378,12 +631,10 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
               <CommandSeparator className="my-2 bg-border/30" />
 
               <CommandGroup
-                heading={
-                  <span className="text-muted-foreground/60">Quick Actions</span>
-                }
+                heading={<span className="text-muted-foreground/60">Quick Actions</span>}
               >
                 <CommandItem
-                  onSelect={() => handleSelect("/admin/clients")}
+                  onSelect={() => goTo("/admin/clients")}
                   className="gap-3 rounded-lg px-3 py-2.5 data-[selected=true]:bg-primary/5"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 border border-primary/20">
@@ -393,7 +644,7 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   <ArrowRight className="ml-auto h-3.5 w-3.5 opacity-40" />
                 </CommandItem>
                 <CommandItem
-                  onSelect={() => handleSelect("/admin/clients/new")}
+                  onSelect={() => goTo("/admin/clients/new")}
                   className="gap-3 rounded-lg px-3 py-2.5 data-[selected=true]:bg-primary/5"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 border border-primary/20">
@@ -405,7 +656,6 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
               </CommandGroup>
             </CommandList>
 
-            {/* Power-user footer */}
             <div className="flex items-center justify-between gap-3 px-4 h-9 border-t border-border/30 bg-card/40 backdrop-blur-xl">
               <div className="flex items-center gap-3 text-[10px] text-muted-foreground/60">
                 <span className="flex items-center gap-1">
@@ -420,6 +670,12 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   </kbd>
                   <span className="hidden sm:inline">open</span>
                 </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border/50 bg-muted/40 px-1 font-mono text-[9px]">
+                    <ChevronRight className="h-2.5 w-2.5" />
+                  </kbd>
+                  <span className="hidden sm:inline">actions</span>
+                </span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
                 <span className="h-1 w-1 rounded-full bg-primary/60" />
@@ -430,5 +686,65 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/* ---------------- internal subcomponents ---------------- */
+
+function KpiChip({
+  tone,
+  icon,
+  label,
+  sub,
+  onClick,
+}: {
+  tone: "success" | "destructive" | "warning" | "muted";
+  icon: React.ReactNode;
+  label: string;
+  sub: string;
+  onClick?: () => void;
+}) {
+  const toneClasses: Record<string, string> = {
+    success: "border-success/30 bg-success/10 text-success hover:bg-success/15",
+    destructive: "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
+    warning: "border-warning/30 bg-warning/10 text-warning hover:bg-warning/15",
+    muted: "border-border/40 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${toneClasses[tone]}`}
+    >
+      {icon}
+      <span className="tabular-nums">{label}</span>
+      <span className="opacity-60 font-normal uppercase tracking-wide text-[9px]">{sub}</span>
+    </button>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition"
+    >
+      <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary">
+        {icon}
+      </span>
+      {label}
+    </button>
   );
 }
