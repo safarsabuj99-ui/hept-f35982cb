@@ -1,74 +1,85 @@
 ## Goal
 
-Upgrade the bottom mobile search pills (per-page `MobileSearchPill` and global `MobileGlobalSearchPill`) to match the **reference frosted-glass aesthetic** in the screenshot: heavier blur, premium inner highlight, ambient glow border, and a slightly more compact footprint.
+Make the **mobile sidebar/nav drawer** (the panel in your second screenshot) feel like the same premium frosted glass surface as the global search dialog (first screenshot): heavier blur, more translucent, and slightly more compact.
 
-Both pills currently use plain `bg-card/95 backdrop-blur-2xl` with a flat shadow — they don't feel like part of the same design language as the global search dialog and the One UI side drawer. We'll align them with the existing `ios-glass-*` tokens that already power those surfaces.
+Today the drawer is a solid `bg-sidebar` color with a flat `bg-black/80` overlay — it looks opaque and disconnected from the rest of the iOS/One UI glass language used everywhere else.
 
 ## Visual changes
 
 | Aspect | Before | After |
 |---|---|---|
-| Background | `bg-card/95` (almost opaque) | `hsl(var(--card)/0.55)` — true frosted glass, lets dashboard show through |
-| Blur | `backdrop-blur-2xl` (~40px, no saturation) | `blur(48px) saturate(200%)` — matches `.ios-glass-card` |
-| Border | `border-border/60` (flat) | `1px hsl(0 0% 100% / 0.1)` + inner `0.5px` micro-edge |
-| Highlight | none | Top inner `1px` white-8% specular highlight (matches reference) |
-| Shadow | Single primary-tinted drop shadow | Layered: deep ambient shadow + soft primary glow + top-edge bleed |
-| Width | `max-w-sm` (384px) | `max-w-[340px]` — more compact, floats nicer at 390px viewport |
-| Height | `h-12` (48px) | `h-11` (44px) — tighter, matches iOS/One UI pill height |
-| Padding | `px-3` / `px-4` | `px-4` consistent with rounded-full radius |
-| Results panel | Same pill bg | Promoted to `.ios-glass-card` look so it visually matches the global search dialog in the reference |
+| Drawer background | Solid `bg-sidebar` (opaque) | `hsl(var(--sidebar-background)/0.55)` + 48px blur, 200% saturation — true frosted glass like the search dialog |
+| Right edge | Flat 1px border | Crisp inner-highlight (white-8%) + soft outer ambient shadow |
+| Width | `18rem` (`SIDEBAR_WIDTH_MOBILE`) | `16.5rem` — slightly more compact, leaves more page peek-through |
+| Page overlay | `bg-black/80` (heavy black) | `bg-background/40` + 8px backdrop-blur — softens the page behind without hiding it, matches dialog overlay |
+| Header band | `bg-sidebar-background/0.6` + 12px blur | Bumped to 32px blur + saturate(180%) so the HEPT logo / version tag float on the same glass |
+| Footer band | Standard | Same glass treatment as header for visual symmetry |
+| Section dividers | Solid line | Slight reduction in opacity so they don't fight the glass |
 
 ## Implementation
 
-### 1. New utility class in `src/index.css`
+### 1. `src/index.css` — new sidebar-glass tokens
 
-Add `.ios-glass-pill-floating` (and a `.dark` override) — a stronger variant of `.ios-glass-pill` tuned specifically for floating bottom pills, with the ambient primary glow seen in the reference:
+Add a paired utility next to the existing `.sidebar-premium`:
 
 ```css
-.ios-glass-pill-floating {
-  background: hsl(var(--card) / 0.55);
+.sidebar-premium-glass {
+  background: hsl(var(--sidebar-background) / 0.55);
   backdrop-filter: blur(48px) saturate(200%);
   -webkit-backdrop-filter: blur(48px) saturate(200%);
-  border: 1px solid hsl(0 0% 100% / 0.1);
+  border-right: 1px solid hsl(0 0% 100% / 0.08);
   box-shadow:
-    inset 0 1px 0 0 hsl(0 0% 100% / 0.1),
-    inset 0 0 0 0.5px hsl(0 0% 100% / 0.04),
-    0 12px 40px -10px hsl(var(--primary) / 0.28),
-    0 4px 16px -4px hsl(0 0% 0% / 0.35);
+    inset -1px 0 0 0 hsl(0 0% 100% / 0.06),
+    0 0 60px -10px hsl(var(--primary) / 0.25);
 }
-.dark .ios-glass-pill-floating {
-  background: hsl(var(--card) / 0.4);
-  border-color: hsl(0 0% 100% / 0.08);
+.dark .sidebar-premium-glass {
+  background: hsl(var(--sidebar-background) / 0.45);
+  border-right-color: hsl(0 0% 100% / 0.06);
   box-shadow:
-    inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
-    inset 0 0 0 0.5px hsl(0 0% 100% / 0.03),
-    0 16px 48px -12px hsl(var(--primary) / 0.4),
-    0 4px 20px -4px hsl(0 0% 0% / 0.5);
+    inset -1px 0 0 0 hsl(0 0% 100% / 0.05),
+    0 0 80px -10px hsl(var(--primary) / 0.35);
 }
 ```
 
-### 2. `src/components/ui/mobile-search-pill.tsx`
+Bump `.sidebar-header-premium` blur from `12px` → `32px` with `saturate(180%)` and lower the background alpha from `0.6` → `0.4` so the glass shows through.
 
-- Replace the pill `<div>` className: drop `bg-card/95 backdrop-blur-2xl border border-border/60 shadow-[…]`, use `ios-glass-pill-floating` instead.
-- Change `h-12` → `h-11`, `max-w-sm` → `max-w-[340px]`.
-- Promote the results panel to use `ios-glass-card` (matches the reference dialog), keep `rounded-3xl` and the upward slide-in animation.
+### 2. `src/components/ui/sidebar.tsx` — apply only on mobile branch
 
-### 3. `src/components/dashboard/ClientSearchCommand.tsx` (`MobileGlobalSearchPill`)
+Inside the `if (isMobile)` block (lines 153-171), update the `SheetContent`:
 
-- Same className swap on the trigger button: `ios-glass-pill-floating` + `h-11` + `max-w-[340px]`.
-- Keep the small ping dot on the right (it's a nice accent) but reduce its color saturation slightly so it doesn't fight the new softer glow.
+- Add the `sidebar-premium-glass` class (mobile-only — doesn't affect desktop sidebar).
+- Drop `bg-sidebar` (replaced by the glass token).
+- Tighten `SIDEBAR_WIDTH_MOBILE` for the mobile drawer to `16.5rem` via inline override (don't change the desktop constant).
 
-### 4. No behavior changes
+```tsx
+<SheetContent
+  data-sidebar="sidebar"
+  data-mobile="true"
+  className="sidebar-premium-glass w-[--sidebar-width] p-0 text-sidebar-foreground [&>button]:hidden"
+  style={{ "--sidebar-width": "16.5rem" } as React.CSSProperties}
+  side={side}
+>
+```
 
-- Hide-on-scroll, keyboard tracking, single-instance registry, and portal mounting all stay identical.
-- Desktop rendering is untouched.
+### 3. `src/components/ui/sheet.tsx` — softer overlay (mobile drawer only)
+
+Two safe options; I'll go with the targeted one to avoid touching every dialog/sheet in the app:
+
+- Change `SheetOverlay` className from `bg-black/80` → `bg-background/40 backdrop-blur-sm`. This affects all Sheets, but currently the only mobile-open Sheet on small screens is the nav drawer + a few side panels that will benefit equally from the softer treatment, matching the dialog overlay style already in use elsewhere.
+
+If a regression appears on any specific Sheet, we can override per-instance via `className` prop.
+
+### 4. No JS / behavior changes
+
+- Drawer open/close, swipe-to-dismiss, focus trap, route detection all unchanged.
+- Desktop sidebar (≥ md) is untouched — it keeps the existing `.sidebar-premium` gradient look.
 
 ## Files to edit
 
-- `src/index.css` — add `.ios-glass-pill-floating` utility (light + dark)
-- `src/components/ui/mobile-search-pill.tsx` — swap classes, tighten size
-- `src/components/dashboard/ClientSearchCommand.tsx` — swap classes on global pill, tighten size
+- `src/index.css` — add `.sidebar-premium-glass` (light + dark), tweak `.sidebar-header-premium`
+- `src/components/ui/sidebar.tsx` — apply glass class + tighter width on the mobile `SheetContent`
+- `src/components/ui/sheet.tsx` — soften overlay to `bg-background/40 backdrop-blur-sm`
 
 ## Result
 
-The bottom search pill will sit on the screen like the reference dialog: a translucent frosted lozenge with a soft primary glow underneath, a crisp specular highlight on top, and content from the page visibly diffusing through it — distinctly more premium and noticeably more compact than the current version.
+When you tap the hamburger on mobile, the nav drawer slides in as a translucent frosted panel — you'll see the dashboard glow softly behind it (especially the colored gradients on KPI cards), with the same depth/feel as the global search popover. It's also ~24px narrower for a more ergonomic, One UI 8.5–style float.
