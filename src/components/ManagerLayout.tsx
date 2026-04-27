@@ -8,6 +8,7 @@ import {
   BarChart3, Users, DollarSign, LogOut, Menu, X,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearchMount } from "@/components/GlobalSearchMount";
 import { useBranding } from "@/hooks/useBranding";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -170,6 +171,7 @@ export function ManagerLayout() {
               <Outlet />
             </div>
           </main>
+          <GlobalSearchMount />
         </div>
       </div>
     </SidebarProvider>

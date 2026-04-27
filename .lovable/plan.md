@@ -1,96 +1,62 @@
-# Make the global client search a real command center
-
 ## Goal
 
-Turn the Cmd+K popup from a list-with-balance into a fast operational tool an agency admin can use to: find any client by anything, see who needs action right now, and jump straight to the right page — without ever leaving the keyboard.
+Make the global client search popup (⌘K / Ctrl+K) openable from **every agency page** — not only the Admin Dashboard. Today it only works on `/admin` because `ClientSearchCommand` is mounted inside `QuickActions`, which lives only on the dashboard.
 
-## What's there today
+## Approach
 
-- Three sections: Top Balances, Needs Attention, All Clients.
-- Search across name / email / business.
-- Balance shown with the correct USD/BDT rule (just fixed).
+Lift the search popup to the **layout level** so it stays mounted on every admin and manager route. Give it its own lightweight data source (shared with the dashboard via React Query cache) so it doesn't depend on dashboard props.
 
-## What's missing (the actual gaps)
+### 1. New shared hook: `useGlobalClientSearch`
 
-1. Search is too narrow — admins also know clients by **phone number**, **mapping keyword**, and **rounded balance**.
-2. No status signals — a client whose campaigns are **guard-paused** (5 right now), or who has a **pending payment request**, looks identical to a healthy client.
-3. No quick actions — clicking always goes to the client detail page; there's no shortcut to wallet, campaigns, spend, or payment requests.
-4. No collection priority — "Needs Attention" lists negatives alphabetically instead of by debt size.
-5. No portfolio summary — admin can't see total credit / total debt at a glance.
-6. No memory of recent work — frequently-opened clients aren't surfaced.
+Create `src/hooks/useGlobalClientSearch.ts`:
+- Calls the existing `get_admin_dashboard_summary` RPC (today range, current `org_id`).
+- Returns just the enriched `clients` array (same shape as `ClientWithBalance`).
+- Uses a stable React Query key (e.g. `["global-client-search", orgId]`) with `staleTime: 60s` so it shares cache with the dashboard and refreshes itself when other pages are open.
+- Gated on `user && orgId` (follows existing query-gating pattern).
 
-## The plan — six concrete upgrades
+### 2. New component: `GlobalSearchMount`
 
-### 1. Multi-field, fuzzy search
+Create `src/components/GlobalSearchMount.tsx`:
+- Thin wrapper that calls `useGlobalClientSearch` and renders `<ClientSearchCommand clients={clients} />`.
+- Renders nothing while loading (popup just shows empty state until data arrives — keyboard shortcut still works).
 
-Extend the per-row `searchValue` so cmdk can match by:
-- name, business, email (existing)
-- **phone** (last 4 digits or full)
-- **mapping keyword** (e.g. typing `MUSA` matches the mapping)
-- **rounded balance** as a string (typing `155` finds the $155 client; typing `1500` finds the ৳1,500 debt)
+### 3. Refactor `ClientSearchCommand`
 
-Requires adding `phone`, `mapping_keyword` to the RPC payload. Search stays fully client-side, so no perf cost.
+Currently the component renders **both** the trigger button and the popup dialog. For layout-level mounting we only want the popup + keyboard listener globally; the dashboard's visible search bar should remain.
 
-### 2. Live status badges on each row
+Split rendering via a new prop:
+- `mode?: "full" | "hotkey-only"` (default `"full"`)
+- `"full"`: existing behaviour — trigger button + dialog (used by dashboard `QuickActions`).
+- `"hotkey-only"`: renders only the dialog + ⌘K listener (used by layouts).
 
-Right after the client name, render at most **two** tiny pill badges so urgent state is visible at a glance:
+Keyboard listener already exists and toggles `open` state — no changes needed beyond suppressing the visible trigger.
 
-- `Paused` (red) — when `guard_paused_at IS NOT NULL` or `system_paused_campaigns` is non-empty.
-- `Pending Pay` (amber) — when the client has 1+ pending payment requests, with the count.
-- `Inactive` (gray) — when `is_active = false`.
+### 4. Mount in layouts
 
-The RPC already groups admin data; we add three lightweight CTEs to attach `is_paused`, `pending_payments`, `is_active` per client. Same dataset, no extra round-trips.
+- `src/components/AdminLayout.tsx`: render `<GlobalSearchMount mode="hotkey-only" />` once inside `AdminLayout` (e.g. just before `<main>` or alongside header). Available on every `/admin/*` route.
+- `src/components/ManagerLayout.tsx`: same mount so managers also get ⌘K. The RPC + clients list will respect their org/permissions via existing RLS.
 
-### 3. Smart sorting in "Needs Attention"
+### 5. Avoid duplicate hotkey on dashboard
 
-Sort by **BDT debt magnitude descending** (using the per-platform conversion already wired up), so the largest debts surface first — that's what an admin actually wants to chase. Show a header subtitle like `Needs Attention · 6 · ৳12,430 due` with the org-wide debt total computed once.
+`QuickActions` (dashboard) keeps its visible search bar via `mode="full"`. To prevent two popups from opening on ⌘K when dashboard is mounted, the `"full"` instance and the layout-mounted `"hotkey-only"` instance both listen — fix by:
+- When `mode="full"`, only render trigger button + dialog but **skip** the global keyboard listener (the layout instance handles it).
+- The layout-mounted dialog is the single source of truth for ⌘K everywhere, including the dashboard.
 
-### 4. Top-of-popup KPI strip
+This keeps the dashboard's pretty search bar intact while the global hotkey lives at the layout.
 
-A single thin row above the groups:
+## Files to change
 
-```text
-[ +$2,143.10 USD credit ]  [ −৳18,420 BDT due ]  [ 5 paused ]  [ 2 pending pay ]
-```
+- **NEW** `src/hooks/useGlobalClientSearch.ts` — shared lightweight client list query.
+- **NEW** `src/components/GlobalSearchMount.tsx` — layout wrapper that mounts the popup.
+- **EDIT** `src/components/dashboard/ClientSearchCommand.tsx` — add `mode` prop; only attach ⌘K listener when not in `"full"` (layout-only).
+- **EDIT** `src/components/AdminLayout.tsx` — mount `<GlobalSearchMount mode="hotkey-only" />`.
+- **EDIT** `src/components/ManagerLayout.tsx` — mount `<GlobalSearchMount mode="hotkey-only" />`.
+- **EDIT** `src/components/dashboard/QuickActions.tsx` — pass `mode="full"` (visible bar without hotkey listener).
 
-Each chip is clickable and routes to the relevant page (wallet inventory, payment requests, attention required). Computed from the `clients` array we already have plus the new status fields — zero new queries.
+No DB / RPC / migration changes.
 
-### 5. Quick-action menu per row (keyboard-driven)
+## Result
 
-Right side of each row gets a chevron. Pressing `→` (or hovering) reveals four sub-actions on that client:
-
-- `Open dashboard` (default Enter behavior, unchanged)
-- `Wallet` → `/admin/clients/:id?tab=wallet`
-- `Campaigns` → `/admin/clients/:id?tab=campaigns`
-- `Payment requests` → `/admin/payment-requests?client=:id`
-
-Implemented with a nested cmdk view (toggle via state when arrow-right is pressed on a focused row). Pure client-side, ~30 lines.
-
-### 6. "Recent" section + per-user persistence
-
-Track the last 5 clients the admin opened in `localStorage` (key: `hept_recent_clients_<userId>`). Show them as the **first** group above Top Balances when the search input is empty, with a `Clear` action. This makes the popup match how admins actually work — they reopen the same 3–4 clients all day.
-
-## Out of scope (explicit)
-
-- No new realtime channels.
-- No new pages or routes.
-- No animation or visual redesign — same look, just more useful.
-- No changes to AdminDashboard KPIs, ClientList, or any unrelated component.
-
-## Files touched
-
-- `supabase/migrations/<new>.sql` — extend `get_admin_dashboard_summary` to include `phone`, `mapping_keyword`, `is_active`, `is_paused`, `pending_payments` per client.
-- `src/hooks/useAdminDashboardData.ts` — type and pass-through the new fields.
-- `src/components/dashboard/QuickActions.tsx` — widen `ClientItem` interface.
-- `src/components/dashboard/ClientSearchCommand.tsx` — KPI strip, status badges, smart sort, multi-field search, quick-action submenu, recent clients (localStorage).
-
-## Why this matters for an agency
-
-Today the popup answers one question: "where's this client?" After this, it answers four:
-
-1. Where's this client? (search)
-2. Who do I owe a callback / collection to right now? (KPI strip + sorted attention)
-3. What state are they in? (badges)
-4. Take me directly to where I work on them. (quick actions + recents)
-
-That's the difference between a search box and a command center.
+- ⌘K / Ctrl+K opens the smart Command Center popup from **any** admin or manager page (Clients, Campaigns, Finance, Payments, Settings, Wallet, etc.).
+- Dashboard still shows its visible search bar at the top.
+- All existing smart features (KPI strip, recents, status badges, multi-field search, quick actions) work unchanged.
