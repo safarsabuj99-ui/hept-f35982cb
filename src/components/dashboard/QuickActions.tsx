@@ -8,6 +8,11 @@ interface ClientItem {
   balance: number;
   pricing_config?: any;
   platform_balances?: Record<string, number>;
+  phone?: string | null;
+  mapping_keyword?: string | null;
+  is_active?: boolean;
+  is_paused?: boolean;
+  pending_payments?: number;
 }
 
 interface QuickActionsProps {

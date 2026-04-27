@@ -14,6 +14,11 @@ interface ClientWithBalance {
   balance: number;
   pricing_config: any;
   platform_balances: Record<string, number>;
+  phone?: string | null;
+  mapping_keyword?: string | null;
+  is_active?: boolean;
+  is_paused?: boolean;
+  pending_payments?: number;
 }
 
 interface DashboardData {
@@ -53,6 +58,11 @@ async function fetchDashboardData(dateRange: DateRange | null, orgId: string): P
     balance: Number(c.balance),
     pricing_config: c.pricing_config,
     platform_balances: c.platform_balances ?? {},
+    phone: c.phone ?? null,
+    mapping_keyword: c.mapping_keyword ?? null,
+    is_active: c.is_active !== false,
+    is_paused: !!c.is_paused,
+    pending_payments: Number(c.pending_payments) || 0,
   }));
 
   const lastSynced = result.lastSynced
