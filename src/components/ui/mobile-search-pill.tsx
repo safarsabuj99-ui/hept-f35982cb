@@ -31,6 +31,9 @@ export interface MobileSearchPillProps {
 /**
  * Single-instance registry. Ensures only the most-recently mounted pill
  * is the visible one when multiple consumer components live on the same page.
+ *
+ * Exported so other bottom-pill consumers (e.g. ClientSearchCommand global
+ * search) can participate in the same single-visible-pill rule.
  */
 let pillCounter = 0;
 const activeIds = new Set<number>();
@@ -38,7 +41,19 @@ const subscribers = new Set<() => void>();
 function notify() {
   subscribers.forEach((cb) => cb());
 }
-function useIsTopPill(id: number) {
+export function registerMobilePill(): { id: number; release: () => void } {
+  const id = ++pillCounter;
+  activeIds.add(id);
+  notify();
+  return {
+    id,
+    release: () => {
+      activeIds.delete(id);
+      notify();
+    },
+  };
+}
+export function useIsTopMobilePill(id: number) {
   const [isTop, setIsTop] = useState(() => Math.max(...Array.from(activeIds), 0) === id);
   useEffect(() => {
     const cb = () => setIsTop(Math.max(...Array.from(activeIds), 0) === id);
@@ -50,6 +65,7 @@ function useIsTopPill(id: number) {
   }, [id]);
   return isTop;
 }
+const useIsTopPill = useIsTopMobilePill;
 
 /**
  * One UI 8.5-style search field.
