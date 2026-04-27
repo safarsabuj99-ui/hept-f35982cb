@@ -468,11 +468,11 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
               if (isMobile) e.preventDefault();
             }}
             className={cn(
-              "fixed z-50 outline-none overflow-hidden border bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)] border-border/40",
+              "fixed z-50 outline-none overflow-hidden border bg-gradient-to-b from-card/95 via-card/90 to-card/85 backdrop-blur-2xl shadow-[0_24px_80px_-20px_hsl(var(--primary)/0.4)] border-border/40 max-h-[92vh]",
               "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
               isMobile
-                ? // One UI 8.5 bottom sheet — anchored to bottom, list flows upward.
-                  "inset-x-2 bottom-2 rounded-3xl flex flex-col-reverse data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2"
+                ? // One UI 8.5 bottom sheet — anchored to bottom; the Command's flex-col-reverse pushes the search input to the bottom and stacks the list upward.
+                  "inset-x-2 bottom-2 rounded-3xl data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2"
                 : // Desktop centered command palette (unchanged).
                   "left-[50%] top-[50%] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
             )}
@@ -497,7 +497,10 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
           />
 
           <Command
-            className="bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2"
+            className={cn(
+              "bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2",
+              isMobile && "flex flex-col-reverse max-h-[88vh]",
+            )}
           >
             <div className="relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
               <div className="flex items-center px-4" cmdk-input-wrapper="">
