@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { getPlatformRates } from "@/lib/pricing";
 
 interface ClientItem {
   user_id: string;
@@ -31,6 +32,8 @@ interface ClientItem {
   email?: string;
   business_name?: string | null;
   balance: number;
+  pricing_config?: any;
+  platform_balances?: Record<string, number>;
 }
 
 interface ClientSearchCommandProps {
