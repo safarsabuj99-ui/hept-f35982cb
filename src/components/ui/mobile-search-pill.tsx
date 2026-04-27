@@ -167,15 +167,15 @@ export function MobileSearchPill({
 
   const pill = (
     <div
-      className="fixed left-0 right-0 z-40 px-3 pointer-events-none"
+      className="fixed left-0 right-0 z-40 px-4 pointer-events-none"
       style={{
         bottom: keyboardOffset > 0
           ? `calc(${keyboardOffset}px + 0.5rem)`
-          : `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-offset, 4.5rem))`,
+          : `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-offset, 1.25rem))`,
         transition: "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1)",
       }}
     >
-      <div className="mx-auto w-full max-w-md flex flex-col gap-2 pointer-events-auto">
+      <div className="mx-auto w-full max-w-sm flex flex-col gap-2 pointer-events-auto">
         {/* Results panel — only when expanded AND consumer provides renderResults */}
         {expanded && renderResults && (
           <div
@@ -193,7 +193,7 @@ export function MobileSearchPill({
         <div
           className={cn(
             "flex items-center gap-2 rounded-full border border-border/60",
-            "bg-card/95 backdrop-blur-2xl px-3 h-14",
+            "bg-card/95 backdrop-blur-2xl px-3 h-12",
             "shadow-[0_8px_32px_-8px_hsl(var(--primary)/0.35),0_-2px_12px_-4px_hsl(var(--foreground)/0.08)]",
           )}
         >
@@ -205,7 +205,7 @@ export function MobileSearchPill({
             onFocus={() => renderResults && setExpanded(true)}
             placeholder={placeholder}
             aria-label={label ?? placeholder}
-            className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/60 placeholder:font-normal"
+            className="flex-1 min-w-0 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground/60 placeholder:font-normal"
           />
           {value ? (
             <button
@@ -215,7 +215,7 @@ export function MobileSearchPill({
                 onChange("");
                 inputRef.current?.focus();
               }}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition"
             >
               <X className="h-4 w-4" />
             </button>
