@@ -1,48 +1,81 @@
-# Fix Client Dashboard Blinking / Constant Reload
+# Fix global search popup — match client-side balance display rule
 
-## Root Cause
+## The bug
 
-The client dashboard (`src/pages/ClientDashboard.tsx`) appears to "reload" repeatedly because of two issues working together:
+The Cmd+K **client search popup** (top of `/admin` dashboard) labels every balance as `BDT` and prints the raw USD number. So a $155 USD credit shows as `155 BDT`, and a $10 USD debt shows as `−10 BDT`. Both the unit and the magnitude are wrong for negatives.
 
-### 1. Unfiltered global realtime listener (the main culprit)
-In the realtime subscription:
-```ts
-.on('postgres_changes', { event: '*', schema: 'public', table: 'daily_metrics' }, debounced)
+The rest of the platform (Client List, Client Detail, Client Dashboard) follows one consistent rule:
+
+- **Positive balance** → USD: `$X.XX` (this IS the real stored value, no conversion)
+- **Negative balance (debt)** → BDT: `−৳Y.YY`, converted from USD using each client's **per-platform billing rate** in `pricing_config` (Meta / TikTok / Google rates, defaulting to 120 if missing)
+
+The search popup is the only place violating this rule.
+
+## Why the conversion needs per-platform rates
+
+A client can owe debt across multiple platforms simultaneously, and each platform may have a different rate (e.g. Meta 122, TikTok 120, Google 125). Total BDT debt is:
+
+```text
+bdt_due = Σ over [meta, tiktok, google] of  max(0, -platform_balance[p]) * rate[p]
 ```
-There is **no filter** on `daily_metrics`. So whenever the agency's sync engine writes metrics for **any client in the system**, every connected client's dashboard fires `fetchAll()`. During active syncs this happens many times a minute → constant refetch → constant re-render.
 
-### 2. CSS entrance animations re-trigger on every state update
-Elements use the classes `animate-fade-in`, `count-up`, and `stagger-1..4`. These animations run **every time the element is rendered**. Because the realtime listener forces a refetch every ~1.5s, the balance numbers and KPI cards re-play their fade/slide animation — visually that looks exactly like the screen is "blinking" or "reloading."
+This is exactly what `ClientList.tsx` already computes (lines 162–181 of that file) using the shared helper `getPlatformRates` from `src/lib/pricing.ts`. The popup must use the same formula — not a single fallback rate — otherwise BDT debt totals will silently differ between the popup and the Client List page for the same client.
 
-## Fix Plan (minimal, surgical, no feature changes)
+## Root cause
 
-### A. Scope the realtime listener to this client only
-In `src/pages/ClientDashboard.tsx`, restrict the `daily_metrics` subscription so it only fires for rows belonging to this client. We already query campaigns by `client_id`; we will add a filter so only this client's metric updates trigger a refetch.
+The dashboard RPC `get_admin_dashboard_summary` returns each client's **total** USD balance but does **not** return per-platform balances. So the popup currently has no way to do the per-platform BDT conversion correctly. It falls back to printing the raw USD number with a wrong "BDT" label.
 
-Approach: derive the client's `campaign_id` list once (we already fetch it inside `fetchAll`) and either
-- subscribe to `campaigns` filtered by `client_id` (already present) **and**
-- replace the unfiltered `daily_metrics` listener with a filter on `client_id` (the `daily_metrics` table includes `client_id` per the schema; if it doesn't on a given row we'll fall back to listening only to `campaigns` + `transactions`, which are already client-scoped).
+## Fix
 
-Net effect: the dashboard only refetches when *this* client's data actually changes, not on every global sync write.
+### 1. Extend the RPC to return per-platform balances
 
-### B. Run the realtime refetch silently (no animation re-trigger)
-Split loading state so background refetches don't replay entrance animations:
-- Keep `initialLoading` for the very first load (skeleton).
-- Move `animate-fade-in`, `page-enter`, `count-up`, and `stagger-*` so they render **only on initial mount**, not on every data refresh. The simplest way: gate those classes behind a `hasAnimatedRef` (set to `true` after first render) so subsequent updates render without re-applying the animation classes.
+In `get_admin_dashboard_summary` (latest migration), the `client_balances` CTE only sums to a single `balance`. Add a sibling JSONB aggregation `platform_balances` keyed by platform:
 
-### C. Increase debounce window slightly
-Bump the realtime debounce from 1500 ms to 2500 ms. Sync writes often arrive in bursts; a slightly larger window collapses the burst into a single quiet refetch.
+```text
+clients: [{
+  user_id, full_name, email, business_name, pricing_config,
+  balance,                     // total USD (unchanged)
+  platform_balances: {         // NEW
+    meta: -3.21,
+    tiktok: 0,
+    google: 1.10
+  }
+}]
+```
 
-## Files Touched
-- `src/pages/ClientDashboard.tsx` — scope realtime listener, gate entrance-animation classes, bump debounce.
+### 2. Pipe the new field through the hook
 
-## Out of Scope (intentionally untouched)
-- No changes to data shape, KPIs, layout, colors, or business logic.
-- No schema changes, no edge-function changes.
-- Admin dashboard and other pages are not modified.
-- The existing `ClientNoticeBanner` and `SpendTrendChart` keep their own logic.
+`useAdminDashboardData.ts`: add `platform_balances` to the typed `ClientWithBalance` shape and to the mapping function.
 
-## Expected Result
-- The client dashboard stops flickering/reloading during agency syncs.
-- Numbers update smoothly in place when this client's own data changes.
-- First page load still shows the premium skeleton + entrance animation exactly as today.
+`QuickActions.tsx` and `ClientSearchCommand.tsx`: widen the `ClientItem` interface to include `pricing_config` and `platform_balances`.
+
+### 3. Render per the canonical rule in the popup
+
+In `ClientSearchCommand.tsx`, replace the current single "BDT" block with the same logic ClientList uses, importing `getPlatformRates` from `@/lib/pricing`:
+
+```text
+if balance >= 0:
+   render  $X.XX            (success color, USD)
+else:
+   rates  = getPlatformRates(client.pricing_config)
+   bdtDue = Σ p in [meta,tiktok,google]:
+              max(0, -client.platform_balances[p]) * rates[p]
+   render  −৳Y.YY            (destructive color, BDT)
+```
+
+Sorting in the "Top Balances" / "Needs Attention" groups stays based on the USD `balance` field — the magnitude ordering is identical, no behaviour change there.
+
+That's the entire fix. No animation changes, no realtime changes, no new tooltips, no extra widgets. Just bring this one popup in line with how every other balance is displayed across the platform.
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — extend `get_admin_dashboard_summary` to also emit `platform_balances` per client.
+- `src/hooks/useAdminDashboardData.ts` — surface `platform_balances` in the typed result.
+- `src/components/dashboard/QuickActions.tsx` — widen `ClientItem` type.
+- `src/components/dashboard/ClientSearchCommand.tsx` — use the USD-for-credit / BDT-for-debt rule via `getPlatformRates`.
+
+## Out of scope
+
+- No change to dashboard KPI cards (already correct).
+- No change to ClientList, ClientDashboard, or any other consumer.
+- No change to realtime subscriptions, sort order, or animations.
