@@ -886,15 +886,13 @@ function MobileGlobalSearchPill({ onOpen }: { onOpen: () => void }) {
           "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1), transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 250ms ease-out",
       }}
     >
-      <div className="mx-auto w-full max-w-sm pointer-events-auto">
+      <div className="mx-auto w-full max-w-[340px] pointer-events-auto">
         <button
           type="button"
           onClick={onOpen}
           aria-label="Search clients"
           className={cn(
-            "flex w-full items-center gap-2 rounded-full border border-border/60",
-            "bg-card/95 backdrop-blur-2xl px-4 h-12",
-            "shadow-[0_8px_32px_-8px_hsl(var(--primary)/0.35),0_-2px_12px_-4px_hsl(var(--foreground)/0.08)]",
+            "ios-glass-pill-floating relative flex w-full items-center gap-2 rounded-full px-4 h-11",
             "transition active:scale-[0.98]",
           )}
         >
@@ -903,8 +901,8 @@ function MobileGlobalSearchPill({ onOpen }: { onOpen: () => void }) {
             Search clients…
           </span>
           <span className="relative flex h-1.5 w-1.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-50 animate-ping" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/80" />
           </span>
         </button>
       </div>

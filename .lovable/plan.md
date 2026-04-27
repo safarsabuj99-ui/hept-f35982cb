@@ -1,43 +1,74 @@
-# Hide Bottom Search Pill on Scroll Down, Reveal on Scroll Up
+## Goal
 
-Many pages (Clients, Ad Accounts, Payments, Orders, etc.) have filter rows of buttons just above the content area. Right now the persistent bottom search pill can sit on top of those buttons while the user is scrolling through long lists. This makes it harder to scan the list and tap filters.
+Upgrade the bottom mobile search pills (per-page `MobileSearchPill` and global `MobileGlobalSearchPill`) to match the **reference frosted-glass aesthetic** in the screenshot: heavier blur, premium inner highlight, ambient glow border, and a slightly more compact footprint.
 
-We'll add a smooth auto-hide behavior, exactly like One UI 8.5 / iOS Safari toolbars:
+Both pills currently use plain `bg-card/95 backdrop-blur-2xl` with a flat shadow — they don't feel like part of the same design language as the global search dialog and the One UI side drawer. We'll align them with the existing `ios-glass-*` tokens that already power those surfaces.
 
-- Scroll **down** → the pill **slides down off-screen and fades out**.
-- Scroll **up** (even a small nudge) → the pill **slides back up and fades in**.
-- At the top of the page → pill is always visible.
-- While the on-screen keyboard is open (user actively typing) → pill stays visible regardless of scroll, so search is never hijacked.
-- When search results are expanded → pill stays visible regardless of scroll.
+## Visual changes
 
-## Technical changes
+| Aspect | Before | After |
+|---|---|---|
+| Background | `bg-card/95` (almost opaque) | `hsl(var(--card)/0.55)` — true frosted glass, lets dashboard show through |
+| Blur | `backdrop-blur-2xl` (~40px, no saturation) | `blur(48px) saturate(200%)` — matches `.ios-glass-card` |
+| Border | `border-border/60` (flat) | `1px hsl(0 0% 100% / 0.1)` + inner `0.5px` micro-edge |
+| Highlight | none | Top inner `1px` white-8% specular highlight (matches reference) |
+| Shadow | Single primary-tinted drop shadow | Layered: deep ambient shadow + soft primary glow + top-edge bleed |
+| Width | `max-w-sm` (384px) | `max-w-[340px]` — more compact, floats nicer at 390px viewport |
+| Height | `h-12` (48px) | `h-11` (44px) — tighter, matches iOS/One UI pill height |
+| Padding | `px-3` / `px-4` | `px-4` consistent with rounded-full radius |
+| Results panel | Same pill bg | Promoted to `.ios-glass-card` look so it visually matches the global search dialog in the reference |
 
-**1. New shared hook: `src/hooks/use-hide-on-scroll.ts`**
-- Tracks `window.scrollY` via a `requestAnimationFrame`-throttled `scroll` listener (passive + capture phase, so nested scroll containers also trigger it).
-- Computes a delta from the last recorded position; if downward delta > 8px → `hidden = true`. If upward delta > 8px → `hidden = false`.
-- Always returns `hidden = false` while `scrollY <= 64` (top-of-page guard).
-- Accepts `enabled`, `threshold`, and `topGuard` options.
+## Implementation
 
-**2. `src/components/ui/mobile-search-pill.tsx`**
-- Call `useHideOnScroll({ enabled: !expanded && keyboardOffset === 0 })`.
-- Apply translate + opacity transition classes to the outer fixed wrapper:
-  ```
-  transition-[transform,opacity] duration-300 ease-out
-  hidden ? "translate-y-[140%] opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
-  ```
-- The existing `bottom` style transition is preserved for keyboard offset.
+### 1. New utility class in `src/index.css`
 
-**3. `src/components/dashboard/ClientSearchCommand.tsx` — `MobileGlobalSearchPill`**
-- Same hook + same translate/opacity classes on the fixed wrapper, so the global search pill on the admin dashboard hides/reveals identically.
+Add `.ios-glass-pill-floating` (and a `.dark` override) — a stronger variant of `.ios-glass-pill` tuned specifically for floating bottom pills, with the ambient primary glow seen in the reference:
 
-## Out of scope
+```css
+.ios-glass-pill-floating {
+  background: hsl(var(--card) / 0.55);
+  backdrop-filter: blur(48px) saturate(200%);
+  -webkit-backdrop-filter: blur(48px) saturate(200%);
+  border: 1px solid hsl(0 0% 100% / 0.1);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.1),
+    inset 0 0 0 0.5px hsl(0 0% 100% / 0.04),
+    0 12px 40px -10px hsl(var(--primary) / 0.28),
+    0 4px 16px -4px hsl(0 0% 0% / 0.35);
+}
+.dark .ios-glass-pill-floating {
+  background: hsl(var(--card) / 0.4);
+  border-color: hsl(0 0% 100% / 0.08);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
+    inset 0 0 0 0.5px hsl(0 0% 100% / 0.03),
+    0 16px 48px -12px hsl(var(--primary) / 0.4),
+    0 4px 20px -4px hsl(0 0% 0% / 0.5);
+}
+```
 
-- Desktop layout (no change).
-- The expanded results panel — when the user is actively searching/typing, the pill stays put.
-- No changes to existing keyboard-offset / safe-area / single-instance-registry logic.
+### 2. `src/components/ui/mobile-search-pill.tsx`
 
-## Files touched
+- Replace the pill `<div>` className: drop `bg-card/95 backdrop-blur-2xl border border-border/60 shadow-[…]`, use `ios-glass-pill-floating` instead.
+- Change `h-12` → `h-11`, `max-w-sm` → `max-w-[340px]`.
+- Promote the results panel to use `ios-glass-card` (matches the reference dialog), keep `rounded-3xl` and the upward slide-in animation.
 
-- `src/hooks/use-hide-on-scroll.ts` *(new)*
-- `src/components/ui/mobile-search-pill.tsx`
-- `src/components/dashboard/ClientSearchCommand.tsx`
+### 3. `src/components/dashboard/ClientSearchCommand.tsx` (`MobileGlobalSearchPill`)
+
+- Same className swap on the trigger button: `ios-glass-pill-floating` + `h-11` + `max-w-[340px]`.
+- Keep the small ping dot on the right (it's a nice accent) but reduce its color saturation slightly so it doesn't fight the new softer glow.
+
+### 4. No behavior changes
+
+- Hide-on-scroll, keyboard tracking, single-instance registry, and portal mounting all stay identical.
+- Desktop rendering is untouched.
+
+## Files to edit
+
+- `src/index.css` — add `.ios-glass-pill-floating` utility (light + dark)
+- `src/components/ui/mobile-search-pill.tsx` — swap classes, tighten size
+- `src/components/dashboard/ClientSearchCommand.tsx` — swap classes on global pill, tighten size
+
+## Result
+
+The bottom search pill will sit on the screen like the reference dialog: a translucent frosted lozenge with a soft primary glow underneath, a crisp specular highlight on top, and content from the page visibly diffusing through it — distinctly more premium and noticeably more compact than the current version.

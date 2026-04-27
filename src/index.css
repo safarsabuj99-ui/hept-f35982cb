@@ -163,6 +163,18 @@
     -webkit-backdrop-filter: blur(24px) saturate(200%);
     border-color: hsl(0 0% 100% / 0.08);
   }
+
+  .dark .ios-glass-pill-floating {
+    background: hsl(var(--card) / 0.4);
+    backdrop-filter: blur(48px) saturate(200%);
+    -webkit-backdrop-filter: blur(48px) saturate(200%);
+    border-color: hsl(0 0% 100% / 0.08);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
+      inset 0 0 0 0.5px hsl(0 0% 100% / 0.03),
+      0 16px 48px -12px hsl(var(--primary) / 0.4),
+      0 4px 20px -4px hsl(0 0% 0% / 0.5);
+  }
 }
 
 @layer base {
@@ -730,6 +742,18 @@
     box-shadow:
       inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
       0 2px 8px -2px hsl(0 0% 0% / 0.06);
+  }
+
+  .ios-glass-pill-floating {
+    background: hsl(var(--card) / 0.55);
+    backdrop-filter: blur(48px) saturate(200%);
+    -webkit-backdrop-filter: blur(48px) saturate(200%);
+    border: 1px solid hsl(0 0% 100% / 0.1);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.1),
+      inset 0 0 0 0.5px hsl(0 0% 100% / 0.04),
+      0 12px 40px -10px hsl(var(--primary) / 0.28),
+      0 4px 16px -4px hsl(0 0% 0% / 0.35);
   }
 }
 
