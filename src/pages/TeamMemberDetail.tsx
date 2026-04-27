@@ -796,13 +796,12 @@ export default function TeamMemberDetail() {
               <DialogHeader>
                 <DialogTitle>Assign Clients</DialogTitle>
               </DialogHeader>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search unassigned clients..."
-                  className="pl-9"
+              <div className="mb-3">
+                <MobileSearchPill
                   value={assignSearch}
-                  onChange={(e) => setAssignSearch(e.target.value)}
+                  onChange={setAssignSearch}
+                  placeholder="Search unassigned clients..."
+                  label="Search unassigned clients"
                 />
               </div>
               {loadingUnassigned ? (
