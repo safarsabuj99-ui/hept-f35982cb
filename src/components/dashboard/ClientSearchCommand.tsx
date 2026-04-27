@@ -502,13 +502,26 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
               isMobile && "flex flex-col-reverse max-h-[88vh]",
             )}
           >
-            <div className="relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
-              <div className="flex items-center px-4" cmdk-input-wrapper="">
+            <div
+              className={cn(
+                "relative bg-gradient-to-r from-primary/5 via-transparent to-primary/5",
+                // On mobile this row sits at the BOTTOM (because of flex-col-reverse on
+                // the parent Command). Style it as a One UI 8.5 pill, lifted off the list.
+                isMobile &&
+                  "mx-2 mb-1 mt-2 rounded-full border border-border/60 bg-card/95 backdrop-blur-2xl shadow-[0_-8px_32px_-8px_hsl(var(--primary)/0.4)] from-transparent via-transparent to-transparent",
+              )}
+            >
+              <div
+                className={cn("flex items-center", isMobile ? "px-4" : "px-4")}
+                cmdk-input-wrapper=""
+              >
                 <Search className="mr-3 h-4 w-4 shrink-0 text-primary/70" />
                 <CommandInput
                   value={query}
                   onValueChange={setQuery}
-                  placeholder="Name, phone, business, mapping, amount…"
+                  placeholder={
+                    isMobile ? "Search clients…" : "Name, phone, business, mapping, amount…"
+                  }
                   className="flex h-14 w-full bg-transparent py-3 text-base font-medium outline-none placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic disabled:cursor-not-allowed disabled:opacity-50 border-0"
                 />
                 <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -520,9 +533,31 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
                   <kbd className="hidden sm:inline-flex h-5 select-none items-center rounded border border-border/60 bg-muted/40 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
                     ESC
                   </kbd>
+                  {isMobile && query && (
+                    <button
+                      type="button"
+                      aria-label="Clear"
+                      onClick={() => setQuery("")}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {isMobile && !query && (
+                    <button
+                      type="button"
+                      aria-label="Close"
+                      onClick={() => setOpen(false)}
+                      className="rounded-full px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+              {!isMobile && (
+                <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+              )}
             </div>
 
             {/* Portfolio KPI strip — only when not searching */}
