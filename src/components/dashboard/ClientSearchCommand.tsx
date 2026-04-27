@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { getPlatformRates } from "@/lib/pricing";
 
 interface ClientItem {
   user_id: string;
@@ -31,6 +32,8 @@ interface ClientItem {
   email?: string;
   business_name?: string | null;
   balance: number;
+  pricing_config?: any;
+  platform_balances?: Record<string, number>;
 }
 
 interface ClientSearchCommandProps {
@@ -73,11 +76,38 @@ function getInitials(name: string) {
   );
 }
 
-function formatBalance(n: number): string {
+function formatMoney(n: number): string {
   return Math.abs(n).toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
+}
+
+const KNOWN_PLATFORMS = ["meta", "tiktok", "google"] as const;
+
+/**
+ * Compute BDT debt total using per-platform billing rates,
+ * matching ClientList.tsx logic exactly.
+ */
+function computeBdtDebt(client: ClientItem): number {
+  const rates = getPlatformRates(client.pricing_config);
+  const platBals = client.platform_balances ?? {};
+  let bdt = 0;
+  for (const p of KNOWN_PLATFORMS) {
+    const bal = Number(platBals[p]) || 0;
+    if (bal < 0) {
+      const rate = Number((rates as any)[p]) || 120;
+      bdt += Math.abs(bal) * rate;
+    }
+  }
+  // Fallback when no per-platform breakdown is available:
+  // use the average platform rate against the aggregate negative balance.
+  if (bdt === 0 && client.balance < 0) {
+    const fallbackRate =
+      Number(rates.meta) || Number(rates.tiktok) || Number(rates.google) || 120;
+    bdt = Math.abs(client.balance) * fallbackRate;
+  }
+  return bdt;
 }
 
 export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
@@ -181,11 +211,14 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   : "text-muted-foreground"
               }`}
             >
-              {negative ? "−" : ""}
-              {formatBalance(client.balance)}
+              {negative
+                ? `−৳${formatMoney(computeBdtDebt(client))}`
+                : positive
+                ? `$${formatMoney(client.balance)}`
+                : `$${formatMoney(0)}`}
             </span>
             <span className="text-[8px] uppercase tracking-[0.15em] text-muted-foreground/50 font-medium">
-              BDT
+              {negative ? "BDT" : "USD"}
             </span>
           </div>
         </div>

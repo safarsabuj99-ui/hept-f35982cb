@@ -13,6 +13,7 @@ interface ClientWithBalance {
   business_name: string | null;
   balance: number;
   pricing_config: any;
+  platform_balances: Record<string, number>;
 }
 
 interface DashboardData {
@@ -51,6 +52,7 @@ async function fetchDashboardData(dateRange: DateRange | null, orgId: string): P
     business_name: c.business_name,
     balance: Number(c.balance),
     pricing_config: c.pricing_config,
+    platform_balances: c.platform_balances ?? {},
   }));
 
   const lastSynced = result.lastSynced
