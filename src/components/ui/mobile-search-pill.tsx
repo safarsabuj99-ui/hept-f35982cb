@@ -187,13 +187,12 @@ export function MobileSearchPill({
           "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1), transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 250ms ease-out",
       }}
     >
-      <div className="mx-auto w-full max-w-sm flex flex-col gap-2 pointer-events-auto">
+      <div className="mx-auto w-full max-w-[340px] flex flex-col gap-2 pointer-events-auto">
         {/* Results panel — only when expanded AND consumer provides renderResults */}
         {expanded && renderResults && (
           <div
             className={cn(
-              "max-h-[60vh] overflow-y-auto rounded-3xl border border-border/40",
-              "bg-card/95 backdrop-blur-2xl shadow-[0_-12px_40px_-12px_hsl(var(--primary)/0.35)]",
+              "ios-glass-card max-h-[60vh] overflow-y-auto rounded-3xl",
               "px-1 py-2 animate-in fade-in-0 slide-in-from-bottom-2",
             )}
           >
@@ -204,9 +203,7 @@ export function MobileSearchPill({
         {/* The pill — persistent, always visible */}
         <div
           className={cn(
-            "flex items-center gap-2 rounded-full border border-border/60",
-            "bg-card/95 backdrop-blur-2xl px-3 h-12",
-            "shadow-[0_8px_32px_-8px_hsl(var(--primary)/0.35),0_-2px_12px_-4px_hsl(var(--foreground)/0.08)]",
+            "ios-glass-pill-floating relative flex items-center gap-2 rounded-full px-4 h-11",
           )}
         >
           <Search className="h-4 w-4 shrink-0 text-primary/70" />
