@@ -133,6 +133,12 @@ export function MobileSearchPill({
     if (!value) setExpanded(false);
   }, [value]);
 
+  // Auto-hide on scroll-down, reveal on scroll-up. Stays visible while typing
+  // (keyboard up) or when the results panel is expanded.
+  const hiddenByScroll = useHideOnScroll({
+    enabled: isMobile && !expanded && keyboardOffset === 0,
+  });
+
   // ─── Desktop ──────────────────────────────────────────────────────────────
   if (!isMobile) {
     const Icon = (
