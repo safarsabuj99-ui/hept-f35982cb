@@ -1,4 +1,5 @@
 import { ClientSearchCommand } from "./ClientSearchCommand";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface ClientItem {
   user_id: string;
@@ -20,6 +21,14 @@ interface QuickActionsProps {
 }
 
 export function QuickActions({ clients }: QuickActionsProps) {
+  const isMobile = useIsMobile();
+
+  // On mobile, the global search renders as a fixed bottom pill via portal —
+  // we don't need a glass-card wrapper taking up space in the page flow.
+  if (isMobile) {
+    return <ClientSearchCommand clients={clients} mode="full" />;
+  }
+
   return (
     <div
       className="glass-card p-3 px-4 opacity-0 animate-slide-up-fade"

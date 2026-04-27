@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -37,6 +37,8 @@ import { getPlatformRates } from "@/lib/pricing";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { createPortal } from "react-dom";
+import { registerMobilePill, useIsTopMobilePill } from "@/components/ui/mobile-search-pill";
 
 interface ClientItem {
   user_id: string;
@@ -433,7 +435,7 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
 
   return (
     <>
-      {!isHotkeyOnly && (
+      {!isHotkeyOnly && !isMobile && (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -454,6 +456,11 @@ export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchComm
             </kbd>
           </div>
         </button>
+      )}
+
+      {/* Mobile: persistent One UI 8.5-style bottom pill trigger (only for "full" mode). */}
+      {!isHotkeyOnly && isMobile && (
+        <MobileGlobalSearchPill onOpen={() => setOpen(true)} />
       )}
 
       <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -823,4 +830,78 @@ function ActionButton({
       {label}
     </button>
   );
+}
+
+/**
+ * Mobile-only persistent bottom pill that acts as the trigger for the global
+ * search dialog. Matches One UI 8.5 styling — same shape/size as
+ * `MobileSearchPill`, but tapping it opens the full command palette.
+ */
+function MobileGlobalSearchPill({ onOpen }: { onOpen: () => void }) {
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const idRef = useRef<{ id: number; release: () => void } | null>(null);
+  if (!idRef.current) idRef.current = registerMobilePill();
+  useEffect(() => {
+    return () => {
+      idRef.current?.release();
+      idRef.current = null;
+    };
+  }, []);
+  const isTop = useIsTopMobilePill(idRef.current.id);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOffset(offset);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  if (!isTop) return null;
+  if (typeof document === "undefined") return null;
+
+  const node = (
+    <div
+      className="fixed left-0 right-0 z-40 px-4 pointer-events-none"
+      style={{
+        bottom: keyboardOffset > 0
+          ? `calc(${keyboardOffset}px + 0.5rem)`
+          : `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-offset, 1.25rem))`,
+        transition: "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1)",
+      }}
+    >
+      <div className="mx-auto w-full max-w-sm pointer-events-auto">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label="Search clients"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-full border border-border/60",
+            "bg-card/95 backdrop-blur-2xl px-4 h-12",
+            "shadow-[0_8px_32px_-8px_hsl(var(--primary)/0.35),0_-2px_12px_-4px_hsl(var(--foreground)/0.08)]",
+            "transition active:scale-[0.98]",
+          )}
+        >
+          <Search className="h-4 w-4 shrink-0 text-primary/70" />
+          <span className="flex-1 min-w-0 text-left text-sm font-normal text-muted-foreground/70 truncate">
+            Search clients…
+          </span>
+          <span className="relative flex h-1.5 w-1.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return createPortal(node, document.body);
 }
