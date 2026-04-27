@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
 import { cn } from "@/lib/utils";
 
 interface RenderResultsArgs {
@@ -132,6 +133,12 @@ export function MobileSearchPill({
     if (!value) setExpanded(false);
   }, [value]);
 
+  // Auto-hide on scroll-down, reveal on scroll-up. Stays visible while typing
+  // (keyboard up) or when the results panel is expanded.
+  const hiddenByScroll = useHideOnScroll({
+    enabled: isMobile && !expanded && keyboardOffset === 0,
+  });
+
   // ─── Desktop ──────────────────────────────────────────────────────────────
   if (!isMobile) {
     const Icon = (
@@ -167,12 +174,17 @@ export function MobileSearchPill({
 
   const pill = (
     <div
-      className="fixed left-0 right-0 z-40 px-4 pointer-events-none"
+      className={cn(
+        "fixed left-0 right-0 z-40 px-4 pointer-events-none",
+        "transition-[transform,opacity] duration-300 ease-out",
+        hiddenByScroll ? "translate-y-[140%] opacity-0" : "translate-y-0 opacity-100",
+      )}
       style={{
         bottom: keyboardOffset > 0
           ? `calc(${keyboardOffset}px + 0.5rem)`
           : `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-offset, 1.25rem))`,
-        transition: "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1)",
+        transition:
+          "bottom 180ms cubic-bezier(0.32, 0.72, 0, 1), transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 250ms ease-out",
       }}
     >
       <div className="mx-auto w-full max-w-sm flex flex-col gap-2 pointer-events-auto">
