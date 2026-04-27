@@ -211,11 +211,14 @@ export function ClientSearchCommand({ clients }: ClientSearchCommandProps) {
                   : "text-muted-foreground"
               }`}
             >
-              {negative ? "−" : ""}
-              {formatBalance(client.balance)}
+              {negative
+                ? `−৳${formatMoney(computeBdtDebt(client))}`
+                : positive
+                ? `$${formatMoney(client.balance)}`
+                : `$${formatMoney(0)}`}
             </span>
             <span className="text-[8px] uppercase tracking-[0.15em] text-muted-foreground/50 font-medium">
-              BDT
+              {negative ? "BDT" : "USD"}
             </span>
           </div>
         </div>
