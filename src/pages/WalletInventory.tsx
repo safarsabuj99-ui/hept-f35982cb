@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { debounce } from "@/lib/debounce";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -203,19 +204,32 @@ export default function WalletInventory() {
   }, [profile?.org_id, fetchOverview]);
 
   useEffect(() => {
+    // Debounce all realtime callbacks — sync workers can write hundreds of
+    // daily_metrics rows per second; without this the page would refetch and
+    // visually "blink" continuously while a sync is running.
+    const refreshPurchases = debounce(() => fetchPurchases(dateRange), 2000);
+    const refreshOverview = debounce(() => fetchOverview(), 2000);
+    const refreshManualSpends = debounce(() => { fetchManualSpends(dateRange); fetchOverview(); }, 2000);
+    const refreshAgencyAccounts = debounce(() => fetchAgencyAccounts(), 2000);
+    const refreshFromMetrics = debounce(() => { refreshSnapshot().then(() => fetchOverview()); }, 3000);
+
     const channel = supabase
       .channel("wallet-inventory-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, () => fetchPurchases(dateRange))
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, () => fetchOverview())
-      .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, () => { fetchManualSpends(dateRange); fetchOverview(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, () => fetchAgencyAccounts())
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => {
-        // Auto-spend detected — refresh snapshot then overview
-        refreshSnapshot().then(() => fetchOverview());
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_purchases" }, refreshPurchases)
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_inventory_snapshots" }, refreshOverview)
+      .on("postgres_changes", { event: "*", schema: "public", table: "usd_manual_spends" }, refreshManualSpends)
+      .on("postgres_changes", { event: "*", schema: "public", table: "agency_accounts" }, refreshAgencyAccounts)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, refreshFromMetrics)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchPurchases, fetchOverview, fetchManualSpends, fetchAgencyAccounts, dateRange]);
+    return () => {
+      refreshPurchases.cancel();
+      refreshOverview.cancel();
+      refreshManualSpends.cancel();
+      refreshAgencyAccounts.cancel();
+      refreshFromMetrics.cancel();
+      supabase.removeChannel(channel);
+    };
+  }, [fetchPurchases, fetchOverview, fetchManualSpends, fetchAgencyAccounts, refreshSnapshot, dateRange]);
 
   const handleRangeChange = (range: DateRange | null, preset: DatePreset) => {
     setDateRange(range);

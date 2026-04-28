@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { isActiveStatus } from "@/lib/campaignStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
+import { debounce } from "@/lib/debounce";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,13 +19,14 @@ export default function ClientReports() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [adAccountMap, setAdAccountMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const initialLoadingRef = useRef(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [preset, setPreset] = useState<ClientDatePreset>("today");
   const [canToggleCampaigns, setCanToggleCampaigns] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;
-    setLoading(true);
+    if (initialLoadingRef.current) setLoading(true);
 
     // Fetch client permissions
     const { data: profileData } = await supabase
@@ -103,21 +105,27 @@ export default function ClientReports() {
       setRawMetrics([]);
     }
     setLoading(false);
+    initialLoadingRef.current = false;
   }, [effectiveClientId, dateRange]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Realtime subscription
+  // Realtime subscription — heavily debounced and filtered to this client.
+  // Sync workers can write hundreds of daily_metrics rows per second; without
+  // debouncing this caused the page to refetch & flash skeletons every second.
   useEffect(() => {
+    if (!effectiveClientId) return;
+    const debounced = debounce(() => fetchData(), 2500);
     const channel = supabase
       .channel("client-reports-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, () => fetchData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_performance" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaigns", filter: `client_id=eq.${effectiveClientId}` }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_metrics" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaign_performance" }, debounced)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchData]);
+    return () => { debounced.cancel(); supabase.removeChannel(channel); };
+  }, [effectiveClientId, fetchData]);
 
   const handleRangeChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
