@@ -61,6 +61,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Soft time budget — give ourselves 18s of the 22s edge budget. Past this point,
+  // skip remaining accounts so the next 15-min orchestrator run can pick them up
+  // cleanly instead of being aborted mid-write (which leaves stale daily_metrics).
+  const startTime = Date.now();
+  const TIME_BUDGET_MS = 18_000;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
