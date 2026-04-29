@@ -705,7 +705,7 @@ Deno.serve(async (req) => {
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -732,7 +732,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -767,9 +767,10 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };
 
-          // Fetch real campaign statuses AND budgets from TikTok
+          // Fetch real campaign statuses, budgets AND objectives from TikTok
           const tiktokStatusMap: Record<string, string> = {};
           const tiktokBudgetMap: Record<string, number> = {};
+          const tiktokObjectiveMap: Record<string, string> = {};
           let tiktokStatusFetchFailed = false;
           try {
             const statusParams = new URLSearchParams({
@@ -790,6 +791,25 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                 // Extract budget (TikTok returns budget in currency units)
                 if (c.budget !== undefined && c.budget !== null) {
                   tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
+                }
+                // Map TikTok objective_type → simplified label (mirrors Meta mapping)
+                const rawObj = (c.objective_type || "").toUpperCase();
+                if (rawObj === "WEB_CONVERSIONS" || rawObj === "PRODUCT_SALES" || rawObj === "CONVERSIONS" || rawObj === "SHOP_PURCHASES") {
+                  tiktokObjectiveMap[c.campaign_id] = "sales";
+                } else if (rawObj === "LEAD_GENERATION") {
+                  tiktokObjectiveMap[c.campaign_id] = "leads";
+                } else if (rawObj === "TRAFFIC") {
+                  tiktokObjectiveMap[c.campaign_id] = "traffic";
+                } else if (rawObj === "ENGAGEMENT" || rawObj === "COMMUNITY_INTERACTION") {
+                  tiktokObjectiveMap[c.campaign_id] = "engagement";
+                } else if (rawObj === "REACH") {
+                  tiktokObjectiveMap[c.campaign_id] = "awareness";
+                } else if (rawObj === "VIDEO_VIEWS") {
+                  tiktokObjectiveMap[c.campaign_id] = "video_views";
+                } else if (rawObj === "APP_PROMOTION" || rawObj === "APP_INSTALL") {
+                  tiktokObjectiveMap[c.campaign_id] = "app_promotion";
+                } else if (rawObj) {
+                  tiktokObjectiveMap[c.campaign_id] = rawObj.toLowerCase().replace(/_/g, " ");
                 }
 
                 const activeStatuses = [
@@ -842,6 +862,14 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
             const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10); // Real "Conversations (TikTok DM)" from API
             const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0; // Attribute leads only when DM conversations exist
+
+            // Sales-funnel metrics (TikTok "Total" = web + app + offline pixel events)
+            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || "0");
+            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || "0");
+            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || "0");
+            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || "0");
+            const tiktokCostPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
+
             const rawCampaignId = row.dimensions?.campaign_id;
             const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
@@ -858,7 +886,8 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             // If status fetch succeeded, use the map (confirmed) or default "active" (also confirmed since API worked)
             const tiktokStatusConfirmed = tiktokStatusFetchFailed ? true : true; // Always confirmed — either from API or forced active
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
-            const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed);
+            const tiktokObjective = tiktokObjectiveMap[rawCampaignId] || "";
+            const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed, tiktokObjective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
             const campaignDbId = campaignResult.id;
             const finalTiktokStatus = campaignResult.status;
@@ -889,6 +918,11 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               conversations_tiktok_dm: tiktokConvDm,
               leads_tiktok_dm: tiktokLeadsDm,
               conversations_instant_msg: 0,
+              view_content: tiktokViewContent,
+              add_to_cart: tiktokAddToCart,
+              initiate_checkout: tiktokInitiateCheckout,
+              purchase: tiktokPurchase,
+              cost_per_purchase: convertSpend(tiktokCostPerPurchase),
             });
 
             // Legacy write
