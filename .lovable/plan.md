@@ -1,51 +1,74 @@
-# Fix: Pages blink/refresh every second during API sync
+## Bug Found
 
-## Root cause
+The **Sales preset** shows blank/zero data for TikTok campaigns because:
 
-When a sync (Meta / TikTok / etc.) is running, it inserts hundreds of `daily_metrics` and `campaign_performance` rows per second. Three pages subscribe to those tables **without any filter and without any debounce**, and each event triggers a full refetch that flips a page-wide `loading` state back to `true` — which swaps the rendered UI for skeletons. That swap, repeated several times per second, is the "blink / refresh every second" the user sees.
+1. **`sync-deep-dive/index.ts` (TikTok branch)** never requests or writes the sales-funnel metrics (`view_content`, `add_to_cart`, `initiate_checkout`, `purchase`, `cost_per_purchase`). Only the Meta branch populates these. The TikTok `upsertMetrics` call simply omits them, so they default to `0`.
+2. **TikTok campaign objective is never fetched/stored.** Only Meta sets `objective` via `metaObjectiveMap`. So in "auto" preset mode the table also can't recognize TikTok sales campaigns (the row's `objective` is empty, the auto-detector falls back to `hasObjectiveData.sales` which is always false because the funnel fields are zero — a circular dead end).
+3. The TikTok request currently asks for: `spend, impressions, clicks, ctr, cpc, conversion, conversion_cost, complete_payment_roas, reach, onsite_form, onsite_on_web_detail`. It's missing the standard TikTok sales-funnel metrics.
 
-`ClientDashboard.tsx` already solved this same issue (debounce + `initialLoading` ref + filtered subscription + skip `daily_metrics`). The other pages were never updated to match.
+## Fix
 
-### Affected files
+### 1. `supabase/functions/sync-deep-dive/index.ts` — TikTok request metrics
 
-- `src/pages/ClientReports.tsx` — subscribes to `daily_metrics` + `campaign_performance` unfiltered, calls `fetchData()` directly, and `fetchData` does `setLoading(true)` every time.
-- `src/pages/CampaignMapping.tsx` — same pattern (unfiltered `daily_metrics` + `campaign_performance`, no debounce).
-- `src/pages/WalletInventory.tsx` — unfiltered `daily_metrics` listener that triggers refetch storms during sync.
+Add TikTok's sales-funnel metric names to **both** the BC-scoped and direct-advertiser request URLs (lines ~708 and ~735):
 
-`useAdminDashboardData.ts`, `ClientList.tsx`, `FinanceDashboard.tsx` already debounce correctly — leave them alone.
+Add: `total_view_content, total_add_to_cart, total_initiate_checkout, total_complete_payment, cost_per_complete_payment`
 
-## The fix
+(These are TikTok's official "Total" web/app pixel funnel metrics, which mirror Meta's `view_content / add_to_cart / initiate_checkout / purchase`. They aggregate web + app + offline events.)
 
-Apply the same proven pattern used in `ClientDashboard.tsx` to all three pages:
+### 2. Map and write the new metrics
 
-1. **Debounce realtime callbacks** to ~2000–2500ms (`debounce` helper from `@/lib/debounce`) so a burst of inserts produces one refetch, not hundreds.
-2. **Separate "initial load" from "background refresh"**:
-   - Use an `initialLoadingRef` (or an `initialLoading` state) that is only `true` for the very first fetch.
-   - Subsequent realtime-triggered refetches must NOT call `setLoading(true)` — they update data silently.
-   - Skeletons render only while `initialLoading` is true; afterwards the existing UI stays mounted (optionally with a subtle `opacity-60` while refreshing, per project loading-state standards).
-3. **Cancel the debounce in the effect cleanup** (`debounced.cancel()`) and `removeChannel` as today.
-4. **For `ClientReports.tsx`**: also remove the redundant `daily_metrics` listener if possible (the data is per-campaign for the current client; spend totals get updated through the `campaigns` listener already used elsewhere). At minimum, keep it but heavily debounced. Decision: keep both listeners but debounced at 2500ms — preserves freshness on the report page while eliminating the blink.
+In the TikTok row loop (lines ~833–892), parse the new fields and pass them into `upsertMetrics`:
 
-## ASCII summary of the change
+```ts
+const viewContent      = parseFloat(row.metrics?.total_view_content      || "0");
+const addToCart        = parseFloat(row.metrics?.total_add_to_cart        || "0");
+const initiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || "0");
+const purchase         = parseFloat(row.metrics?.total_complete_payment   || "0");
+const costPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
 
-```text
-BEFORE (every realtime event):
- sync writes row → onChange → fetchData() → setLoading(true) → skeleton flash → setLoading(false)
- (repeats hundreds of times per second)
-
-AFTER:
- sync writes rows → onChange (debounced 2500ms) → single silent refetch → data updates in place
- (initial page load still shows skeleton exactly once)
+await upsertMetrics(campaignDbId, dataDate, {
+  ...existing fields,
+  view_content: viewContent,
+  add_to_cart: addToCart,
+  initiate_checkout: initiateCheckout,
+  purchase: purchase,
+  cost_per_purchase: convertSpend(costPerPurchase),
+});
 ```
 
-## Out of scope
+Note: `cost_per_purchase` runs through `convertSpend()` so BDT-priced TikTok accounts normalize to USD just like `spend`.
 
-- No schema, RLS, or edge-function changes.
-- No changes to pages that already debounce correctly.
-- No new dependencies (`debounce` helper already exists in `src/lib/debounce.ts`).
+### 3. Fetch + store TikTok campaign objective
 
-## Verification after implementation
+In the existing `campaign/get/` status fetch loop (line ~785), also extract `objective_type` from each campaign and build a `tiktokObjectiveMap`. Then map to the same simplified labels the front-end expects:
 
-- Open Client Reports while a sync job is running → page should no longer flash skeletons; numbers update smoothly every couple of seconds.
-- Open Campaign Mapping and Wallet Inventory during sync → same: no blinking.
-- Initial page load still shows skeletons exactly once.
+```text
+TikTok objective_type             → simplified label
+WEB_CONVERSIONS / PRODUCT_SALES   → "sales"
+LEAD_GENERATION                   → "leads"
+TRAFFIC                           → "traffic"
+ENGAGEMENT                        → "engagement"
+REACH                             → "awareness"
+VIDEO_VIEWS                       → "video_views"
+APP_PROMOTION                     → "app_promotion"
+```
+
+Pass `objective` into `upsertCampaign(...)` so the `campaigns.objective` column is populated. The existing `upsertCampaign` already accepts an `objective` param (line 252) — TikTok just isn't passing one today.
+
+Add `objective_type` to the `fields` query string of the status fetch — it's already returned by default but make it explicit if needed.
+
+### 4. (Optional polish) Fast-lane parity
+
+`sync-fast-lane/index.ts` (TikTok branch ~line 407) is the "live spend" lane and only writes spend/clicks/impressions — it does NOT need sales-funnel data (deep-dive owns that). Leave fast-lane untouched to keep it fast. Sales data will appear after the next deep-dive cycle.
+
+## Files Changed
+
+- `supabase/functions/sync-deep-dive/index.ts` — only file modified
+
+## Verification
+
+After deploy + one deep-dive run:
+- `daily_metrics` rows for TikTok campaigns will have non-zero `view_content / add_to_cart / initiate_checkout / purchase` where the pixel is firing.
+- `campaigns.objective` will be `"sales"` for TikTok web-conversion / product-sales campaigns.
+- The Sales preset in `DeepDiveTable` will render real numbers for TikTok rows, and the **Auto** preset will correctly auto-detect sales campaigns on TikTok.
