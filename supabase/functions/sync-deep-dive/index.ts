@@ -1061,6 +1061,8 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
         skipped_no_keyword_match: skippedCampaigns,
+        skipped_for_time_budget: skippedForTimeBudget,
+        elapsed_ms: Date.now() - startTime,
         errors: errors.length > 0 ? errors : undefined,
         error_code: errors.length > 0 ? "partial_errors" : undefined,
         rows_synced: totalSynced,
