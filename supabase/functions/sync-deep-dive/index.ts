@@ -919,10 +919,12 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10);
             const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0;
 
-            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || "0");
-            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || "0");
-            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || "0");
-            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || "0");
+            // BC reports return `total_*` (web+app+offline pixel events). Direct/advertiser
+            // reports only support the non-`total_` variants. Read either source.
+            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || row.metrics?.view_content       || "0");
+            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || row.metrics?.add_to_cart        || "0");
+            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || row.metrics?.initiate_checkout  || "0");
+            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || row.metrics?.complete_payment   || "0");
             const tiktokCostPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
 
             const tiktokStatusConfirmed = true;
