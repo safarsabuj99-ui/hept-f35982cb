@@ -746,7 +746,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment","initiate_checkout","add_to_cart","view_content"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
