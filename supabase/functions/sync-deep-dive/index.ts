@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
 
     let totalSynced = 0;
     let skippedCampaigns = 0;
+    let skippedForTimeBudget = 0;
     const errors: string[] = [];
 
     // Get TikTok proxy URL setting
@@ -186,6 +187,13 @@ Deno.serve(async (req) => {
     if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
 
     for (const account of accounts) {
+      // Soft time budget: stop enqueuing new accounts past the budget so the next
+      // run picks them up. Prevents mid-write aborts that leave daily_metrics stale.
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        skippedForTimeBudget++;
+        console.log(`Time budget exhausted, deferring ${account.account_name} to next run`);
+        continue;
+      }
       const integration = (account as any).api_integrations;
       const platform = account.platform_name;
       const accountAssignments = accountKeywordMap[account.id] ?? [];
