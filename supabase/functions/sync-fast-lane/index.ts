@@ -295,7 +295,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
