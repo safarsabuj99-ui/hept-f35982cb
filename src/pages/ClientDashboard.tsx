@@ -202,35 +202,16 @@ export default function ClientDashboard() {
     };
   }, [effectiveClientId, fetchAll]);
 
-  const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
-  const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
-  const balance = credits - debits;
+  const wallet = useMemo(() => computeWalletBalance(transactions), [transactions]);
+  const balance = wallet.total;
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // Calculate BDT balance using per-platform rates (works for both negative and positive)
+  // Canonical BDT debt (matches Client List, Wallet, search popup).
   const balanceBdt = useMemo(() => {
-    const flatRates = getPlatformRates(pricingConfig);
-    const platforms = ["meta", "tiktok", "google"] as const;
-    let totalBdt = 0;
-    for (const p of platforms) {
-      const pCredits = transactions.filter(t => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      const pDebits = transactions.filter(t => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      const pBalance = pCredits - pDebits;
-      const rate = Number(flatRates[p]) || 120;
-      totalBdt += pBalance * rate;
-    }
-    // Include untagged transactions with average rate
-    const taggedPlatforms = transactions.filter(t => t.platform && ["meta", "tiktok", "google"].includes(t.platform));
-    const untaggedCredits = transactions.filter(t => t.type === "credit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
-    const untaggedDebits = transactions.filter(t => t.type === "debit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
-    const untaggedBalance = untaggedCredits - untaggedDebits;
-    if (untaggedBalance !== 0) {
-      const avgRate = (flatRates.meta + flatRates.tiktok + flatRates.google) / 3;
-      totalBdt += untaggedBalance * avgRate;
-    }
-    return totalBdt;
-  }, [transactions, pricingConfig]);
+    if (balance >= 0) return 0;
+    return -computeBdtDebt(pricingConfig, wallet);
+  }, [wallet, balance, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);
