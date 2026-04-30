@@ -403,7 +403,7 @@ Deno.serve(async (req) => {
           }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
