@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,14 +147,16 @@ export default function TeamMemberDetail() {
       // Calculate balance for each client
       const rows: ClientRow[] = [];
       for (const cp of clientProfiles) {
-        const { data: txns } = await supabase
-          .from("transactions")
-          .select("type, amount, status")
-          .eq("client_id", cp.user_id)
-          .eq("status", "completed");
+        const txns = await fetchAllRows<any>(() =>
+          supabase
+            .from("transactions")
+            .select("type, amount, status")
+            .eq("client_id", cp.user_id)
+            .eq("status", "completed")
+        );
 
         let balance = 0;
-        (txns ?? []).forEach((t: any) => {
+        txns.forEach((t: any) => {
           if (t.type === "credit") balance += Number(t.amount);
           else balance -= Number(t.amount);
         });
