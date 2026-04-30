@@ -1,73 +1,82 @@
-## Root cause (verified against live DB)
+## You're right — and here's why it works
 
-The "All Clients" page reads the `transactions` table with a plain `.select(...).eq("status","completed")` call. Supabase silently caps SELECTs at **1000 rows**. Today the table has **1056** completed transactions, so the **most recent 56 transactions are dropped**. Because 99 % of recent rows are `auto_spend` debits, dropping them makes balances look **falsely high**.
+Today the two sync lanes do different things with the same API spend numbers:
 
-### Live proof (sums computed from full DB vs values shown on screen)
-
-| Client | Shown in UI | Real sum from DB | Phantom credit |
+| Lane | Frequency | Writes to | Triggers wallet debit? |
 |---|---|---|---|
-| MD HASIB FAKIR | $249.73 | $168.95 | +$80.78 |
-| Tofail Ahmed | $35.41 | $20.09 | +$15.32 |
-| Kawsar | $10.32 | $1.94 | +$8.38 |
-| Saif | $9.91 | $9.91 | 0 (early in dataset) |
+| **Fast-Lane** | Every few minutes | `daily_ad_spend` only | **No** |
+| **Deep-Dive** | Hourly-ish, slower | `daily_metrics` (+ `campaign_performance`) | **Yes** (via `auto_debit_on_spend` trigger) |
 
-The gap exactly matches the recent debits being chopped off the 1000-row window.
+The wallet balance comes from `transactions`. `transactions` debits are only created when a row lands in `daily_metrics`. That only happens in Deep-Dive. So:
 
-The same bug pattern exists on every page that reads `transactions` or `daily_metrics` without pagination. Project memory already calls this out as a Core rule; the fix helper `src/lib/fetchAllRows.ts` already exists but was not adopted in these pages.
+- Fast-Lane sees fresh spend within minutes — but the wallet doesn't know about it yet.
+- Until Deep-Dive runs, balances look **higher than reality**.
+- That gap is exactly the "data mismatched with every ad account" symptom you reported yesterday.
 
-## Fix plan
+Live proof from the DB right now: latest `daily_ad_spend.synced_at` is **30 minutes newer** than latest `daily_metrics.synced_at`. That 30-minute window is when balances are wrong.
 
-### 1. Use `fetchAllRows` for every aggregation query (the actual fix)
+Your suggestion — "let Fast-Lane also write the spend so debits happen immediately" — is the correct fix.
 
-Replace the direct `.select(...)` with the existing `fetchAllRows(() => …)` helper in the files that compute balances or spend totals:
+## The plan
 
-- `src/pages/ClientList.tsx` — `transactions`, `daily_metrics`, `campaigns`, `ad_account_clients`.
-- `src/pages/ClientDetail.tsx` — `transactions`, `daily_metrics`.
-- `src/pages/ClientDashboard.tsx` — `transactions`, `daily_metrics`.
-- `src/pages/ManagerDashboard.tsx` — `transactions`.
-- `src/pages/TeamMemberDetail.tsx` — `transactions`.
-- `src/components/LowBalanceAlerts.tsx` — `transactions`.
-- `src/components/dashboard/ProfitabilityTable.tsx` — `daily_metrics`.
-- `src/components/ClientProfitTab.tsx` — `daily_metrics`.
-- `src/components/RunwayPrediction.tsx` — `transactions`.
-- `src/components/PlatformTransferDialog.tsx` — `transactions`.
-- `src/components/dashboard/RecentActivityFeed.tsx` — leave as-is (it explicitly only wants the latest N rows; pagination would defeat the purpose). Add an explicit `.limit(N).order(...)` so its 1000 cap is intentional, not silent.
+### 1. Make Fast-Lane the source of truth for *spend-only* debits
 
-No business logic, RLS, currency math, or schema changes — only swapping the read call.
+For each platform block in `supabase/functions/sync-fast-lane/index.ts` (Meta, Google, TikTok), after we already have the per-day spend rows and a `matchedClientId`, also upsert a minimal row into `daily_metrics`:
 
-### 2. Add a build-time guard so this can't silently happen again
+- `campaign_id` — resolved from `campaign_mappings` (we already have `campaign_id` from Meta and an equivalent from Google/TikTok). If no campaign row exists yet (new campaign Deep-Dive hasn't seen), skip the metrics write — Deep-Dive will pick it up. This avoids fabricating a campaigns row from Fast-Lane (which lacks objective/status).
+- `data_date` — the spend day from the API.
+- `spend` — USD-normalized (same conversion Fast-Lane already does for `daily_ad_spend.final_billable_usd`).
+- All other metric fields (impressions/clicks/conversions/etc.) — leave at 0 / null. Deep-Dive will overwrite them later with the rich values.
+- `org_id` — from `account.org_id`.
 
-Add a lint rule (eslint custom rule in `eslint.config.js`) that flags any call matching `supabase.from(<aggregating-table>).select(...)` without either:
-- an enclosing `fetchAllRows(...)`, **or**
-- an explicit `.limit(n)` chained on it.
+Upsert key: `(campaign_id, data_date)` — same key Deep-Dive already uses, so when Deep-Dive runs later it cleanly replaces our zero-filled row with the full metric row.
 
-Aggregating tables: `transactions`, `daily_metrics`, `campaigns`, `daily_ad_spend`, `ad_account_clients`, `campaign_performance`, `campaign_mappings`. This makes the "you forgot pagination" mistake fail CI instead of silently corrupting balances.
+Crucial: **`auto_debit_on_spend` is an `AFTER INSERT` trigger that already deletes any prior `auto_spend:<campaign>:<date>` debit before inserting the new one** (see the trigger body — it does `DELETE FROM transactions WHERE description = 'auto_spend:...'` then re-inserts). That means when Deep-Dive later upserts the same row with corrected spend, the debit is replaced, not duplicated. So Fast-Lane writing first is **safe and idempotent** by construction.
 
-### 3. Self-check on the affected page (cheap safety net)
+### 2. Don't break Deep-Dive's richer write
 
-Inside `ClientList.tsx`, after the data load, add a single console-warning when the raw row count from any aggregate query equals exactly the page size — same pattern `fetchAllRows` already uses. Future regressions will be visible in the browser console immediately.
+Deep-Dive's existing `daily_metrics` upsert keeps overwriting Fast-Lane's minimal row with the full metric set. The only column both lanes care about is `spend`, and they read it from the same API field, so they agree. No business logic changes anywhere else.
 
-## Verification after deploy
+### 3. Skip the metrics write when we can't resolve a campaign row
 
-Re-run the comparison query for the four sample clients above; the on-screen balances should match the SQL sums to the cent. The bug is deterministic, so this verifies the whole class of affected pages at once.
+Fast-Lane today does keyword matching on `campaign_name` to find a client. For the new `daily_metrics` write we additionally need a real `campaigns.id`. Resolution order:
 
-## What this does NOT change
+1. Look up `campaigns` by `(ad_account_id, platform_id)` where platform_id is the platform's native campaign id (Meta `row.campaign_id`, Google `campaign.id`, TikTok `row.dimensions.campaign_id`).
+2. If not found → skip just the metrics write (still write `daily_ad_spend` as today). Logged as `fast-lane: campaign not yet ingested, deferring metric to deep-dive`. No error, no missing money — Deep-Dive will catch it on its next run, exactly as today.
 
-- No changes to RLS, auth, schema, currency conversion, BDT/USD policy, ERP math, or the wallet debit attribution rule (still via `campaigns.client_id`).
-- No changes to the underlying `transactions` data — only how it is read.
-- No edge-function changes.
+### 4. Add a one-line balance reconciliation log
+
+After each Fast-Lane account finishes, log `fast-lane: wrote N metric rows, M skipped (no campaign yet)`. Surfaces the case where Deep-Dive falls behind on new campaigns.
+
+### 5. Nothing else changes
+
+- No schema changes.
+- No new triggers.
+- No change to `daily_ad_spend` writes.
+- No change to Deep-Dive code.
+- No change to currency conversion, USD/BDT policy, RLS, or wallet attribution rules.
+- Pagination fix from the previous plan stays in place.
 
 ## Files touched
 
-- `src/pages/ClientList.tsx`
-- `src/pages/ClientDetail.tsx`
-- `src/pages/ClientDashboard.tsx`
-- `src/pages/ManagerDashboard.tsx`
-- `src/pages/TeamMemberDetail.tsx`
-- `src/components/LowBalanceAlerts.tsx`
-- `src/components/dashboard/ProfitabilityTable.tsx`
-- `src/components/ClientProfitTab.tsx`
-- `src/components/RunwayPrediction.tsx`
-- `src/components/PlatformTransferDialog.tsx`
-- `src/components/dashboard/RecentActivityFeed.tsx` (add explicit `.limit`)
-- `eslint.config.js` (new guard rule)
+- `supabase/functions/sync-fast-lane/index.ts` — three small additions (one per platform: Meta, Google, TikTok), each ~10 lines: resolve campaign id, build minimal metric row, batched upsert.
+
+## What this fixes
+
+- Wallet balances reflect spend within Fast-Lane's cadence (minutes), not Deep-Dive's (hourly).
+- The 30-minute over-statement gap shown in production right now disappears.
+- The original "ad account shows 85.45 but project shows 66.02" class of mismatch is closed at its root.
+
+## What this does NOT do
+
+- Doesn't change historical data — only future syncs.
+- Doesn't make Deep-Dive optional. Deep-Dive still owns impressions, clicks, conversions, ROAS, etc. Fast-Lane only touches `spend`.
+- Doesn't risk double-debiting — the existing `auto_debit_on_spend` trigger deletes-then-inserts on the same `auto_spend:<campaign>:<date>` key, so repeated upserts of the same (campaign, date) collapse to a single debit equal to the latest spend value.
+
+## Verification after deploy
+
+1. Pick any active client. Note their wallet balance.
+2. Wait one Fast-Lane cycle (a few minutes).
+3. Re-check the balance. It should drop by the new spend Fast-Lane just observed, *without waiting for Deep-Dive*.
+4. After Deep-Dive runs, the balance should not change again for those same (campaign, date) pairs — confirming idempotency.
+
