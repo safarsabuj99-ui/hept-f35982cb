@@ -51,7 +51,7 @@ export default function ManagerDashboard() {
       );
 
       const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
-        const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id);
+        const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id);
         const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         return { user_id: p.user_id, full_name: p.full_name, email: p.email, business_name: p.business_name, balance: credits - debits };
