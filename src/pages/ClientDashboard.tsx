@@ -3,6 +3,7 @@ import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
 import { SpendTrendChart } from "@/components/SpendTrendChart";
