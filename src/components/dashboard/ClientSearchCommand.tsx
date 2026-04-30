@@ -120,7 +120,7 @@ function formatCompactBdt(n: number): string {
   return `৳${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
-const KNOWN_PLATFORMS = ["meta", "tiktok", "google"] as const;
+
 
 function computeBdtDebt(client: ClientItem): number {
   return sharedComputeBdtDebt(client.pricing_config, {
