@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { toast } from "@/hooks/use-toast";
 import { ArrowRight, RefreshCw } from "lucide-react";
 
@@ -41,14 +42,16 @@ export function PlatformTransferDialog({ open, onOpenChange, clientId, onSuccess
 
   async function loadData() {
     if (!clientId) return;
-    const [txRes, profileRes] = await Promise.all([
-      supabase.from("transactions").select("type, amount, platform").eq("client_id", clientId).eq("status", "completed"),
+    const [txRows, profileRes] = await Promise.all([
+      fetchAllRows<any>(() =>
+        supabase.from("transactions").select("type, amount, platform").eq("client_id", clientId).eq("status", "completed")
+      ),
       supabase.from("profiles").select("pricing_config").eq("user_id", clientId).single(),
     ]);
 
     // Calculate balances
     const bals: Record<string, number> = { meta: 0, tiktok: 0, google: 0 };
-    (txRes.data || []).forEach((t: any) => {
+    txRows.forEach((t: any) => {
       if (!t.platform || !bals.hasOwnProperty(t.platform)) return;
       bals[t.platform] += t.type === "credit" ? Number(t.amount) : -Number(t.amount);
     });

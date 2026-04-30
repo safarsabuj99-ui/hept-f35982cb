@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp } from "lucide-react";
