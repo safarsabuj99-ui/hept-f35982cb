@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/command";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { getPlatformRates } from "@/lib/pricing";
 import { computeBdtDebt as sharedComputeBdtDebt } from "@/lib/walletBalance";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
