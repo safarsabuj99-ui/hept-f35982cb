@@ -65,6 +65,10 @@ interface ClientSearchCommandProps {
    *   Use this in layouts so the popup is reachable from every page.
    */
   mode?: "full" | "hotkey-only";
+  /** Optional controlled open state (used by mobile double-tap mount). */
+  forceOpen?: boolean;
+  /** Callback when open state changes (paired with forceOpen). */
+  onOpenChange?: (open: boolean) => void;
 }
 
 const AVATAR_GRADIENTS = [
@@ -161,8 +165,18 @@ function pushRecent(userId: string | null | undefined, clientId: string) {
   }
 }
 
-export function ClientSearchCommand({ clients, mode = "full" }: ClientSearchCommandProps) {
-  const [open, setOpen] = useState(false);
+export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenChange }: ClientSearchCommandProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = forceOpen !== undefined;
+  const open = isControlled ? !!forceOpen : internalOpen;
+  const setOpen = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const resolved = typeof next === "function" ? (next as (p: boolean) => boolean)(open) : next;
+      if (!isControlled) setInternalOpen(resolved);
+      onOpenChange?.(resolved);
+    },
+    [isControlled, onOpenChange, open],
+  );
   const isHotkeyOnly = mode === "hotkey-only";
   const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
