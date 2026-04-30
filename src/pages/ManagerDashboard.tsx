@@ -42,11 +42,13 @@ export default function ManagerDashboard() {
       const clientIds = clientProfiles.map((p: any) => p.user_id);
 
       // Only fetch needed columns, filtered to these clients
-      const { data: transactions } = await supabase
-        .from("transactions")
-        .select("client_id, type, amount, status")
-        .in("client_id", clientIds)
-        .eq("status", "completed");
+      const transactions = await fetchAllRows<any>(() =>
+        supabase
+          .from("transactions")
+          .select("client_id, type, amount, status")
+          .in("client_id", clientIds)
+          .eq("status", "completed")
+      );
 
       const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
         const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id);
