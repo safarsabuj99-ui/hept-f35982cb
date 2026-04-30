@@ -124,22 +124,10 @@ function formatCompactBdt(n: number): string {
 const KNOWN_PLATFORMS = ["meta", "tiktok", "google"] as const;
 
 function computeBdtDebt(client: ClientItem): number {
-  const rates = getPlatformRates(client.pricing_config);
-  const platBals = client.platform_balances ?? {};
-  let bdt = 0;
-  for (const p of KNOWN_PLATFORMS) {
-    const bal = Number(platBals[p]) || 0;
-    if (bal < 0) {
-      const rate = Number((rates as any)[p]) || 120;
-      bdt += Math.abs(bal) * rate;
-    }
-  }
-  if (bdt === 0 && client.balance < 0) {
-    const fallbackRate =
-      Number(rates.meta) || Number(rates.tiktok) || Number(rates.google) || 120;
-    bdt = Math.abs(client.balance) * fallbackRate;
-  }
-  return bdt;
+  return sharedComputeBdtDebt(client.pricing_config, {
+    balance: Number(client.balance) || 0,
+    platform_balances: client.platform_balances ?? {},
+  });
 }
 
 const RECENTS_LIMIT = 5;
