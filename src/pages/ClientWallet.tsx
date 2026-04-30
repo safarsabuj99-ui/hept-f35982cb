@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { format } from "date-fns";
 import { getPlatformRate } from "@/lib/pricing";
+import { computeWalletBalance } from "@/lib/walletBalance";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
