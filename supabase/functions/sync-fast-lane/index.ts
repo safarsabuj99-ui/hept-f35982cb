@@ -54,6 +54,86 @@ function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
 }
 
+/**
+ * Fast-Lane spend → daily_metrics writer.
+ *
+ * Resolves campaigns.id from (ad_account_id, platform_id) and upserts a
+ * minimal spend-only row into daily_metrics. The auto_debit_on_spend trigger
+ * picks it up and books the wallet debit immediately, instead of waiting for
+ * Deep-Dive (which can be 30+ min behind). Deep-Dive later overwrites the
+ * same (campaign_id, data_date) row with the full metric set, and the trigger
+ * idempotently replaces the debit (delete-then-insert on auto_spend:<id>:<date>).
+ *
+ * Items: { platform_id: string; date: string; spendUsd: number }
+ */
+async function writeFastLaneMetrics(
+  supabase: any,
+  adAccountId: string,
+  orgId: string,
+  items: { platform_id: string; date: string; spendUsd: number }[],
+  logPrefix: string,
+): Promise<{ written: number; skipped: number }> {
+  if (items.length === 0) return { written: 0, skipped: 0 };
+
+  // Dedupe inputs by (platform_id, date) — last write wins.
+  const dedup: Record<string, { platform_id: string; date: string; spendUsd: number }> = {};
+  for (const it of items) {
+    if (!it.platform_id || !it.date) continue;
+    dedup[`${it.platform_id}|${it.date}`] = it;
+  }
+  const deduped = Object.values(dedup);
+  if (deduped.length === 0) return { written: 0, skipped: 0 };
+
+  const platformIds = [...new Set(deduped.map(i => i.platform_id))];
+
+  // Resolve campaigns.id for this account's known platform_ids in one query.
+  const { data: campaignRows, error: cErr } = await supabase
+    .from("campaigns")
+    .select("id, platform_id")
+    .eq("ad_account_id", adAccountId)
+    .in("platform_id", platformIds);
+  if (cErr) {
+    console.warn(`${logPrefix} campaign lookup failed: ${cErr.message}`);
+    return { written: 0, skipped: deduped.length };
+  }
+
+  const platformIdToCampaignId: Record<string, string> = {};
+  for (const c of campaignRows || []) platformIdToCampaignId[c.platform_id] = c.id;
+
+  const metricRows: any[] = [];
+  let skipped = 0;
+  for (const it of deduped) {
+    const campaignId = platformIdToCampaignId[it.platform_id];
+    if (!campaignId) { skipped++; continue; }
+    metricRows.push({
+      campaign_id: campaignId,
+      data_date: it.date,
+      spend: it.spendUsd,
+      org_id: orgId,
+      synced_at: new Date().toISOString(),
+    });
+  }
+
+  if (metricRows.length === 0) {
+    if (skipped > 0) console.log(`${logPrefix} fast-lane metrics: 0 written, ${skipped} deferred (no campaign row yet)`);
+    return { written: 0, skipped };
+  }
+
+  for (let i = 0; i < metricRows.length; i += 100) {
+    const batch = metricRows.slice(i, i + 100);
+    const { error } = await supabase
+      .from("daily_metrics")
+      .upsert(batch, { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
+    if (error) {
+      console.warn(`${logPrefix} daily_metrics upsert failed: ${error.message}`);
+      return { written: i, skipped };
+    }
+  }
+
+  console.log(`${logPrefix} fast-lane metrics: ${metricRows.length} written, ${skipped} deferred`);
+  return { written: metricRows.length, skipped };
+}
+
 // Force redeploy v2 - proxy + 30-day chunking fix
 
 Deno.serve(async (req) => {
