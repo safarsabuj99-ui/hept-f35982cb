@@ -213,22 +213,22 @@ export default function ClientDetail() {
     }
 
     const campaignIds = campaignsData.map((c: any) => c.id);
-    let metricsQuery = supabase
-      .from("daily_metrics")
-      .select("campaign_id, data_date, spend, impressions, clicks, results, conversion_value, synced_at, cpc, ctr, roas, reach, budget, cpm, purchase, add_to_cart, initiate_checkout, view_content, messaging_conversations, new_messaging_contacts, cost_per_purchase, cost_per_message, create_order, conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg")
-      .in("campaign_id", campaignIds)
-      .order("data_date", { ascending: false });
-
-    if (range) {
-      metricsQuery = metricsQuery
-        .gte("data_date", format(range.from, "yyyy-MM-dd"))
-        .lte("data_date", format(range.to, "yyyy-MM-dd"));
-    }
-
-    const { data: metricsData } = await metricsQuery;
+    const metricsData = await fetchAllRows<any>(() => {
+      let q = supabase
+        .from("daily_metrics")
+        .select("campaign_id, data_date, spend, impressions, clicks, results, conversion_value, synced_at, cpc, ctr, roas, reach, budget, cpm, purchase, add_to_cart, initiate_checkout, view_content, messaging_conversations, new_messaging_contacts, cost_per_purchase, cost_per_message, create_order, conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg")
+        .in("campaign_id", campaignIds)
+        .order("data_date", { ascending: false });
+      if (range) {
+        q = q
+          .gte("data_date", format(range.from, "yyyy-MM-dd"))
+          .lte("data_date", format(range.to, "yyyy-MM-dd"));
+      }
+      return q;
+    });
 
     // Enrich with campaign info
-    const enriched = (metricsData ?? []).map((m: any) => {
+    const enriched = metricsData.map((m: any) => {
       const campaign = campaignsData.find((c: any) => c.id === m.campaign_id);
       return { ...m, campaign };
     });
