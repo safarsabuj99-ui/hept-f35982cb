@@ -499,6 +499,21 @@ Deno.serve(async (req) => {
           accountRowCounts[account.id] += spendRecords.length;
           console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
 
+          // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
+          const googleMetricItems = results
+            .filter((r: any) => (parseInt(r.metrics?.costMicros || "0", 10) / 1_000_000) > 0 && r.campaign?.id && r.segments?.date)
+            .map((r: any) => {
+              const sp = parseInt(r.metrics?.costMicros || "0", 10) / 1_000_000;
+              const isB = currency === "BDT";
+              const rate = isB ? (account.exchange_rate ?? 1) : 1;
+              return {
+                platform_id: `google_${r.campaign.id}`,
+                date: r.segments.date,
+                spendUsd: isB ? Math.round((sp / rate) * 100) / 100 : sp,
+              };
+            });
+          await writeFastLaneMetrics(supabase, account.id, account.org_id, googleMetricItems, `Google ${account.ad_account_id}`);
+
         } else if (platform === "tiktok") {
           // ===== TIKTOK: BC-scoped reporting to bypass geo-restrictions =====
           if (!integration?.api_token) {
