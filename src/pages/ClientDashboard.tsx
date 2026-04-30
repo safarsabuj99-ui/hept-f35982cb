@@ -207,10 +207,22 @@ export default function ClientDashboard() {
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // Canonical BDT debt (matches Client List, Wallet, search popup).
+  // Canonical BDT equivalent. Negative = debt (uses each platform's rate).
+  // Positive = credit value priced per platform; falls back to avg rate for untagged.
   const balanceBdt = useMemo(() => {
-    if (balance >= 0) return 0;
-    return -computeBdtDebt(pricingConfig, wallet);
+    const flatRates = getPlatformRates(pricingConfig) as Record<string, number>;
+    if (balance < 0) return -computeBdtDebt(pricingConfig, wallet);
+    const platforms = ["meta", "tiktok", "google"] as const;
+    let totalBdt = 0;
+    for (const p of platforms) {
+      const rate = Number(flatRates[p]) || 120;
+      totalBdt += wallet.platforms[p] * rate;
+    }
+    if (wallet.platforms.untagged !== 0) {
+      const avgRate = ((Number(flatRates.meta) || 0) + (Number(flatRates.tiktok) || 0) + (Number(flatRates.google) || 0)) / 3 || 120;
+      totalBdt += wallet.platforms.untagged * avgRate;
+    }
+    return totalBdt;
   }, [wallet, balance, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
