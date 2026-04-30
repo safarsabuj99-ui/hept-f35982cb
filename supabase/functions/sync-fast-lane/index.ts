@@ -380,6 +380,21 @@ Deno.serve(async (req) => {
           accountRowCounts[account.id] += spendRecords.length;
           console.log(`Meta fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
 
+          // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
+          const metaMetricItems = allInsights
+            .filter(r => parseFloat(r.spend || "0") > 0 && r.campaign_id)
+            .map(r => {
+              const sp = parseFloat(r.spend || "0");
+              const isB = currency === "BDT";
+              const rate = isB ? (account.exchange_rate ?? exchangeRate) : 1;
+              return {
+                platform_id: `meta_${r.campaign_id}`,
+                date: r.date_start,
+                spendUsd: isB ? Math.round((sp / rate) * 100) / 100 : sp,
+              };
+            });
+          await writeFastLaneMetrics(supabase, account.id, account.org_id, metaMetricItems, `Meta ${account.ad_account_id}`);
+
         } else if (platform === "google") {
           // ===== GOOGLE: Real API with segments.date =====
           if (!integration?.api_token) {
