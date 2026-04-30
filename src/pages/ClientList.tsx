@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Link } from "react-router-dom";
 import { debounce } from "@/lib/debounce";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
