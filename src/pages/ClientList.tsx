@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
+import { computeWalletBalance, computeBdtDebt } from "@/lib/walletBalance";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Link } from "react-router-dom";
@@ -165,41 +166,24 @@ export default function ClientList() {
       }
       setMargins(marginMap);
 
-      // Compute balances (total + per-platform)
-      const balMap: Record<string, number> = {};
-      const platformBalMap: Record<string, Record<string, number>> = {};
-      const knownPlatforms = ["meta", "tiktok", "google"];
+      // Compute balances using the canonical helper (status='completed' only).
+      // Group txns by client first so every screen produces the same number.
+      const txnsByClient: Record<string, any[]> = {};
       for (const t of (txnsRes.data ?? []) as any[]) {
-        const amt = Number(t.amount) || 0;
-        const delta = t.type === "credit" ? amt : -amt;
-        balMap[t.client_id] = (balMap[t.client_id] || 0) + delta;
-        // Only track known platforms (matching Client Dashboard logic)
-        if (t.platform && knownPlatforms.includes(t.platform)) {
-          if (!platformBalMap[t.client_id]) platformBalMap[t.client_id] = {};
-          platformBalMap[t.client_id][t.platform] = (platformBalMap[t.client_id][t.platform] || 0) + delta;
+        if (!txnsByClient[t.client_id]) txnsByClient[t.client_id] = [];
+        txnsByClient[t.client_id].push(t);
+      }
+
+      const balMap: Record<string, number> = {};
+      const bdtMap: Record<string, number> = {};
+      for (const profile of (profilesRes.data ?? []) as any[]) {
+        const wb = computeWalletBalance(txnsByClient[profile.user_id] ?? []);
+        balMap[profile.user_id] = wb.total;
+        if (wb.total < 0) {
+          bdtMap[profile.user_id] = computeBdtDebt(profile.pricing_config, wb);
         }
       }
       setBalances(balMap);
-
-      // Compute BDT for negative balances matching Client Dashboard logic exactly
-      const bdtMap: Record<string, number> = {};
-      for (const [cid, totalBal] of Object.entries(balMap)) {
-        if (totalBal >= 0) continue;
-        const profile = profileMap[cid];
-        const pConfig = profile?.pricing_config as any;
-        const rates = getPlatformRates(pConfig);
-        const platBals = platformBalMap[cid] || {};
-        let bdtTotal = 0;
-        // Only iterate known platforms, same as Client Dashboard
-        for (const p of knownPlatforms) {
-          const platBal = platBals[p] || 0;
-          if (platBal < 0) {
-            const rate = Number(rates[p] || 120);
-            bdtTotal += Math.abs(platBal) * rate;
-          }
-        }
-        bdtMap[cid] = bdtTotal;
-      }
       setBdtBalances(bdtMap);
 
       setLoading(false);

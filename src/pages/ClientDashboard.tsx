@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
+import { computeWalletBalance, computeBdtDebt } from "@/lib/walletBalance";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
@@ -201,35 +202,28 @@ export default function ClientDashboard() {
     };
   }, [effectiveClientId, fetchAll]);
 
-  const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
-  const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
-  const balance = credits - debits;
+  const wallet = useMemo(() => computeWalletBalance(transactions), [transactions]);
+  const balance = wallet.total;
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // Calculate BDT balance using per-platform rates (works for both negative and positive)
+  // Canonical BDT equivalent. Negative = debt (uses each platform's rate).
+  // Positive = credit value priced per platform; falls back to avg rate for untagged.
   const balanceBdt = useMemo(() => {
-    const flatRates = getPlatformRates(pricingConfig);
+    const flatRates = getPlatformRates(pricingConfig) as Record<string, number>;
+    if (balance < 0) return -computeBdtDebt(pricingConfig, wallet);
     const platforms = ["meta", "tiktok", "google"] as const;
     let totalBdt = 0;
     for (const p of platforms) {
-      const pCredits = transactions.filter(t => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      const pDebits = transactions.filter(t => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      const pBalance = pCredits - pDebits;
       const rate = Number(flatRates[p]) || 120;
-      totalBdt += pBalance * rate;
+      totalBdt += wallet.platforms[p] * rate;
     }
-    // Include untagged transactions with average rate
-    const taggedPlatforms = transactions.filter(t => t.platform && ["meta", "tiktok", "google"].includes(t.platform));
-    const untaggedCredits = transactions.filter(t => t.type === "credit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
-    const untaggedDebits = transactions.filter(t => t.type === "debit" && (!t.platform || !["meta", "tiktok", "google"].includes(t.platform))).reduce((s, t) => s + Number(t.amount), 0);
-    const untaggedBalance = untaggedCredits - untaggedDebits;
-    if (untaggedBalance !== 0) {
-      const avgRate = (flatRates.meta + flatRates.tiktok + flatRates.google) / 3;
-      totalBdt += untaggedBalance * avgRate;
+    if (wallet.platforms.untagged !== 0) {
+      const avgRate = ((Number(flatRates.meta) || 0) + (Number(flatRates.tiktok) || 0) + (Number(flatRates.google) || 0)) / 3 || 120;
+      totalBdt += wallet.platforms.untagged * avgRate;
     }
     return totalBdt;
-  }, [transactions, pricingConfig]);
+  }, [wallet, balance, pricingConfig]);
 
   const handleDateChange = (range: ClientDateRange | null, p: ClientDatePreset) => {
     setDateRange(range);

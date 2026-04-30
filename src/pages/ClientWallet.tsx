@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { format } from "date-fns";
 import { getPlatformRate } from "@/lib/pricing";
+import { computeWalletBalance } from "@/lib/walletBalance";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/hooks/useImpersonation";
@@ -86,18 +87,18 @@ export default function ClientWallet() {
     return () => { debounced.cancel(); supabase.removeChannel(channel); };
   }, [effectiveClientId, fetchAll]);
 
-  const credits = transactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
-  const debits = transactions.filter((t) => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
-  const balance = credits - debits;
+  const wallet = useMemo(() => computeWalletBalance(transactions), [transactions]);
+  const balance = wallet.total;
 
   const platformBalances = useMemo(() => {
     const platforms = ["meta", "tiktok", "google"] as const;
-    return platforms.map((p) => {
-      const pCredits = transactions.filter((t) => t.type === "credit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      const pDebits = transactions.filter((t) => t.type === "debit" && t.platform === p).reduce((s, t) => s + Number(t.amount), 0);
-      return { platform: p, label: PLATFORM_LABELS[p], balance: pCredits - pDebits, color: PLATFORM_COLORS[p] };
-    });
-  }, [transactions]);
+    return platforms.map((p) => ({
+      platform: p,
+      label: PLATFORM_LABELS[p],
+      balance: wallet.platforms[p],
+      color: PLATFORM_COLORS[p],
+    }));
+  }, [wallet]);
 
   const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtBdt = (n: number) => `৳${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

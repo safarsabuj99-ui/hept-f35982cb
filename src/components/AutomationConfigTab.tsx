@@ -104,9 +104,8 @@ export function AutomationConfigTab({
       .eq("status", "completed");
 
     if (txns) {
-      const credits = txns.filter(t => t.type === "credit").reduce((s, t) => s + Number(t.amount), 0);
-      const debits = txns.filter(t => t.type === "debit").reduce((s, t) => s + Number(t.amount), 0);
-      setBalance(credits - debits);
+      const { computeWalletBalance } = await import("@/lib/walletBalance");
+      setBalance(computeWalletBalance(txns as any).total);
     }
 
     // Fetch campaign details if there are paused campaigns
