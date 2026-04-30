@@ -1,74 +1,72 @@
-## Bug Found
+## What's actually wrong
 
-The **Sales preset** shows blank/zero data for TikTok campaigns because:
+The data mismatch is **not** an exchange-rate or currency bug. It's a **stale-data** bug caused by `sync-deep-dive` aborting mid-execution for TikTok USD accounts (HEPT 15, HEPT 8, etc.).
 
-1. **`sync-deep-dive/index.ts` (TikTok branch)** never requests or writes the sales-funnel metrics (`view_content`, `add_to_cart`, `initiate_checkout`, `purchase`, `cost_per_purchase`). Only the Meta branch populates these. The TikTok `upsertMetrics` call simply omits them, so they default to `0`.
-2. **TikTok campaign objective is never fetched/stored.** Only Meta sets `objective` via `metaObjectiveMap`. So in "auto" preset mode the table also can't recognize TikTok sales campaigns (the row's `objective` is empty, the auto-detector falls back to `hasObjectiveData.sales` which is always false because the funnel fields are zero — a circular dead end).
-3. The TikTok request currently asks for: `spend, impressions, clicks, ctr, cpc, conversion, conversion_cost, complete_payment_roas, reach, onsite_form, onsite_on_web_detail`. It's missing the standard TikTok sales-funnel metrics.
+### Evidence (HEPT 15, 2026-04-29)
+| Source | Total spend | Last refresh |
+|---|---|---|
+| TikTok ad-account UI (truth) | ~85.45 | live |
+| `daily_ad_spend` (account-level table, written by Fast-Lane) | 78.45 | 23:45 UTC |
+| `daily_metrics` (campaign-level table, written by Deep-Dive — what dashboards read) | **66.02** | **stuck at 14:16 UTC** |
 
-## Fix
+Per-campaign comparison shows every campaign in `daily_metrics` is ~30% lower than the same campaign in `daily_ad_spend`, with synced_at frozen at 14:16 — i.e. yesterday afternoon's snapshot, never refreshed for the rest of the day.
 
-### 1. `supabase/functions/sync-deep-dive/index.ts` — TikTok request metrics
+### Root cause
 
-Add TikTok's sales-funnel metric names to **both** the BC-scoped and direct-advertiser request URLs (lines ~708 and ~735):
+`sync_account_stats.last_error = "The signal has been aborted"` for HEPT 15 and HEPT AGENCY 2. Deep-dive jobs are completing as `done` with `rows_synced: 0` because the TikTok branch is hitting the 22-second edge-function timeout **after** fetching/parsing data but **before** finishing the per-row upserts.
 
-Add: `total_view_content, total_add_to_cart, total_initiate_checkout, total_complete_payment, cost_per_complete_payment`
+What inflated runtime past the budget:
+1. The recent Sales-preset fix added 5 extra TikTok metric fields (`total_view_content`, `total_add_to_cart`, `total_initiate_checkout`, `total_complete_payment`, `cost_per_complete_payment`) → larger API responses, more parsing.
+2. TikTok status fetch is a separate sequential request before the metrics loop.
+3. Each row does 3 sequential awaits: `upsertCampaign` → `campaign_mappings.upsert` → `upsertMetrics` (+ legacy `campaign_performance.upsert`). For 50+ active campaigns this serial chain blows the budget.
+4. Result: first half of campaigns get fresh writes (synced_at 14:16, when the day only had 66.02 of spend); after timeout, no further writes for the rest of the day.
 
-(These are TikTok's official "Total" web/app pixel funnel metrics, which mirror Meta's `view_content / add_to_cart / initiate_checkout / purchase`. They aggregate web + app + offline events.)
+The smaller mismatch between `daily_ad_spend` (78.45) and TikTok UI (85.45) is the keyword-skip filter — campaigns whose names don't match any client's `mapping_keyword` are skipped on purpose. That is a separate, intended behaviour and is **not** changed by this fix.
 
-### 2. Map and write the new metrics
+## Fix plan (no functional regressions)
 
-In the TikTok row loop (lines ~833–892), parse the new fields and pass them into `upsertMetrics`:
+All changes are inside `supabase/functions/sync-deep-dive/index.ts`, TikTok branch only. No schema changes, no behaviour change for Meta/Google.
 
-```ts
-const viewContent      = parseFloat(row.metrics?.total_view_content      || "0");
-const addToCart        = parseFloat(row.metrics?.total_add_to_cart        || "0");
-const initiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || "0");
-const purchase         = parseFloat(row.metrics?.total_complete_payment   || "0");
-const costPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
-
-await upsertMetrics(campaignDbId, dataDate, {
-  ...existing fields,
-  view_content: viewContent,
-  add_to_cart: addToCart,
-  initiate_checkout: initiateCheckout,
-  purchase: purchase,
-  cost_per_purchase: convertSpend(costPerPurchase),
-});
-```
-
-Note: `cost_per_purchase` runs through `convertSpend()` so BDT-priced TikTok accounts normalize to USD just like `spend`.
-
-### 3. Fetch + store TikTok campaign objective
-
-In the existing `campaign/get/` status fetch loop (line ~785), also extract `objective_type` from each campaign and build a `tiktokObjectiveMap`. Then map to the same simplified labels the front-end expects:
+### 1. Parallelize the per-row write chain
+Replace the sequential `upsertCampaign → campaign_mappings.upsert → upsertMetrics → campaign_performance.upsert` per-row loop with a batched approach:
 
 ```text
-TikTok objective_type             → simplified label
-WEB_CONVERSIONS / PRODUCT_SALES   → "sales"
-LEAD_GENERATION                   → "leads"
-TRAFFIC                           → "traffic"
-ENGAGEMENT                        → "engagement"
-REACH                             → "awareness"
-VIDEO_VIEWS                       → "video_views"
-APP_PROMOTION                     → "app_promotion"
+phase A (sequential, fast): upsertCampaign for each row → collect campaignDbId
+phase B (parallel, capped): Promise.allSettled in batches of 5:
+        - campaign_mappings.upsert
+        - upsertMetrics
+        - campaign_performance.upsert
 ```
 
-Pass `objective` into `upsertCampaign(...)` so the `campaigns.objective` column is populated. The existing `upsertCampaign` already accepts an `objective` param (line 252) — TikTok just isn't passing one today.
+This matches the existing memory rule ("process concurrent ops via Promise.allSettled batches of 5") and typically cuts the per-account TikTok loop time by 60-70%.
 
-Add `objective_type` to the `fields` query string of the status fetch — it's already returned by default but make it explicit if needed.
+### 2. Bulk the `campaign_mappings` upserts
+Today every row does its own `upsert`. Collect them into an array and do **one** `.upsert(arr, { onConflict: "campaign_id" })` per account at the end — same idempotent result, single round trip.
 
-### 4. (Optional polish) Fast-lane parity
+### 3. Bulk the `campaign_performance` legacy writes
+Same pattern — accumulate the legacy rows and bulk-upsert at the end of the TikTok branch.
 
-`sync-fast-lane/index.ts` (TikTok branch ~line 407) is the "live spend" lane and only writes spend/clicks/impressions — it does NOT need sales-funnel data (deep-dive owns that). Leave fast-lane untouched to keep it fast. Sales data will appear after the next deep-dive cycle.
+### 4. Per-account soft time budget
+Add an elapsed check (`Date.now() - startTime > 18000ms`) at the top of each per-account iteration. If exceeded, skip the remaining accounts and let the next 15-min orchestrator run pick them up. Currently a timeout aborts mid-write and corrupts partial state; this turns it into a clean, resumable boundary.
 
-## Files Changed
+### 5. Reduce sales-funnel field fetch where unused
+Conditionally request `total_view_content / total_add_to_cart / total_initiate_checkout` only when the account has at least one campaign with objective `WEB_CONVERSIONS / PRODUCT_SALES`. Always fetch `total_complete_payment` + `cost_per_complete_payment` (cheap and used by KPIs). For non-sales accounts this trims ~30% off the response payload.
 
-- `supabase/functions/sync-deep-dive/index.ts` — only file modified
+### 6. Backfill today's stale data after deploy
+Once the function is deployed, manually invoke `sync-deep-dive` for the affected TikTok accounts (HEPT 15, HEPT 8, HEPT AGENCY 2, HEPT AGENCY 3) with `date_from = today` to immediately reconcile the visible numbers without waiting for the next 15-min cycle.
 
-## Verification
+## What this does NOT change
+- Meta and Google sync paths are untouched.
+- The keyword-mapping skip (`if (!clientId) continue`) stays — that's an intentional product rule, not a bug.
+- `daily_ad_spend` writers (Fast-Lane) are untouched.
+- BDT→USD conversion logic is untouched (BDT accounts are correct, verified above with rate 119).
+- Auth, RLS, schema, edge-function config — all untouched.
 
-After deploy + one deep-dive run:
-- `daily_metrics` rows for TikTok campaigns will have non-zero `view_content / add_to_cart / initiate_checkout / purchase` where the pixel is firing.
-- `campaigns.objective` will be `"sales"` for TikTok web-conversion / product-sales campaigns.
-- The Sales preset in `DeepDiveTable` will render real numbers for TikTok rows, and the **Auto** preset will correctly auto-detect sales campaigns on TikTok.
+## Files to edit
+- `supabase/functions/sync-deep-dive/index.ts` — TikTok branch only (~lines 690-960).
+
+## Verification after deploy
+1. Deploy function, manually trigger sync-deep-dive for the four TikTok accounts.
+2. Re-run the comparison query: `daily_metrics.spend` per campaign for `data_date = today` should match `daily_ad_spend.final_billable_usd` within rounding (sub-cent).
+3. Check `sync_account_stats.last_error` — should clear (no more "signal has been aborted").
+4. Confirm `synced_at` on `daily_metrics` keeps advancing every 15 min instead of freezing.

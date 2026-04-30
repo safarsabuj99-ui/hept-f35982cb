@@ -61,6 +61,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Soft time budget — give ourselves 18s of the 22s edge budget. Past this point,
+  // skip remaining accounts so the next 15-min orchestrator run can pick them up
+  // cleanly instead of being aborted mid-write (which leaves stale daily_metrics).
+  const startTime = Date.now();
+  const TIME_BUDGET_MS = 18_000;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -170,6 +176,7 @@ Deno.serve(async (req) => {
 
     let totalSynced = 0;
     let skippedCampaigns = 0;
+    let skippedForTimeBudget = 0;
     const errors: string[] = [];
 
     // Get TikTok proxy URL setting
@@ -180,6 +187,13 @@ Deno.serve(async (req) => {
     if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
 
     for (const account of accounts) {
+      // Soft time budget: stop enqueuing new accounts past the budget so the next
+      // run picks them up. Prevents mid-write aborts that leave daily_metrics stale.
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        skippedForTimeBudget++;
+        console.log(`Time budget exhausted, deferring ${account.account_name} to next run`);
+        continue;
+      }
       const integration = (account as any).api_integrations;
       const platform = account.platform_name;
       const accountAssignments = accountKeywordMap[account.id] ?? [];
@@ -732,7 +746,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   report_type: "BASIC",
                   data_level: "AUCTION_CAMPAIGN",
                   dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"]',
+metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"]',
                   start_date: chunk.start,
                   end_date: chunk.end,
                   page_size: "500",
@@ -851,7 +865,49 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
           }
 
           const rows = json.data?.list || [];
+          const syncedAtIso = new Date().toISOString();
+
+          // ===== PHASE A: parse rows + sequential upsertCampaign (cheap, needs ID) =====
+          // We must keep upsertCampaign sequential because each call does a select-then-update
+          // that depends on existing-row state (status, original_name_tag, guard locking).
+          type PreparedRow = {
+            platformId: string;
+            campaignDbId: string;
+            campaignName: string;
+            clientId: string;
+            dataDate: string;
+            spendUsd: number;
+            cpcUsd: number;
+            ctr: number;
+            impressions: number;
+            clicks: number;
+            conversions: number;
+            roas: number;
+            tiktokReach: number;
+            tiktokConvDm: number;
+            tiktokLeadsDm: number;
+            tiktokViewContent: number;
+            tiktokAddToCart: number;
+            tiktokInitiateCheckout: number;
+            tiktokPurchase: number;
+            tiktokCostPerPurchaseUsd: number;
+            tiktokBudgetUsd: number;
+            cpmValue: number;
+            finalTiktokStatus: string;
+          };
+
+          const prepared: PreparedRow[] = [];
+
           for (const row of rows) {
+            const rawCampaignId = row.dimensions?.campaign_id;
+            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
+            const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
+
+            // ===== KEYWORD MATCHING: Skip if no match =====
+            const platformId = `tiktok_${rawCampaignId}`;
+            const clientId = resolveClientId(campaignName, platformId);
+            if (!clientId) { skippedCampaigns++; continue; }
+
             const spend = parseFloat(row.metrics?.spend || "0");
             const impressions = parseInt(row.metrics?.impressions || "0", 10);
             const clicks = parseInt(row.metrics?.clicks || "0", 10);
@@ -860,48 +916,22 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             const conversions = parseInt(row.metrics?.conversion || "0", 10);
             const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
             const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
-            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10); // Real "Conversations (TikTok DM)" from API
-            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0; // Attribute leads only when DM conversations exist
+            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10);
+            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0;
 
-            // Sales-funnel metrics (TikTok "Total" = web + app + offline pixel events)
-            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || "0");
-            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || "0");
-            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || "0");
-            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || "0");
+            // BC reports return `total_*` (web+app+offline pixel events). Direct/advertiser
+            // reports only support the non-`total_` variants. Read either source.
+            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || row.metrics?.view_content       || "0");
+            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || row.metrics?.add_to_cart        || "0");
+            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || row.metrics?.initiate_checkout  || "0");
+            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || row.metrics?.complete_payment   || "0");
             const tiktokCostPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
 
-            const rawCampaignId = row.dimensions?.campaign_id;
-            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
-            const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
-
-            // ===== KEYWORD MATCHING: Skip if no match =====
-            const platformId = `tiktok_${rawCampaignId}`;
-            const clientId = resolveClientId(campaignName, platformId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
-
-            // If status fetch failed and map is empty, force "active" to overwrite stale "paused"
-            // If status fetch succeeded, use the map (confirmed) or default "active" (also confirmed since API worked)
-            const tiktokStatusConfirmed = tiktokStatusFetchFailed ? true : true; // Always confirmed — either from API or forced active
+            const tiktokStatusConfirmed = true;
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
             const tiktokObjective = tiktokObjectiveMap[rawCampaignId] || "";
             const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed, tiktokObjective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalTiktokStatus = campaignResult.status;
-
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
@@ -909,41 +939,115 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             const tiktokBudgetUsd = convertSpend(tiktokBudget);
             const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
 
-            await upsertMetrics(campaignDbId, dataDate, {
-              spend: spendUsd, impressions, clicks, results: conversions,
-              conversion_value: 0, ctr, cpc: cpcUsd, roas,
-              reach: tiktokReach,
-              cpm: Math.round(cpmValue * 100) / 100,
-              budget: tiktokBudgetUsd,
-              conversations_tiktok_dm: tiktokConvDm,
-              leads_tiktok_dm: tiktokLeadsDm,
-              conversations_instant_msg: 0,
-              view_content: tiktokViewContent,
-              add_to_cart: tiktokAddToCart,
-              initiate_checkout: tiktokInitiateCheckout,
-              purchase: tiktokPurchase,
-              cost_per_purchase: convertSpend(tiktokCostPerPurchase),
+            prepared.push({
+              platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate,
+              spendUsd, cpcUsd, ctr, impressions, clicks, conversions, roas,
+              tiktokReach, tiktokConvDm, tiktokLeadsDm,
+              tiktokViewContent, tiktokAddToCart, tiktokInitiateCheckout, tiktokPurchase,
+              tiktokCostPerPurchaseUsd: convertSpend(tiktokCostPerPurchase),
+              tiktokBudgetUsd, cpmValue,
+              finalTiktokStatus: campaignResult.status,
             });
-
-            // Legacy write
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: platformId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
-                results: conversions, conversion_value: 0, roas,
-                status: finalTiktokStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`TikTok legacy upsert: ${error.message}`);
           }
 
-          console.log(`TikTok deep-dive: ${rows.length} rows for ${account.ad_account_id}`);
+          // ===== PHASE B: bulk + parallel writes =====
+          // 1) campaign_mappings — single bulk upsert (one row per unique campaign).
+          //    Dedupe by platformId so the upsert array has no duplicate conflict targets.
+          const mappingMap = new Map<string, any>();
+          for (const p of prepared) {
+            mappingMap.set(p.platformId, {
+              campaign_id: p.platformId,
+              campaign_name: p.campaignName,
+              platform,
+              client_id: p.clientId,
+              ad_account_id: account.id,
+              is_active: true,
+              org_id: account.org_id,
+            });
+          }
+          if (mappingMap.size > 0) {
+            // No unique index on campaign_mappings.campaign_id, so we can't use ON CONFLICT.
+            // Pattern: select existing IDs, insert only the missing ones (idempotent + safe).
+            const allIds = Array.from(mappingMap.keys());
+            const existingIds = new Set<string>();
+            for (let i = 0; i < allIds.length; i += 200) {
+              const slice = allIds.slice(i, i + 200);
+              const { data: ex } = await supabase
+                .from("campaign_mappings")
+                .select("campaign_id")
+                .in("campaign_id", slice);
+              for (const r of ex ?? []) existingIds.add(r.campaign_id);
+            }
+            const toInsert = Array.from(mappingMap.values()).filter((r: any) => !existingIds.has(r.campaign_id));
+            for (let i = 0; i < toInsert.length; i += 100) {
+              const batch = toInsert.slice(i, i + 100);
+              const { error: mErr } = await supabase.from("campaign_mappings").insert(batch);
+              if (mErr) errors.push(`TikTok campaign_mappings insert: ${mErr.message}`);
+            }
+          }
+
+          // 2) daily_metrics — parallel batches of 5 (idempotent per (campaign_id, data_date)).
+          const BATCH = 5;
+          for (let i = 0; i < prepared.length; i += BATCH) {
+            const slice = prepared.slice(i, i + BATCH);
+            const results = await Promise.allSettled(slice.map((p) =>
+              upsertMetrics(p.campaignDbId, p.dataDate, {
+                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks, results: p.conversions,
+                conversion_value: 0, ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
+                reach: p.tiktokReach,
+                cpm: Math.round(p.cpmValue * 100) / 100,
+                budget: p.tiktokBudgetUsd,
+                conversations_tiktok_dm: p.tiktokConvDm,
+                leads_tiktok_dm: p.tiktokLeadsDm,
+                conversations_instant_msg: 0,
+                view_content: p.tiktokViewContent,
+                add_to_cart: p.tiktokAddToCart,
+                initiate_checkout: p.tiktokInitiateCheckout,
+                purchase: p.tiktokPurchase,
+                cost_per_purchase: p.tiktokCostPerPurchaseUsd,
+              })
+            ));
+            for (const r of results) {
+              if (r.status === "rejected") errors.push(`TikTok upsertMetrics: ${r.reason?.message || r.reason}`);
+            }
+          }
+
+          // 3) campaign_performance (legacy) — single bulk upsert per account.
+          //    Dedupe by (campaign_id, date) to satisfy the unique constraint.
+          const perfMap = new Map<string, any>();
+          for (const p of prepared) {
+            const key = `${p.platformId}|${p.dataDate}`;
+            perfMap.set(key, {
+              campaign_id: p.platformId,
+              campaign_name: p.campaignName,
+              ad_account_id: account.id,
+              client_id: p.clientId,
+              date: p.dataDate,
+              impressions: p.impressions,
+              clicks: p.clicks,
+              ctr: p.ctr,
+              cpc: p.cpcUsd,
+              spend: p.spendUsd,
+              results: p.conversions,
+              conversion_value: 0,
+              roas: p.roas,
+              status: p.finalTiktokStatus,
+              synced_at: syncedAtIso,
+              org_id: account.org_id,
+            });
+          }
+          if (perfMap.size > 0) {
+            const perfRows = Array.from(perfMap.values());
+            for (let i = 0; i < perfRows.length; i += 100) {
+              const batch = perfRows.slice(i, i + 100);
+              const { error: pErr } = await supabase
+                .from("campaign_performance")
+                .upsert(batch, { onConflict: "campaign_id,date", ignoreDuplicates: false });
+              if (pErr) errors.push(`TikTok campaign_performance bulk upsert: ${pErr.message}`);
+            }
+          }
+
+          console.log(`TikTok deep-dive: ${rows.length} rows (${prepared.length} matched) for ${account.ad_account_id}`);
         }
 
         totalSynced++;
@@ -969,6 +1073,8 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
         skipped_no_keyword_match: skippedCampaigns,
+        skipped_for_time_budget: skippedForTimeBudget,
+        elapsed_ms: Date.now() - startTime,
         errors: errors.length > 0 ? errors : undefined,
         error_code: errors.length > 0 ? "partial_errors" : undefined,
         rows_synced: totalSynced,
