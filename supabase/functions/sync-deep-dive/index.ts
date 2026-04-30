@@ -966,13 +966,23 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             });
           }
           if (mappingMap.size > 0) {
-            const mappingRows = Array.from(mappingMap.values());
-            for (let i = 0; i < mappingRows.length; i += 100) {
-              const batch = mappingRows.slice(i, i + 100);
-              const { error: mErr } = await supabase
+            // No unique index on campaign_mappings.campaign_id, so we can't use ON CONFLICT.
+            // Pattern: select existing IDs, insert only the missing ones (idempotent + safe).
+            const allIds = Array.from(mappingMap.keys());
+            const existingIds = new Set<string>();
+            for (let i = 0; i < allIds.length; i += 200) {
+              const slice = allIds.slice(i, i + 200);
+              const { data: ex } = await supabase
                 .from("campaign_mappings")
-                .upsert(batch, { onConflict: "campaign_id" });
-              if (mErr) errors.push(`TikTok campaign_mappings bulk upsert: ${mErr.message}`);
+                .select("campaign_id")
+                .in("campaign_id", slice);
+              for (const r of ex ?? []) existingIds.add(r.campaign_id);
+            }
+            const toInsert = Array.from(mappingMap.values()).filter((r: any) => !existingIds.has(r.campaign_id));
+            for (let i = 0; i < toInsert.length; i += 100) {
+              const batch = toInsert.slice(i, i + 100);
+              const { error: mErr } = await supabase.from("campaign_mappings").insert(batch);
+              if (mErr) errors.push(`TikTok campaign_mappings insert: ${mErr.message}`);
             }
           }
 
