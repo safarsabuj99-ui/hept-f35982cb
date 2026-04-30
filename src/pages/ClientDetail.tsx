@@ -3,6 +3,7 @@ import { isActiveStatus } from "@/lib/campaignStatus";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -114,15 +115,22 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountClientsRes, paymentsRes, txRes, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
+    const [profileRes, adAccountClientsRes, paymentsRes, txRows, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_account_clients").select("id, ad_account_id, client_id, mapping_keyword").eq("client_id", userId!),
       supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date").eq("client_id", userId!).order("created_at", { ascending: false }),
-      supabase.from("transactions").select("id, client_id, type, amount, platform, date, created_at, status, description").eq("client_id", userId!).order("created_at", { ascending: false }),
+      fetchAllRows<any>(() =>
+        supabase
+          .from("transactions")
+          .select("id, client_id, type, amount, platform, date, created_at, status, description")
+          .eq("client_id", userId!)
+          .order("created_at", { ascending: false })
+      ),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
       supabase.from("user_roles").select("role").eq("user_id", userId!).maybeSingle(),
       supabase.from("ad_accounts").select("id, account_name, platform_name, ad_account_id, is_active").order("account_name"),
     ]);
+    const txRes = { data: txRows };
 
     if (roleRes.data) {
       setClientRole(roleRes.data.role);
@@ -205,22 +213,22 @@ export default function ClientDetail() {
     }
 
     const campaignIds = campaignsData.map((c: any) => c.id);
-    let metricsQuery = supabase
-      .from("daily_metrics")
-      .select("campaign_id, data_date, spend, impressions, clicks, results, conversion_value, synced_at, cpc, ctr, roas, reach, budget, cpm, purchase, add_to_cart, initiate_checkout, view_content, messaging_conversations, new_messaging_contacts, cost_per_purchase, cost_per_message, create_order, conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg")
-      .in("campaign_id", campaignIds)
-      .order("data_date", { ascending: false });
-
-    if (range) {
-      metricsQuery = metricsQuery
-        .gte("data_date", format(range.from, "yyyy-MM-dd"))
-        .lte("data_date", format(range.to, "yyyy-MM-dd"));
-    }
-
-    const { data: metricsData } = await metricsQuery;
+    const metricsData = await fetchAllRows<any>(() => {
+      let q = supabase
+        .from("daily_metrics")
+        .select("campaign_id, data_date, spend, impressions, clicks, results, conversion_value, synced_at, cpc, ctr, roas, reach, budget, cpm, purchase, add_to_cart, initiate_checkout, view_content, messaging_conversations, new_messaging_contacts, cost_per_purchase, cost_per_message, create_order, conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg")
+        .in("campaign_id", campaignIds)
+        .order("data_date", { ascending: false });
+      if (range) {
+        q = q
+          .gte("data_date", format(range.from, "yyyy-MM-dd"))
+          .lte("data_date", format(range.to, "yyyy-MM-dd"));
+      }
+      return q;
+    });
 
     // Enrich with campaign info
-    const enriched = (metricsData ?? []).map((m: any) => {
+    const enriched = metricsData.map((m: any) => {
       const campaign = campaignsData.find((c: any) => c.id === m.campaign_id);
       return { ...m, campaign };
     });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Clock, TrendingDown } from "lucide-react";
@@ -51,18 +52,20 @@ export function RunwayPrediction() {
 
     if (mappedAccountIds.length === 0) { setLoading(false); return; }
 
-    const [profilesRes, txnsRes] = await Promise.all([
+    const [profilesRes, txns, recentSpend] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_balance_usd").in("user_id", clientIds),
-      supabase.from("transactions").select("client_id, type, amount, status"),
+      fetchAllRows<any>(() => supabase.from("transactions").select("client_id, type, amount, status")),
+      fetchAllRows<any>(() =>
+        supabase
+          .from("daily_ad_spend")
+          .select("ad_account_id, final_billable_usd, campaign_name")
+          .in("ad_account_id", mappedAccountIds)
+          .gte("date", getDhakaDateString(-3))
+      ),
     ]);
+    const txnsRes = { data: txns };
 
     const threeDaysStr = getDhakaDateString(-3);
-
-    const { data: recentSpend } = await supabase
-      .from("daily_ad_spend")
-      .select("ad_account_id, final_billable_usd, campaign_name")
-      .in("ad_account_id", mappedAccountIds)
-      .gte("date", threeDaysStr);
 
     // Client spend last 3 days - only count matching campaigns
     const clientSpend3d: Record<string, number> = {};

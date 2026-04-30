@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
@@ -25,7 +26,7 @@ export function LowBalanceAlerts() {
       if (clientIds.length === 0) { setLoading(false); return; }
 
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", clientIds);
-      const { data: txns } = await supabase.from("transactions").select("client_id, type, amount, status, date");
+      const txns = await fetchAllRows<any>(() => supabase.from("transactions").select("client_id, type, amount, status, date"));
 
       const sevenDaysStr = getDhakaDateString(-7);
 

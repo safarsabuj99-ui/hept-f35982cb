@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -61,12 +62,14 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     setLoading(true);
 
     // Step 1: Get mapped accounts WITH keywords
-    const { data: mappedAssignments } = await supabase
-      .from("ad_account_clients")
-      .select("ad_account_id, client_id, mapping_keyword")
-      .neq("mapping_keyword", "");
+    const mappedAssignments = await fetchAllRows<any>(() =>
+      supabase
+        .from("ad_account_clients")
+        .select("ad_account_id, client_id, mapping_keyword")
+        .neq("mapping_keyword", "")
+    );
 
-    const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
+    const mappedAccountIds = [...new Set(mappedAssignments.map((r: any) => r.ad_account_id))];
 
     if (mappedAccountIds.length === 0) {
       setRows([]);
@@ -75,29 +78,36 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     }
 
     // Get campaigns from mapped accounts only
-    const { data: mappedCampaigns } = await supabase
-      .from("campaigns")
-      .select("id, ad_account_id, platform, client_id")
-      .in("ad_account_id", mappedAccountIds);
+    const mappedCampaigns = await fetchAllRows<any>(() =>
+      supabase
+        .from("campaigns")
+        .select("id, ad_account_id, platform, client_id")
+        .in("ad_account_id", mappedAccountIds)
+    );
 
-    const campaignIds = mappedCampaigns?.map((c: any) => c.id) ?? [];
+    const campaignIds = mappedCampaigns.map((c: any) => c.id);
 
-    let metricsQuery = supabase.from("daily_metrics").select("campaign_id, spend");
-    if (campaignIds.length > 0) {
-      metricsQuery = metricsQuery.in("campaign_id", campaignIds);
-    }
-    if (dateRange) {
-      metricsQuery = metricsQuery
-        .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
-        .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
-    }
+    const buildMetricsQuery = () => {
+      let q = supabase.from("daily_metrics").select("campaign_id, spend");
+      if (campaignIds.length > 0) q = q.in("campaign_id", campaignIds);
+      if (dateRange) {
+        q = q
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
+      }
+      return q;
+    };
 
-    const [purchasesRes, metricsRes, profilesRes, rolesRes] = await Promise.all([
-      supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
-      metricsQuery,
-      supabase.from("profiles").select("user_id, full_name, pricing_config"),
-      supabase.from("user_roles").select("user_id").eq("role", "client"),
+    const [purchases, metrics, profiles, roles] = await Promise.all([
+      fetchAllRows<any>(() => supabase.from("usd_purchases").select("bdt_amount_paid, usd_received")),
+      fetchAllRows<any>(buildMetricsQuery),
+      fetchAllRows<any>(() => supabase.from("profiles").select("user_id, full_name, pricing_config")),
+      fetchAllRows<any>(() => supabase.from("user_roles").select("user_id").eq("role", "client")),
     ]);
+    const purchasesRes = { data: purchases };
+    const metricsRes = { data: metrics };
+    const profilesRes = { data: profiles };
+    const rolesRes = { data: roles };
 
     // WAC with cascading fallback
     const calcWac = (data: any[] | null) => {

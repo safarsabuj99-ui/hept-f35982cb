@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, TrendingUp } from "lucide-react";
@@ -118,22 +119,19 @@ export function ClientProfitTab({ clientId }: ClientProfitTabProps) {
     }
 
     // Fetch metrics with date filter
-    let metricsQuery = supabase
-      .from("daily_metrics")
-      .select("campaign_id, spend")
-      .in("campaign_id", campaignIds);
-
-    if (range) {
-      metricsQuery = metricsQuery
-        .gte("data_date", format(range.from, "yyyy-MM-dd"))
-        .lte("data_date", format(range.to, "yyyy-MM-dd"));
-    }
-
-    const metricsRes = await metricsQuery;
+    const metricsRows = await fetchAllRows<any>(() => {
+      let q = supabase.from("daily_metrics").select("campaign_id, spend").in("campaign_id", campaignIds);
+      if (range) {
+        q = q
+          .gte("data_date", format(range.from, "yyyy-MM-dd"))
+          .lte("data_date", format(range.to, "yyyy-MM-dd"));
+      }
+      return q;
+    });
 
     // Aggregate spend per platform
     const platformSpend: Record<string, number> = {};
-    for (const m of (metricsRes.data ?? []) as any[]) {
+    for (const m of metricsRows) {
       const platform = campaignMap[m.campaign_id];
       if (!platform) continue;
       platformSpend[platform] = (platformSpend[platform] || 0) + Number(m.spend);

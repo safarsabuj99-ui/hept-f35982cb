@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -41,14 +42,16 @@ export default function ManagerDashboard() {
       const clientIds = clientProfiles.map((p: any) => p.user_id);
 
       // Only fetch needed columns, filtered to these clients
-      const { data: transactions } = await supabase
-        .from("transactions")
-        .select("client_id, type, amount, status")
-        .in("client_id", clientIds)
-        .eq("status", "completed");
+      const transactions = await fetchAllRows<any>(() =>
+        supabase
+          .from("transactions")
+          .select("client_id, type, amount, status")
+          .in("client_id", clientIds)
+          .eq("status", "completed")
+      );
 
       const result: ClientWithBalance[] = clientProfiles.map((p: any) => {
-        const clientTxns = (transactions ?? []).filter((t: any) => t.client_id === p.user_id);
+        const clientTxns = transactions.filter((t: any) => t.client_id === p.user_id);
         const credits = clientTxns.filter((t: any) => t.type === "credit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         const debits = clientTxns.filter((t: any) => t.type === "debit").reduce((sum: number, t: any) => sum + Number(t.amount), 0);
         return { user_id: p.user_id, full_name: p.full_name, email: p.email, business_name: p.business_name, balance: credits - debits };
