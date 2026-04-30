@@ -115,15 +115,22 @@ export default function ClientDetail() {
 
   async function loadAll() {
     setLoading(true);
-    const [profileRes, adAccountClientsRes, paymentsRes, txRes, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
+    const [profileRes, adAccountClientsRes, paymentsRes, txRows, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_account_clients").select("id, ad_account_id, client_id, mapping_keyword").eq("client_id", userId!),
       supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date").eq("client_id", userId!).order("created_at", { ascending: false }),
-      supabase.from("transactions").select("id, client_id, type, amount, platform, date, created_at, status, description").eq("client_id", userId!).order("created_at", { ascending: false }),
+      fetchAllRows<any>(() =>
+        supabase
+          .from("transactions")
+          .select("id, client_id, type, amount, platform, date, created_at, status, description")
+          .eq("client_id", userId!)
+          .order("created_at", { ascending: false })
+      ),
       supabase.from("user_roles").select("user_id").eq("role", "manager"),
       supabase.from("user_roles").select("role").eq("user_id", userId!).maybeSingle(),
       supabase.from("ad_accounts").select("id, account_name, platform_name, ad_account_id, is_active").order("account_name"),
     ]);
+    const txRes = { data: txRows };
 
     if (roleRes.data) {
       setClientRole(roleRes.data.role);
