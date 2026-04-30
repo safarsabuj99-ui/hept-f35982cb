@@ -74,17 +74,37 @@ export default function ClientList() {
       if (!roles?.length) { setLoading(false); setInitialLoading(false); initialLoadingRef.current = false; return; }
 
       const ids = roles.map((r) => r.user_id);
-      const [profilesRes, purchasesRes, campaignsRes, metricsRes, accClientsRes, txnsRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
-          .in("user_id", ids),
-        supabase.from("usd_purchases").select("bdt_amount_paid, usd_received"),
-        supabase.from("campaigns").select("id, ad_account_id, platform"),
-        supabase.from("daily_metrics").select("campaign_id, spend").gte("data_date", new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)),
-        supabase.from("ad_account_clients").select("ad_account_id, client_id"),
-        supabase.from("transactions").select("client_id, type, amount, platform, status").eq("status", "completed"),
+      // NOTE: tables that can exceed 1000 rows MUST go through fetchAllRows,
+      // otherwise Supabase silently truncates and balances/spend are wrong.
+      const [profiles, purchases, campaignsData, metrics, accClients, txns] = await Promise.all([
+        fetchAllRows<any>(() =>
+          supabase
+            .from("profiles")
+            .select("user_id, full_name, email, business_name, custom_exchange_rate, pricing_config")
+            .in("user_id", ids)
+        ),
+        fetchAllRows<any>(() => supabase.from("usd_purchases").select("bdt_amount_paid, usd_received")),
+        fetchAllRows<any>(() => supabase.from("campaigns").select("id, ad_account_id, platform")),
+        fetchAllRows<any>(() =>
+          supabase
+            .from("daily_metrics")
+            .select("campaign_id, spend")
+            .gte("data_date", new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
+        ),
+        fetchAllRows<any>(() => supabase.from("ad_account_clients").select("ad_account_id, client_id")),
+        fetchAllRows<any>(() =>
+          supabase
+            .from("transactions")
+            .select("client_id, type, amount, platform, status")
+            .eq("status", "completed")
+        ),
       ]);
+      const profilesRes = { data: profiles };
+      const purchasesRes = { data: purchases };
+      const campaignsRes = { data: campaignsData };
+      const metricsRes = { data: metrics };
+      const accClientsRes = { data: accClients };
+      const txnsRes = { data: txns };
 
       setClients(profilesRes.data || []);
 
