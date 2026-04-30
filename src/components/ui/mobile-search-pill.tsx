@@ -174,6 +174,7 @@ export function MobileSearchPill({
 
   const pill = (
     <div
+      data-no-double-tap
       className={cn(
         "fixed left-0 right-0 z-40 px-4 pointer-events-none",
         "transition-[transform,opacity] duration-300 ease-out",
