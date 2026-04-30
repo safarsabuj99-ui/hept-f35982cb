@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
-import { computeWalletBalance, computeBdtDebt, KNOWN_PLATFORMS } from "@/lib/walletBalance";
+import { computeWalletBalance, computeBdtDebt } from "@/lib/walletBalance";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Link } from "react-router-dom";
