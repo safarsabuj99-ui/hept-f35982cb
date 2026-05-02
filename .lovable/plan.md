@@ -1,62 +1,64 @@
-## Problem
+## Why mobile shows "no data" but lovable preview works
 
-In the global ⌘K / mobile search, typing a client's exact name sometimes returns no result (or hides the right client). Two real bugs in `src/components/dashboard/ClientSearchCommand.tsx` cause this:
+Two things are happening together:
 
-### Bug 1 — Duplicate `value` collisions (cmdk dedupes items)
+### 1. The deployed PWA is serving an older JS bundle
 
-Each `CommandItem` is rendered with:
+The previous search fix (custom `filter` + `::user_id` suffix on `value`) lives in the codebase and works in the lovable preview, but the published mobile app at `hept.lovable.app` / `heptbd.com` still ships the *previous* build. Until we publish, mobile users keep hitting the old fuzzy-scorer code where "hasib" silently returns nothing.
 
-```ts
-value={client._searchValue}
-```
+### 2. Even after publish, the current `value`-only trick is fragile
 
-`_searchValue` is just the concatenation of name + email + business + phone + keyword + amount. cmdk (the underlying `Command` library) requires **unique `value` per item** — when two items share the same `value`, only one is kept in the filtered list. This happens whenever:
+We currently stuff every searchable token (name + email + business + phone + keyword + amount + status flags + `::uuid`) into the single `value` string of `<CommandItem>`. cmdk normalizes that string (lowercases, collapses `[\s-]` to spaces) before matching and storing — making collisions and edge cases possible. The library actually has a first-class API for exactly this: pass a stable unique `value` and feed all searchable text through the `keywords` prop. cmdk's `filter(value, search, keywords)` then receives `keywords` as an array, which is what we should be matching against.
 
-- Two clients share the same full name (very common: "Akram", "Rahim", etc.)
-- A client has empty business/email/phone/keyword and only the name distinguishes them
-- Two rows produce identical token strings after the `filter(Boolean).join(" ")`
+This rewrite eliminates the `::uuid` hack and matches cmdk's intended contract.
 
-Result: the matching client is silently dropped from the list even though the search string matches.
+## Plan
 
-### Bug 2 — Default cmdk fuzzy scorer misses valid substrings
+Edit **`src/components/dashboard/ClientSearchCommand.tsx`**:
 
-cmdk uses `command-score` by default. For long concatenated strings with many tokens, short queries like `akram` can score `0` against a row whose name actually contains "Akram" — especially when the matching token isn't first or when the string contains digits/punctuation from the amount tokens. This intermittently filters out exact-name matches.
+1. Replace the single `_searchValue` string with two fields on each enriched client:
+   - `_value`: stable unique id (just `client.user_id`) — used as `<CommandItem value=...>`. Guarantees uniqueness and prevents cmdk dedupe.
+   - `_keywords`: `string[]` of every searchable token (`full_name`, `email`, `business_name`, `phone`, `mapping_keyword`, rounded balance, "paused" / "pending" / "inactive" flags). Pre-lowercased and de-duped.
 
-## Fix (smart, minimal, robust)
-
-Edit `src/components/dashboard/ClientSearchCommand.tsx`:
-
-1. **Make every CommandItem value unique** by appending the `user_id`:
-   ```ts
-   const searchValue = `${tokens.filter(Boolean).join(" ")} ::${c.user_id}`;
-   ```
-   The `::user_id` suffix guarantees uniqueness without affecting human queries (no admin types `::uuid`).
-
-2. **Replace cmdk's default fuzzy filter with a deterministic substring matcher** on `<Command filter={...}>`:
+2. On `<CommandItem>` use:
    ```tsx
-   <Command
-     filter={(value, search) => {
-       if (!search) return 1;
-       const haystack = value.toLowerCase();
-       const needle = search.trim().toLowerCase();
-       // Multi-token AND match: every whitespace-separated token must appear
-       const tokens = needle.split(/\s+/).filter(Boolean);
-       return tokens.every((t) => haystack.includes(t)) ? 1 : 0;
-     }}
+   <CommandItem
+     value={client._value}
+     keywords={client._keywords}
+     onSelect={...}
    >
    ```
-   This guarantees: if the typed text (or each whitespace token of it) appears anywhere in the row's search string, the row is shown. No fuzzy false-negatives, no silent drops.
 
-3. Keep the existing token-rich `_searchValue` (name, email, business, phone, mapping_keyword, amount, status flags) so all existing search vectors keep working — we're only changing the **scoring** and **uniqueness**, not the searchable surface.
+3. Update the custom `filter` on `<Command>` to use the `keywords` argument (cmdk passes it as the 3rd arg) instead of the `value` arg:
+   ```tsx
+   filter={(_value, search, keywords) => {
+     if (!search) return 1;
+     const hay = (keywords ?? []).join(" ").toLowerCase();
+     const needles = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+     return needles.every((t) => hay.includes(t)) ? 1 : 0;
+   }}
+   ```
+   This is fully deterministic: if every typed token appears anywhere in the keyword list, the row shows. No fuzzy false negatives, no value-collision dedupe, ever.
+
+4. Keep all existing UI (Quick Actions row, recents, KPI strip, mobile bottom pill) untouched — only the matching layer changes.
+
+5. Bump `public/sw.js` with a small version comment so service workers update on next visit, and ensure the published PWA picks up the fix immediately:
+   ```js
+   // v2 — search filter rewrite
+   ```
+   (`sw.js` already caches nothing, but bumping triggers `install` → `skipWaiting` → `clients.claim`, forcing the new HTML/JS to load.)
+
+6. After the code edit is in, publish so the mobile app at `hept.lovable.app` / `heptbd.com` actually serves the fixed bundle.
 
 ## Files touched
 
-- `src/components/dashboard/ClientSearchCommand.tsx` — 2 small edits (value suffix + custom `filter` prop on `<Command>`).
+- `src/components/dashboard/ClientSearchCommand.tsx` — swap `value`/filter to use cmdk `keywords` API.
+- `public/sw.js` — version-bump comment to force SW refresh on mobile.
 
-No DB / RPC / data layer changes needed. The data already arrives correctly from `useGlobalClientSearch`; only the client-side filter was dropping rows.
+No DB / RPC changes. No prop API changes for callers.
 
 ## Why this is the permanent fix
 
-- Unique values eliminate the entire class of "duplicate-name disappears" bugs.
-- A pure substring filter is predictable: an exact name will *always* match. No future admin will hit the fuzzy-scorer edge case again.
-- Multi-token AND matching ("hasib bkash") still works for compound queries.
+- `value = user_id` is guaranteed unique → cmdk can never silently drop a duplicate-name client again.
+- `keywords` is cmdk's official multi-token search input — searches like "hasib", "bkash", "01700…", "Women's World" all hit the same array and match on substring with zero scorer ambiguity.
+- Service-worker version bump means the next time the user opens the mobile PWA, they get the fixed bundle without needing to manually clear cache.

@@ -198,29 +198,36 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
     return () => document.removeEventListener("keydown", down);
   }, [isHotkeyOnly]);
 
-  // Pre-compute heavy fields once per client
-  type EnrichedClient = ClientItem & { _bdtDebt: number; _searchValue: string };
+  // Pre-compute heavy fields once per client.
+  // - `_value` is a STABLE UNIQUE id (user_id) so cmdk never silently dedupes
+  //   two clients that happen to share a name.
+  // - `_keywords` carries every searchable token; cmdk passes this array as the
+  //   3rd arg of `filter(value, search, keywords)`, which we use for matching.
+  type EnrichedClient = ClientItem & { _bdtDebt: number; _value: string; _keywords: string[] };
   const enriched: EnrichedClient[] = useMemo(() => {
     return clients.map((c) => {
       const bdt = c.balance < 0 ? computeBdtDebt(c) : 0;
-      // Build a rich, multi-token search string
-      const tokens = [
+      const raw = [
         c.full_name,
         c.email ?? "",
         c.business_name ?? "",
         c.phone ?? "",
         c.mapping_keyword ?? "",
-        // include amount-as-string so admins can search by rounded balance
         c.balance > 0 ? Math.round(c.balance).toString() : "",
         c.balance < 0 ? Math.round(bdt).toString() : "",
         c.is_paused ? "paused" : "",
         (c.pending_payments ?? 0) > 0 ? "pending" : "",
         c.is_active === false ? "inactive" : "",
       ];
-      // Append user_id so cmdk values are guaranteed unique (prevents duplicate-name rows
-      // from being silently deduped). The `::uuid` suffix won't collide with human queries.
-      const searchValue = `${tokens.filter(Boolean).join(" ")} ::${c.user_id}`;
-      return { ...c, _bdtDebt: bdt, _searchValue: searchValue };
+      const keywords = Array.from(
+        new Set(
+          raw
+            .filter(Boolean)
+            .map((s) => String(s).toLowerCase().trim())
+            .filter(Boolean),
+        ),
+      );
+      return { ...c, _bdtDebt: bdt, _value: c.user_id, _keywords: keywords };
     });
   }, [clients]);
 
