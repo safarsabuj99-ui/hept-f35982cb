@@ -1,4 +1,5 @@
 // Service Worker for Web Push Notifications
+// v2 — global search filter rewrite (force PWA refresh)
 // Does NOT cache anything — purely for push notification handling
 
 self.addEventListener("install", () => {
