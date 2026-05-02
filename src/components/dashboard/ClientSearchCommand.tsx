@@ -518,11 +518,11 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
           />
 
           <Command
-            filter={(value, search) => {
+            filter={(_value, search, keywords) => {
               if (!search) return 1;
-              const haystack = value.toLowerCase();
+              const hay = ((keywords ?? []).join(" ") + " " + _value).toLowerCase();
               const needles = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-              return needles.every((t) => haystack.includes(t)) ? 1 : 0;
+              return needles.every((t) => hay.includes(t)) ? 1 : 0;
             }}
             className={cn(
               "bg-transparent [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-muted-foreground/60 [&_[cmdk-group]]:px-2",
