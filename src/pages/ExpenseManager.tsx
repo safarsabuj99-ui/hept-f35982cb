@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
-import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -107,9 +106,6 @@ export default function ExpenseManager() {
       org_id: profile?.org_id || null,
     } as any);
 
-    if (!error && paidFromAccountId) {
-      await adjustAccountBalance(paidFromAccountId, -Number(amount));
-    }
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
