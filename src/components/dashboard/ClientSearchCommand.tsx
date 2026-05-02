@@ -343,7 +343,8 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
     return (
       <div key={client.user_id} className="relative">
         <CommandItem
-          value={client._searchValue}
+          value={client._value}
+          keywords={client._keywords}
           onSelect={() => goTo(`/admin/clients/${client.user_id}`, client.user_id)}
           className="group/row relative gap-3 rounded-lg px-3 py-2.5 my-0.5 data-[selected=true]:bg-gradient-to-r data-[selected=true]:from-primary/10 data-[selected=true]:via-primary/5 data-[selected=true]:to-transparent transition-all duration-200"
         >
