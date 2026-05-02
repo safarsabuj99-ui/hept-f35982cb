@@ -217,7 +217,10 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
         (c.pending_payments ?? 0) > 0 ? "pending" : "",
         c.is_active === false ? "inactive" : "",
       ];
-      return { ...c, _bdtDebt: bdt, _searchValue: tokens.filter(Boolean).join(" ") };
+      // Append user_id so cmdk values are guaranteed unique (prevents duplicate-name rows
+      // from being silently deduped). The `::uuid` suffix won't collide with human queries.
+      const searchValue = `${tokens.filter(Boolean).join(" ")} ::${c.user_id}`;
+      return { ...c, _bdtDebt: bdt, _searchValue: searchValue };
     });
   }, [clients]);
 
