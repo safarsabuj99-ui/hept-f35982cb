@@ -110,18 +110,17 @@ export default function ExpenseManager() {
     let currQ = supabase.from("agency_expenses").select(baseSel).order("date", { ascending: false });
     if (range) currQ = currQ.gte("date", toISODate(range.from)).lte("date", toISODate(range.to));
 
-    const promises: Promise<any>[] = [currQ];
-    if (range) {
-      const prev = buildPrevRange(range);
-      promises.push(
-        supabase.from("agency_expenses")
+    const prevQ = range
+      ? supabase.from("agency_expenses")
           .select("amount_bdt, category")
-          .gte("date", toISODate(prev.from))
-          .lte("date", toISODate(prev.to))
-      );
-    }
+          .gte("date", toISODate(buildPrevRange(range).from))
+          .lte("date", toISODate(buildPrevRange(range).to))
+      : null;
 
-    const [currRes, prevRes] = await Promise.all(promises);
+    const [currRes, prevRes] = await Promise.all([
+      Promise.resolve(currQ),
+      prevQ ? Promise.resolve(prevQ) : Promise.resolve(null as any),
+    ]);
     setExpenses((currRes?.data as any[]) ?? []);
 
     if (prevRes?.data) {
