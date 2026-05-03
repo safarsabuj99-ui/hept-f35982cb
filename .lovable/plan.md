@@ -1,64 +1,74 @@
-## Why mobile shows "no data" but lovable preview works
+## Goal
+Transform `/admin/finance?tab=expenses` from a basic 3-KPI + pie page into an information-dense, premium glassmorphic command center for cash outflows — with trends, comparisons, breakdowns, top categories, and inline row actions.
 
-Two things are happening together:
+## What's wrong today
+- Only 3 KPIs (Total / OpEx / Owner's Draw), all in BDT — no context, no deltas, no avg/largest.
+- Single pie chart, no trend over time, no comparison vs previous period.
+- Table only shows Date / Category / Amount — no description, no source account, no actions (edit/delete).
+- No category-level summary bars or month-over-month context.
+- Empty states are flat ("No data yet") with no CTA.
+- Visually flat — cards lack the premium glassmorphism / glow used elsewhere.
 
-### 1. The deployed PWA is serving an older JS bundle
+## New layout
 
-The previous search fix (custom `filter` + `::user_id` suffix on `value`) lives in the codebase and works in the lovable preview, but the published mobile app at `hept.lovable.app` / `heptbd.com` still ships the *previous* build. Until we publish, mobile users keep hitting the old fuzzy-scorer code where "hasib" silently returns nothing.
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Header: "Expenses" + period chip      [Export CSV] [+ Add]   │
+├──────────────────────────────────────────────────────────────┤
+│ DateRangeFilter (existing)                                   │
+├──────────────────────────────────────────────────────────────┤
+│  KPI ROW — 4 cards (glass + glow, click to filter)           │
+│  ┌──────────┬──────────┬──────────┬──────────────────────┐  │
+│  │ Total    │ OpEx     │ Owner's  │ Avg / Day            │  │
+│  │ ৳X       │ ৳X       │ Draw ৳X  │ ৳X  (largest: ৳Y)    │  │
+│  │ ▲12% vs  │ ▲5% vs   │ ▼3% vs   │ N expenses logged    │  │
+│  │ prev     │ prev     │ prev     │                      │  │
+│  └──────────┴──────────┴──────────┴──────────────────────┘  │
+├──────────────────────────────────────────────────────────────┤
+│  TREND (col-span-2)              │  CATEGORY BREAKDOWN      │
+│  Daily area chart                │  Horizontal bars per cat │
+│  (BDT spent per day)             │  with % of total + ৳     │
+├──────────────────────────────────────────────────────────────┤
+│  EXPENSES TABLE (full width)                                 │
+│  Date │ Category │ Description │ Paid From │ Amount │ ⋯     │
+│  - Search box + category multi-filter pills                  │
+│  - Row hover reveals Edit / Delete                           │
+│  - Premium empty state with "Add your first expense" CTA     │
+└──────────────────────────────────────────────────────────────┘
+```
 
-### 2. Even after publish, the current `value`-only trick is fragile
+## Features added
 
-We currently stuff every searchable token (name + email + business + phone + keyword + amount + status flags + `::uuid`) into the single `value` string of `<CommandItem>`. cmdk normalizes that string (lowercases, collapses `[\s-]` to spaces) before matching and storing — making collisions and edge cases possible. The library actually has a first-class API for exactly this: pass a stable unique `value` and feed all searchable text through the `keywords` prop. cmdk's `filter(value, search, keywords)` then receives `keywords` as an array, which is what we should be matching against.
+1. **4th KPI: Avg/Day + largest single expense + count** — gives operators a sense of velocity, not just totals.
+2. **Period-over-period deltas** — query the previous equal-length window and show ▲/▼ % vs prev on each KPI card.
+3. **Daily spend trend** — Recharts area chart bucketed by day across selected range, BDT axis. Replaces the half-empty distribution column with something actionable.
+4. **Category breakdown bars** — keep distribution insight but in a more readable horizontal bar list (category, ৳ amount, % of total, colored bar) instead of a pie that becomes useless past 3 segments.
+5. **Richer table**:
+   - Add Description column (truncated w/ tooltip).
+   - Add "Paid From" column (joins `agency_accounts.name` via `paid_from_account_id`).
+   - Inline search input (matches description / category).
+   - Row actions menu: **Edit** (opens existing dialog prefilled) and **Delete** (with confirm + atomic balance refund via existing `adjustAccountBalance` if originally paid from an account).
+6. **Export CSV** button — exports current filtered view (date, category, amount, description, paid_from).
+7. **Premium empty states** — illustration + CTA button instead of plain text.
+8. **Visual polish**:
+   - All cards use `glass-card glow-border` with subtle gradient accents per KPI (primary / chart-meta / warning / success).
+   - Animated number counters on KPI mount.
+   - Smooth `animate-slide-up-fade` staggers (already in codebase).
+   - Mobile: KPIs become 2x2 grid; trend + breakdown stack; table → premium card list with description preview.
 
-This rewrite eliminates the `::uuid` hack and matches cmdk's intended contract.
+## Technical notes
 
-## Plan
+- All new data derived client-side from a single fetch — extend `fetchExpenses` to also fetch a previous-period query in parallel for deltas (use `Promise.all`).
+- Join `paid_from_account_id` → `agency_accounts.name` via a second lightweight fetch keyed by id (already loading `agencyAccounts`, just look up by id).
+- Daily trend: bucket `expenses` by `date` across the selected range, fill missing days with 0 so the chart spans the full window.
+- Edit/Delete: new `updateExpense` / `deleteExpense` handlers calling `supabase.from('agency_expenses')`. Delete must refund the source `agency_accounts.current_balance_bdt` if `paid_from_account_id` is set (use `adjustAccountBalance` helper for atomic +amount). Wrap in toast feedback.
+- CSV export: build string client-side, trigger `Blob` download — no new deps.
+- Honor existing currency policy: BDT (৳) everywhere on this page (memory: `currency-display-policy`).
+- Honor existing date standards (UTC+6, lexicographic compare) — reuse `DateRangeFilter` helpers already imported.
+- Honor mobile responsiveness standard: stack on `<sm`, 2x2 KPIs on `sm`, 4-up on `lg`.
 
-Edit **`src/components/dashboard/ClientSearchCommand.tsx`**:
+## Files to edit
 
-1. Replace the single `_searchValue` string with two fields on each enriched client:
-   - `_value`: stable unique id (just `client.user_id`) — used as `<CommandItem value=...>`. Guarantees uniqueness and prevents cmdk dedupe.
-   - `_keywords`: `string[]` of every searchable token (`full_name`, `email`, `business_name`, `phone`, `mapping_keyword`, rounded balance, "paused" / "pending" / "inactive" flags). Pre-lowercased and de-duped.
+- `src/pages/ExpenseManager.tsx` — full redesign per layout above (single file, ~contained).
 
-2. On `<CommandItem>` use:
-   ```tsx
-   <CommandItem
-     value={client._value}
-     keywords={client._keywords}
-     onSelect={...}
-   >
-   ```
-
-3. Update the custom `filter` on `<Command>` to use the `keywords` argument (cmdk passes it as the 3rd arg) instead of the `value` arg:
-   ```tsx
-   filter={(_value, search, keywords) => {
-     if (!search) return 1;
-     const hay = (keywords ?? []).join(" ").toLowerCase();
-     const needles = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-     return needles.every((t) => hay.includes(t)) ? 1 : 0;
-   }}
-   ```
-   This is fully deterministic: if every typed token appears anywhere in the keyword list, the row shows. No fuzzy false negatives, no value-collision dedupe, ever.
-
-4. Keep all existing UI (Quick Actions row, recents, KPI strip, mobile bottom pill) untouched — only the matching layer changes.
-
-5. Bump `public/sw.js` with a small version comment so service workers update on next visit, and ensure the published PWA picks up the fix immediately:
-   ```js
-   // v2 — search filter rewrite
-   ```
-   (`sw.js` already caches nothing, but bumping triggers `install` → `skipWaiting` → `clients.claim`, forcing the new HTML/JS to load.)
-
-6. After the code edit is in, publish so the mobile app at `hept.lovable.app` / `heptbd.com` actually serves the fixed bundle.
-
-## Files touched
-
-- `src/components/dashboard/ClientSearchCommand.tsx` — swap `value`/filter to use cmdk `keywords` API.
-- `public/sw.js` — version-bump comment to force SW refresh on mobile.
-
-No DB / RPC changes. No prop API changes for callers.
-
-## Why this is the permanent fix
-
-- `value = user_id` is guaranteed unique → cmdk can never silently drop a duplicate-name client again.
-- `keywords` is cmdk's official multi-token search input — searches like "hasib", "bkash", "01700…", "Women's World" all hit the same array and match on substring with zero scorer ambiguity.
-- Service-worker version bump means the next time the user opens the mobile PWA, they get the fixed bundle without needing to manually clear cache.
+No DB migrations needed. No new dependencies.
