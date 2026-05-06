@@ -106,6 +106,7 @@ export default function PaymentRequests() {
   const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
   // Per-platform rates for multi-platform payments
   const [perPlatformRates, setPerPlatformRates] = useState<Record<string, number>>({});
+  const [mfsFeePercent, setMfsFeePercent] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [deposits, setDeposits] = useState<PendingDeposit[]>([]);
