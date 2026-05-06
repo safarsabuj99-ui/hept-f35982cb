@@ -22,7 +22,8 @@ export default function ClientReports() {
   const initialLoadingRef = useRef(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [preset, setPreset] = useState<ClientDatePreset>("today");
-  const [canToggleCampaigns, setCanToggleCampaigns] = useState(false);
+  const [canPause, setCanPause] = useState(false);
+  const [canResume, setCanResume] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;
