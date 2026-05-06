@@ -1696,27 +1696,26 @@ export default function CashFlowManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Record Return Dialog (Withdrawals) */}
+      {/* Borrower Return Dialog (auto-allocates FIFO) */}
       <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Record Return</DialogTitle></DialogHeader>
-          {returnWithdrawal && (
+          <DialogHeader><DialogTitle>Record Return from {returnGroup?.root.borrower_name}</DialogTitle></DialogHeader>
+          {returnGroup && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-muted p-3 space-y-1">
-                <p className="text-sm font-medium">{returnWithdrawal.borrower_name} — {CATEGORY_LABELS[returnWithdrawal.category] || returnWithdrawal.category}</p>
-                <p className="text-xs text-muted-foreground">
-                  Total: ৳{Number(returnWithdrawal.amount_bdt).toLocaleString()} · Returned: ৳{Number(returnWithdrawal.returned_bdt).toLocaleString()} · 
-                  <span className="text-destructive font-medium"> Outstanding: ৳{(Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt)).toLocaleString()}</span>
-                </p>
+              <div className="rounded-lg bg-muted p-3 grid grid-cols-3 gap-2 text-xs">
+                <div><div className="text-muted-foreground">Total Borrowed</div><div className="font-mono font-semibold">৳{Number(returnGroup.totalBorrowed).toLocaleString()}</div></div>
+                <div><div className="text-muted-foreground">Already Returned</div><div className="font-mono font-semibold text-success">৳{Number(returnGroup.totalReturned).toLocaleString()}</div></div>
+                <div><div className="text-muted-foreground">Outstanding</div><div className="font-mono font-semibold text-destructive">৳{Number(returnGroup.outstanding).toLocaleString()}</div></div>
               </div>
               <div>
                 <Label>Return Amount (BDT)</Label>
                 <Input
                   type="number"
-                  placeholder={`Max ৳${(Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt)).toLocaleString()}`}
+                  placeholder={`Max ৳${Number(returnGroup.outstanding).toLocaleString()}`}
                   value={retAmount}
                   onChange={e => setRetAmount(e.target.value)}
                 />
+                <p className="text-[11px] text-muted-foreground mt-1">Auto-applied to oldest open borrows first.</p>
               </div>
               <div>
                 <Label>Return To Account</Label>
@@ -1739,7 +1738,7 @@ export default function CashFlowManagement() {
                 <Label>Note (optional)</Label>
                 <Textarea value={retNote} onChange={e => setRetNote(e.target.value)} placeholder="e.g. Partial return" />
               </div>
-              <Button className="w-full" onClick={handleRecordReturn} disabled={retSubmitting}>
+              <Button className="w-full" onClick={handleRecordBorrowerReturn} disabled={retSubmitting}>
                 {retSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Return
               </Button>
             </div>
@@ -1747,6 +1746,96 @@ export default function CashFlowManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Borrower History Dialog */}
+      <Dialog open={!!historyGroup} onOpenChange={(o) => !o && setHistoryGroup(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{historyGroup?.root.borrower_name} — Transaction History</DialogTitle>
+          </DialogHeader>
+          {historyGroup && (() => {
+            const childIds = new Set<string>(historyGroup.all.map((r: CashWithdrawal) => r.id));
+            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string }> = [];
+            for (const w of historyGroup.all as CashWithdrawal[]) {
+              events.push({
+                kind: "borrow",
+                date: w.date,
+                created_at: w.created_at,
+                amount: Number(w.amount_bdt),
+                note: w.note,
+                meta: w.parent_withdrawal_id ? "Top-up borrow" : "Original borrow",
+              });
+            }
+            for (const r of withdrawalReturns) {
+              if (childIds.has(r.withdrawal_id)) {
+                const toAcc = accounts.find(a => a.id === r.to_account_id);
+                events.push({
+                  kind: "return",
+                  date: r.date,
+                  created_at: r.created_at,
+                  amount: Number(r.amount_bdt),
+                  note: r.note,
+                  meta: `Returned to ${toAcc?.name ?? "?"}`,
+                });
+              }
+            }
+            events.sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
+            let running = 0;
+            const fromAcc = accounts.find(a => a.id === historyGroup.root.from_account_id);
+            return (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-muted p-3 grid grid-cols-3 gap-2 text-xs">
+                  <div><div className="text-muted-foreground">Total Borrowed</div><div className="font-mono font-semibold">৳{Number(historyGroup.totalBorrowed).toLocaleString()}</div></div>
+                  <div><div className="text-muted-foreground">Total Returned</div><div className="font-mono font-semibold text-success">৳{Number(historyGroup.totalReturned).toLocaleString()}</div></div>
+                  <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${historyGroup.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{Number(historyGroup.outstanding).toLocaleString()}</div></div>
+                </div>
+                <p className="text-xs text-muted-foreground">Account: {fromAcc?.name ?? "?"} · Category: {CATEGORY_LABELS[historyGroup.root.category] || historyGroup.root.category}</p>
+                <div className="border rounded-lg max-h-[420px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Event</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {events.map((e, i) => {
+                        running += e.kind === "borrow" ? e.amount : -e.amount;
+                        return (
+                          <TableRow key={i}>
+                            <TableCell className="font-mono text-xs whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</TableCell>
+                            <TableCell className="text-xs">
+                              <div className="font-medium">{e.meta}</div>
+                              {e.note && <div className="text-muted-foreground">{e.note}</div>}
+                            </TableCell>
+                            <TableCell className={`text-right font-mono text-xs ${e.kind === "borrow" ? "text-destructive" : "text-success"}`}>
+                              {e.kind === "borrow" ? "+" : "−"}৳{e.amount.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs font-semibold">৳{running.toLocaleString()}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {historyGroup.outstanding > 0 && (
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      const g = historyGroup;
+                      setHistoryGroup(null);
+                      openReturnDialog(g);
+                    }}
+                  >
+                    <RotateCcw className="mr-1 h-4 w-4" /> Record Return
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
       {/* Loan Repayment Dialog */}
       <Dialog open={loanReturnOpen} onOpenChange={setLoanReturnOpen}>
         <DialogContent>
