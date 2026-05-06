@@ -1416,7 +1416,7 @@ export function DeepDiveTable({
             const s = row.status.toLowerCase();
             return s === "paused" || s === "disable";
           });
-          if (!canToggleCampaigns && !isAdmin) return null;
+          if (!canPause && !canResume && !isAdmin) return null;
           return (
             <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
               <span className="text-sm font-medium text-foreground">
@@ -1431,7 +1431,7 @@ export function DeepDiveTable({
                 >
                   <X className="h-3.5 w-3.5 mr-1" /> Clear
                 </Button>
-                {canToggleCampaigns && hasActive && (
+                {canPause && hasActive && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1441,7 +1441,7 @@ export function DeepDiveTable({
                     <Power className="h-3.5 w-3.5 mr-1" /> Pause All
                   </Button>
                 )}
-                {(isAdmin || canToggleCampaigns) && hasPaused && (
+                {(isAdmin || canResume) && hasPaused && (
                   <Button
                     size="sm"
                     onClick={() => setShowBulkActivate(true)}
