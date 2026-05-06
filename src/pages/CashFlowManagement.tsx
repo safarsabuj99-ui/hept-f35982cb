@@ -29,6 +29,8 @@ interface AgencyAccount {
   current_balance_bdt: number;
   is_active: boolean;
   created_at: string;
+  default_out_fee_percent?: number;
+  default_out_fee_flat_bdt?: number;
 }
 
 interface FundTransfer {
@@ -39,6 +41,8 @@ interface FundTransfer {
   note: string | null;
   created_by: string;
   created_at: string;
+  fee_bdt?: number;
+  fee_percent?: number | null;
 }
 
 interface RecentActivity {
