@@ -167,11 +167,11 @@ export default function CashFlowManagement() {
   const [wdSubmitting, setWdSubmitting] = useState(false);
   const [wdParentId, setWdParentId] = useState<string | null>(null); // root id when topping up existing borrower
   const [borrowerPickerOpen, setBorrowerPickerOpen] = useState(false);
-  const [expandedBorrowers, setExpandedBorrowers] = useState<Set<string>>(new Set());
+  const [historyGroup, setHistoryGroup] = useState<any | null>(null);
 
-  // Return state (for withdrawals)
+  // Borrower return state (consolidated, auto-allocates FIFO)
   const [returnOpen, setReturnOpen] = useState(false);
-  const [returnWithdrawal, setReturnWithdrawal] = useState<CashWithdrawal | null>(null);
+  const [returnGroup, setReturnGroup] = useState<any | null>(null);
   const [retAmount, setRetAmount] = useState("");
   const [retToAccId, setRetToAccId] = useState("");
   const [retDate, setRetDate] = useState(new Date().toISOString().slice(0, 10));
