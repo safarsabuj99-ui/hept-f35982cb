@@ -133,6 +133,10 @@ export default function CashFlowManagement() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferNote, setTransferNote] = useState("");
   const [transferring, setTransferring] = useState(false);
+  const [transferFeePercent, setTransferFeePercent] = useState("");
+  const [transferFeeFlat, setTransferFeeFlat] = useState("");
+  const [accFeePct, setAccFeePct] = useState("");
+  const [accFeeFlat, setAccFeeFlat] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
