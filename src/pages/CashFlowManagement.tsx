@@ -531,6 +531,13 @@ export default function CashFlowManagement() {
     }
     setWdSubmitting(true);
 
+    // Resolve root id: if wdParentId is itself a top-up, walk to its root.
+    let rootId: string | null = wdParentId;
+    if (rootId) {
+      const node = withdrawals.find(w => w.id === rootId);
+      if (node?.parent_withdrawal_id) rootId = node.parent_withdrawal_id;
+    }
+
     const { error: insertErr } = await supabase.from("cash_withdrawals" as any).insert({
       from_account_id: wdFromAccId,
       amount_bdt: amt,
@@ -540,6 +547,7 @@ export default function CashFlowManagement() {
       note: wdNote || null,
       created_by: user?.id,
       org_id: profile?.org_id || null,
+      parent_withdrawal_id: rootId,
     } as any);
 
     if (insertErr) {
@@ -551,9 +559,12 @@ export default function CashFlowManagement() {
     await adjustAccountBalance(wdFromAccId, -amt);
 
     setWdSubmitting(false);
-    toast({ title: "Withdrawal Recorded", description: `৳${amt.toLocaleString()} withdrawn from ${(freshAcc as any)?.name}` });
+    toast({
+      title: rootId ? "Top-Up Recorded" : "Withdrawal Recorded",
+      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name}`,
+    });
     setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
-    setWdFromAccId(""); setWdExpectedDate(""); setWdNote("");
+    setWdFromAccId(""); setWdExpectedDate(""); setWdNote(""); setWdParentId(null);
     setWithdrawOpen(false);
     fetchData();
   };
