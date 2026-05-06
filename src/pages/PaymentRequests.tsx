@@ -868,7 +868,8 @@ export default function PaymentRequests() {
                       <div className="space-y-2">
                         {Object.entries(confirmModal.request.platform_amounts!).map(([platform, bdtAmount]) => {
                           const rate = perPlatformRates[platform] || 120;
-                          const usd = Math.round((Number(bdtAmount) / rate) * 100) / 100;
+                          const netForPlatform = Number(bdtAmount) * feeMultiplier;
+                          const usd = Math.round((netForPlatform / rate) * 100) / 100;
                           return (
                             <div key={platform} className="flex flex-wrap items-center gap-1.5 sm:gap-2 rounded-md border p-2.5">
                               <Badge variant="outline" className={cn("capitalize text-xs shrink-0", PLATFORM_COLORS[platform] || "")}>
