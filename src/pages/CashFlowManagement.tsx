@@ -1469,6 +1469,7 @@ export default function CashFlowManagement() {
                           <TableHead>Date</TableHead>
                           <TableHead>From → To</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Fee</TableHead>
                           <TableHead>Note</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1476,11 +1477,13 @@ export default function CashFlowManagement() {
                         {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
                           const from = accounts.find(a => a.id === t.from_account_id);
                           const to = accounts.find(a => a.id === t.to_account_id);
+                          const fee = Number(t.fee_bdt) || 0;
                           return (
                             <TableRow key={t.id}>
                               <TableCell className="font-mono text-sm">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                               <TableCell className="text-sm">{from?.name || "?"} → {to?.name || "?"}</TableCell>
                               <TableCell className="text-right font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-mono text-xs">{fee > 0 ? <span className="text-destructive">৳{fee.toLocaleString()}{t.fee_percent ? ` (${t.fee_percent}%)` : ""}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
                               <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{t.note || "—"}</TableCell>
                             </TableRow>
                           );
