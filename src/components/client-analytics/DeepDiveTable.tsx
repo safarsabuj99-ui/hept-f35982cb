@@ -126,7 +126,12 @@ interface DeepDiveTableProps {
   onSetDefaultPreset?: (preset: PresetType) => void;
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
+  /** @deprecated use canPause + canResume. Kept for back-compat (true => both). */
   canToggleCampaigns?: boolean;
+  /** Client may turn campaigns OFF (pause). */
+  canPause?: boolean;
+  /** Client may turn campaigns ON (resume). */
+  canResume?: boolean;
   isAdmin?: boolean;
 }
 
@@ -141,7 +146,8 @@ interface DeepDiveTableProps {
 interface MobileCampaignCardProps {
   row: CampaignRow;
   selectedPreset: PresetType;
-  canToggleCampaigns: boolean;
+  canPause: boolean;
+  canResume: boolean;
   isSelectable: boolean;
   isSelected: boolean;
   isToggling: boolean;
@@ -152,7 +158,8 @@ interface MobileCampaignCardProps {
 const MobileCampaignCard = memo(function MobileCampaignCard({
   row,
   selectedPreset,
-  canToggleCampaigns,
+  canPause,
+  canResume,
   isSelectable,
   isSelected,
   isToggling,
@@ -164,7 +171,7 @@ const MobileCampaignCard = memo(function MobileCampaignCard({
   const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
   const active = isActiveStatus(row.status);
   const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
-  const canToggle = canToggleCampaigns && !!row.campaign_id && (active || isPaused);
+  const canToggle = !!row.campaign_id && ((active && canPause) || (isPaused && canResume));
 
   const normalized = normalizeStatus(row.status);
   const redStatuses = ["not delivering", "disapproved", "with issues"];
@@ -390,9 +397,17 @@ export function DeepDiveTable({
   onSetDefaultPreset,
   savedColumnOrder,
   onColumnOrderChange,
-  canToggleCampaigns = true,
+  canToggleCampaigns,
+  canPause: canPauseProp,
+  canResume: canResumeProp,
   isAdmin = false,
 }: DeepDiveTableProps) {
+  // Resolve effective permissions with legacy back-compat:
+  // - If new flags provided, use them.
+  // - Else fall back to canToggleCampaigns (true => both, undefined => default true for back-compat).
+  const legacy = canToggleCampaigns ?? true;
+  const canPause = canPauseProp ?? legacy;
+  const canResume = canResumeProp ?? legacy;
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -459,14 +474,13 @@ export function DeepDiveTable({
   const selectableRows = useMemo(
     () => paginatedData.filter(r => {
       if (!r.campaign_id) return false;
-      if (canToggleCampaigns && isActiveStatus(r.status)) return true;
-      // Allow resume of paused campaigns when caller has toggle perms (clients) or is admin.
-      // Guard-paused campaigns are intentionally excluded for clients — those require a top-up.
+      if (canPause && isActiveStatus(r.status)) return true;
+      // Admin can resume any paused (incl. guard_paused). Clients with canResume can resume regular paused only.
       if (isAdmin && isPausedStatus(r.status)) return true;
-      if (canToggleCampaigns && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
+      if (canResume && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
       return false;
     }),
-    [paginatedData, canToggleCampaigns, isAdmin]
+    [paginatedData, canPause, canResume, isAdmin]
   );
 
   const toggleSelect = useCallback((id: string) => {
@@ -645,7 +659,8 @@ export function DeepDiveTable({
           const row = info.row.original;
           const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
           const isSelectable = row.campaign_id && (
-            (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+            (canPause && isActiveStatus(row.status)) ||
+            (canResume && clientPaused) ||
             (isAdmin && isPausedStatus(row.status))
           );
           if (!isSelectable) return <div className="w-4" />;
@@ -699,7 +714,7 @@ export function DeepDiveTable({
 
           const guardPaused = isGuardPaused(status);
           const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable" || guardPaused;
-          const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
+          const canToggle = !!row.campaign_id && ((active && canPause) || ((row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable") && canResume));
 
           if (guardPaused) dotClass = "bg-orange-500";
 
@@ -1116,7 +1131,8 @@ export function DeepDiveTable({
   const renderMobileCard = (row: CampaignRow) => {
     const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
     const isSelectable = !!row.campaign_id && (
-      (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+      (canPause && isActiveStatus(row.status)) ||
+      (canResume && clientPaused) ||
       (isAdmin && isPausedStatus(row.status))
     );
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
@@ -1125,7 +1141,8 @@ export function DeepDiveTable({
       <MobileCampaignCard
         row={row}
         selectedPreset={selectedPreset}
-        canToggleCampaigns={canToggleCampaigns}
+        canPause={canPause}
+        canResume={canResume}
         isSelectable={isSelectable}
         isSelected={isSelected}
         isToggling={isToggling}
@@ -1399,7 +1416,7 @@ export function DeepDiveTable({
             const s = row.status.toLowerCase();
             return s === "paused" || s === "disable";
           });
-          if (!canToggleCampaigns && !isAdmin) return null;
+          if (!canPause && !canResume && !isAdmin) return null;
           return (
             <div className="sticky bottom-16 md:bottom-0 mt-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/95 backdrop-blur-sm p-3.5 shadow-lg">
               <span className="text-sm font-medium text-foreground">
@@ -1414,7 +1431,7 @@ export function DeepDiveTable({
                 >
                   <X className="h-3.5 w-3.5 mr-1" /> Clear
                 </Button>
-                {canToggleCampaigns && hasActive && (
+                {canPause && hasActive && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1424,7 +1441,7 @@ export function DeepDiveTable({
                     <Power className="h-3.5 w-3.5 mr-1" /> Pause All
                   </Button>
                 )}
-                {(isAdmin || canToggleCampaigns) && hasPaused && (
+                {(isAdmin || canResume) && hasPaused && (
                   <Button
                     size="sm"
                     onClick={() => setShowBulkActivate(true)}

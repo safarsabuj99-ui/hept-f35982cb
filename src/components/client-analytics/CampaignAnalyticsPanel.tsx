@@ -13,13 +13,19 @@ const fmt = (n: number) =>
 interface CampaignAnalyticsPanelProps {
   campaignRows: CampaignRow[];
   onRefresh: () => void;
+  /** @deprecated use canPause + canResume */
   canToggleCampaigns?: boolean;
+  canPause?: boolean;
+  canResume?: boolean;
   isAdmin?: boolean;
 }
 
 type PlatformTab = "all" | "meta" | "tiktok" | "google";
 
-export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns = true, isAdmin = false }: CampaignAnalyticsPanelProps) {
+export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampaigns, canPause, canResume, isAdmin = false }: CampaignAnalyticsPanelProps) {
+  const legacy = canToggleCampaigns ?? true;
+  const effCanPause = canPause ?? legacy;
+  const effCanResume = canResume ?? legacy;
   const { getDefaultPreset, setDefaultPreset, getColumnOrder, setColumnOrder } = usePresetPreferences();
   const [activeTab, setActiveTab] = useState<PlatformTab>("all");
 
@@ -52,7 +58,8 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       onSetDefaultPreset={(preset) => setDefaultPreset(platform, preset)}
       savedColumnOrder={getColumnOrder(platform)}
       onColumnOrderChange={(order) => setColumnOrder(platform, order)}
-      canToggleCampaigns={canToggleCampaigns}
+      canPause={effCanPause}
+      canResume={effCanResume}
       isAdmin={isAdmin}
     />
   );

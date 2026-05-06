@@ -689,30 +689,71 @@ export default function ClientDetail() {
               <CardDescription>Control what this client can see and do in their dashboard.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between max-w-md">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">Campaign On/Off Control</Label>
-                  <p className="text-xs text-muted-foreground">Allow client to pause and resume campaigns directly from their dashboard.</p>
-                </div>
-                <Switch
-                  checked={((profile?.client_permissions as any)?.can_toggle_campaigns) === true}
-                  onCheckedChange={async (checked) => {
-                    const currentPerms = (profile?.client_permissions as any) || {};
-                    const newPerms = { ...currentPerms, can_toggle_campaigns: checked };
-                    const { data, error } = await supabase
-                      .from("profiles")
-                      .update({ client_permissions: newPerms } as any)
-                      .eq("user_id", userId!)
-                      .select();
-                    if (error) {
-                      toast({ title: "Error", description: error.message, variant: "destructive" });
-                    } else if (data?.[0]) {
-                      setProfile(data[0]);
-                      toast({ title: checked ? "Permission Granted" : "Permission Revoked", description: `Campaign toggle ${checked ? "enabled" : "disabled"} for this client.` });
-                    }
-                  }}
-                />
-              </div>
+              {(() => {
+                const perms = (profile?.client_permissions as any) || {};
+                const legacy = perms.can_toggle_campaigns === true;
+                const canPause = perms.can_pause_campaigns === true || legacy;
+                const canResume = perms.can_resume_campaigns === true || legacy;
+                const mode: "off" | "pause" | "resume" | "both" =
+                  canPause && canResume ? "both" : canPause ? "pause" : canResume ? "resume" : "off";
+
+                const setMode = async (next: "off" | "pause" | "resume" | "both") => {
+                  const newPerms = {
+                    ...perms,
+                    can_pause_campaigns: next === "pause" || next === "both",
+                    can_resume_campaigns: next === "resume" || next === "both",
+                  };
+                  // Clear legacy flag now that we've explicitly set the new ones.
+                  delete newPerms.can_toggle_campaigns;
+                  const { data, error } = await supabase
+                    .from("profiles")
+                    .update({ client_permissions: newPerms } as any)
+                    .eq("user_id", userId!)
+                    .select();
+                  if (error) {
+                    toast({ title: "Error", description: error.message, variant: "destructive" });
+                  } else if (data?.[0]) {
+                    setProfile(data[0]);
+                    const labels = { off: "Disabled", pause: "Pause only", resume: "Resume only", both: "Pause + Resume" };
+                    toast({ title: "Permission Updated", description: `Campaign control set to: ${labels[next]}.` });
+                  }
+                };
+
+                const options: Array<{ value: "off" | "pause" | "resume" | "both"; label: string; hint: string }> = [
+                  { value: "off", label: "Disabled", hint: "Client cannot pause or resume campaigns." },
+                  { value: "pause", label: "Pause only", hint: "Client can stop active campaigns but cannot restart paused ones." },
+                  { value: "resume", label: "Resume only", hint: "Client can restart paused campaigns but cannot pause active ones." },
+                  { value: "both", label: "Pause + Resume", hint: "Full on/off control over their campaigns." },
+                ];
+
+                return (
+                  <div className="space-y-3 max-w-2xl">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">Campaign On/Off Control</Label>
+                      <p className="text-xs text-muted-foreground">{options.find(o => o.value === mode)?.hint}</p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {options.map(o => {
+                        const active = mode === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => setMode(o.value)}
+                            className={`text-left rounded-lg border px-3 py-2.5 transition-all ${
+                              active
+                                ? "border-primary bg-primary/10 ring-1 ring-primary/40 shadow-sm"
+                                : "border-border/60 bg-card hover:border-border hover:bg-muted/40"
+                            }`}
+                          >
+                            <div className={`text-xs font-semibold ${active ? "text-primary" : "text-foreground"}`}>{o.label}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
 

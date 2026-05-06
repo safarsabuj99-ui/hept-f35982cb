@@ -22,7 +22,8 @@ export default function ClientReports() {
   const initialLoadingRef = useRef(true);
   const [dateRange, setDateRange] = useState<ClientDateRange | null>(() => { const t = getLocalTodayClient(); return { from: t, to: t }; });
   const [preset, setPreset] = useState<ClientDatePreset>("today");
-  const [canToggleCampaigns, setCanToggleCampaigns] = useState(false);
+  const [canPause, setCanPause] = useState(false);
+  const [canResume, setCanResume] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!effectiveClientId) return;
@@ -35,7 +36,9 @@ export default function ClientReports() {
       .eq("user_id", effectiveClientId)
       .maybeSingle();
     const perms = (profileData as any)?.client_permissions || {};
-    setCanToggleCampaigns(perms.can_toggle_campaigns === true);
+    const legacy = perms.can_toggle_campaigns === true;
+    setCanPause(perms.can_pause_campaigns === true || legacy);
+    setCanResume(perms.can_resume_campaigns === true || legacy);
 
     const { data: accClients } = await supabase
       .from("ad_account_clients")
@@ -167,7 +170,7 @@ export default function ClientReports() {
     // so they have rows to switch back ON from the client panel.
     for (const c of campaigns) {
       const isPaused = c.status?.toLowerCase() === "paused" || c.status?.toLowerCase() === "disable";
-      const shouldInject = isActiveStatus(c.status) || (canToggleCampaigns && isPaused);
+      const shouldInject = isActiveStatus(c.status) || (canResume && isPaused);
       if (shouldInject && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
@@ -186,14 +189,14 @@ export default function ClientReports() {
     return Object.values(map).filter(r => {
       if (isActiveStatus(r.status)) return true;
       if (r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0) return true;
-      // Keep paused rows visible when client can toggle them back on
-      if (canToggleCampaigns) {
+      // Keep paused rows visible when client can resume them
+      if (canResume) {
         const s = r.status.toLowerCase();
         if (s === "paused" || s === "disable") return true;
       }
       return false;
     });
-  }, [rawMetrics, adAccountMap, campaigns, canToggleCampaigns]);
+  }, [rawMetrics, adAccountMap, campaigns, canResume]);
 
 
   if (loading) {
@@ -224,7 +227,7 @@ export default function ClientReports() {
 
       <ClientDateFilter onRangeChange={handleRangeChange} activePreset={preset} />
 
-      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} canToggleCampaigns={canToggleCampaigns} />
+      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} canPause={canPause} canResume={canResume} />
     </div>
   );
 }
