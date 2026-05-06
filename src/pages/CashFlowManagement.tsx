@@ -237,6 +237,7 @@ export default function CashFlowManagement() {
     setAccounts(accs);
     setTransfers((transferRes.data as any[]) ?? []);
     setWithdrawals((wdRes.data as any[]) ?? []);
+    setWithdrawalReturns((wdRetRes.data as any[]) ?? []);
     setLoans((loanRes.data as any[]) ?? []);
 
     const accMap: Record<string, string> = {};
