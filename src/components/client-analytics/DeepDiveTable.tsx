@@ -565,7 +565,10 @@ export function DeepDiveTable({
   const handleBulkActivate = async () => {
     const ids = Array.from(selectedIds).filter(id => {
       const row = data.find(r => r.campaign_id === id);
-      return row && isPausedStatus(row.status);
+      if (!row) return false;
+      if (isAdmin) return isPausedStatus(row.status);
+      const s = row.status.toLowerCase();
+      return s === "paused" || s === "disable";
     });
     setBulkActivating(true);
     setBulkProgress({ current: 0, total: ids.length });
