@@ -1336,71 +1336,40 @@ export default function CashFlowManagement() {
 
                     const pagedGroups = groups.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize);
 
-                    const toggleExpand = (rootId: string) => {
-                      setExpandedBorrowers(prev => {
-                        const next = new Set(prev);
-                        if (next.has(rootId)) next.delete(rootId);
-                        else next.add(rootId);
-                        return next;
-                      });
-                    };
-
                     return (
                       <>
                         {/* Mobile card view */}
                         <div className="flex flex-col gap-3 md:hidden">
                           {pagedGroups.map(g => {
                             const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
-                            const isOpen = expandedBorrowers.has(g.root.id);
                             return (
-                              <div key={g.root.id} className={`rounded-xl border bg-card ${g.anyOverdue ? "border-destructive/50" : ""}`}>
+                              <div key={g.root.id} className={`rounded-xl border bg-card p-4 space-y-3 ${g.anyOverdue ? "border-destructive/50" : ""}`}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                    {g.all.length > 1 && (
+                                      <Badge variant="outline" className="text-xs">{g.all.length}× borrows</Badge>
+                                    )}
+                                    {g.anyOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                                  </div>
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => toggleExpand(g.root.id)}
-                                  className="w-full p-4 space-y-3 text-left"
+                                  className="text-left w-full"
+                                  onClick={() => setHistoryGroup(g)}
                                 >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
-                                      {g.children.length > 0 && (
-                                        <Badge variant="outline" className="text-xs">{g.all.length} entries</Badge>
-                                      )}
-                                      {g.anyOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-                                    </div>
-                                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-medium">{g.root.borrower_name || "—"}</p>
-                                    <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"}</p>
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-2 text-xs">
-                                    <div><div className="text-muted-foreground">Borrowed</div><div className="font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</div></div>
-                                    <div><div className="text-muted-foreground">Returned</div><div className="font-mono font-semibold text-success">৳{g.totalReturned.toLocaleString()}</div></div>
-                                    <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{g.outstanding.toLocaleString()}</div></div>
-                                  </div>
+                                  <p className="text-sm font-medium underline-offset-2 hover:underline">{g.root.borrower_name || "—"}</p>
+                                  <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"} · Tap for history</p>
                                 </button>
-                                {isOpen && (
-                                  <div className="border-t bg-muted/20 divide-y">
-                                    {g.all.map(child => {
-                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
-                                      return (
-                                        <div key={child.id} className="p-3 flex items-center justify-between">
-                                          <div>
-                                            <p className="text-xs text-muted-foreground">{new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
-                                            <p className="font-mono text-sm">৳{Number(child.amount_bdt).toLocaleString()}</p>
-                                            {remaining > 0 && remaining < Number(child.amount_bdt) && (
-                                              <p className="text-[10px] text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
-                                            )}
-                                          </div>
-                                          {child.status !== "fully_returned" && (
-                                            <Button size="sm" variant="outline" onClick={() => openReturnDialog(child)}>
-                                              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                                            </Button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                  <div><div className="text-muted-foreground">Borrowed</div><div className="font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</div></div>
+                                  <div><div className="text-muted-foreground">Returned</div><div className="font-mono font-semibold text-success">৳{g.totalReturned.toLocaleString()}</div></div>
+                                  <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{g.outstanding.toLocaleString()}</div></div>
+                                </div>
+                                {!g.allReturned && (
+                                  <Button size="sm" variant="outline" className="w-full" onClick={() => openReturnDialog(g)}>
+                                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Record Return
+                                  </Button>
                                 )}
                               </div>
                             );
@@ -1412,7 +1381,6 @@ export default function CashFlowManagement() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-8"></TableHead>
                                 <TableHead>Last Date</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead>Borrower</TableHead>
@@ -1427,82 +1395,43 @@ export default function CashFlowManagement() {
                             <TableBody>
                               {pagedGroups.map(g => {
                                 const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
-                                const isOpen = expandedBorrowers.has(g.root.id);
-                                const hasChildren = g.children.length > 0;
                                 return (
-                                  <Fragment key={g.root.id}>
-                                    <TableRow
-                                      className={`${g.anyOverdue ? "bg-destructive/5" : ""} cursor-pointer`}
-                                      onClick={() => hasChildren && toggleExpand(g.root.id)}
-                                    >
-                                      <TableCell>
-                                        {hasChildren ? (
-                                          isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
-                                        ) : null}
-                                      </TableCell>
-                                      <TableCell className="font-mono text-sm">{new Date(g.latestDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                                      <TableCell>
-                                        <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
-                                      </TableCell>
-                                      <TableCell className="font-medium">
+                                  <TableRow key={g.root.id} className={g.anyOverdue ? "bg-destructive/5" : ""}>
+                                    <TableCell className="font-mono text-sm">{new Date(g.latestDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                      <button
+                                        type="button"
+                                        className="hover:underline underline-offset-2 text-left"
+                                        onClick={() => setHistoryGroup(g)}
+                                      >
                                         {g.root.borrower_name || "—"}
-                                        {hasChildren && (
-                                          <span className="ml-2 text-xs text-muted-foreground">({g.all.length}×)</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
-                                      <TableCell className="text-right font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</TableCell>
-                                      <TableCell className="text-right font-mono text-success">৳{g.totalReturned.toLocaleString()}</TableCell>
-                                      <TableCell className={`text-right font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>
-                                        ৳{g.outstanding.toLocaleString()}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge variant={g.allReturned ? "secondary" : (g.totalReturned > 0 ? "warning" as any : "destructive")} className="text-xs capitalize">
-                                          {g.allReturned ? "Fully returned" : (g.totalReturned > 0 ? "Partially returned" : "Active")}
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell onClick={(e) => e.stopPropagation()}>
-                                        {!g.allReturned && (
-                                          <Button size="sm" variant="outline" onClick={() => openReturnDialog(g.root)}>
-                                            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                                          </Button>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    {isOpen && g.all.map(child => {
-                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
-                                      const overdue = isOverdue(child);
-                                      return (
-                                        <TableRow key={child.id} className="bg-muted/20 text-xs">
-                                          <TableCell></TableCell>
-                                          <TableCell className="font-mono pl-8">↳ {new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                                          <TableCell colSpan={2} className="text-muted-foreground">
-                                            {child.parent_withdrawal_id ? "Top-up" : "Original"}
-                                            {child.note ? ` · ${child.note}` : ""}
-                                          </TableCell>
-                                          <TableCell className="text-muted-foreground">
-                                            {child.expected_return_date ? `Due ${new Date(child.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
-                                            {overdue && <AlertTriangle className="inline h-3 w-3 ml-1 text-destructive" />}
-                                          </TableCell>
-                                          <TableCell className="text-right font-mono">৳{Number(child.amount_bdt).toLocaleString()}</TableCell>
-                                          <TableCell className="text-right font-mono text-success">৳{Number(child.returned_bdt).toLocaleString()}</TableCell>
-                                          <TableCell className={`text-right font-mono ${remaining > 0 ? "text-destructive" : "text-success"}`}>৳{remaining.toLocaleString()}</TableCell>
-                                          <TableCell>
-                                            <Badge variant={STATUS_VARIANTS[child.status] || "secondary"} className="text-[10px] capitalize">
-                                              {child.status.replace(/_/g, " ")}
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell>
-                                            {child.status !== "fully_returned" && (
-                                              <Button size="sm" variant="ghost" onClick={() => openReturnDialog(child)}>
-                                                <RotateCcw className="mr-1 h-3 w-3" /> Return
-                                              </Button>
-                                            )}
-                                          </TableCell>
-                                        </TableRow>
-                                      );
-                                    })}
-                                  </Fragment>
+                                      </button>
+                                      {g.all.length > 1 && (
+                                        <span className="ml-2 text-xs text-muted-foreground">({g.all.length}×)</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
+                                    <TableCell className="text-right font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right font-mono text-success">৳{g.totalReturned.toLocaleString()}</TableCell>
+                                    <TableCell className={`text-right font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>
+                                      ৳{g.outstanding.toLocaleString()}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={g.allReturned ? "secondary" : (g.totalReturned > 0 ? "warning" as any : "destructive")} className="text-xs capitalize">
+                                        {g.allReturned ? "Fully returned" : (g.totalReturned > 0 ? "Partially returned" : "Active")}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      {!g.allReturned && (
+                                        <Button size="sm" variant="outline" onClick={() => openReturnDialog(g)}>
+                                          <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                        </Button>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
                                 );
                               })}
                             </TableBody>
