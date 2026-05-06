@@ -875,8 +875,11 @@ export default function PaymentRequests() {
                               <Badge variant="outline" className={cn("capitalize text-xs shrink-0", PLATFORM_COLORS[platform] || "")}>
                                 {platform}
                               </Badge>
-                              <span className="text-xs text-muted-foreground font-mono">
-                                ৳{Number(bdtAmount).toLocaleString()}
+                              <span className="text-xs font-mono">
+                                {effectiveFeePct > 0 && (
+                                  <span className="text-muted-foreground/60 line-through mr-1">৳{Number(bdtAmount).toLocaleString()}</span>
+                                )}
+                                <span className="text-foreground">৳{netForPlatform.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                               </span>
                               <span className="text-xs text-muted-foreground">÷</span>
                               <Input
