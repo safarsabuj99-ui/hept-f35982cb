@@ -714,7 +714,7 @@ export function DeepDiveTable({
 
           const guardPaused = isGuardPaused(status);
           const isPaused = status.toLowerCase() === "paused" || status.toLowerCase() === "disable" || guardPaused;
-          const canToggle = canToggleCampaigns && row.campaign_id && (active || isPaused);
+          const canToggle = !!row.campaign_id && ((active && canPause) || ((row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable") && canResume));
 
           if (guardPaused) dotClass = "bg-orange-500";
 
