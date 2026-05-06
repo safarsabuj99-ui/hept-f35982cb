@@ -815,11 +815,157 @@ export default function CashFlowManagement() {
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>{wdParentId ? "Add Top-Up Borrow" : "Record Withdrawal / Loan"}</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
               <div>
+                <Label>From Account</Label>
+                <Select
+                  value={wdFromAccId}
+                  onValueChange={(v) => {
+                    setWdFromAccId(v);
+                    // Clear top-up linkage if account changes
+                    if (wdParentId) {
+                      const root = withdrawals.find(w => w.id === wdParentId);
+                      if (root && root.from_account_id !== v) {
+                        setWdParentId(null);
+                        setWdBorrower("");
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Smart Borrower picker: lists existing active borrowers for the chosen account */}
+              <div>
+                <Label>Borrower Name</Label>
+                {(() => {
+                  // Build active borrower list (root rows only) for this account
+                  const activeBorrowers = withdrawals.filter(
+                    w => !w.parent_withdrawal_id
+                      && w.status !== "fully_returned"
+                      && (!wdFromAccId || w.from_account_id === wdFromAccId)
+                  );
+                  const computeOutstanding = (rootId: string) => {
+                    const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
+                    return rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
+                  };
+                  return (
+                    <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className={wdBorrower ? "" : "text-muted-foreground"}>
+                            {wdBorrower || "Type or pick a borrower"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={true}>
+                          <CommandInput
+                            placeholder="Search or create new..."
+                            value={wdBorrower}
+                            onValueChange={(v) => {
+                              setWdBorrower(v);
+                              // Typing breaks the link unless they re-pick
+                              if (wdParentId) {
+                                const root = withdrawals.find(w => w.id === wdParentId);
+                                if (!root || root.borrower_name.toLowerCase() !== v.trim().toLowerCase()) {
+                                  setWdParentId(null);
+                                }
+                              }
+                            }}
+                          />
+                          <CommandList>
+                            {activeBorrowers.length > 0 && (
+                              <CommandGroup heading="Active borrowers (top-up)">
+                                {activeBorrowers.map(b => {
+                                  const outstanding = computeOutstanding(b.id);
+                                  const acc = accounts.find(a => a.id === b.from_account_id);
+                                  return (
+                                    <CommandItem
+                                      key={b.id}
+                                      value={b.borrower_name + " " + b.id}
+                                      onSelect={() => {
+                                        setWdBorrower(b.borrower_name);
+                                        setWdCategory(b.category);
+                                        setWdFromAccId(b.from_account_id);
+                                        setWdParentId(b.id);
+                                        setBorrowerPickerOpen(false);
+                                      }}
+                                    >
+                                      {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium truncate">{b.borrower_name}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
+                            <CommandEmpty>
+                              {wdBorrower.trim()
+                                ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
+                                : "No active borrowers"}
+                            </CommandEmpty>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  );
+                })()}
+              </div>
+
+              {/* Top-up summary card */}
+              {wdParentId && (() => {
+                const root = withdrawals.find(w => w.id === wdParentId);
+                if (!root) return null;
+                const rows = withdrawals.filter(w => w.id === root.id || w.parent_withdrawal_id === root.id);
+                const totalBorrowed = rows.reduce((s, r) => s + Number(r.amount_bdt), 0);
+                const totalReturned = rows.reduce((s, r) => s + Number(r.returned_bdt), 0);
+                const outstanding = totalBorrowed - totalReturned;
+                return (
+                  <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-warning">Top-Up Mode</span>
+                      <button
+                        type="button"
+                        onClick={() => { setWdParentId(null); setWdBorrower(""); }}
+                        className="text-xs underline text-muted-foreground hover:text-foreground"
+                      >
+                        Make new instead
+                      </button>
+                    </div>
+                    <div className="text-xs text-muted-foreground grid grid-cols-3 gap-2 pt-1">
+                      <div><div>Borrowed</div><div className="font-mono font-semibold text-foreground">৳{totalBorrowed.toLocaleString()}</div></div>
+                      <div><div>Returned</div><div className="font-mono font-semibold text-success">৳{totalReturned.toLocaleString()}</div></div>
+                      <div><div>Outstanding</div><div className="font-mono font-semibold text-destructive">৳{outstanding.toLocaleString()}</div></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div>
                 <Label>Category</Label>
-                <Select value={wdCategory} onValueChange={setWdCategory}>
+                <Select value={wdCategory} onValueChange={setWdCategory} disabled={!!wdParentId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="personal_loan">Personal Loan</SelectItem>
@@ -831,25 +977,8 @@ export default function CashFlowManagement() {
                 </Select>
               </div>
               <div>
-                <Label>Borrower Name</Label>
-                <Input placeholder="Who is this for?" value={wdBorrower} onChange={e => setWdBorrower(e.target.value)} />
-              </div>
-              <div>
                 <Label>Amount (BDT)</Label>
                 <Input type="number" placeholder="e.g. 50000" value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
-              </div>
-              <div>
-                <Label>From Account</Label>
-                <Select value={wdFromAccId} onValueChange={setWdFromAccId}>
-                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
-                  <SelectContent>
-                    {activeAccounts.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <div>
                 <Label>Expected Return Date (optional)</Label>
@@ -860,7 +989,8 @@ export default function CashFlowManagement() {
                 <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
               </div>
               <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
-                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Withdrawal
+                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {wdParentId ? "Add Top-Up" : "Record Withdrawal"}
               </Button>
             </div>
           </DialogContent>
