@@ -301,6 +301,9 @@ export default function PaymentRequests() {
         body.selected_rate = selectedRate?.rate ?? undefined;
         body.platform_override = overriddenPlatform || confirmModal.request.platform || undefined;
       }
+      if (currentIsMfs && effectiveFeePct > 0) {
+        body.mfs_fee_percent = effectiveFeePct;
+      }
     }
 
     const { data, error } = await supabase.functions.invoke("approve-payment", { body });
