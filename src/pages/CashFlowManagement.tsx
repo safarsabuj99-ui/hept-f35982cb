@@ -1414,9 +1414,8 @@ export default function CashFlowManagement() {
                                 const isOpen = expandedBorrowers.has(g.root.id);
                                 const hasChildren = g.children.length > 0;
                                 return (
-                                  <>
+                                  <Fragment key={g.root.id}>
                                     <TableRow
-                                      key={g.root.id}
                                       className={`${g.anyOverdue ? "bg-destructive/5" : ""} cursor-pointer`}
                                       onClick={() => hasChildren && toggleExpand(g.root.id)}
                                     >
