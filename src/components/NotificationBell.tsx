@@ -227,7 +227,7 @@ export function NotificationBell({ allNotificationsPath = "/admin/notifications"
         </div>
 
         {/* List */}
-        <ScrollArea className="max-h-[400px]">
+        <ScrollArea className="h-[400px]">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
               <Bell className="h-10 w-10 mb-3 opacity-20" />
