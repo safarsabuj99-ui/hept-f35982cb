@@ -227,7 +227,7 @@ export default function ClientReports() {
 
       <ClientDateFilter onRangeChange={handleRangeChange} activePreset={preset} />
 
-      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} canToggleCampaigns={canToggleCampaigns} />
+      <CampaignAnalyticsPanel campaignRows={campaignRows} onRefresh={fetchData} canPause={canPause} canResume={canResume} />
     </div>
   );
 }
