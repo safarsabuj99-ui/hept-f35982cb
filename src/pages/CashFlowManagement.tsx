@@ -895,6 +895,32 @@ export default function CashFlowManagement() {
                 <Label>Amount (BDT)</Label>
                 <Input type="number" placeholder="e.g. 10000" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Fee % (cash-out charge)</Label>
+                  <Input type="number" step="0.01" placeholder="0" value={transferFeePercent} onChange={e => setTransferFeePercent(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Flat Fee (৳)</Label>
+                  <Input type="number" step="0.01" placeholder="0" value={transferFeeFlat} onChange={e => setTransferFeeFlat(e.target.value)} />
+                </div>
+              </div>
+              {(() => {
+                const amt = Number(transferAmount) || 0;
+                const fp = Number(transferFeePercent) || 0;
+                const ff = Number(transferFeeFlat) || 0;
+                const fee = Math.round(((amt * fp) / 100 + ff) * 100) / 100;
+                if (amt <= 0) return null;
+                return (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-mono">৳{amt.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Transfer fee</span><span className="font-mono text-destructive">৳{fee.toLocaleString()}</span></div>
+                    <div className="flex justify-between border-t pt-1 mt-1 font-semibold"><span>Total deducted from source</span><span className="font-mono">৳{(amt + fee).toLocaleString()}</span></div>
+                    <div className="flex justify-between text-muted-foreground"><span>Destination receives</span><span className="font-mono">৳{amt.toLocaleString()}</span></div>
+                    {fee > 0 && <p className="text-[10px] text-muted-foreground pt-1">Fee will be auto-logged as today's expense (Transfer_Fee)</p>}
+                  </div>
+                );
+              })()}
               <div>
                 <Label>Reference / Note (optional)</Label>
                 <Textarea value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Moving to bank for vendor payment" />
