@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
       platform_rates,
       received_in_account_id,
       platform_override,
+      mfs_fee_percent,
     } = await req.json();
 
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
@@ -96,6 +97,15 @@ Deno.serve(async (req) => {
 
     const totalBdt = Number(pr.amount_bdt);
     const txDate = pr.payment_date || new Date().toISOString().split("T")[0];
+
+    // MFS fee — only applied for bKash/Nagad. Reduces USD wallet credit; agency BDT account still receives full amount.
+    const methodLower = String(pr.payment_method || "").toLowerCase();
+    const isMfs = methodLower === "bkash" || methodLower === "nagad";
+    const feePctRaw = Number(mfs_fee_percent);
+    const feePct = isMfs && Number.isFinite(feePctRaw) ? Math.max(0, Math.min(10, feePctRaw)) : 0;
+    const feeMultiplier = 1 - feePct / 100;
+    const feeBdtTotal = totalBdt * (feePct / 100);
+
     const transactions: any[] = [];
     let finalUsd = 0;
     let exchangeRateSnapshot: any;
@@ -110,15 +120,18 @@ Deno.serve(async (req) => {
 
         const rate = Number(platform_rates[platform]) || await getFallbackRate(adminClient, pr.client_id, platform);
         rateMap[platform] = rate;
-        const platformUsd = Math.round((platformBdt / rate) * 100) / 100;
+        const netPlatformBdt = platformBdt * feeMultiplier;
+        const platformUsd = Math.round((netPlatformBdt / rate) * 100) / 100;
         finalUsd += platformUsd;
+
+        const feeNote = feePct > 0 ? ` (MFS fee ${feePct}% = ৳${(platformBdt - netPlatformBdt).toFixed(2)})` : "";
 
         transactions.push({
           client_id: pr.client_id,
           type: "credit",
           amount: platformUsd,
           date: txDate,
-          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${rate})`,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${rate})${feeNote}`,
           created_by: user.id,
           status: "completed",
           exchange_rate: rate,
@@ -138,15 +151,18 @@ Deno.serve(async (req) => {
       for (const [platform, bdtAmount] of Object.entries(platformAmounts)) {
         const platformBdt = Number(bdtAmount);
         if (platformBdt <= 0) continue;
-        const platformUsd = Math.round((platformBdt / fallbackRate) * 100) / 100;
+        const netPlatformBdt = platformBdt * feeMultiplier;
+        const platformUsd = Math.round((netPlatformBdt / fallbackRate) * 100) / 100;
         finalUsd += platformUsd;
+
+        const feeNote = feePct > 0 ? ` (MFS fee ${feePct}% = ৳${(platformBdt - netPlatformBdt).toFixed(2)})` : "";
 
         transactions.push({
           client_id: pr.client_id,
           type: "credit",
           amount: platformUsd,
           date: txDate,
-          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${fallbackRate})`,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${fallbackRate})${feeNote}`,
           created_by: user.id,
           status: "completed",
           exchange_rate: fallbackRate,
@@ -163,15 +179,18 @@ Deno.serve(async (req) => {
         ? selected_rate
         : await getFallbackRate(adminClient, pr.client_id, "meta");
 
-      finalUsd = Math.round((totalBdt / exchangeRate) * 100) / 100;
+      const netBdt = totalBdt * feeMultiplier;
+      finalUsd = Math.round((netBdt / exchangeRate) * 100) / 100;
       exchangeRateSnapshot = exchangeRate;
+
+      const feeNote = feePct > 0 ? ` (MFS fee ${feePct}% = ৳${feeBdtTotal.toFixed(2)})` : "";
 
       transactions.push({
         client_id: pr.client_id,
         type: "credit",
         amount: finalUsd,
         date: txDate,
-        description: `Payment: ৳${totalBdt.toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})`,
+        description: `Payment: ৳${totalBdt.toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})${feeNote}`,
         created_by: user.id,
         status: "completed",
         exchange_rate: exchangeRate,
@@ -241,7 +260,7 @@ Deno.serve(async (req) => {
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action_type: "payment_approved",
-      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}`,
+      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}${feePct > 0 ? ` [MFS fee ${feePct}% = ৳${feeBdtTotal.toFixed(2)}]` : ""}`,
       org_id: pr.org_id,
     });
 

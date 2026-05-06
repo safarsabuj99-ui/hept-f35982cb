@@ -106,6 +106,7 @@ export default function PaymentRequests() {
   const [overriddenPlatform, setOverriddenPlatform] = useState<string>("");
   // Per-platform rates for multi-platform payments
   const [perPlatformRates, setPerPlatformRates] = useState<Record<string, number>>({});
+  const [mfsFeePercent, setMfsFeePercent] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [deposits, setDeposits] = useState<PendingDeposit[]>([]);
@@ -120,8 +121,20 @@ export default function PaymentRequests() {
   const isMultiPlatform = (r: PaymentRequest | null) =>
     r?.platform_amounts && typeof r.platform_amounts === "object" && Object.keys(r.platform_amounts).length > 0;
 
+  const isMfsMethod = (method?: string | null) => {
+    const m = (method || "").toLowerCase();
+    return m === "bkash" || m === "nagad";
+  };
+
+  const currentIsMfs = isMfsMethod(confirmModal.request?.payment_method);
+  const effectiveFeePct = currentIsMfs ? Math.max(0, Math.min(10, mfsFeePercent || 0)) : 0;
+  const feeMultiplier = 1 - effectiveFeePct / 100;
+
   const selectedRate = rateOptions.find((r) => r.key === selectedRateKey);
-  const calculatedUsd = selectedRate ? Math.round((confirmModal.request?.amount_bdt ?? 0) / selectedRate.rate * 100) / 100 : 0;
+  const grossBdt = confirmModal.request?.amount_bdt ?? 0;
+  const netBdt = grossBdt * feeMultiplier;
+  const feeBdt = grossBdt - netBdt;
+  const calculatedUsd = selectedRate ? Math.round((netBdt / selectedRate.rate) * 100) / 100 : 0;
 
   // Multi-platform total USD calculation
   const multiPlatformTotal = useMemo(() => {
@@ -129,9 +142,9 @@ export default function PaymentRequests() {
     const pa = confirmModal.request.platform_amounts!;
     return Object.entries(pa).reduce((sum, [p, bdt]) => {
       const rate = perPlatformRates[p] || 120;
-      return sum + Math.round((Number(bdt) / rate) * 100) / 100;
+      return sum + Math.round(((Number(bdt) * feeMultiplier) / rate) * 100) / 100;
     }, 0);
-  }, [confirmModal.request, perPlatformRates]);
+  }, [confirmModal.request, perPlatformRates, feeMultiplier]);
 
   const { toast } = useToast();
 
@@ -224,6 +237,7 @@ export default function PaymentRequests() {
     setSelectedAccountId("");
     setOverriddenPlatform(request.platform || "");
     setPerPlatformRates({});
+    setMfsFeePercent(isMfsMethod(request.payment_method) ? 0.85 : 0);
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
@@ -286,6 +300,9 @@ export default function PaymentRequests() {
       } else {
         body.selected_rate = selectedRate?.rate ?? undefined;
         body.platform_override = overriddenPlatform || confirmModal.request.platform || undefined;
+      }
+      if (currentIsMfs && effectiveFeePct > 0) {
+        body.mfs_fee_percent = effectiveFeePct;
       }
     }
 
@@ -814,6 +831,33 @@ export default function PaymentRequests() {
                 )}
               </div>
 
+              {confirmModal.action === "approved" && currentIsMfs && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-sm font-medium">MFS Fee ({confirmModal.request?.payment_method})</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={10}
+                        value={mfsFeePercent}
+                        onChange={(e) => setMfsFeePercent(Number(e.target.value))}
+                        className="w-20 h-8 text-xs font-mono text-right"
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  {effectiveFeePct > 0 && (
+                    <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                      <span>Gross ৳{fmt(grossBdt)} − Fee ৳{fmt(feeBdt)}</span>
+                      <span className="font-semibold text-foreground">Net ৳{fmt(netBdt)}</span>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">Full ৳{fmt(grossBdt)} credited to agency account; only net converts to wallet USD.</p>
+                </div>
+              )}
+
               {confirmModal.action === "approved" && (
                 <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
                   {rateLoading ? (
@@ -824,7 +868,8 @@ export default function PaymentRequests() {
                       <div className="space-y-2">
                         {Object.entries(confirmModal.request.platform_amounts!).map(([platform, bdtAmount]) => {
                           const rate = perPlatformRates[platform] || 120;
-                          const usd = Math.round((Number(bdtAmount) / rate) * 100) / 100;
+                          const netForPlatform = Number(bdtAmount) * feeMultiplier;
+                          const usd = Math.round((netForPlatform / rate) * 100) / 100;
                           return (
                             <div key={platform} className="flex flex-wrap items-center gap-1.5 sm:gap-2 rounded-md border p-2.5">
                               <Badge variant="outline" className={cn("capitalize text-xs shrink-0", PLATFORM_COLORS[platform] || "")}>
