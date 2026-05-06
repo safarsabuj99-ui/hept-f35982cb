@@ -120,6 +120,7 @@ export default function CashFlowManagement() {
   const [transfers, setTransfers] = useState<FundTransfer[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [withdrawals, setWithdrawals] = useState<CashWithdrawal[]>([]);
+  const [withdrawalReturns, setWithdrawalReturns] = useState<CashWithdrawalReturn[]>([]);
   const [loans, setLoans] = useState<LiquidFundLoan[]>([]);
   const [loading, setLoading] = useState(true);
 
