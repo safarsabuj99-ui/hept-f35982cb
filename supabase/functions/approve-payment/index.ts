@@ -120,15 +120,18 @@ Deno.serve(async (req) => {
 
         const rate = Number(platform_rates[platform]) || await getFallbackRate(adminClient, pr.client_id, platform);
         rateMap[platform] = rate;
-        const platformUsd = Math.round((platformBdt / rate) * 100) / 100;
+        const netPlatformBdt = platformBdt * feeMultiplier;
+        const platformUsd = Math.round((netPlatformBdt / rate) * 100) / 100;
         finalUsd += platformUsd;
+
+        const feeNote = feePct > 0 ? ` (MFS fee ${feePct}% = ৳${(platformBdt - netPlatformBdt).toFixed(2)})` : "";
 
         transactions.push({
           client_id: pr.client_id,
           type: "credit",
           amount: platformUsd,
           date: txDate,
-          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${rate})`,
+          description: `Payment: ৳${platformBdt.toLocaleString()} via ${pr.payment_method} [${platform}] (Rate: ${rate})${feeNote}`,
           created_by: user.id,
           status: "completed",
           exchange_rate: rate,
