@@ -332,6 +332,8 @@ export default function CashFlowManagement() {
       type: accType,
       account_number: accNumber || null,
       current_balance_bdt: Number(accBalance) || 0,
+      default_out_fee_percent: Number(accFeePct) || 0,
+      default_out_fee_flat_bdt: Number(accFeeFlat) || 0,
       org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
@@ -339,7 +341,7 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Account created" });
-      setAccName(""); setAccNumber(""); setAccBalance("");
+      setAccName(""); setAccNumber(""); setAccBalance(""); setAccFeePct(""); setAccFeeFlat("");
       setAddOpen(false);
       fetchData();
     }
@@ -347,18 +349,24 @@ export default function CashFlowManagement() {
 
   const handleTransfer = async () => {
     const amt = Number(transferAmount);
+    const feePct = Number(transferFeePercent) || 0;
+    const feeFlat = Number(transferFeeFlat) || 0;
+    const fee = Math.round(((amt * feePct) / 100 + feeFlat) * 100) / 100;
+    const totalDeduct = amt + fee;
+
     if (!fromAccId || !toAccId || fromAccId === toAccId || amt <= 0) {
       toast({ title: "Error", description: "Select different accounts and a valid amount", variant: "destructive" });
       return;
     }
     const { data: freshFrom } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", fromAccId).single();
-    if (freshFrom && Number((freshFrom as any).current_balance_bdt) < amt) {
-      toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+    if (freshFrom && Number((freshFrom as any).current_balance_bdt) < totalDeduct) {
+      toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()} (need ৳${totalDeduct.toLocaleString()} incl. fee)`, variant: "destructive" });
       return;
     }
 
     setTransferring(true);
 
+    // Step 1: Debit source by amount only (fee handled by expense trigger)
     const debitOk = await adjustAccountBalance(fromAccId, -amt);
     if (!debitOk) {
       setTransferring(false);
@@ -366,6 +374,7 @@ export default function CashFlowManagement() {
       return;
     }
 
+    // Step 2: Credit destination
     const creditOk = await adjustAccountBalance(toAccId, amt);
     if (!creditOk) {
       await adjustAccountBalance(fromAccId, amt);
@@ -374,18 +383,56 @@ export default function CashFlowManagement() {
       return;
     }
 
+    // Step 3: Create fee expense (trigger debits source for fee automatically)
+    let feeExpenseId: string | null = null;
+    if (fee > 0) {
+      const fromAcc = accounts.find(a => a.id === fromAccId);
+      const toAcc = accounts.find(a => a.id === toAccId);
+      const { data: expData, error: expErr } = await supabase
+        .from("agency_expenses" as any)
+        .insert({
+          amount_bdt: fee,
+          category: "Transfer_Fee",
+          description: `Transfer fee: ${fromAcc?.name || "?"} → ${toAcc?.name || "?"} (৳${amt.toLocaleString()}${feePct ? ` @ ${feePct}%` : ""})`,
+          paid_from_account_id: fromAccId,
+          created_by: user?.id,
+          org_id: profile?.org_id || null,
+        } as any)
+        .select("id")
+        .single();
+      if (expErr) {
+        // Roll back the transfer if fee logging fails
+        await adjustAccountBalance(toAccId, -amt);
+        await adjustAccountBalance(fromAccId, amt);
+        setTransferring(false);
+        toast({ title: "Error", description: "Failed to log transfer fee: " + expErr.message, variant: "destructive" });
+        return;
+      }
+      feeExpenseId = (expData as any)?.id || null;
+    }
+
+    // Step 4: Insert fund_transfers record
     await supabase.from("fund_transfers" as any).insert({
       from_account_id: fromAccId,
       to_account_id: toAccId,
       amount_bdt: amt,
+      fee_bdt: fee,
+      fee_percent: feePct || null,
+      fee_expense_id: feeExpenseId,
       note: transferNote || null,
       created_by: user?.id,
       org_id: profile?.org_id || null,
     } as any);
 
     setTransferring(false);
-    toast({ title: "Transfer Complete", description: `৳${amt.toLocaleString()} moved successfully` });
+    toast({
+      title: "Transfer Complete",
+      description: fee > 0
+        ? `৳${amt.toLocaleString()} moved · ৳${fee.toLocaleString()} fee logged as today's expense`
+        : `৳${amt.toLocaleString()} moved successfully`,
+    });
     setTransferAmount(""); setTransferNote(""); setFromAccId(""); setToAccId("");
+    setTransferFeePercent(""); setTransferFeeFlat("");
     setTransferOpen(false);
     fetchData();
   };
