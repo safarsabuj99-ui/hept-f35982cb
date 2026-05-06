@@ -1486,7 +1486,7 @@ export default function CashFlowManagement() {
                                         </TableRow>
                                       );
                                     })}
-                                  </>
+                                  </Fragment>
                                 );
                               })}
                             </TableBody>
