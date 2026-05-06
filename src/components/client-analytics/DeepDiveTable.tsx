@@ -1421,7 +1421,7 @@ export function DeepDiveTable({
                     <Power className="h-3.5 w-3.5 mr-1" /> Pause All
                   </Button>
                 )}
-                {isAdmin && hasPaused && (
+                {(isAdmin || canToggleCampaigns) && hasPaused && (
                   <Button
                     size="sm"
                     onClick={() => setShowBulkActivate(true)}
