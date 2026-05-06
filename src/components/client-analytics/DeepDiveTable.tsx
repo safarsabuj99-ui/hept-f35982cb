@@ -1131,7 +1131,8 @@ export function DeepDiveTable({
   const renderMobileCard = (row: CampaignRow) => {
     const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
     const isSelectable = !!row.campaign_id && (
-      (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+      (canPause && isActiveStatus(row.status)) ||
+      (canResume && clientPaused) ||
       (isAdmin && isPausedStatus(row.status))
     );
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
@@ -1140,7 +1141,8 @@ export function DeepDiveTable({
       <MobileCampaignCard
         row={row}
         selectedPreset={selectedPreset}
-        canToggleCampaigns={canToggleCampaigns}
+        canPause={canPause}
+        canResume={canResume}
         isSelectable={isSelectable}
         isSelected={isSelected}
         isToggling={isToggling}
