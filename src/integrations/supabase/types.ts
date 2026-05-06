@@ -374,6 +374,8 @@ export type Database = {
           account_number: string | null
           created_at: string
           current_balance_bdt: number
+          default_out_fee_flat_bdt: number
+          default_out_fee_percent: number
           id: string
           is_active: boolean
           name: string
@@ -384,6 +386,8 @@ export type Database = {
           account_number?: string | null
           created_at?: string
           current_balance_bdt?: number
+          default_out_fee_flat_bdt?: number
+          default_out_fee_percent?: number
           id?: string
           is_active?: boolean
           name: string
@@ -394,6 +398,8 @@ export type Database = {
           account_number?: string | null
           created_at?: string
           current_balance_bdt?: number
+          default_out_fee_flat_bdt?: number
+          default_out_fee_percent?: number
           id?: string
           is_active?: boolean
           name?: string
@@ -1645,6 +1651,9 @@ export type Database = {
           amount_bdt: number
           created_at: string
           created_by: string
+          fee_bdt: number
+          fee_expense_id: string | null
+          fee_percent: number | null
           from_account_id: string
           id: string
           note: string | null
@@ -1655,6 +1664,9 @@ export type Database = {
           amount_bdt: number
           created_at?: string
           created_by: string
+          fee_bdt?: number
+          fee_expense_id?: string | null
+          fee_percent?: number | null
           from_account_id: string
           id?: string
           note?: string | null
@@ -1665,6 +1677,9 @@ export type Database = {
           amount_bdt?: number
           created_at?: string
           created_by?: string
+          fee_bdt?: number
+          fee_expense_id?: string | null
+          fee_percent?: number | null
           from_account_id?: string
           id?: string
           note?: string | null
@@ -1672,6 +1687,13 @@ export type Database = {
           to_account_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fund_transfers_fee_expense_id_fkey"
+            columns: ["fee_expense_id"]
+            isOneToOne: false
+            referencedRelation: "agency_expenses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fund_transfers_from_account_id_fkey"
             columns: ["from_account_id"]
@@ -4197,6 +4219,7 @@ export type Database = {
         | "Owner_Draw"
         | "Marketing"
         | "Other"
+        | "Transfer_Fee"
       export_request_status:
         | "pending"
         | "processing"
@@ -4404,6 +4427,7 @@ export const Constants = {
         "Owner_Draw",
         "Marketing",
         "Other",
+        "Transfer_Fee",
       ],
       export_request_status: [
         "pending",

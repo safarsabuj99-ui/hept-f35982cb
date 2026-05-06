@@ -31,13 +31,14 @@ import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDh
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 
-const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Other"] as const;
+const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Transfer_Fee", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
   Rent: "hsl(var(--chart-meta))",
   Salary: "hsl(var(--primary))",
   Software: "hsl(var(--chart-google))",
   Owner_Draw: "hsl(var(--warning))",
   Marketing: "hsl(var(--chart-tiktok))",
+  Transfer_Fee: "hsl(var(--destructive))",
   Other: "hsl(var(--muted-foreground))",
 };
 

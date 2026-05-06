@@ -29,6 +29,8 @@ interface AgencyAccount {
   current_balance_bdt: number;
   is_active: boolean;
   created_at: string;
+  default_out_fee_percent?: number;
+  default_out_fee_flat_bdt?: number;
 }
 
 interface FundTransfer {
@@ -39,6 +41,8 @@ interface FundTransfer {
   note: string | null;
   created_by: string;
   created_at: string;
+  fee_bdt?: number;
+  fee_percent?: number | null;
 }
 
 interface RecentActivity {
@@ -129,6 +133,10 @@ export default function CashFlowManagement() {
   const [transferAmount, setTransferAmount] = useState("");
   const [transferNote, setTransferNote] = useState("");
   const [transferring, setTransferring] = useState(false);
+  const [transferFeePercent, setTransferFeePercent] = useState("");
+  const [transferFeeFlat, setTransferFeeFlat] = useState("");
+  const [accFeePct, setAccFeePct] = useState("");
+  const [accFeeFlat, setAccFeeFlat] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -187,6 +195,21 @@ export default function CashFlowManagement() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
+
+  // Auto-fill transfer fee defaults from source account
+  useEffect(() => {
+    if (!fromAccId) {
+      setTransferFeePercent("");
+      setTransferFeeFlat("");
+      return;
+    }
+    const acc = accounts.find(a => a.id === fromAccId);
+    if (acc) {
+      setTransferFeePercent(String(acc.default_out_fee_percent ?? 0));
+      setTransferFeeFlat(String(acc.default_out_fee_flat_bdt ?? 0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromAccId]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -324,6 +347,8 @@ export default function CashFlowManagement() {
       type: accType,
       account_number: accNumber || null,
       current_balance_bdt: Number(accBalance) || 0,
+      default_out_fee_percent: Number(accFeePct) || 0,
+      default_out_fee_flat_bdt: Number(accFeeFlat) || 0,
       org_id: profile?.org_id || null,
     } as any);
     setSubmitting(false);
@@ -331,7 +356,7 @@ export default function CashFlowManagement() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Account created" });
-      setAccName(""); setAccNumber(""); setAccBalance("");
+      setAccName(""); setAccNumber(""); setAccBalance(""); setAccFeePct(""); setAccFeeFlat("");
       setAddOpen(false);
       fetchData();
     }
@@ -339,18 +364,24 @@ export default function CashFlowManagement() {
 
   const handleTransfer = async () => {
     const amt = Number(transferAmount);
+    const feePct = Number(transferFeePercent) || 0;
+    const feeFlat = Number(transferFeeFlat) || 0;
+    const fee = Math.round(((amt * feePct) / 100 + feeFlat) * 100) / 100;
+    const totalDeduct = amt + fee;
+
     if (!fromAccId || !toAccId || fromAccId === toAccId || amt <= 0) {
       toast({ title: "Error", description: "Select different accounts and a valid amount", variant: "destructive" });
       return;
     }
     const { data: freshFrom } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", fromAccId).single();
-    if (freshFrom && Number((freshFrom as any).current_balance_bdt) < amt) {
-      toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()}`, variant: "destructive" });
+    if (freshFrom && Number((freshFrom as any).current_balance_bdt) < totalDeduct) {
+      toast({ title: "Insufficient Balance", description: `${(freshFrom as any).name} has only ৳${Number((freshFrom as any).current_balance_bdt).toLocaleString()} (need ৳${totalDeduct.toLocaleString()} incl. fee)`, variant: "destructive" });
       return;
     }
 
     setTransferring(true);
 
+    // Step 1: Debit source by amount only (fee handled by expense trigger)
     const debitOk = await adjustAccountBalance(fromAccId, -amt);
     if (!debitOk) {
       setTransferring(false);
@@ -358,6 +389,7 @@ export default function CashFlowManagement() {
       return;
     }
 
+    // Step 2: Credit destination
     const creditOk = await adjustAccountBalance(toAccId, amt);
     if (!creditOk) {
       await adjustAccountBalance(fromAccId, amt);
@@ -366,18 +398,56 @@ export default function CashFlowManagement() {
       return;
     }
 
+    // Step 3: Create fee expense (trigger debits source for fee automatically)
+    let feeExpenseId: string | null = null;
+    if (fee > 0) {
+      const fromAcc = accounts.find(a => a.id === fromAccId);
+      const toAcc = accounts.find(a => a.id === toAccId);
+      const { data: expData, error: expErr } = await supabase
+        .from("agency_expenses" as any)
+        .insert({
+          amount_bdt: fee,
+          category: "Transfer_Fee",
+          description: `Transfer fee: ${fromAcc?.name || "?"} → ${toAcc?.name || "?"} (৳${amt.toLocaleString()}${feePct ? ` @ ${feePct}%` : ""})`,
+          paid_from_account_id: fromAccId,
+          created_by: user?.id,
+          org_id: profile?.org_id || null,
+        } as any)
+        .select("id")
+        .single();
+      if (expErr) {
+        // Roll back the transfer if fee logging fails
+        await adjustAccountBalance(toAccId, -amt);
+        await adjustAccountBalance(fromAccId, amt);
+        setTransferring(false);
+        toast({ title: "Error", description: "Failed to log transfer fee: " + expErr.message, variant: "destructive" });
+        return;
+      }
+      feeExpenseId = (expData as any)?.id || null;
+    }
+
+    // Step 4: Insert fund_transfers record
     await supabase.from("fund_transfers" as any).insert({
       from_account_id: fromAccId,
       to_account_id: toAccId,
       amount_bdt: amt,
+      fee_bdt: fee,
+      fee_percent: feePct || null,
+      fee_expense_id: feeExpenseId,
       note: transferNote || null,
       created_by: user?.id,
       org_id: profile?.org_id || null,
     } as any);
 
     setTransferring(false);
-    toast({ title: "Transfer Complete", description: `৳${amt.toLocaleString()} moved successfully` });
+    toast({
+      title: "Transfer Complete",
+      description: fee > 0
+        ? `৳${amt.toLocaleString()} moved · ৳${fee.toLocaleString()} fee logged as today's expense`
+        : `৳${amt.toLocaleString()} moved successfully`,
+    });
     setTransferAmount(""); setTransferNote(""); setFromAccId(""); setToAccId("");
+    setTransferFeePercent(""); setTransferFeeFlat("");
     setTransferOpen(false);
     fetchData();
   };
@@ -825,6 +895,32 @@ export default function CashFlowManagement() {
                 <Label>Amount (BDT)</Label>
                 <Input type="number" placeholder="e.g. 10000" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Fee % (cash-out charge)</Label>
+                  <Input type="number" step="0.01" placeholder="0" value={transferFeePercent} onChange={e => setTransferFeePercent(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Flat Fee (৳)</Label>
+                  <Input type="number" step="0.01" placeholder="0" value={transferFeeFlat} onChange={e => setTransferFeeFlat(e.target.value)} />
+                </div>
+              </div>
+              {(() => {
+                const amt = Number(transferAmount) || 0;
+                const fp = Number(transferFeePercent) || 0;
+                const ff = Number(transferFeeFlat) || 0;
+                const fee = Math.round(((amt * fp) / 100 + ff) * 100) / 100;
+                if (amt <= 0) return null;
+                return (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-mono">৳{amt.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Transfer fee</span><span className="font-mono text-destructive">৳{fee.toLocaleString()}</span></div>
+                    <div className="flex justify-between border-t pt-1 mt-1 font-semibold"><span>Total deducted from source</span><span className="font-mono">৳{(amt + fee).toLocaleString()}</span></div>
+                    <div className="flex justify-between text-muted-foreground"><span>Destination receives</span><span className="font-mono">৳{amt.toLocaleString()}</span></div>
+                    {fee > 0 && <p className="text-[10px] text-muted-foreground pt-1">Fee will be auto-logged as today's expense (Transfer_Fee)</p>}
+                  </div>
+                );
+              })()}
               <div>
                 <Label>Reference / Note (optional)</Label>
                 <Textarea value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Moving to bank for vendor payment" />
@@ -876,6 +972,20 @@ export default function CashFlowManagement() {
               <div>
                 <Label>Opening Balance (BDT)</Label>
                 <Input type="number" placeholder="0" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Default Out-Transfer Fee</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Fee % (e.g. bKash 1.85)</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={accFeePct} onChange={e => setAccFeePct(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Flat Fee (৳)</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={accFeeFlat} onChange={e => setAccFeeFlat(e.target.value)} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Auto-applied when transferring out from this account. Editable per transfer.</p>
               </div>
               <Button className="w-full" onClick={handleAddAccount} disabled={submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Account
@@ -1336,6 +1446,12 @@ export default function CashFlowManagement() {
                             <span className="text-sm font-medium">{from?.name || "?"} → {to?.name || "?"}</span>
                             <span className="font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</span>
                           </div>
+                          {Number(t.fee_bdt) > 0 && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Fee{t.fee_percent ? ` (${t.fee_percent}%)` : ""}</span>
+                              <span className="font-mono text-destructive">৳{Number(t.fee_bdt).toLocaleString()}</span>
+                            </div>
+                          )}
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span className="font-mono">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                             {t.note && <span className="truncate ml-2 max-w-[150px]">{t.note}</span>}
@@ -1353,6 +1469,7 @@ export default function CashFlowManagement() {
                           <TableHead>Date</TableHead>
                           <TableHead>From → To</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Fee</TableHead>
                           <TableHead>Note</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1360,11 +1477,13 @@ export default function CashFlowManagement() {
                         {transfers.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(t => {
                           const from = accounts.find(a => a.id === t.from_account_id);
                           const to = accounts.find(a => a.id === t.to_account_id);
+                          const fee = Number(t.fee_bdt) || 0;
                           return (
                             <TableRow key={t.id}>
                               <TableCell className="font-mono text-sm">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
                               <TableCell className="text-sm">{from?.name || "?"} → {to?.name || "?"}</TableCell>
                               <TableCell className="text-right font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-mono text-xs">{fee > 0 ? <span className="text-destructive">৳{fee.toLocaleString()}{t.fee_percent ? ` (${t.fee_percent}%)` : ""}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
                               <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{t.note || "—"}</TableCell>
                             </TableRow>
                           );
