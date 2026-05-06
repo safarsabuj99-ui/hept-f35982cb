@@ -121,8 +121,20 @@ export default function PaymentRequests() {
   const isMultiPlatform = (r: PaymentRequest | null) =>
     r?.platform_amounts && typeof r.platform_amounts === "object" && Object.keys(r.platform_amounts).length > 0;
 
+  const isMfsMethod = (method?: string | null) => {
+    const m = (method || "").toLowerCase();
+    return m === "bkash" || m === "nagad";
+  };
+
+  const currentIsMfs = isMfsMethod(confirmModal.request?.payment_method);
+  const effectiveFeePct = currentIsMfs ? Math.max(0, Math.min(10, mfsFeePercent || 0)) : 0;
+  const feeMultiplier = 1 - effectiveFeePct / 100;
+
   const selectedRate = rateOptions.find((r) => r.key === selectedRateKey);
-  const calculatedUsd = selectedRate ? Math.round((confirmModal.request?.amount_bdt ?? 0) / selectedRate.rate * 100) / 100 : 0;
+  const grossBdt = confirmModal.request?.amount_bdt ?? 0;
+  const netBdt = grossBdt * feeMultiplier;
+  const feeBdt = grossBdt - netBdt;
+  const calculatedUsd = selectedRate ? Math.round((netBdt / selectedRate.rate) * 100) / 100 : 0;
 
   // Multi-platform total USD calculation
   const multiPlatformTotal = useMemo(() => {
@@ -130,9 +142,9 @@ export default function PaymentRequests() {
     const pa = confirmModal.request.platform_amounts!;
     return Object.entries(pa).reduce((sum, [p, bdt]) => {
       const rate = perPlatformRates[p] || 120;
-      return sum + Math.round((Number(bdt) / rate) * 100) / 100;
+      return sum + Math.round(((Number(bdt) * feeMultiplier) / rate) * 100) / 100;
     }, 0);
-  }, [confirmModal.request, perPlatformRates]);
+  }, [confirmModal.request, perPlatformRates, feeMultiplier]);
 
   const { toast } = useToast();
 
