@@ -640,7 +640,11 @@ export function DeepDiveTable({
         },
         cell: (info) => {
           const row = info.row.original;
-          const isSelectable = row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
+          const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+          const isSelectable = row.campaign_id && (
+            (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+            (isAdmin && isPausedStatus(row.status))
+          );
           if (!isSelectable) return <div className="w-4" />;
           return (
             <Checkbox
