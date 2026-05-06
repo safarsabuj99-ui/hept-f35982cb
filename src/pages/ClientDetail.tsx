@@ -692,7 +692,7 @@ export default function ClientDetail() {
               <div className="flex items-center justify-between max-w-md">
                 <div className="space-y-0.5">
                   <Label className="text-sm font-medium">Campaign On/Off Control</Label>
-                  <p className="text-xs text-muted-foreground">Allow client to pause and enable campaigns from their dashboard.</p>
+                  <p className="text-xs text-muted-foreground">Allow client to pause and resume campaigns directly from their dashboard.</p>
                 </div>
                 <Switch
                   checked={((profile?.client_permissions as any)?.can_toggle_campaigns) === true}

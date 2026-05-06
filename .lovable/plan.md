@@ -1,74 +1,43 @@
+# Plan: Client-side Campaign Resume (Turn ON)
+
+## Current behavior
+- Admin grants `client_permissions.can_toggle_campaigns` per client (ClientDetail → Client Access).
+- `ClientReports` reads that flag and passes `canToggleCampaigns` to `CampaignAnalyticsPanel` → `DeepDiveTable`.
+- In `DeepDiveTable`:
+  - The pause/enable Switch and bulk-select treat **paused rows as selectable only when `isAdmin === true`**.
+  - Clients can therefore only PAUSE active campaigns — never resume paused ones.
+- `ClientReports.campaignRows` filters out paused rows that have no spend/impressions in the selected range, so paused campaigns are often invisible to the client.
+
 ## Goal
-Transform `/admin/finance?tab=expenses` from a basic 3-KPI + pie page into an information-dense, premium glassmorphic command center for cash outflows — with trends, comparisons, breakdowns, top categories, and inline row actions.
+When the agency enables "Campaign On/Off Control" for a client, the client should be able to **both pause active campaigns and resume paused campaigns** from their dashboard — using the same secure `pause-campaign` edge function that's already in place. No new admin toggle required (one permission = full on/off control), keeping the UX simple.
 
-## What's wrong today
-- Only 3 KPIs (Total / OpEx / Owner's Draw), all in BDT — no context, no deltas, no avg/largest.
-- Single pie chart, no trend over time, no comparison vs previous period.
-- Table only shows Date / Category / Amount — no description, no source account, no actions (edit/delete).
-- No category-level summary bars or month-over-month context.
-- Empty states are flat ("No data yet") with no CTA.
-- Visually flat — cards lack the premium glassmorphism / glow used elsewhere.
+## Changes
 
-## New layout
+### 1. `src/components/client-analytics/DeepDiveTable.tsx`
+Treat `canToggleCampaigns` as full bidirectional control (no `isAdmin` requirement for resuming):
+- Row Switch (`canToggle` calc on line ~167 and ~692): already allows both directions when `canToggleCampaigns` is true — verify and keep.
+- `selectableRows` (line ~460): allow paused rows when `canToggleCampaigns` is true (drop the `isAdmin` gate for paused).
+- `isSelectable` checks (lines ~640, ~1107): same — `canToggleCampaigns && (active || paused)`.
+- Bulk action bar (line ~1384, ~1399): show **both** "Pause Selected" and "Enable Selected" bulk buttons whenever `canToggleCampaigns` is true (currently `hasActive` gate only). Add a `hasPaused` mirror that drives a bulk-enable button reusing the existing per-row enable logic (loop `pause-campaign` with `action: "enable"`).
+- Confirm dialog copy: keep dynamic ("This will pause…" / "This will enable…") — already action-aware.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ Header: "Expenses" + period chip      [Export CSV] [+ Add]   │
-├──────────────────────────────────────────────────────────────┤
-│ DateRangeFilter (existing)                                   │
-├──────────────────────────────────────────────────────────────┤
-│  KPI ROW — 4 cards (glass + glow, click to filter)           │
-│  ┌──────────┬──────────┬──────────┬──────────────────────┐  │
-│  │ Total    │ OpEx     │ Owner's  │ Avg / Day            │  │
-│  │ ৳X       │ ৳X       │ Draw ৳X  │ ৳X  (largest: ৳Y)    │  │
-│  │ ▲12% vs  │ ▲5% vs   │ ▼3% vs   │ N expenses logged    │  │
-│  │ prev     │ prev     │ prev     │                      │  │
-│  └──────────┴──────────┴──────────┴──────────────────────┘  │
-├──────────────────────────────────────────────────────────────┤
-│  TREND (col-span-2)              │  CATEGORY BREAKDOWN      │
-│  Daily area chart                │  Horizontal bars per cat │
-│  (BDT spent per day)             │  with % of total + ৳     │
-├──────────────────────────────────────────────────────────────┤
-│  EXPENSES TABLE (full width)                                 │
-│  Date │ Category │ Description │ Paid From │ Amount │ ⋯     │
-│  - Search box + category multi-filter pills                  │
-│  - Row hover reveals Edit / Delete                           │
-│  - Premium empty state with "Add your first expense" CTA     │
-└──────────────────────────────────────────────────────────────┘
-```
+### 2. `src/pages/ClientReports.tsx`
+Make paused campaigns visible to clients who have permission so they have something to turn back on:
+- In the `campaignRows` `useMemo` filter (line ~182), when `canToggleCampaigns` is true, also include paused campaigns from the `campaigns` list (inject paused rows similar to the existing active-injection block above it). When the permission is off, keep the current active-only behavior so the report stays clean.
+- Inject all paused campaigns (not just those with spend) so they're toggleable; show them with status badge that DeepDiveTable already renders ("paused" / "guard paused").
 
-## Features added
+### 3. `src/pages/ClientDetail.tsx` (admin)
+Refresh the description so the agency understands the toggle now covers both directions:
+- "Allow client to **pause and resume** campaigns from their dashboard." (current copy already says "pause and enable" — minor wording polish to "pause and resume").
 
-1. **4th KPI: Avg/Day + largest single expense + count** — gives operators a sense of velocity, not just totals.
-2. **Period-over-period deltas** — query the previous equal-length window and show ▲/▼ % vs prev on each KPI card.
-3. **Daily spend trend** — Recharts area chart bucketed by day across selected range, BDT axis. Replaces the half-empty distribution column with something actionable.
-4. **Category breakdown bars** — keep distribution insight but in a more readable horizontal bar list (category, ৳ amount, % of total, colored bar) instead of a pie that becomes useless past 3 segments.
-5. **Richer table**:
-   - Add Description column (truncated w/ tooltip).
-   - Add "Paid From" column (joins `agency_accounts.name` via `paid_from_account_id`).
-   - Inline search input (matches description / category).
-   - Row actions menu: **Edit** (opens existing dialog prefilled) and **Delete** (with confirm + atomic balance refund via existing `adjustAccountBalance` if originally paid from an account).
-6. **Export CSV** button — exports current filtered view (date, category, amount, description, paid_from).
-7. **Premium empty states** — illustration + CTA button instead of plain text.
-8. **Visual polish**:
-   - All cards use `glass-card glow-border` with subtle gradient accents per KPI (primary / chart-meta / warning / success).
-   - Animated number counters on KPI mount.
-   - Smooth `animate-slide-up-fade` staggers (already in codebase).
-   - Mobile: KPIs become 2x2 grid; trend + breakdown stack; table → premium card list with description preview.
+### 4. Edge function / RLS — no changes needed
+`pause-campaign` already accepts `action: "pause" | "enable"` and authorizes via the caller's session. Clients can already invoke it (DeepDiveTable does). RLS on `campaigns` lets the client read their own rows; the edge function performs the platform call and DB update with service role.
 
-## Technical notes
+## Out of scope
+- Splitting into two separate permissions (pause-only vs resume-only). One unified "On/Off Control" flag stays simpler and matches the existing UI label.
+- Guard-paused campaigns: keep the existing automation flow (resume-window) — clients won't be able to resume `guard_paused` rows here; those still go through the AutomationConfigTab top-up flow.
 
-- All new data derived client-side from a single fetch — extend `fetchExpenses` to also fetch a previous-period query in parallel for deltas (use `Promise.all`).
-- Join `paid_from_account_id` → `agency_accounts.name` via a second lightweight fetch keyed by id (already loading `agencyAccounts`, just look up by id).
-- Daily trend: bucket `expenses` by `date` across the selected range, fill missing days with 0 so the chart spans the full window.
-- Edit/Delete: new `updateExpense` / `deleteExpense` handlers calling `supabase.from('agency_expenses')`. Delete must refund the source `agency_accounts.current_balance_bdt` if `paid_from_account_id` is set (use `adjustAccountBalance` helper for atomic +amount). Wrap in toast feedback.
-- CSV export: build string client-side, trigger `Blob` download — no new deps.
-- Honor existing currency policy: BDT (৳) everywhere on this page (memory: `currency-display-policy`).
-- Honor existing date standards (UTC+6, lexicographic compare) — reuse `DateRangeFilter` helpers already imported.
-- Honor mobile responsiveness standard: stack on `<sm`, 2x2 KPIs on `sm`, 4-up on `lg`.
-
-## Files to edit
-
-- `src/pages/ExpenseManager.tsx` — full redesign per layout above (single file, ~contained).
-
-No DB migrations needed. No new dependencies.
+## Files touched
+- `src/components/client-analytics/DeepDiveTable.tsx` — selection + bulk-enable button
+- `src/pages/ClientReports.tsx` — surface paused campaigns when permission is on
+- `src/pages/ClientDetail.tsx` — minor copy polish

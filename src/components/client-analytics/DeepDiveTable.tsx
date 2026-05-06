@@ -460,7 +460,10 @@ export function DeepDiveTable({
     () => paginatedData.filter(r => {
       if (!r.campaign_id) return false;
       if (canToggleCampaigns && isActiveStatus(r.status)) return true;
+      // Allow resume of paused campaigns when caller has toggle perms (clients) or is admin.
+      // Guard-paused campaigns are intentionally excluded for clients — those require a top-up.
       if (isAdmin && isPausedStatus(r.status)) return true;
+      if (canToggleCampaigns && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
       return false;
     }),
     [paginatedData, canToggleCampaigns, isAdmin]
@@ -562,7 +565,10 @@ export function DeepDiveTable({
   const handleBulkActivate = async () => {
     const ids = Array.from(selectedIds).filter(id => {
       const row = data.find(r => r.campaign_id === id);
-      return row && isPausedStatus(row.status);
+      if (!row) return false;
+      if (isAdmin) return isPausedStatus(row.status);
+      const s = row.status.toLowerCase();
+      return s === "paused" || s === "disable";
     });
     setBulkActivating(true);
     setBulkProgress({ current: 0, total: ids.length });
@@ -637,7 +643,11 @@ export function DeepDiveTable({
         },
         cell: (info) => {
           const row = info.row.original;
-          const isSelectable = row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
+          const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+          const isSelectable = row.campaign_id && (
+            (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+            (isAdmin && isPausedStatus(row.status))
+          );
           if (!isSelectable) return <div className="w-4" />;
           return (
             <Checkbox
@@ -1104,7 +1114,11 @@ export function DeepDiveTable({
   // so individual selections don't remount the entire list (which previously caused
   // the page to scroll back to the top after toggling a checkbox).
   const renderMobileCard = (row: CampaignRow) => {
-    const isSelectable = !!row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
+    const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+    const isSelectable = !!row.campaign_id && (
+      (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+      (isAdmin && isPausedStatus(row.status))
+    );
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     return (
@@ -1379,7 +1393,11 @@ export function DeepDiveTable({
           });
           const hasPaused = Array.from(selectedIds).some(id => {
             const row = data.find(r => r.campaign_id === id);
-            return row && isPausedStatus(row.status);
+            if (!row) return false;
+            // Admins can resume any paused status; clients only regular paused (not guard_paused).
+            if (isAdmin) return isPausedStatus(row.status);
+            const s = row.status.toLowerCase();
+            return s === "paused" || s === "disable";
           });
           if (!canToggleCampaigns && !isAdmin) return null;
           return (
@@ -1406,7 +1424,7 @@ export function DeepDiveTable({
                     <Power className="h-3.5 w-3.5 mr-1" /> Pause All
                   </Button>
                 )}
-                {isAdmin && hasPaused && (
+                {(isAdmin || canToggleCampaigns) && hasPaused && (
                   <Button
                     size="sm"
                     onClick={() => setShowBulkActivate(true)}
