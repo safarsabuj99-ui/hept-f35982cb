@@ -397,9 +397,17 @@ export function DeepDiveTable({
   onSetDefaultPreset,
   savedColumnOrder,
   onColumnOrderChange,
-  canToggleCampaigns = true,
+  canToggleCampaigns,
+  canPause: canPauseProp,
+  canResume: canResumeProp,
   isAdmin = false,
 }: DeepDiveTableProps) {
+  // Resolve effective permissions with legacy back-compat:
+  // - If new flags provided, use them.
+  // - Else fall back to canToggleCampaigns (true => both, undefined => default true for back-compat).
+  const legacy = canToggleCampaigns ?? true;
+  const canPause = canPauseProp ?? legacy;
+  const canResume = canResumeProp ?? legacy;
   const [sorting, setSorting] = useState<SortingState>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
