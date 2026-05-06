@@ -1446,6 +1446,12 @@ export default function CashFlowManagement() {
                             <span className="text-sm font-medium">{from?.name || "?"} → {to?.name || "?"}</span>
                             <span className="font-mono font-semibold">৳{Number(t.amount_bdt).toLocaleString()}</span>
                           </div>
+                          {Number(t.fee_bdt) > 0 && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Fee{t.fee_percent ? ` (${t.fee_percent}%)` : ""}</span>
+                              <span className="font-mono text-destructive">৳{Number(t.fee_bdt).toLocaleString()}</span>
+                            </div>
+                          )}
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span className="font-mono">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                             {t.note && <span className="truncate ml-2 max-w-[150px]">{t.note}</span>}
