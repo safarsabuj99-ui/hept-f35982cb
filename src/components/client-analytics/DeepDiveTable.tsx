@@ -146,7 +146,8 @@ interface DeepDiveTableProps {
 interface MobileCampaignCardProps {
   row: CampaignRow;
   selectedPreset: PresetType;
-  canToggleCampaigns: boolean;
+  canPause: boolean;
+  canResume: boolean;
   isSelectable: boolean;
   isSelected: boolean;
   isToggling: boolean;
@@ -157,7 +158,8 @@ interface MobileCampaignCardProps {
 const MobileCampaignCard = memo(function MobileCampaignCard({
   row,
   selectedPreset,
-  canToggleCampaigns,
+  canPause,
+  canResume,
   isSelectable,
   isSelected,
   isToggling,
@@ -169,7 +171,7 @@ const MobileCampaignCard = memo(function MobileCampaignCard({
   const pb = PLATFORM_BADGE[row.platform] || { label: row.platform, className: "bg-muted text-muted-foreground border-border" };
   const active = isActiveStatus(row.status);
   const isPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
-  const canToggle = canToggleCampaigns && !!row.campaign_id && (active || isPaused);
+  const canToggle = !!row.campaign_id && ((active && canPause) || (isPaused && canResume));
 
   const normalized = normalizeStatus(row.status);
   const redStatuses = ["not delivering", "disapproved", "with issues"];
