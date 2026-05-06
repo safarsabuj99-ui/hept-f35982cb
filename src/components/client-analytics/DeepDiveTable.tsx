@@ -1111,7 +1111,11 @@ export function DeepDiveTable({
   // so individual selections don't remount the entire list (which previously caused
   // the page to scroll back to the top after toggling a checkbox).
   const renderMobileCard = (row: CampaignRow) => {
-    const isSelectable = !!row.campaign_id && ((canToggleCampaigns && isActiveStatus(row.status)) || (isAdmin && isPausedStatus(row.status)));
+    const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
+    const isSelectable = !!row.campaign_id && (
+      (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+      (isAdmin && isPausedStatus(row.status))
+    );
     const isSelected = row.campaign_id ? selectedIds.has(row.campaign_id) : false;
     const isToggling = togglingId === row.campaign_id;
     return (
