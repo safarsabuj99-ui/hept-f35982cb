@@ -179,15 +179,18 @@ Deno.serve(async (req) => {
         ? selected_rate
         : await getFallbackRate(adminClient, pr.client_id, "meta");
 
-      finalUsd = Math.round((totalBdt / exchangeRate) * 100) / 100;
+      const netBdt = totalBdt * feeMultiplier;
+      finalUsd = Math.round((netBdt / exchangeRate) * 100) / 100;
       exchangeRateSnapshot = exchangeRate;
+
+      const feeNote = feePct > 0 ? ` (MFS fee ${feePct}% = ৳${feeBdtTotal.toFixed(2)})` : "";
 
       transactions.push({
         client_id: pr.client_id,
         type: "credit",
         amount: finalUsd,
         date: txDate,
-        description: `Payment: ৳${totalBdt.toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})`,
+        description: `Payment: ৳${totalBdt.toLocaleString()} via ${pr.payment_method} (Rate: ${exchangeRate})${feeNote}`,
         created_by: user.id,
         status: "completed",
         exchange_rate: exchangeRate,
