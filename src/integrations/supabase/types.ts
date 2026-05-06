@@ -1011,6 +1011,7 @@ export type Database = {
           id: string
           note: string | null
           org_id: string | null
+          parent_withdrawal_id: string | null
           returned_bdt: number
           status: Database["public"]["Enums"]["withdrawal_status"]
           updated_at: string
@@ -1027,6 +1028,7 @@ export type Database = {
           id?: string
           note?: string | null
           org_id?: string | null
+          parent_withdrawal_id?: string | null
           returned_bdt?: number
           status?: Database["public"]["Enums"]["withdrawal_status"]
           updated_at?: string
@@ -1043,6 +1045,7 @@ export type Database = {
           id?: string
           note?: string | null
           org_id?: string | null
+          parent_withdrawal_id?: string | null
           returned_bdt?: number
           status?: Database["public"]["Enums"]["withdrawal_status"]
           updated_at?: string
@@ -1060,6 +1063,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_withdrawals_parent_withdrawal_id_fkey"
+            columns: ["parent_withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "cash_withdrawals"
             referencedColumns: ["id"]
           },
         ]

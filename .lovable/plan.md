@@ -1,46 +1,74 @@
-# Transfer Fee System
-
 ## Goal
-When transferring funds between agency accounts (MFS ↔ Bank ↔ Cash), charge a configurable fee on the source account. The fee is automatically logged as today's expense under a new `Transfer_Fee` category.
+On the Withdrawals tab, when a borrower has already taken money from an account and the loan is still active (outstanding > 0), allow the admin to **add a new top-up borrow** to that existing record instead of being forced to create a brand-new withdrawal entry. This keeps each borrower's history consolidated and shows a true running total.
 
-## Database Migration
-- Add `Transfer_Fee` to `expense_category` enum.
-- `agency_accounts`: add `default_out_fee_percent numeric DEFAULT 0`, `default_out_fee_flat_bdt numeric DEFAULT 0`.
-- `fund_transfers`: add `fee_bdt numeric NOT NULL DEFAULT 0`, `fee_percent numeric`, `fee_expense_id uuid REFERENCES agency_expenses(id)`.
+## Current Behavior
+Every "Record Withdrawal" creates a brand-new `cash_withdrawals` row, even if the same borrower (e.g. *Arif*, *Sabuj Miah*) is already listed as Active. So one borrower who takes ৳1,000 today and ৳500 next week shows up as **two separate Active rows** — hard to track total exposure per person.
 
-## Transfer Logic (`CashFlowManagement.tsx → handleTransfer`)
+## Proposed UX
+
+### A. Smart "Borrower" field in the Withdraw dialog
+- Replace plain text input with a **combobox** that suggests existing **Active** borrowers (status = `active` / `partially_returned`) for the selected source account.
+- When user picks an existing borrower → dialog switches to **"Top-Up Mode"**:
+  - Header changes to: *"Add new borrow for Arif (Outstanding: ৳12,500)"*
+  - Shows a mini summary: previous principal, returned, current outstanding.
+  - Submit button reads **"Add Top-Up"**.
+- If the typed name doesn't match → normal **"New Borrower"** flow (current behavior).
+
+### B. Withdrawals table — collapsible borrower groups
+- Group rows by borrower (per source account). Default view shows one row per borrower with **Total Borrowed / Total Returned / Outstanding**.
+- Click chevron → expands to show every individual top-up entry with its own date and Return button.
+- Each top-up row remains independently returnable (preserves existing return logic).
+
+### C. Borrower detail dialog (optional polish)
+Clicking a borrower opens a timeline: every borrow + every return chronologically with running balance.
+
+## Technical Plan
+
+### Database
+Add a lightweight grouping column without breaking existing data:
+- `cash_withdrawals.parent_withdrawal_id uuid REFERENCES cash_withdrawals(id)` — null for the **first** borrow, set to the original row for top-ups.
+- Index on `(from_account_id, borrower_name, status)` for fast active-borrower lookup.
+- No enum changes, no trigger changes — each top-up is still a real withdrawal row, so balance debits and the existing return flow keep working untouched.
+
 ```text
-Amount: ৳10,000   Fee (1.85%): ৳185
-Source debited: ৳10,000 (transfer) + ৳185 (auto via expense trigger) = ৳10,185
-Destination credited: ৳10,000
-Expense row created: Transfer_Fee ৳185, paid_from = source, today
+Row 1: Arif | ৳12,500 | parent=null     ← original
+Row 2: Arif | ৳5,000  | parent=Row1.id  ← top-up #1
+Row 3: Arif | ৳2,000  | parent=Row1.id  ← top-up #2
 ```
-Steps:
-1. Validate source balance >= `amount + fee`.
-2. Debit source by `amount`, credit destination by `amount` (existing atomic helpers).
-3. Insert `fund_transfers` row with `fee_bdt`, `fee_percent`.
-4. If `fee > 0`: insert `agency_expenses` row (category `Transfer_Fee`, paid_from = source). Existing balance-sync trigger debits source for the fee — no double-debit.
-5. Save returned expense id back into `fund_transfers.fee_expense_id` for audit trace.
-6. Compensating rollback on any failure (mirrors current pattern).
 
-## UI Changes
-**Add/Edit Account form**: two new fields — "Default cash-out fee %" and "Flat fee (৳)". Smart hint: bKash personal ≈ 1.85%.
+### Frontend (`src/pages/CashFlowManagement.tsx`)
+1. **Active-borrower lookup**: derive list from existing `withdrawals` state (filter `status != fully_returned` and matching `from_account_id`).
+2. **Borrower combobox**: shadcn `Command` inside `Popover`, with "Create new borrower 'X'" footer item.
+3. **handleWithdraw**: if an existing borrower is selected, set `parent_withdrawal_id` to that root id (resolve root by walking parent chain — usually 1 hop). Otherwise insert as today.
+4. **Grouping helper**: build `groupedWithdrawals = Map<rootId, { root, children[], totals }>` for the table render.
+5. **Table refactor**: render grouped rows with expand/collapse via `useState<Set<string>>` for open rootIds. Reuse existing return dialog per child row.
+6. Keep existing pagination — paginate over groups, not raw rows.
 
-**Transfer Dialog**: 
-- Auto-fill fee from source account's defaults when source is picked.
-- Editable fee input + % toggle.
-- Live summary card: `Total deducted: ৳X | Destination receives: ৳Y | Fee: ৳Z`.
-- Insufficient-balance check uses `amount + fee`.
+### Logic Snippet (illustrative)
+```typescript
+// Detect existing active borrower on submit
+const root = withdrawals.find(w =>
+  w.from_account_id === wdFromAccId &&
+  w.borrower_name.toLowerCase() === wdBorrower.trim().toLowerCase() &&
+  w.status !== "fully_returned" &&
+  !w.parent_withdrawal_id
+);
 
-**Transfer History tab**: new "Fee" column with tooltip linking to expense.
-
-**Expense Manager**: register `Transfer_Fee` category in filters, badge color, and totals — appears automatically in today's expenses.
+await supabase.from("cash_withdrawals").insert({
+  from_account_id: wdFromAccId,
+  amount_bdt: amt,
+  borrower_name: root?.borrower_name ?? wdBorrower.trim(),
+  category: root?.category ?? wdCategory,
+  parent_withdrawal_id: root?.id ?? null,
+  date: wdDate,
+  ...
+});
+```
 
 ## Files Touched
-- DB migration (enum + 5 columns)
-- `src/pages/CashFlowManagement.tsx` (account form, transfer dialog, handleTransfer, history table)
-- `src/pages/ExpenseManager.tsx` (new category label/color/filter)
+- DB migration (1 column + 1 index)
+- `src/pages/CashFlowManagement.tsx` (combobox, grouping, table render, handleWithdraw)
 
 ## Non-Goals
-- No edit/delete of past transfers (append-only, matches existing policy).
-- No client-side fees — agency-account transfers only.
+- No change to return flow, balance triggers, or expense logic.
+- No retroactive merging of historical duplicate borrowers (admins can leave old rows; new top-ups going forward will group correctly). Optional one-time SQL cleanup can be offered later.
