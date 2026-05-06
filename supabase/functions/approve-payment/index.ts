@@ -97,6 +97,15 @@ Deno.serve(async (req) => {
 
     const totalBdt = Number(pr.amount_bdt);
     const txDate = pr.payment_date || new Date().toISOString().split("T")[0];
+
+    // MFS fee — only applied for bKash/Nagad. Reduces USD wallet credit; agency BDT account still receives full amount.
+    const methodLower = String(pr.payment_method || "").toLowerCase();
+    const isMfs = methodLower === "bkash" || methodLower === "nagad";
+    const feePctRaw = Number(mfs_fee_percent);
+    const feePct = isMfs && Number.isFinite(feePctRaw) ? Math.max(0, Math.min(10, feePctRaw)) : 0;
+    const feeMultiplier = 1 - feePct / 100;
+    const feeBdtTotal = totalBdt * (feePct / 100);
+
     const transactions: any[] = [];
     let finalUsd = 0;
     let exchangeRateSnapshot: any;
