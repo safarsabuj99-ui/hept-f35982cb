@@ -570,53 +570,66 @@ export default function CashFlowManagement() {
     fetchData();
   };
 
-  const openReturnDialog = (w: CashWithdrawal) => {
-    setReturnWithdrawal(w);
+  const openReturnDialog = (group: any) => {
+    setReturnGroup(group);
     setRetAmount("");
-    setRetToAccId(w.from_account_id);
+    setRetToAccId(group.root.from_account_id);
     setRetDate(new Date().toISOString().slice(0, 10));
     setRetNote("");
     setReturnOpen(true);
   };
 
-  const handleRecordReturn = async () => {
-    if (!returnWithdrawal) return;
+  const handleRecordBorrowerReturn = async () => {
+    if (!returnGroup) return;
     const amt = Number(retAmount);
-    const remaining = Number(returnWithdrawal.amount_bdt) - Number(returnWithdrawal.returned_bdt);
-    if (!retToAccId || amt <= 0 || amt > remaining) {
-      toast({ title: "Error", description: `Enter a valid amount (max ৳${remaining.toLocaleString()})`, variant: "destructive" });
+    const outstanding = Number(returnGroup.outstanding);
+    if (!retToAccId || amt <= 0 || amt > outstanding) {
+      toast({ title: "Error", description: `Enter a valid amount (max ৳${outstanding.toLocaleString()})`, variant: "destructive" });
       return;
     }
     setRetSubmitting(true);
 
-    const { error: insertErr } = await supabase.from("cash_withdrawal_returns" as any).insert({
-      withdrawal_id: returnWithdrawal.id,
-      amount_bdt: amt,
-      to_account_id: retToAccId,
-      date: retDate,
-      note: retNote || null,
-      created_by: user?.id,
-      org_id: profile?.org_id || null,
-    } as any);
+    // FIFO: oldest open rows first
+    const openRows = (returnGroup.all as CashWithdrawal[])
+      .filter(r => r.status !== "fully_returned" && Number(r.amount_bdt) - Number(r.returned_bdt) > 0)
+      .sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
 
-    if (insertErr) {
-      setRetSubmitting(false);
-      toast({ title: "Error", description: insertErr.message, variant: "destructive" });
-      return;
+    let remaining = amt;
+    for (const row of openRows) {
+      if (remaining <= 0) break;
+      const rowRemaining = Number(row.amount_bdt) - Number(row.returned_bdt);
+      const apply = Math.min(remaining, rowRemaining);
+
+      const { error: insErr } = await supabase.from("cash_withdrawal_returns" as any).insert({
+        withdrawal_id: row.id,
+        amount_bdt: apply,
+        to_account_id: retToAccId,
+        date: retDate,
+        note: retNote || null,
+        created_by: user?.id,
+        org_id: profile?.org_id || null,
+      } as any);
+      if (insErr) {
+        setRetSubmitting(false);
+        toast({ title: "Error", description: insErr.message, variant: "destructive" });
+        return;
+      }
+
+      const newReturned = Number(row.returned_bdt) + apply;
+      const newStatus = newReturned >= Number(row.amount_bdt) ? "fully_returned" : "partially_returned";
+      await supabase.from("cash_withdrawals" as any)
+        .update({ returned_bdt: newReturned, status: newStatus } as any)
+        .eq("id", row.id);
+
+      remaining -= apply;
     }
-
-    const newReturned = Number(returnWithdrawal.returned_bdt) + amt;
-    const newStatus = newReturned >= Number(returnWithdrawal.amount_bdt) ? "fully_returned" : "partially_returned";
-    await supabase.from("cash_withdrawals" as any)
-      .update({ returned_bdt: newReturned, status: newStatus } as any)
-      .eq("id", returnWithdrawal.id);
 
     await adjustAccountBalance(retToAccId, amt);
 
     setRetSubmitting(false);
-    toast({ title: "Return Recorded", description: `৳${amt.toLocaleString()} returned` });
+    toast({ title: "Return Recorded", description: `৳${amt.toLocaleString()} returned from ${returnGroup.root.borrower_name}` });
     setReturnOpen(false);
-    setReturnWithdrawal(null);
+    setReturnGroup(null);
     fetchData();
   };
 
