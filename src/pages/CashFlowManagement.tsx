@@ -973,6 +973,20 @@ export default function CashFlowManagement() {
                 <Label>Opening Balance (BDT)</Label>
                 <Input type="number" placeholder="0" value={accBalance} onChange={e => setAccBalance(e.target.value)} />
               </div>
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Default Out-Transfer Fee</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Fee % (e.g. bKash 1.85)</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={accFeePct} onChange={e => setAccFeePct(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Flat Fee (৳)</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={accFeeFlat} onChange={e => setAccFeeFlat(e.target.value)} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Auto-applied when transferring out from this account. Editable per transfer.</p>
+              </div>
               <Button className="w-full" onClick={handleAddAccount} disabled={submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Account
               </Button>
