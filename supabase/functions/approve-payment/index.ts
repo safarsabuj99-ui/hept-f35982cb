@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
       platform_rates,
       received_in_account_id,
       platform_override,
+      mfs_fee_percent,
     } = await req.json();
 
     if (!request_id || !action || !["approved", "rejected"].includes(action)) {
