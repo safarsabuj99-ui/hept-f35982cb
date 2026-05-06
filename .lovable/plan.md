@@ -1,73 +1,37 @@
-## Goal
-Simplify the Withdrawals tab so each borrower appears as a **single row** showing total borrow / total returned / outstanding, with **one Return button** that deducts directly from the running total. Clicking the borrower's name opens a **full transaction history** dialog (every borrow + every return chronologically).
+# MFS Fee on Client Payments
 
-## Current Pain
-After the Top-Up feature, each top-up still renders as a child row when the group is expanded, and every child has its own Return button. For borrowers like *Sagro* who borrow many times, this looks cluttered — admin only cares about: "How much does Sagro owe me total? Let me record his payment." History should be on-demand, not always visible.
+When a client pays via an MFS method (bKash / Nagad), admin can apply a percentage fee at approval time. The fee is **deducted from the client's wallet credit** (USD), but the **full BDT amount still lands in the agency account**.
 
-## Proposed UX
+## Behavior
 
-### Withdrawals tab — single row per borrower
-- One flat row per borrower (per source account):
-  - **Borrower name** (clickable → opens history dialog)
-  - Account
-  - Total Borrowed (sum of root + all top-ups)
-  - Total Returned (sum across all entries)
-  - **Outstanding** (the headline number)
-  - Last activity date
-  - Status badge (Active / Partially Returned / Fully Returned / Overdue)
-  - Single **"Return"** button (disabled when outstanding = 0)
-- Remove the chevron / expand UI and the per-entry child sub-table.
+- Client submits payment of ৳1000 via bKash.
+- Admin opens approval dialog → sees an **MFS Fee %** field, prefilled with `0.85` (only when method is bKash/Nagad). Editable per approval, can set to 0.
+- Effective BDT used for wallet credit = `1000 × (1 - 0.85/100)` = ৳991.50
+- Wallet credit (USD) = `991.50 / exchange_rate` per platform
+- Agency account receives the full ৳1000 (unchanged).
+- Description on the wallet transaction notes the fee, e.g. `... (MFS fee 0.85% deducted)`.
+- Audit log records the fee % and BDT amount deducted.
+- For non-MFS methods (Bank, Cash) → no fee field shown, behavior unchanged.
 
-### Borrower history dialog (opens on name click)
-- Header: *"{Borrower} — Transaction History"* with summary chips: Total Borrowed / Total Returned / **Outstanding**.
-- Single chronological timeline (date asc), each row is one of:
-  - **Borrow** entry: date, amount (+৳), note, expected return date.
-  - **Return** entry: date, amount (−৳), note, which account it went back to.
-- Right column shows **running balance** after each event.
-- Read-only; no edit/delete (preserves audit trail). Admin closes dialog and uses the main "Return" button to record a new return.
+## Technical changes
 
-### Return dialog — pay against total outstanding
-- Header: *"Record return from {borrower}"*
-- Shows: Total Borrowed, Already Returned, **Outstanding (max returnable)**, "Return to account" selector, date, optional note.
-- Single amount field, validates `≤ outstanding`.
-- On submit, the system **auto-allocates** the return across the borrower's open withdrawal rows (oldest-first FIFO) so the existing per-row `returned_bdt` / `status` columns and balance-credit trigger keep working untouched. Admin doesn't see or pick rows.
+### 1. UI — `src/pages/PaymentRequests.tsx` approval modal
+- Detect MFS method: `["bkash","nagad"].includes(payment_method.toLowerCase())`.
+- Add numeric input **MFS Fee (%)**, default `0.85`, only visible for MFS.
+- Show live breakdown: Gross ৳1000 → Fee ৳8.50 → Net ৳991.50 → Wallet $X.XX.
+- Pass `mfs_fee_percent` to `approve-payment` edge function in the request body.
 
-```text
-Sagro owes ৳15,000 across 3 withdrawals:
-  Row A: 5,000 borrowed, 0 returned   (oldest)
-  Row B: 7,000 borrowed, 0 returned
-  Row C: 3,000 borrowed, 0 returned
+### 2. Edge function — `supabase/functions/approve-payment/index.ts`
+- Accept new optional param `mfs_fee_percent: number` (0–10).
+- Compute `effectiveBdt = totalBdt * (1 - feePct/100)` used **only** for USD conversion.
+- For multi-platform: apply the same percentage to each platform's BDT before dividing by its rate.
+- Agency account credit still uses original `totalBdt` (no change there).
+- Append `(MFS fee X% = ৳Y)` to transaction description and audit log.
+- If method is not bKash/Nagad, ignore `mfs_fee_percent` (force 0) as a safety guard.
 
-Admin records ৳8,000 return:
-  → Row A fully returned (5,000)
-  → Row B partially returned (3,000)
-  → Row C untouched
-Outstanding now = ৳7,000
-```
+### 3. No DB schema change
+- Fee is transient (per-approval). No new columns needed; the deduction is already reflected in the smaller `final_amount_usd` and the transaction description carries the audit detail.
 
-## Technical Plan (frontend only, no schema change)
-
-File: `src/pages/CashFlowManagement.tsx`
-
-1. **Table render (Withdrawals tab)**: replace the grouped/expandable structure with a flat one-row-per-borrower table. Drop `expandedGroups` state and the children sub-table. Reuse existing grouping helper (`rootMap` → groups with `totalBorrowed`, `totalReturned`, `outstanding`, `allReturned`, `anyOverdue`, `latestDate`).
-2. **Borrower history dialog**: new state `historyGroup`. Click on borrower name sets it. Dialog merges the group's withdrawal rows + matching `cash_withdrawal_returns` rows into a single sorted timeline with running-balance computation.
-3. **Single Return button per group** opens a new "borrower return" dialog that carries the **group** (not a single row).
-4. **New return handler `handleRecordBorrowerReturn`**:
-   - Input: group + amount + to-account + date + note.
-   - Fetch open child rows (already in state) ordered by `date asc, created_at asc`, status ≠ `fully_returned`.
-   - Loop allocating `remaining` to each row:
-     - `apply = min(remaining, row.amount_bdt - row.returned_bdt)`
-     - Insert one `cash_withdrawal_returns` row per touched withdrawal (preserves audit trail and the balance-credit trigger).
-     - Update `cash_withdrawals.returned_bdt` and `status` (`partially_returned` / `fully_returned`).
-   - Stop when `remaining == 0`. Single toast at the end.
-5. **Remove** the legacy per-row return path (`openReturnDialog` / `handleRecordReturn`) since it's no longer reachable from the UI.
-6. **Pagination**: continue paginating over groups.
-7. **No DB / trigger / type changes.**
-
-## Files Touched
-- `src/pages/CashFlowManagement.tsx` (table refactor + borrower history dialog + new return handler/dialog + cleanup)
-
-## Non-Goals
-- No schema migration.
-- No change to the borrower combobox / top-up flow in the Withdraw dialog.
-- No change to liquid-fund loans, transfers, or balance triggers.
+## Files to edit
+- `src/pages/PaymentRequests.tsx` — add fee input + breakdown in approval dialog.
+- `supabase/functions/approve-payment/index.ts` — apply fee to USD conversion only.
