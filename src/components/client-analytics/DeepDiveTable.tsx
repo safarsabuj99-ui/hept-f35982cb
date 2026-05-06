@@ -1390,7 +1390,11 @@ export function DeepDiveTable({
           });
           const hasPaused = Array.from(selectedIds).some(id => {
             const row = data.find(r => r.campaign_id === id);
-            return row && isPausedStatus(row.status);
+            if (!row) return false;
+            // Admins can resume any paused status; clients only regular paused (not guard_paused).
+            if (isAdmin) return isPausedStatus(row.status);
+            const s = row.status.toLowerCase();
+            return s === "paused" || s === "disable";
           });
           if (!canToggleCampaigns && !isAdmin) return null;
           return (
