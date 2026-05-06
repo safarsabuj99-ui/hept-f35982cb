@@ -196,6 +196,21 @@ export default function CashFlowManagement() {
   const { profile } = useProfile();
   const { toast } = useToast();
 
+  // Auto-fill transfer fee defaults from source account
+  useEffect(() => {
+    if (!fromAccId) {
+      setTransferFeePercent("");
+      setTransferFeeFlat("");
+      return;
+    }
+    const acc = accounts.find(a => a.id === fromAccId);
+    if (acc) {
+      setTransferFeePercent(String(acc.default_out_fee_percent ?? 0));
+      setTransferFeeFlat(String(acc.default_out_fee_flat_bdt ?? 0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromAccId]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes, loanRes, loanRetRes] = await Promise.all([
