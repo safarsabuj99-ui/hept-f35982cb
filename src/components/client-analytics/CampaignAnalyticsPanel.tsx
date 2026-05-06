@@ -58,7 +58,8 @@ export function CampaignAnalyticsPanel({ campaignRows, onRefresh, canToggleCampa
       onSetDefaultPreset={(preset) => setDefaultPreset(platform, preset)}
       savedColumnOrder={getColumnOrder(platform)}
       onColumnOrderChange={(order) => setColumnOrder(platform, order)}
-      canToggleCampaigns={canToggleCampaigns}
+      canPause={effCanPause}
+      canResume={effCanResume}
       isAdmin={isAdmin}
     />
   );
