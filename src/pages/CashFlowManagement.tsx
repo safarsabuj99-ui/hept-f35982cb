@@ -66,6 +66,7 @@ interface CashWithdrawal {
   expected_return_date: string | null;
   note: string | null;
   created_at: string;
+  parent_withdrawal_id?: string | null;
 }
 
 interface LiquidFundLoan {
