@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Fragment } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { supabase } from "@/integrations/supabase/client";
