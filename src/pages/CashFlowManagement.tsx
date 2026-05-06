@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle, Landmark } from "lucide-react";
+import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle, Landmark, ChevronRight, ChevronDown, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useProfile } from "@/hooks/useProfile";
@@ -66,6 +68,7 @@ interface CashWithdrawal {
   expected_return_date: string | null;
   note: string | null;
   created_at: string;
+  parent_withdrawal_id?: string | null;
 }
 
 interface LiquidFundLoan {
@@ -161,6 +164,9 @@ export default function CashFlowManagement() {
   const [wdExpectedDate, setWdExpectedDate] = useState("");
   const [wdNote, setWdNote] = useState("");
   const [wdSubmitting, setWdSubmitting] = useState(false);
+  const [wdParentId, setWdParentId] = useState<string | null>(null); // root id when topping up existing borrower
+  const [borrowerPickerOpen, setBorrowerPickerOpen] = useState(false);
+  const [expandedBorrowers, setExpandedBorrowers] = useState<Set<string>>(new Set());
 
   // Return state (for withdrawals)
   const [returnOpen, setReturnOpen] = useState(false);
@@ -525,6 +531,13 @@ export default function CashFlowManagement() {
     }
     setWdSubmitting(true);
 
+    // Resolve root id: if wdParentId is itself a top-up, walk to its root.
+    let rootId: string | null = wdParentId;
+    if (rootId) {
+      const node = withdrawals.find(w => w.id === rootId);
+      if (node?.parent_withdrawal_id) rootId = node.parent_withdrawal_id;
+    }
+
     const { error: insertErr } = await supabase.from("cash_withdrawals" as any).insert({
       from_account_id: wdFromAccId,
       amount_bdt: amt,
@@ -534,6 +547,7 @@ export default function CashFlowManagement() {
       note: wdNote || null,
       created_by: user?.id,
       org_id: profile?.org_id || null,
+      parent_withdrawal_id: rootId,
     } as any);
 
     if (insertErr) {
@@ -545,9 +559,12 @@ export default function CashFlowManagement() {
     await adjustAccountBalance(wdFromAccId, -amt);
 
     setWdSubmitting(false);
-    toast({ title: "Withdrawal Recorded", description: `৳${amt.toLocaleString()} withdrawn from ${(freshAcc as any)?.name}` });
+    toast({
+      title: rootId ? "Top-Up Recorded" : "Withdrawal Recorded",
+      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name}`,
+    });
     setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
-    setWdFromAccId(""); setWdExpectedDate(""); setWdNote("");
+    setWdFromAccId(""); setWdExpectedDate(""); setWdNote(""); setWdParentId(null);
     setWithdrawOpen(false);
     fetchData();
   };
@@ -798,11 +815,157 @@ export default function CashFlowManagement() {
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Record Withdrawal / Loan</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>{wdParentId ? "Add Top-Up Borrow" : "Record Withdrawal / Loan"}</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
               <div>
+                <Label>From Account</Label>
+                <Select
+                  value={wdFromAccId}
+                  onValueChange={(v) => {
+                    setWdFromAccId(v);
+                    // Clear top-up linkage if account changes
+                    if (wdParentId) {
+                      const root = withdrawals.find(w => w.id === wdParentId);
+                      if (root && root.from_account_id !== v) {
+                        setWdParentId(null);
+                        setWdBorrower("");
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectContent>
+                    {activeAccounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Smart Borrower picker: lists existing active borrowers for the chosen account */}
+              <div>
+                <Label>Borrower Name</Label>
+                {(() => {
+                  // Build active borrower list (root rows only) for this account
+                  const activeBorrowers = withdrawals.filter(
+                    w => !w.parent_withdrawal_id
+                      && w.status !== "fully_returned"
+                      && (!wdFromAccId || w.from_account_id === wdFromAccId)
+                  );
+                  const computeOutstanding = (rootId: string) => {
+                    const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
+                    return rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
+                  };
+                  return (
+                    <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className={wdBorrower ? "" : "text-muted-foreground"}>
+                            {wdBorrower || "Type or pick a borrower"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={true}>
+                          <CommandInput
+                            placeholder="Search or create new..."
+                            value={wdBorrower}
+                            onValueChange={(v) => {
+                              setWdBorrower(v);
+                              // Typing breaks the link unless they re-pick
+                              if (wdParentId) {
+                                const root = withdrawals.find(w => w.id === wdParentId);
+                                if (!root || root.borrower_name.toLowerCase() !== v.trim().toLowerCase()) {
+                                  setWdParentId(null);
+                                }
+                              }
+                            }}
+                          />
+                          <CommandList>
+                            {activeBorrowers.length > 0 && (
+                              <CommandGroup heading="Active borrowers (top-up)">
+                                {activeBorrowers.map(b => {
+                                  const outstanding = computeOutstanding(b.id);
+                                  const acc = accounts.find(a => a.id === b.from_account_id);
+                                  return (
+                                    <CommandItem
+                                      key={b.id}
+                                      value={b.borrower_name + " " + b.id}
+                                      onSelect={() => {
+                                        setWdBorrower(b.borrower_name);
+                                        setWdCategory(b.category);
+                                        setWdFromAccId(b.from_account_id);
+                                        setWdParentId(b.id);
+                                        setBorrowerPickerOpen(false);
+                                      }}
+                                    >
+                                      {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium truncate">{b.borrower_name}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
+                            <CommandEmpty>
+                              {wdBorrower.trim()
+                                ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
+                                : "No active borrowers"}
+                            </CommandEmpty>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  );
+                })()}
+              </div>
+
+              {/* Top-up summary card */}
+              {wdParentId && (() => {
+                const root = withdrawals.find(w => w.id === wdParentId);
+                if (!root) return null;
+                const rows = withdrawals.filter(w => w.id === root.id || w.parent_withdrawal_id === root.id);
+                const totalBorrowed = rows.reduce((s, r) => s + Number(r.amount_bdt), 0);
+                const totalReturned = rows.reduce((s, r) => s + Number(r.returned_bdt), 0);
+                const outstanding = totalBorrowed - totalReturned;
+                return (
+                  <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-warning">Top-Up Mode</span>
+                      <button
+                        type="button"
+                        onClick={() => { setWdParentId(null); setWdBorrower(""); }}
+                        className="text-xs underline text-muted-foreground hover:text-foreground"
+                      >
+                        Make new instead
+                      </button>
+                    </div>
+                    <div className="text-xs text-muted-foreground grid grid-cols-3 gap-2 pt-1">
+                      <div><div>Borrowed</div><div className="font-mono font-semibold text-foreground">৳{totalBorrowed.toLocaleString()}</div></div>
+                      <div><div>Returned</div><div className="font-mono font-semibold text-success">৳{totalReturned.toLocaleString()}</div></div>
+                      <div><div>Outstanding</div><div className="font-mono font-semibold text-destructive">৳{outstanding.toLocaleString()}</div></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div>
                 <Label>Category</Label>
-                <Select value={wdCategory} onValueChange={setWdCategory}>
+                <Select value={wdCategory} onValueChange={setWdCategory} disabled={!!wdParentId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="personal_loan">Personal Loan</SelectItem>
@@ -814,25 +977,8 @@ export default function CashFlowManagement() {
                 </Select>
               </div>
               <div>
-                <Label>Borrower Name</Label>
-                <Input placeholder="Who is this for?" value={wdBorrower} onChange={e => setWdBorrower(e.target.value)} />
-              </div>
-              <div>
                 <Label>Amount (BDT)</Label>
                 <Input type="number" placeholder="e.g. 50000" value={wdAmount} onChange={e => setWdAmount(e.target.value)} />
-              </div>
-              <div>
-                <Label>From Account</Label>
-                <Select value={wdFromAccId} onValueChange={setWdFromAccId}>
-                  <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
-                  <SelectContent>
-                    {activeAccounts.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name} (৳{Number(a.current_balance_bdt).toLocaleString()})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
               <div>
                 <Label>Expected Return Date (optional)</Label>
@@ -843,7 +989,8 @@ export default function CashFlowManagement() {
                 <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
               </div>
               <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
-                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Record Withdrawal
+                {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {wdParentId ? "Add Top-Up" : "Record Withdrawal"}
               </Button>
             </div>
           </DialogContent>
@@ -1144,118 +1291,217 @@ export default function CashFlowManagement() {
                 <p className="text-center text-muted-foreground py-8">No withdrawals recorded yet</p>
               ) : (
                 <>
-                  {/* Mobile card view */}
-                  <div className="flex flex-col gap-3 md:hidden">
-                    {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
-                      const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
-                      const overdue = isOverdue(w);
-                      const fromAcc = accounts.find(a => a.id === w.from_account_id);
-                      return (
-                        <div key={w.id} className={`rounded-xl border p-4 space-y-3 bg-card ${overdue ? "border-destructive/50" : ""}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs">
-                                {CATEGORY_LABELS[w.category] || w.category}
-                              </Badge>
-                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
-                                {w.status.replace(/_/g, " ")}
-                              </Badge>
-                              {overdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{w.borrower_name || "—"}</p>
-                            <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"} · {new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</p>
-                              {remaining > 0 && remaining < Number(w.amount_bdt) && (
-                                <p className="text-xs text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
-                              )}
-                            </div>
-                            {w.status !== "fully_returned" && (
-                              <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
-                                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                              </Button>
-                            )}
-                          </div>
-                          {w.expected_return_date && (
-                            <p className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                              {overdue ? "Overdue" : "Due"}: {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    // Build groups: rootId -> { root, children, totals }
+                    const rootMap = new Map<string, { root: CashWithdrawal; children: CashWithdrawal[] }>();
+                    for (const w of withdrawals) {
+                      if (!w.parent_withdrawal_id) {
+                        if (!rootMap.has(w.id)) rootMap.set(w.id, { root: w, children: [] });
+                        else rootMap.get(w.id)!.root = w;
+                      }
+                    }
+                    for (const w of withdrawals) {
+                      if (w.parent_withdrawal_id) {
+                        const g = rootMap.get(w.parent_withdrawal_id);
+                        if (g) g.children.push(w);
+                        else rootMap.set(w.id, { root: w, children: [] }); // orphan fallback
+                      }
+                    }
+                    const groups = Array.from(rootMap.values()).map(g => {
+                      const all = [g.root, ...g.children];
+                      const totalBorrowed = all.reduce((s, r) => s + Number(r.amount_bdt), 0);
+                      const totalReturned = all.reduce((s, r) => s + Number(r.returned_bdt), 0);
+                      const outstanding = totalBorrowed - totalReturned;
+                      const allReturned = all.every(r => r.status === "fully_returned");
+                      const anyOverdue = all.some(r => isOverdue(r));
+                      const latestDate = all.reduce((m, r) => (r.created_at > m ? r.created_at : m), g.root.created_at);
+                      return { ...g, all, totalBorrowed, totalReturned, outstanding, allReturned, anyOverdue, latestDate };
+                    }).sort((a, b) => b.latestDate.localeCompare(a.latestDate));
 
-                  {/* Desktop table */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Borrower</TableHead>
-                          <TableHead>From</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-right">Outstanding</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
-                          const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
-                          const overdue = isOverdue(w);
-                          const fromAcc = accounts.find(a => a.id === w.from_account_id);
-                          return (
-                            <TableRow key={w.id} className={overdue ? "bg-destructive/5" : ""}>
-                              <TableCell className="font-mono text-sm">{new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[w.category] || w.category}</Badge>
-                              </TableCell>
-                              <TableCell className="font-medium">{w.borrower_name || "—"}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
-                              <TableCell className="text-right font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</TableCell>
-                              <TableCell className={`text-right font-mono font-semibold ${remaining > 0 ? "text-destructive" : "text-success"}`}>
-                                ৳{remaining.toLocaleString()}
-                              </TableCell>
-                              <TableCell className={`text-sm ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                                {w.expected_return_date ? (
-                                  <span className="flex items-center gap-1">
-                                    {overdue && <AlertTriangle className="h-3 w-3" />}
-                                    {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                  </span>
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
-                                  {w.status.replace(/_/g, " ")}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {w.status !== "fully_returned" && (
-                                  <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
-                                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                                  </Button>
+                    const pagedGroups = groups.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize);
+
+                    const toggleExpand = (rootId: string) => {
+                      setExpandedBorrowers(prev => {
+                        const next = new Set(prev);
+                        if (next.has(rootId)) next.delete(rootId);
+                        else next.add(rootId);
+                        return next;
+                      });
+                    };
+
+                    return (
+                      <>
+                        {/* Mobile card view */}
+                        <div className="flex flex-col gap-3 md:hidden">
+                          {pagedGroups.map(g => {
+                            const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
+                            const isOpen = expandedBorrowers.has(g.root.id);
+                            return (
+                              <div key={g.root.id} className={`rounded-xl border bg-card ${g.anyOverdue ? "border-destructive/50" : ""}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(g.root.id)}
+                                  className="w-full p-4 space-y-3 text-left"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                      {g.children.length > 0 && (
+                                        <Badge variant="outline" className="text-xs">{g.all.length} entries</Badge>
+                                      )}
+                                      {g.anyOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                                    </div>
+                                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{g.root.borrower_name || "—"}</p>
+                                    <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"}</p>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2 text-xs">
+                                    <div><div className="text-muted-foreground">Borrowed</div><div className="font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</div></div>
+                                    <div><div className="text-muted-foreground">Returned</div><div className="font-mono font-semibold text-success">৳{g.totalReturned.toLocaleString()}</div></div>
+                                    <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{g.outstanding.toLocaleString()}</div></div>
+                                  </div>
+                                </button>
+                                {isOpen && (
+                                  <div className="border-t bg-muted/20 divide-y">
+                                    {g.all.map(child => {
+                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
+                                      return (
+                                        <div key={child.id} className="p-3 flex items-center justify-between">
+                                          <div>
+                                            <p className="text-xs text-muted-foreground">{new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                                            <p className="font-mono text-sm">৳{Number(child.amount_bdt).toLocaleString()}</p>
+                                            {remaining > 0 && remaining < Number(child.amount_bdt) && (
+                                              <p className="text-[10px] text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
+                                            )}
+                                          </div>
+                                          {child.status !== "fully_returned" && (
+                                            <Button size="sm" variant="outline" onClick={() => openReturnDialog(child)}>
+                                              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                            </Button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <TablePagination
-                    totalItems={withdrawals.length}
-                    pageSize={wdPageSize}
-                    currentPage={wdPage}
-                    onPageChange={setWdPage}
-                    onPageSizeChange={setWdPageSize}
-                  />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-8"></TableHead>
+                                <TableHead>Last Date</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Borrower</TableHead>
+                                <TableHead>From</TableHead>
+                                <TableHead className="text-right">Total Borrowed</TableHead>
+                                <TableHead className="text-right">Returned</TableHead>
+                                <TableHead className="text-right">Outstanding</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {pagedGroups.map(g => {
+                                const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
+                                const isOpen = expandedBorrowers.has(g.root.id);
+                                const hasChildren = g.children.length > 0;
+                                return (
+                                  <Fragment key={g.root.id}>
+                                    <TableRow
+                                      className={`${g.anyOverdue ? "bg-destructive/5" : ""} cursor-pointer`}
+                                      onClick={() => hasChildren && toggleExpand(g.root.id)}
+                                    >
+                                      <TableCell>
+                                        {hasChildren ? (
+                                          isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                                        ) : null}
+                                      </TableCell>
+                                      <TableCell className="font-mono text-sm">{new Date(g.latestDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                                      <TableCell>
+                                        <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {g.root.borrower_name || "—"}
+                                        {hasChildren && (
+                                          <span className="ml-2 text-xs text-muted-foreground">({g.all.length}×)</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
+                                      <TableCell className="text-right font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</TableCell>
+                                      <TableCell className="text-right font-mono text-success">৳{g.totalReturned.toLocaleString()}</TableCell>
+                                      <TableCell className={`text-right font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>
+                                        ৳{g.outstanding.toLocaleString()}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant={g.allReturned ? "secondary" : (g.totalReturned > 0 ? "warning" as any : "destructive")} className="text-xs capitalize">
+                                          {g.allReturned ? "Fully returned" : (g.totalReturned > 0 ? "Partially returned" : "Active")}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell onClick={(e) => e.stopPropagation()}>
+                                        {!g.allReturned && (
+                                          <Button size="sm" variant="outline" onClick={() => openReturnDialog(g.root)}>
+                                            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    {isOpen && g.all.map(child => {
+                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
+                                      const overdue = isOverdue(child);
+                                      return (
+                                        <TableRow key={child.id} className="bg-muted/20 text-xs">
+                                          <TableCell></TableCell>
+                                          <TableCell className="font-mono pl-8">↳ {new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                                          <TableCell colSpan={2} className="text-muted-foreground">
+                                            {child.parent_withdrawal_id ? "Top-up" : "Original"}
+                                            {child.note ? ` · ${child.note}` : ""}
+                                          </TableCell>
+                                          <TableCell className="text-muted-foreground">
+                                            {child.expected_return_date ? `Due ${new Date(child.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                                            {overdue && <AlertTriangle className="inline h-3 w-3 ml-1 text-destructive" />}
+                                          </TableCell>
+                                          <TableCell className="text-right font-mono">৳{Number(child.amount_bdt).toLocaleString()}</TableCell>
+                                          <TableCell className="text-right font-mono text-success">৳{Number(child.returned_bdt).toLocaleString()}</TableCell>
+                                          <TableCell className={`text-right font-mono ${remaining > 0 ? "text-destructive" : "text-success"}`}>৳{remaining.toLocaleString()}</TableCell>
+                                          <TableCell>
+                                            <Badge variant={STATUS_VARIANTS[child.status] || "secondary"} className="text-[10px] capitalize">
+                                              {child.status.replace(/_/g, " ")}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            {child.status !== "fully_returned" && (
+                                              <Button size="sm" variant="ghost" onClick={() => openReturnDialog(child)}>
+                                                <RotateCcw className="mr-1 h-3 w-3" /> Return
+                                              </Button>
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </Fragment>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <TablePagination
+                          totalItems={groups.length}
+                          pageSize={wdPageSize}
+                          currentPage={wdPage}
+                          onPageChange={setWdPage}
+                          onPageSizeChange={setWdPageSize}
+                        />
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
