@@ -831,6 +831,33 @@ export default function PaymentRequests() {
                 )}
               </div>
 
+              {confirmModal.action === "approved" && currentIsMfs && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-sm font-medium">MFS Fee ({confirmModal.request?.payment_method})</Label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={10}
+                        value={mfsFeePercent}
+                        onChange={(e) => setMfsFeePercent(Number(e.target.value))}
+                        className="w-20 h-8 text-xs font-mono text-right"
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  {effectiveFeePct > 0 && (
+                    <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                      <span>Gross ৳{fmt(grossBdt)} − Fee ৳{fmt(feeBdt)}</span>
+                      <span className="font-semibold text-foreground">Net ৳{fmt(netBdt)}</span>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">Full ৳{fmt(grossBdt)} credited to agency account; only net converts to wallet USD.</p>
+                </div>
+              )}
+
               {confirmModal.action === "approved" && (
                 <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
                   {rateLoading ? (
