@@ -220,7 +220,7 @@ export default function CashFlowManagement() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes, loanRes, loanRetRes] = await Promise.all([
+    const [accRes, transferRes, paymentRes, purchaseRes, expenseRes, liquidRes, wdRes, wdRetRes, loanRes, loanRetRes] = await Promise.all([
       supabase.from("agency_accounts" as any).select("*").order("type").order("name"),
       supabase.from("fund_transfers" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("payment_requests" as any).select("amount_bdt, payment_method, created_at, status, received_in_account_id").eq("status", "approved").order("created_at", { ascending: false }).limit(10),
@@ -228,6 +228,7 @@ export default function CashFlowManagement() {
       supabase.from("agency_expenses" as any).select("amount_bdt, category, date, created_at, paid_from_account_id, description").order("created_at", { ascending: false }).limit(10),
       supabase.from("liquid_fund_entries" as any).select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("cash_withdrawals" as any).select("*").order("created_at", { ascending: false }),
+      supabase.from("cash_withdrawal_returns" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("liquid_fund_loans" as any).select("*").order("created_at", { ascending: false }),
       supabase.from("liquid_fund_loan_returns" as any).select("*").order("created_at", { ascending: false }).limit(20),
     ]);
