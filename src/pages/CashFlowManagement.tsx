@@ -1291,118 +1291,218 @@ export default function CashFlowManagement() {
                 <p className="text-center text-muted-foreground py-8">No withdrawals recorded yet</p>
               ) : (
                 <>
-                  {/* Mobile card view */}
-                  <div className="flex flex-col gap-3 md:hidden">
-                    {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
-                      const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
-                      const overdue = isOverdue(w);
-                      const fromAcc = accounts.find(a => a.id === w.from_account_id);
-                      return (
-                        <div key={w.id} className={`rounded-xl border p-4 space-y-3 bg-card ${overdue ? "border-destructive/50" : ""}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs">
-                                {CATEGORY_LABELS[w.category] || w.category}
-                              </Badge>
-                              <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
-                                {w.status.replace(/_/g, " ")}
-                              </Badge>
-                              {overdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{w.borrower_name || "—"}</p>
-                            <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"} · {new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</p>
-                              {remaining > 0 && remaining < Number(w.amount_bdt) && (
-                                <p className="text-xs text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
-                              )}
-                            </div>
-                            {w.status !== "fully_returned" && (
-                              <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
-                                <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                              </Button>
-                            )}
-                          </div>
-                          {w.expected_return_date && (
-                            <p className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                              {overdue ? "Overdue" : "Due"}: {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    // Build groups: rootId -> { root, children, totals }
+                    const rootMap = new Map<string, { root: CashWithdrawal; children: CashWithdrawal[] }>();
+                    for (const w of withdrawals) {
+                      if (!w.parent_withdrawal_id) {
+                        if (!rootMap.has(w.id)) rootMap.set(w.id, { root: w, children: [] });
+                        else rootMap.get(w.id)!.root = w;
+                      }
+                    }
+                    for (const w of withdrawals) {
+                      if (w.parent_withdrawal_id) {
+                        const g = rootMap.get(w.parent_withdrawal_id);
+                        if (g) g.children.push(w);
+                        else rootMap.set(w.id, { root: w, children: [] }); // orphan fallback
+                      }
+                    }
+                    const groups = Array.from(rootMap.values()).map(g => {
+                      const all = [g.root, ...g.children];
+                      const totalBorrowed = all.reduce((s, r) => s + Number(r.amount_bdt), 0);
+                      const totalReturned = all.reduce((s, r) => s + Number(r.returned_bdt), 0);
+                      const outstanding = totalBorrowed - totalReturned;
+                      const allReturned = all.every(r => r.status === "fully_returned");
+                      const anyOverdue = all.some(r => isOverdue(r));
+                      const latestDate = all.reduce((m, r) => (r.created_at > m ? r.created_at : m), g.root.created_at);
+                      return { ...g, all, totalBorrowed, totalReturned, outstanding, allReturned, anyOverdue, latestDate };
+                    }).sort((a, b) => b.latestDate.localeCompare(a.latestDate));
 
-                  {/* Desktop table */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Borrower</TableHead>
-                          <TableHead>From</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-right">Outstanding</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {withdrawals.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize).map(w => {
-                          const remaining = Number(w.amount_bdt) - Number(w.returned_bdt);
-                          const overdue = isOverdue(w);
-                          const fromAcc = accounts.find(a => a.id === w.from_account_id);
-                          return (
-                            <TableRow key={w.id} className={overdue ? "bg-destructive/5" : ""}>
-                              <TableCell className="font-mono text-sm">{new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[w.category] || w.category}</Badge>
-                              </TableCell>
-                              <TableCell className="font-medium">{w.borrower_name || "—"}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
-                              <TableCell className="text-right font-mono font-semibold">৳{Number(w.amount_bdt).toLocaleString()}</TableCell>
-                              <TableCell className={`text-right font-mono font-semibold ${remaining > 0 ? "text-destructive" : "text-success"}`}>
-                                ৳{remaining.toLocaleString()}
-                              </TableCell>
-                              <TableCell className={`text-sm ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                                {w.expected_return_date ? (
-                                  <span className="flex items-center gap-1">
-                                    {overdue && <AlertTriangle className="h-3 w-3" />}
-                                    {new Date(w.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                  </span>
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={STATUS_VARIANTS[w.status] || "secondary"} className="text-xs capitalize">
-                                  {w.status.replace(/_/g, " ")}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {w.status !== "fully_returned" && (
-                                  <Button size="sm" variant="outline" onClick={() => openReturnDialog(w)}>
-                                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
-                                  </Button>
+                    const pagedGroups = groups.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize);
+
+                    const toggleExpand = (rootId: string) => {
+                      setExpandedBorrowers(prev => {
+                        const next = new Set(prev);
+                        if (next.has(rootId)) next.delete(rootId);
+                        else next.add(rootId);
+                        return next;
+                      });
+                    };
+
+                    return (
+                      <>
+                        {/* Mobile card view */}
+                        <div className="flex flex-col gap-3 md:hidden">
+                          {pagedGroups.map(g => {
+                            const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
+                            const isOpen = expandedBorrowers.has(g.root.id);
+                            return (
+                              <div key={g.root.id} className={`rounded-xl border bg-card ${g.anyOverdue ? "border-destructive/50" : ""}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(g.root.id)}
+                                  className="w-full p-4 space-y-3 text-left"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                      {g.children.length > 0 && (
+                                        <Badge variant="outline" className="text-xs">{g.all.length} entries</Badge>
+                                      )}
+                                      {g.anyOverdue && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                                    </div>
+                                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{g.root.borrower_name || "—"}</p>
+                                    <p className="text-xs text-muted-foreground">{fromAcc?.name || "?"}</p>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2 text-xs">
+                                    <div><div className="text-muted-foreground">Borrowed</div><div className="font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</div></div>
+                                    <div><div className="text-muted-foreground">Returned</div><div className="font-mono font-semibold text-success">৳{g.totalReturned.toLocaleString()}</div></div>
+                                    <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{g.outstanding.toLocaleString()}</div></div>
+                                  </div>
+                                </button>
+                                {isOpen && (
+                                  <div className="border-t bg-muted/20 divide-y">
+                                    {g.all.map(child => {
+                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
+                                      return (
+                                        <div key={child.id} className="p-3 flex items-center justify-between">
+                                          <div>
+                                            <p className="text-xs text-muted-foreground">{new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                                            <p className="font-mono text-sm">৳{Number(child.amount_bdt).toLocaleString()}</p>
+                                            {remaining > 0 && remaining < Number(child.amount_bdt) && (
+                                              <p className="text-[10px] text-muted-foreground">Outstanding: ৳{remaining.toLocaleString()}</p>
+                                            )}
+                                          </div>
+                                          {child.status !== "fully_returned" && (
+                                            <Button size="sm" variant="outline" onClick={() => openReturnDialog(child)}>
+                                              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                            </Button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <TablePagination
-                    totalItems={withdrawals.length}
-                    pageSize={wdPageSize}
-                    currentPage={wdPage}
-                    onPageChange={setWdPage}
-                    onPageSizeChange={setWdPageSize}
-                  />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Desktop table */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-8"></TableHead>
+                                <TableHead>Last Date</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Borrower</TableHead>
+                                <TableHead>From</TableHead>
+                                <TableHead className="text-right">Total Borrowed</TableHead>
+                                <TableHead className="text-right">Returned</TableHead>
+                                <TableHead className="text-right">Outstanding</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {pagedGroups.map(g => {
+                                const fromAcc = accounts.find(a => a.id === g.root.from_account_id);
+                                const isOpen = expandedBorrowers.has(g.root.id);
+                                const hasChildren = g.children.length > 0;
+                                return (
+                                  <>
+                                    <TableRow
+                                      key={g.root.id}
+                                      className={`${g.anyOverdue ? "bg-destructive/5" : ""} cursor-pointer`}
+                                      onClick={() => hasChildren && toggleExpand(g.root.id)}
+                                    >
+                                      <TableCell>
+                                        {hasChildren ? (
+                                          isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                                        ) : null}
+                                      </TableCell>
+                                      <TableCell className="font-mono text-sm">{new Date(g.latestDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                                      <TableCell>
+                                        <Badge variant="secondary" className="text-xs">{CATEGORY_LABELS[g.root.category] || g.root.category}</Badge>
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {g.root.borrower_name || "—"}
+                                        {hasChildren && (
+                                          <span className="ml-2 text-xs text-muted-foreground">({g.all.length}×)</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{fromAcc?.name || "?"}</TableCell>
+                                      <TableCell className="text-right font-mono font-semibold">৳{g.totalBorrowed.toLocaleString()}</TableCell>
+                                      <TableCell className="text-right font-mono text-success">৳{g.totalReturned.toLocaleString()}</TableCell>
+                                      <TableCell className={`text-right font-mono font-semibold ${g.outstanding > 0 ? "text-destructive" : "text-success"}`}>
+                                        ৳{g.outstanding.toLocaleString()}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant={g.allReturned ? "secondary" : (g.totalReturned > 0 ? "warning" as any : "destructive")} className="text-xs capitalize">
+                                          {g.allReturned ? "Fully returned" : (g.totalReturned > 0 ? "Partially returned" : "Active")}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell onClick={(e) => e.stopPropagation()}>
+                                        {!g.allReturned && (
+                                          <Button size="sm" variant="outline" onClick={() => openReturnDialog(g.root)}>
+                                            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Return
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    {isOpen && g.all.map(child => {
+                                      const remaining = Number(child.amount_bdt) - Number(child.returned_bdt);
+                                      const overdue = isOverdue(child);
+                                      return (
+                                        <TableRow key={child.id} className="bg-muted/20 text-xs">
+                                          <TableCell></TableCell>
+                                          <TableCell className="font-mono pl-8">↳ {new Date(child.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
+                                          <TableCell colSpan={2} className="text-muted-foreground">
+                                            {child.parent_withdrawal_id ? "Top-up" : "Original"}
+                                            {child.note ? ` · ${child.note}` : ""}
+                                          </TableCell>
+                                          <TableCell className="text-muted-foreground">
+                                            {child.expected_return_date ? `Due ${new Date(child.expected_return_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                                            {overdue && <AlertTriangle className="inline h-3 w-3 ml-1 text-destructive" />}
+                                          </TableCell>
+                                          <TableCell className="text-right font-mono">৳{Number(child.amount_bdt).toLocaleString()}</TableCell>
+                                          <TableCell className="text-right font-mono text-success">৳{Number(child.returned_bdt).toLocaleString()}</TableCell>
+                                          <TableCell className={`text-right font-mono ${remaining > 0 ? "text-destructive" : "text-success"}`}>৳{remaining.toLocaleString()}</TableCell>
+                                          <TableCell>
+                                            <Badge variant={STATUS_VARIANTS[child.status] || "secondary"} className="text-[10px] capitalize">
+                                              {child.status.replace(/_/g, " ")}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            {child.status !== "fully_returned" && (
+                                              <Button size="sm" variant="ghost" onClick={() => openReturnDialog(child)}>
+                                                <RotateCcw className="mr-1 h-3 w-3" /> Return
+                                              </Button>
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <TablePagination
+                          totalItems={groups.length}
+                          pageSize={wdPageSize}
+                          currentPage={wdPage}
+                          onPageChange={setWdPage}
+                          onPageSizeChange={setWdPageSize}
+                        />
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
