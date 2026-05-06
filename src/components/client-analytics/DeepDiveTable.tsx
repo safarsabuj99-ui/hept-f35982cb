@@ -126,7 +126,12 @@ interface DeepDiveTableProps {
   onSetDefaultPreset?: (preset: PresetType) => void;
   savedColumnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
+  /** @deprecated use canPause + canResume. Kept for back-compat (true => both). */
   canToggleCampaigns?: boolean;
+  /** Client may turn campaigns OFF (pause). */
+  canPause?: boolean;
+  /** Client may turn campaigns ON (resume). */
+  canResume?: boolean;
   isAdmin?: boolean;
 }
 
