@@ -659,7 +659,8 @@ export function DeepDiveTable({
           const row = info.row.original;
           const clientPaused = row.status.toLowerCase() === "paused" || row.status.toLowerCase() === "disable";
           const isSelectable = row.campaign_id && (
-            (canToggleCampaigns && (isActiveStatus(row.status) || clientPaused)) ||
+            (canPause && isActiveStatus(row.status)) ||
+            (canResume && clientPaused) ||
             (isAdmin && isPausedStatus(row.status))
           );
           if (!isSelectable) return <div className="w-4" />;
