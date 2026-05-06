@@ -170,7 +170,7 @@ export default function ClientReports() {
     // so they have rows to switch back ON from the client panel.
     for (const c of campaigns) {
       const isPaused = c.status?.toLowerCase() === "paused" || c.status?.toLowerCase() === "disable";
-      const shouldInject = isActiveStatus(c.status) || (canToggleCampaigns && isPaused);
+      const shouldInject = isActiveStatus(c.status) || (canResume && isPaused);
       if (shouldInject && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
@@ -189,14 +189,14 @@ export default function ClientReports() {
     return Object.values(map).filter(r => {
       if (isActiveStatus(r.status)) return true;
       if (r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0) return true;
-      // Keep paused rows visible when client can toggle them back on
-      if (canToggleCampaigns) {
+      // Keep paused rows visible when client can resume them
+      if (canResume) {
         const s = r.status.toLowerCase();
         if (s === "paused" || s === "disable") return true;
       }
       return false;
     });
-  }, [rawMetrics, adAccountMap, campaigns, canToggleCampaigns]);
+  }, [rawMetrics, adAccountMap, campaigns, canResume]);
 
 
   if (loading) {
