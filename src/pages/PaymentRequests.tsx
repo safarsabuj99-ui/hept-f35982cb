@@ -237,6 +237,7 @@ export default function PaymentRequests() {
     setSelectedAccountId("");
     setOverriddenPlatform(request.platform || "");
     setPerPlatformRates({});
+    setMfsFeePercent(isMfsMethod(request.payment_method) ? 0.85 : 0);
     setConfirmModal({ open: true, request, action });
 
     if (action === "approved") {
