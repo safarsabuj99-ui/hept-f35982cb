@@ -460,7 +460,10 @@ export function DeepDiveTable({
     () => paginatedData.filter(r => {
       if (!r.campaign_id) return false;
       if (canToggleCampaigns && isActiveStatus(r.status)) return true;
+      // Allow resume of paused campaigns when caller has toggle perms (clients) or is admin.
+      // Guard-paused campaigns are intentionally excluded for clients — those require a top-up.
       if (isAdmin && isPausedStatus(r.status)) return true;
+      if (canToggleCampaigns && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
       return false;
     }),
     [paginatedData, canToggleCampaigns, isAdmin]
