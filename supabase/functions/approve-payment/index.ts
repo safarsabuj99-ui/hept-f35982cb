@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action_type: "payment_approved",
-      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}`,
+      description: `Approved payment ৳${totalBdt.toLocaleString()} → $${finalUsd}${rateInfo} for client ${pr.client_id}${platformInfo}${feePct > 0 ? ` [MFS fee ${feePct}% = ৳${feeBdtTotal.toFixed(2)}]` : ""}`,
       org_id: pr.org_id,
     });
 
