@@ -35,8 +35,9 @@ export default function ClientReports() {
       .select("client_permissions")
       .eq("user_id", effectiveClientId)
       .maybeSingle();
-    const perms = (profileData as any)?.client_permissions || {};
-    setCanToggleCampaigns(perms.can_toggle_campaigns === true);
+    const legacy = perms.can_toggle_campaigns === true;
+    setCanPause(perms.can_pause_campaigns === true || legacy);
+    setCanResume(perms.can_resume_campaigns === true || legacy);
 
     const { data: accClients } = await supabase
       .from("ad_account_clients")
