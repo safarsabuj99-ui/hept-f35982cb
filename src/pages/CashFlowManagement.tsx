@@ -164,6 +164,9 @@ export default function CashFlowManagement() {
   const [wdExpectedDate, setWdExpectedDate] = useState("");
   const [wdNote, setWdNote] = useState("");
   const [wdSubmitting, setWdSubmitting] = useState(false);
+  const [wdParentId, setWdParentId] = useState<string | null>(null); // root id when topping up existing borrower
+  const [borrowerPickerOpen, setBorrowerPickerOpen] = useState(false);
+  const [expandedBorrowers, setExpandedBorrowers] = useState<Set<string>>(new Set());
 
   // Return state (for withdrawals)
   const [returnOpen, setReturnOpen] = useState(false);
