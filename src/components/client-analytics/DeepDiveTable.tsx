@@ -474,14 +474,13 @@ export function DeepDiveTable({
   const selectableRows = useMemo(
     () => paginatedData.filter(r => {
       if (!r.campaign_id) return false;
-      if (canToggleCampaigns && isActiveStatus(r.status)) return true;
-      // Allow resume of paused campaigns when caller has toggle perms (clients) or is admin.
-      // Guard-paused campaigns are intentionally excluded for clients — those require a top-up.
+      if (canPause && isActiveStatus(r.status)) return true;
+      // Admin can resume any paused (incl. guard_paused). Clients with canResume can resume regular paused only.
       if (isAdmin && isPausedStatus(r.status)) return true;
-      if (canToggleCampaigns && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
+      if (canResume && (r.status.toLowerCase() === "paused" || r.status.toLowerCase() === "disable")) return true;
       return false;
     }),
-    [paginatedData, canToggleCampaigns, isAdmin]
+    [paginatedData, canPause, canResume, isAdmin]
   );
 
   const toggleSelect = useCallback((id: string) => {
