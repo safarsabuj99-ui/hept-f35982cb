@@ -165,13 +165,9 @@ export default function ClientReports() {
       if (row.leads_tiktok_dm) map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(row.leads_tiktok_dm);
       if (row.conversations_instant_msg) map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(row.conversations_instant_msg);
     }
-    // Inject active campaigns that have no metrics for the selected date range.
-    // When the client has campaign on/off control, also inject paused campaigns
-    // so they have rows to switch back ON from the client panel.
+    // Match agency view: only inject active campaigns with no metrics.
     for (const c of campaigns) {
-      const isPaused = c.status?.toLowerCase() === "paused" || c.status?.toLowerCase() === "disable";
-      const shouldInject = isActiveStatus(c.status) || (canResume && isPaused);
-      if (shouldInject && !map[c.id]) {
+      if (isActiveStatus(c.status) && !map[c.id]) {
         map[c.id] = {
           campaign_name: c.name || "Unknown",
           platform: c.platform || "unknown",
@@ -186,17 +182,10 @@ export default function ClientReports() {
         };
       }
     }
-    return Object.values(map).filter(r => {
-      if (isActiveStatus(r.status)) return true;
-      if (r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0) return true;
-      // Keep paused rows visible when client can resume them
-      if (canResume) {
-        const s = r.status.toLowerCase();
-        if (s === "paused" || s === "disable") return true;
-      }
-      return false;
-    });
-  }, [rawMetrics, adAccountMap, campaigns, canResume]);
+    return Object.values(map).filter(r =>
+      isActiveStatus(r.status) || r.spend > 0 || r.impressions > 0 || r.clicks > 0 || r.results > 0
+    );
+  }, [rawMetrics, adAccountMap, campaigns]);
 
 
   if (loading) {
