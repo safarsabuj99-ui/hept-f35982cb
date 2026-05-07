@@ -153,6 +153,20 @@ export default function ClientReports() {
           spend: 0,
           results: 0,
           conversion_value: 0,
+          view_content: 0,
+          add_to_cart: 0,
+          initiate_checkout: 0,
+          purchase: 0,
+          messaging_conversations: 0,
+          new_messaging_contacts: 0,
+          create_order: 0,
+          reach: 0,
+          cpm: 0,
+          cost_per_purchase: 0,
+          cost_per_message: 0,
+          conversations_tiktok_dm: 0,
+          leads_tiktok_dm: 0,
+          conversations_instant_msg: 0,
         };
       }
       map[key].impressions += Number(row.impressions);
@@ -160,10 +174,24 @@ export default function ClientReports() {
       map[key].spend += Number(row.spend);
       map[key].results += Number(row.results ?? 0);
       map[key].conversion_value += Number(row.conversion_value ?? 0);
+      map[key].view_content = (map[key].view_content ?? 0) + Number(row.view_content ?? 0);
+      map[key].add_to_cart = (map[key].add_to_cart ?? 0) + Number(row.add_to_cart ?? 0);
+      map[key].initiate_checkout = (map[key].initiate_checkout ?? 0) + Number(row.initiate_checkout ?? 0);
+      map[key].purchase = (map[key].purchase ?? 0) + Number(row.purchase ?? 0);
+      map[key].messaging_conversations = (map[key].messaging_conversations ?? 0) + Number(row.messaging_conversations ?? 0);
+      map[key].new_messaging_contacts = (map[key].new_messaging_contacts ?? 0) + Number(row.new_messaging_contacts ?? 0);
+      map[key].create_order = (map[key].create_order ?? 0) + Number(row.create_order ?? 0);
+      map[key].reach = (map[key].reach ?? 0) + Number(row.reach ?? 0);
+      map[key].conversations_tiktok_dm = (map[key].conversations_tiktok_dm ?? 0) + Number(row.conversations_tiktok_dm ?? 0);
+      map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(row.leads_tiktok_dm ?? 0);
+      map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(row.conversations_instant_msg ?? 0);
       if (row.budget) map[key].budget = (map[key].budget ?? 0) + Number(row.budget);
-      if (row.conversations_tiktok_dm) map[key].conversations_tiktok_dm = (map[key].conversations_tiktok_dm ?? 0) + Number(row.conversations_tiktok_dm);
-      if (row.leads_tiktok_dm) map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(row.leads_tiktok_dm);
-      if (row.conversations_instant_msg) map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(row.conversations_instant_msg);
+    }
+    // Recompute derived ratios from aggregated totals (mirrors agency view).
+    for (const r of Object.values(map)) {
+      if ((r.purchase ?? 0) > 0) r.cost_per_purchase = r.spend / r.purchase!;
+      if ((r.messaging_conversations ?? 0) > 0) r.cost_per_message = r.spend / r.messaging_conversations!;
+      if (r.impressions > 0) r.cpm = (r.spend / r.impressions) * 1000;
     }
     // Match agency view: only inject active campaigns with no metrics.
     for (const c of campaigns) {
