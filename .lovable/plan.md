@@ -1,29 +1,40 @@
-# Align Client Performance Analytics with Agency View
-
 ## Problem
 
-On `/client/reports` (Performance Analytics), the campaign list shows many campaigns with all-zero metrics (mostly paused TikTok ones). The agency-side view of the same client (`/admin/clients/:id` Spend tab) only shows active campaigns plus any campaign that actually has data in the selected date range — so the two views disagree on which rows to display.
+On the client-side `Performance Analytics` page (`/dashboard/reports`), columns like **Messages, New Contacts, Returning, Create Order, Cost/Message, Purchase, Add-to-Cart, ROAS, CPM, Reach** all render `0` even when the agency-side view shows real numbers for the same campaigns and date range.
 
-## Root cause
+## Root Cause
 
-`src/pages/ClientReports.tsx` and `src/pages/ClientDetail.tsx` build `campaignRows` from the same data, but their final filters differ:
+`src/pages/ClientReports.tsx` fetches `daily_metrics` with `select("*")` (so the data is there), but its `campaignRows` `useMemo` only sums a small subset of fields:
 
-- **Agency (ClientDetail.tsx, ~line 404-418)** — injects only `isActiveStatus(c.status)` campaigns, then filters with:
-  ```
-  isActiveStatus(r.status) || spend>0 || impressions>0 || clicks>0 || results>0
-  ```
-- **Client (ClientReports.tsx, ~line 171-198)** — also injects paused campaigns whenever the client has the `can_resume_campaigns` permission (the legacy `can_toggle_campaigns` flag enables this by default), and the final filter keeps every `paused` / `disable` row regardless of whether it has metrics. That is what produces the long list of zero-data rows in the screenshot.
+```
+impressions, clicks, spend, results, conversion_value, budget,
+conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg
+```
+
+Every other metric (`messaging_conversations`, `new_messaging_contacts`, `create_order`, `purchase`, `add_to_cart`, `initiate_checkout`, `view_content`, `reach`, `cpm`, `cost_per_purchase`, `cost_per_message`) is dropped, so `DeepDiveTable` receives `undefined` and shows `0`.
+
+The agency-side `CampaignMapping.tsx` and `ClientDetail.tsx` aggregate the full metric set and recompute derived ratios (`cost_per_purchase`, `cost_per_message`, `cpm`) from aggregated totals — that is why those views display correctly.
 
 ## Fix
 
-Update `src/pages/ClientReports.tsx` so the campaign row aggregation matches the agency rule exactly:
+Bring the client `campaignRows` aggregation to parity with the agency one (presentation-layer only — no data-fetching or RLS changes).
 
-1. Inject into `map` only campaigns where `isActiveStatus(c.status)` is true (drop the `canResume && isPaused` branch).
-2. Final filter becomes: keep a row if it is active **or** has any non-zero metric (`spend`, `impressions`, `clicks`, or `results`). Remove the `canResume`-based "keep paused rows" branch.
-3. Keep the existing pause/resume toggle behavior in `DeepDiveTable` untouched — paused campaigns that did spend in the selected range will still appear (because they have metrics > 0), so clients with resume permission can still flip them back on. Paused campaigns with zero data in the range will simply be hidden, matching the agency view.
+**File:** `src/pages/ClientReports.tsx`
 
-No changes to data fetching, RLS, permissions, or `DeepDiveTable`. This is a pure presentation-layer alignment.
+1. Initialise every supported metric to `0` when creating a row in `map`, matching the field set used in `CampaignMapping.tsx`:
+   `view_content, add_to_cart, initiate_checkout, purchase, messaging_conversations, new_messaging_contacts, create_order, reach, cpm, cost_per_purchase, cost_per_message`, plus the existing TikTok DM / Instant Msg fields.
+2. Sum each of these fields across `rawMetrics` (using `Number(m.<field> ?? 0)`).
+3. After the sum loop, recompute derived fields from aggregated totals:
+   - `cost_per_purchase = spend / purchase` when `purchase > 0`
+   - `cost_per_message = spend / messaging_conversations` when `messaging_conversations > 0`
+   - `cpm = (spend / impressions) * 1000` when `impressions > 0`
+4. Keep the existing "inject active campaigns with no metrics" block and the final filter (active OR has any non-zero core metric) — already aligned with the agency view.
 
-## Files to change
+No changes to:
+- Database queries, RLS, or permissions
+- `DeepDiveTable` columns / preset logic
+- `CampaignAnalyticsPanel` KPI cards (they will start showing real numbers automatically once `messaging_conversations` etc. are populated)
 
-- `src/pages/ClientReports.tsx` — adjust the `campaignRows` `useMemo` (injection loop + final `.filter`).
+## Result
+
+Client `/dashboard/reports` will display the same metric values as the agency-side analytics for the same client and date range.
