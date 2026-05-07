@@ -1,40 +1,21 @@
-## Problem
+## Goal
+Replace the current client-side top pill nav with an agency-style collapsible sidebar on desktop (md+). Mobile keeps the existing bottom tab bar untouched.
 
-On the client-side `Performance Analytics` page (`/dashboard/reports`), columns like **Messages, New Contacts, Returning, Create Order, Cost/Message, Purchase, Add-to-Cart, ROAS, CPM, Reach** all render `0` even when the agency-side view shows real numbers for the same campaigns and date range.
+## Changes
+**File:** `src/components/ClientLayout.tsx` (presentation only)
 
-## Root Cause
+1. Wrap layout in `SidebarProvider` and add a new `ClientSidebarContent` component using shadcn `Sidebar` (`collapsible="icon"`) — mirrors `AdminLayout`'s structure and reuses the same premium classes (`sidebar-premium`, `sidebar-header-premium`, `sidebar-nav-active`, `sidebar-icon-bubble`, `sidebar-footer-premium`, etc.) for visual parity with agency side.
+2. Hide the sidebar on mobile via `className="hidden md:flex"` on the `Sidebar` so it only appears on desktop. Mobile bottom tab bar remains exactly as is.
+3. Nav items (same as current tabs):
+   - Dashboard → `/dashboard`
+   - Wallet → `/dashboard/wallet`
+   - Campaigns → `/dashboard/campaigns`
+   - Reports → `/dashboard/reports`
+4. Sidebar header: brand logo + name (matches admin orb style). Sidebar footer: ThemeToggle + Sign Out icon button (when not impersonating).
+5. Replace the current desktop header:
+   - Desktop: thin sticky header with `SidebarTrigger`, impersonation back button (if any), and right-side controls (`NotificationBell`, avatar). Drop the centered pill nav.
+   - Mobile: keep existing top header look (logo + brand + bell + theme + signout + avatar) — bottom tabs unchanged.
+6. Keep impersonation banner at top, gradient accent bar, and `<main>` content/Outlet exactly the same.
 
-`src/pages/ClientReports.tsx` fetches `daily_metrics` with `select("*")` (so the data is there), but its `campaignRows` `useMemo` only sums a small subset of fields:
-
-```
-impressions, clicks, spend, results, conversion_value, budget,
-conversations_tiktok_dm, leads_tiktok_dm, conversations_instant_msg
-```
-
-Every other metric (`messaging_conversations`, `new_messaging_contacts`, `create_order`, `purchase`, `add_to_cart`, `initiate_checkout`, `view_content`, `reach`, `cpm`, `cost_per_purchase`, `cost_per_message`) is dropped, so `DeepDiveTable` receives `undefined` and shows `0`.
-
-The agency-side `CampaignMapping.tsx` and `ClientDetail.tsx` aggregate the full metric set and recompute derived ratios (`cost_per_purchase`, `cost_per_message`, `cpm`) from aggregated totals — that is why those views display correctly.
-
-## Fix
-
-Bring the client `campaignRows` aggregation to parity with the agency one (presentation-layer only — no data-fetching or RLS changes).
-
-**File:** `src/pages/ClientReports.tsx`
-
-1. Initialise every supported metric to `0` when creating a row in `map`, matching the field set used in `CampaignMapping.tsx`:
-   `view_content, add_to_cart, initiate_checkout, purchase, messaging_conversations, new_messaging_contacts, create_order, reach, cpm, cost_per_purchase, cost_per_message`, plus the existing TikTok DM / Instant Msg fields.
-2. Sum each of these fields across `rawMetrics` (using `Number(m.<field> ?? 0)`).
-3. After the sum loop, recompute derived fields from aggregated totals:
-   - `cost_per_purchase = spend / purchase` when `purchase > 0`
-   - `cost_per_message = spend / messaging_conversations` when `messaging_conversations > 0`
-   - `cpm = (spend / impressions) * 1000` when `impressions > 0`
-4. Keep the existing "inject active campaigns with no metrics" block and the final filter (active OR has any non-zero core metric) — already aligned with the agency view.
-
-No changes to:
-- Database queries, RLS, or permissions
-- `DeepDiveTable` columns / preset logic
-- `CampaignAnalyticsPanel` KPI cards (they will start showing real numbers automatically once `messaging_conversations` etc. are populated)
-
-## Result
-
-Client `/dashboard/reports` will display the same metric values as the agency-side analytics for the same client and date range.
+## Out of scope
+No changes to routes, data fetching, permissions, or the mobile bottom tab bar.
