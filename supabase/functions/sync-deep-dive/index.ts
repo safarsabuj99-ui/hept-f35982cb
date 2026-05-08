@@ -1073,6 +1073,55 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
           console.log(`TikTok deep-dive: ${rows.length} rows (${prepared.length} matched) for ${account.ad_account_id}`);
         }
 
+        // ===== Ad Guard reconcile cleanup =====
+        // For campaigns the platform reported active during this run, remove
+        // them from the owning client's system_paused_campaigns list, drop the
+        // pause queue rows, and write an audit log entry per affected client.
+        if (reconciledResumeIds.length > 0) {
+          try {
+            const affectedClients = new Set<string>();
+            for (const cid of reconciledResumeIds) {
+              const owner = guardLockedClientByCampaign.get(cid);
+              if (owner) affectedClients.add(owner);
+            }
+
+            await supabase
+              .from("guard_pause_jobs")
+              .delete()
+              .in("campaign_id", reconciledResumeIds);
+
+            for (const ownerId of affectedClients) {
+              const { data: prof } = await supabase
+                .from("profiles")
+                .select("system_paused_campaigns, org_id")
+                .eq("user_id", ownerId)
+                .maybeSingle();
+              const list = Array.isArray((prof as any)?.system_paused_campaigns)
+                ? ((prof as any).system_paused_campaigns as any[]).map(String)
+                : [];
+              const remaining = list.filter((id) => !reconciledResumeIds.includes(id));
+              const cleared = list.length - remaining.length;
+              const updatePatch: any = { system_paused_campaigns: remaining };
+              if (remaining.length === 0) updatePatch.guard_paused_at = null;
+              await supabase
+                .from("profiles")
+                .update(updatePatch)
+                .eq("user_id", ownerId);
+
+              if (cleared > 0) {
+                await supabase.from("audit_logs").insert({
+                  user_id: ownerId,
+                  action_type: "ad_guard_resume",
+                  description: `Auto-resumed ${cleared} campaign(s): detected active on ${platform} during sync`,
+                  org_id: (prof as any)?.org_id ?? null,
+                });
+              }
+            }
+          } catch (e: any) {
+            console.error("Guard reconcile cleanup failed:", e?.message);
+          }
+        }
+
         totalSynced++;
       } catch (err: any) {
         errors.push(`${platform} ${account.ad_account_id}: ${err.message}`);
