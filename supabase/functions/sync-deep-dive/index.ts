@@ -241,21 +241,34 @@ Deno.serve(async (req) => {
         // statusConfirmed: true = status came directly from platform API; false = fallback "active"
         // Build a set of guard-locked campaign IDs to prevent sync from overwriting
         const guardLockedIds = new Set<string>();
+        const guardLockedClientByCampaign = new Map<string, string>();
         {
           const linkedClientIds = accountAssignments.map(a => a.client_id);
           if (linkedClientIds.length > 0) {
             const { data: clientProfiles } = await supabase
               .from("profiles")
-              .select("system_paused_campaigns")
+              .select("user_id, system_paused_campaigns")
               .in("user_id", linkedClientIds);
             for (const p of clientProfiles ?? []) {
-              const paused = p.system_paused_campaigns;
+              const paused = (p as any).system_paused_campaigns;
               if (Array.isArray(paused)) {
-                for (const id of paused) guardLockedIds.add(String(id));
+                for (const id of paused) {
+                  const sid = String(id);
+                  guardLockedIds.add(sid);
+                  guardLockedClientByCampaign.set(sid, (p as any).user_id);
+                }
               }
             }
           }
         }
+
+        // Track campaigns reconciled paused→active by platform during this run
+        const reconciledResumeIds: string[] = [];
+
+        const isPlatformActive = (s: string): boolean => {
+          const v = (s || "").toLowerCase();
+          return v === "active" || v === "enable" || v.startsWith("active -");
+        };
 
         const upsertCampaign = async (
           platformId: string,
@@ -273,19 +286,29 @@ Deno.serve(async (req) => {
             .maybeSingle();
 
           if (existing) {
-            // GUARD PROTECTION: Never overwrite guard_paused/paused status if campaign is guard-locked
             const isGuardLocked = guardLockedIds.has(existing.id) || existing.status === "guard_paused";
             let finalStatus: string;
-            if (isGuardLocked) {
-              // Preserve the guard state — sync must NOT undo Ad Guard
+            // RECONCILE: if platform confirms the campaign is active, override guard_paused locally
+            if (isGuardLocked && statusConfirmed && isPlatformActive(status)) {
+              finalStatus = "active";
+              reconciledResumeIds.push(existing.id);
+              console.log(`Guard-reconcile: platform reports active, resuming campaign ${existing.id}`);
+            } else if (isGuardLocked) {
+              // Preserve the guard state — sync must NOT undo Ad Guard while platform still paused
               finalStatus = existing.status;
-              console.log(`Guard-locked: preserving status "${existing.status}" for campaign ${existing.id} (platform says: ${status})`);
             } else if (!statusConfirmed) {
               finalStatus = existing.status;
             } else {
               finalStatus = status;
             }
             const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
+            if (finalStatus === "active" && isGuardLocked) {
+              updatePayload.pause_required = false;
+              updatePayload.pause_requested_at = null;
+              updatePayload.pause_confirmed_at = null;
+              updatePayload.pause_attempt_count = 0;
+              updatePayload.pause_error = null;
+            }
             if (objective) updatePayload.objective = objective;
             await supabase
               .from("campaigns")
