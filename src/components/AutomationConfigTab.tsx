@@ -504,6 +504,8 @@ export function AutomationConfigTab({
         </div>
       )}
 
+      <AdGuardHistoryPanel userId={userId} />
+
     </div>
   );
 }
