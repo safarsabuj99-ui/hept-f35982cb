@@ -78,10 +78,20 @@ Deno.serve(async (req) => {
     });
 
     if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("updateUserById failed:", error);
+      // Surface Supabase Auth's real reason (e.g. weak_password, length policy, user not found)
+      // as a 400 so the client can show the actual message instead of a generic 500.
+      const code = (error as any).code ?? (error as any).name ?? null;
+      const status = (error as any).status && (error as any).status >= 400 && (error as any).status < 500
+        ? (error as any).status
+        : 400;
+      return new Response(
+        JSON.stringify({ error: error.message, code }),
+        {
+          status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Audit log: password reset

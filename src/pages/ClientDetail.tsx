@@ -318,12 +318,25 @@ export default function ClientDetail() {
     }
     setResettingPassword(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
       const response = await supabase.functions.invoke("reset-client-password", {
         body: { user_id: userId, new_password: newPassword },
       });
       if (response.error) {
-        toast({ title: "Error", description: response.error.message, variant: "destructive" });
+        let detail = response.error.message || "Password reset failed.";
+        try {
+          const ctx: any = (response.error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) detail = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
+          } else if (ctx && typeof ctx.text === "function") {
+            const text = await ctx.text();
+            if (text) {
+              try { const parsed = JSON.parse(text); if (parsed?.error) detail = parsed.error; }
+              catch { detail = text; }
+            }
+          }
+        } catch { /* keep generic */ }
+        toast({ title: "Reset failed", description: detail, variant: "destructive" });
       } else {
         setNewPassword("");
         toast({ title: "Password Reset", description: "Client password has been updated." });
