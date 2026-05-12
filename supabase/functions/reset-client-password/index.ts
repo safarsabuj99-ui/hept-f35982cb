@@ -1,4 +1,10 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  errorResponse,
+  jsonResponse,
+  requireCaller,
+  requireOrgAccess,
+  requireRole,
+} from "../_shared/auth.ts";
 
 const PASSWORD_MIN_LENGTH = 8;
 
@@ -26,66 +32,29 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Verify caller is admin
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const {
-      data: { user: caller },
-    } = await supabaseAdmin.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check admin role
-    const { data: roleData } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", caller.id)
-      .eq("role", "admin")
-      .maybeSingle();
-
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const ctx = await requireCaller(req);
+    requireRole(ctx, ["admin", "platform_owner"]);
+    const supabaseAdmin = ctx.supabaseAdmin;
 
     const { user_id, new_password } = await req.json();
-
     if (!user_id || !new_password) {
-      return new Response(
-        JSON.stringify({ error: "user_id and new_password are required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonResponse({ error: "user_id and new_password are required" }, 400);
     }
 
-    const passwordValidationError = getPasswordValidationError(new_password);
+    // Cross-tenant guard: target user must belong to caller's org
+    const { data: targetProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("org_id")
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!targetProfile) return jsonResponse({ error: "Target user not found" }, 404);
+    await requireOrgAccess(ctx, targetProfile.org_id as string | null);
 
+    const passwordValidationError = getPasswordValidationError(new_password);
     if (passwordValidationError) {
-      return new Response(
-        JSON.stringify({ error: passwordValidationError, code: "password_policy_violation" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+      return jsonResponse(
+        { error: passwordValidationError, code: "password_policy_violation" },
+        400,
       );
     }
 
@@ -95,39 +64,21 @@ Deno.serve(async (req) => {
 
     if (error) {
       console.error("updateUserById failed:", error);
-      // Surface Supabase Auth's real reason (e.g. weak_password, length policy, user not found)
-      // as a 400 so the client can show the actual message instead of a generic 500.
       const code = (error as any).code ?? (error as any).name ?? null;
       const status = (error as any).status && (error as any).status >= 400 && (error as any).status < 500
         ? (error as any).status
         : 400;
-      return new Response(
-        JSON.stringify({ error: error.message, code }),
-        {
-          status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonResponse({ error: error.message, code }, status);
     }
 
-    // Audit log: password reset
     await supabaseAdmin.from("audit_logs").insert({
-      user_id: caller.id,
+      user_id: ctx.userId,
       action_type: "client_password_reset",
       description: `Admin reset password for user ${user_id}`,
     });
 
-    return new Response(
-      JSON.stringify({ success: true, message: "Password updated successfully" }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonResponse({ success: true, message: "Password updated successfully" });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(err);
   }
 });

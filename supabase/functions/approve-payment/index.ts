@@ -1,17 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-function jsonRes(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+import {
+  corsHeaders,
+  errorResponse,
+  jsonResponse as jsonRes,
+  requireCaller,
+  requireOrgAccess,
+  requireRole,
+} from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -19,30 +13,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return jsonRes({ error: "Unauthorized" }, 401);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Verify caller
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) return jsonRes({ error: "Unauthorized" }, 401);
-
-    // Check admin role
-    const adminClient = createClient(supabaseUrl, serviceKey);
-    const { data: roleCheck } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .single();
-
-    if (!roleCheck) return jsonRes({ error: "Forbidden: admin only" }, 403);
+    const ctx = await requireCaller(req);
+    requireRole(ctx, ["admin", "platform_owner"]);
+    const adminClient = ctx.supabaseAdmin;
+    const user = { id: ctx.userId };
 
     const {
       request_id,
@@ -70,6 +44,9 @@ Deno.serve(async (req) => {
     if (prErr || !pr) {
       return jsonRes({ error: "Request not found or already processed" }, 404);
     }
+
+    // Cross-tenant guard
+    await requireOrgAccess(ctx, pr.org_id as string | null);
 
     // --- REJECTED ---
     if (action === "rejected") {
@@ -271,7 +248,7 @@ Deno.serve(async (req) => {
       exchange_rate: exchangeRateSnapshot,
     });
   } catch (err) {
-    return jsonRes({ error: String(err) }, 500);
+    return errorResponse(err);
   }
 });
 
