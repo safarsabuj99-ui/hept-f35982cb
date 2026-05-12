@@ -103,6 +103,74 @@ function UsageGauge({ label, icon: Icon, used, max }: { label: string; icon: any
   );
 }
 
+function OnlineGatewayList({ orgId, invoiceId, amountBdt }: { orgId: string; invoiceId: string | null; amountBdt: number }) {
+  const [gateways, setGateways] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc("get_active_gateways_for_currency" as any, { _currency: "BDT" });
+      setGateways((data as any[]) || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  async function pay(gw: any) {
+    setPaying(gw.id);
+    try {
+      const action = gw.gateway === "stripe" ? "stripe-initiate" : gw.gateway === "sslcommerz" ? "sslcommerz-initiate" : null;
+      if (!action) { toast.error(`${gw.display_name} checkout not implemented yet`); return; }
+      const body: any = { action, org_id: orgId, invoice_id: invoiceId };
+      if (gw.gateway === "stripe") { body.amount = amountBdt; body.currency = "USD"; }
+      else { body.amount_bdt = amountBdt; }
+      const { data, error } = await supabase.functions.invoke("payment-gateway", { body });
+      if (error) throw error;
+      if (data?.gateway_url) window.location.href = data.gateway_url;
+      else toast.error(data?.error || "Failed to start checkout");
+    } catch (err: any) {
+      toast.error(err.message || "Checkout failed");
+    } finally {
+      setPaying(null);
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  if (!gateways.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center space-y-3">
+        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+          <Wifi className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-base font-semibold">No Online Gateway Available</h3>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Use manual payment, or contact support to enable an online option.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {gateways.map((gw) => (
+        <Button
+          key={gw.id}
+          onClick={() => pay(gw)}
+          disabled={paying === gw.id || amountBdt <= 0}
+          variant="outline"
+          className="w-full justify-between h-auto py-3"
+        >
+          <span className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
+            {gw.display_name}
+            {gw.mode === "sandbox" && <Badge variant="secondary" className="text-[10px]">Sandbox</Badge>}
+          </span>
+          {paying === gw.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+        </Button>
+      ))}
+    </div>
+  );
+
 export default function AdminSubscription() {
   const { session } = useAuth();
   const [org, setOrg] = useState<OrgData | null>(null);
