@@ -41,6 +41,20 @@ interface PricingConfig {
   percentage?: number;
 }
 
+const CLIENT_PASSWORD_MIN_LENGTH = 8;
+
+function getClientPasswordValidationError(password: string) {
+  if (password.length < CLIENT_PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${CLIENT_PASSWORD_MIN_LENGTH} characters.`;
+  }
+
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+    return "Password must include uppercase, lowercase, and a number.";
+  }
+
+  return null;
+}
+
 export default function ClientDetail() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -77,6 +91,10 @@ export default function ClientDetail() {
   // Password reset
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+  const passwordValidationError = useMemo(
+    () => (newPassword ? getClientPasswordValidationError(newPassword) : null),
+    [newPassword]
+  );
 
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
@@ -312,8 +330,8 @@ export default function ClientDetail() {
 
   async function handlePasswordReset() {
     if (!userId || !newPassword) return;
-    if (newPassword.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+    if (passwordValidationError) {
+      toast({ title: "Reset failed", description: passwordValidationError, variant: "destructive" });
       return;
     }
     setResettingPassword(true);
@@ -582,10 +600,17 @@ export default function ClientDetail() {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Min 6 characters"
+                    placeholder="At least 8 characters"
+                    maxLength={128}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Use at least 8 characters with uppercase, lowercase, and a number.
+                  </p>
+                  {newPassword && passwordValidationError ? (
+                    <p className="text-xs text-destructive">{passwordValidationError}</p>
+                  ) : null}
                 </div>
-                <Button onClick={handlePasswordReset} disabled={resettingPassword || !newPassword} variant="secondary" className="gap-2">
+                <Button onClick={handlePasswordReset} disabled={resettingPassword || !newPassword || !!passwordValidationError} variant="secondary" className="gap-2">
                   <KeyRound className="h-3.5 w-3.5" />
                   {resettingPassword ? "Resetting…" : "Reset"}
                 </Button>
