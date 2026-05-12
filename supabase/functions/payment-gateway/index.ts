@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireCaller, requireOrgAccess, requireRole, AuthError } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,6 +34,14 @@ Deno.serve(async (req) => {
 
   try {
     const { action, ...payload } = await req.json();
+
+    // Guard user-initiated payment sessions. Webhooks/IPN come from external gateways.
+    const isInitiate = action === "initiate" || action === "sslcommerz-initiate" || action === "stripe-initiate";
+    if (isInitiate) {
+      const ctx = await requireCaller(req);
+      requireRole(ctx, ["admin", "platform_owner"]);
+      await requireOrgAccess(ctx, payload.org_id);
+    }
 
     // ===== SSLCommerz: Initiate =====
     if (action === "initiate" || action === "sslcommerz-initiate") {
@@ -175,6 +184,7 @@ Deno.serve(async (req) => {
 
     return jsonResp({ error: "Unknown action" }, 400);
   } catch (err: any) {
+    if (err instanceof AuthError) return jsonResp({ error: err.message }, err.status);
     return jsonResp({ error: err.message }, 500);
   }
 });
