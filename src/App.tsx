@@ -179,6 +179,7 @@ const FullApp = () => (
                   <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
                   <Route path="/platform/affiliates" element={<PlatformAffiliates />} />
                   <Route path="/platform/audit" element={<PlatformAudit />} />
+                  <Route path="/platform/payment-gateways" element={<PlatformPaymentGateways />} />
                 </Route>
 
                 {/* Super Admin routes */}
