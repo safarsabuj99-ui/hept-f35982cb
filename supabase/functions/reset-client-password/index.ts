@@ -1,5 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const PASSWORD_MIN_LENGTH = 8;
+
+function getPasswordValidationError(password: string) {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+  }
+
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+    return "Password must include uppercase, lowercase, and a number.";
+  }
+
+  return null;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -63,9 +77,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (new_password.length < 6) {
+    const passwordValidationError = getPasswordValidationError(new_password);
+
+    if (passwordValidationError) {
       return new Response(
-        JSON.stringify({ error: "Password must be at least 6 characters" }),
+        JSON.stringify({ error: passwordValidationError, code: "password_policy_violation" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
