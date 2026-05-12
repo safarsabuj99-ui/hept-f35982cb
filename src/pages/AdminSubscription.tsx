@@ -170,6 +170,7 @@ function OnlineGatewayList({ orgId, invoiceId, amountBdt }: { orgId: string; inv
       ))}
     </div>
   );
+}
 
 export default function AdminSubscription() {
   const { session } = useAuth();
