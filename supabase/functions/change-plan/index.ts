@@ -1,30 +1,45 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import {
+  corsHeaders,
+  errorResponse,
+  jsonResponse,
+  requireCaller,
+  requireOrgAccess,
+  requireRole,
+} from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
   try {
+    const ctx = await requireCaller(req);
+    requireRole(ctx, ["admin", "platform_owner"]);
+
     const { org_id, new_plan_key, new_billing_cycle } = await req.json();
+    if (!org_id) return jsonResponse({ error: "Missing org_id" }, 400);
+
+    await requireOrgAccess(ctx, org_id);
+    const supabase = ctx.supabaseAdmin;
 
     // Get current org and subscription
-    const { data: org } = await supabase.from("organizations").select("*, organization_subscriptions(*)").eq("id", org_id).single();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("*, organization_subscriptions(*)")
+      .eq("id", org_id)
+      .single();
     if (!org) throw new Error("Organization not found");
 
     const currentSub = (org as any).organization_subscriptions?.[0];
     if (!currentSub) throw new Error("No active subscription");
 
     // Get target plan
-    const { data: newPlan } = await supabase.from("platform_plans").select("*").eq("key", new_plan_key).eq("is_active", true).single();
+    const { data: newPlan } = await supabase
+      .from("platform_plans")
+      .select("*")
+      .eq("key", new_plan_key)
+      .eq("is_active", true)
+      .single();
     if (!newPlan) throw new Error("Target plan not found or inactive");
 
-    const isUpgrade = newPlan.sort_order > 0; // simplified check
     const cycle = new_billing_cycle || currentSub.billing_cycle;
     const newAmount = cycle === "yearly" ? newPlan.price_bdt_yearly : newPlan.price_bdt_monthly;
 
@@ -40,20 +55,25 @@ Deno.serve(async (req) => {
     const charge = Math.round(newDailyRate * remainingDays);
 
     // Validate resource limits for downgrades
-    const { count: clientCount } = await supabase.from("profiles").select("id", { count: "exact" })
+    const { count: clientCount } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact" })
       .eq("org_id", org_id);
-    const { count: accountCount } = await supabase.from("ad_accounts").select("id", { count: "exact" })
-      .eq("org_id", org_id).eq("is_active", true);
+    const { count: accountCount } = await supabase
+      .from("ad_accounts")
+      .select("id", { count: "exact" })
+      .eq("org_id", org_id)
+      .eq("is_active", true);
 
     if ((clientCount || 0) > newPlan.max_clients) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         error: `Cannot change to ${newPlan.name}: you have ${clientCount} clients but the plan allows ${newPlan.max_clients}`,
-      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }, 400);
     }
     if ((accountCount || 0) > newPlan.max_ad_accounts) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         error: `Cannot change to ${newPlan.name}: you have ${accountCount} ad accounts but the plan allows ${newPlan.max_ad_accounts}`,
-      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }, 400);
     }
 
     // Apply plan change
@@ -65,32 +85,42 @@ Deno.serve(async (req) => {
       allowed_features: newPlan.feature_flags,
     }).eq("id", org_id);
 
-    // Update subscription
     await supabase.from("organization_subscriptions").update({
-      plan: new_plan_key, billing_cycle: cycle, amount_bdt: newAmount, updated_at: now.toISOString(),
+      plan: new_plan_key,
+      billing_cycle: cycle,
+      amount_bdt: newAmount,
+      updated_at: now.toISOString(),
     }).eq("id", currentSub.id);
 
-    // Log the change
     await supabase.from("plan_change_log").insert({
-      org_id, from_plan: org.plan, to_plan: new_plan_key,
-      from_cycle: currentSub.billing_cycle, to_cycle: cycle,
-      proration_credit_bdt: credit, proration_charge_bdt: charge,
+      org_id,
+      from_plan: org.plan,
+      to_plan: new_plan_key,
+      from_cycle: currentSub.billing_cycle,
+      to_cycle: cycle,
+      proration_credit_bdt: credit,
+      proration_charge_bdt: charge,
       status: "completed",
     });
 
-    // Notify owner
     await supabase.from("notifications").insert({
-      user_id: org.owner_user_id, title: "Plan Changed Successfully",
+      user_id: org.owner_user_id,
+      title: "Plan Changed Successfully",
       body: `Your plan has been changed to ${newPlan.name}. Credit: ৳${credit}, Charge: ৳${charge}.`,
-      type: "system", priority: "normal", link: "/admin/subscription",
+      type: "system",
+      priority: "normal",
+      link: "/admin/subscription",
     });
 
-    return new Response(JSON.stringify({
-      ok: true, from: org.plan, to: new_plan_key, credit, charge,
+    return jsonResponse({
+      ok: true,
+      from: org.plan,
+      to: new_plan_key,
+      credit,
+      charge,
       net: charge - credit,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    });
+  } catch (err) {
+    return errorResponse(err);
   }
 });

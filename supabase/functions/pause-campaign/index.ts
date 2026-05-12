@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
     const { data: campaign, error: campErr } = await supabase
       .from("campaigns")
-      .select("id, platform_id, platform, ad_account_id, status, name")
+      .select("id, platform_id, platform, ad_account_id, status, name, org_id")
       .eq("id", campaign_id)
       .single();
 
@@ -155,7 +155,25 @@ Deno.serve(async (req) => {
         });
       }
 
-      if (!isAdmin) {
+      if (isAdmin) {
+        // Cross-tenant guard: admin's org must match campaign's org (platform_owner bypasses)
+        const { data: po } = await supabase
+          .from("user_roles").select("role").eq("user_id", user.id).eq("role", "platform_owner").maybeSingle();
+        if (!po) {
+          const { data: callerProfile } = await supabase
+            .from("profiles").select("org_id").eq("user_id", user.id).maybeSingle();
+          if (!callerProfile?.org_id || callerProfile.org_id !== campaign.org_id) {
+            await supabase.from("audit_logs").insert({
+              user_id: user.id,
+              action_type: "cross_tenant_blocked",
+              description: `pause-campaign: caller org=${callerProfile?.org_id ?? "none"} attempted campaign org=${campaign.org_id}`,
+            });
+            return new Response(JSON.stringify({ error: "Forbidden: cross-tenant access denied" }), {
+              status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+      } else {
         const { data: ownership } = await supabase
           .from("ad_account_clients").select("id")
           .eq("ad_account_id", campaign.ad_account_id).eq("client_id", user.id).maybeSingle();

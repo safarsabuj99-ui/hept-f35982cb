@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import {
+  corsHeaders,
+  errorResponse,
+  jsonResponse,
+  requireCaller,
+  requireRole,
+  requireRowOrgAccess,
+} from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -15,7 +17,6 @@ serve(async (req) => {
     try {
       return JSON.parse(text.trim());
     } catch {
-      // Try to extract JSON from response
       const jsonStart = text.search(/[\{\[]/);
       const lastBrace = text.lastIndexOf('}');
       const lastBracket = text.lastIndexOf(']');
@@ -32,27 +33,26 @@ serve(async (req) => {
   }
 
   try {
-    const { integration_id } = await req.json();
-    if (!integration_id) throw new Error("integration_id required");
+    const ctx = await requireCaller(req);
+    requireRole(ctx, ["admin", "platform_owner"]);
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const { integration_id } = await req.json();
+    if (!integration_id) return jsonResponse({ ok: false, message: "integration_id required" }, 400);
+
+    await requireRowOrgAccess(ctx, "api_integrations", "id", integration_id);
+    const supabaseAdmin = ctx.supabaseAdmin;
 
     const { data: integration, error } = await supabaseAdmin
       .from("api_integrations")
       .select("*")
       .eq("id", integration_id)
       .single();
-
     if (error || !integration) throw new Error("Integration not found");
 
     const platform = integration.platform;
     const token = integration.api_token;
     const appId = integration.app_id;
 
-    // Get TikTok proxy URL setting
     const { data: proxySetting } = await supabaseAdmin
       .from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle();
     const tiktokProxyUrl = proxySetting?.value || null;
@@ -77,7 +77,6 @@ serve(async (req) => {
       }
     } else if (platform === "tiktok") {
       const bcId = appId;
-      // Use /bc/asset/get/ to list advertisers under the BC
       const advRes = await fetch(
         `${tiktokBase}/open_api/v1.3/bc/asset/get/?bc_id=${bcId}&asset_type=ADVERTISER&page_size=1`,
         { headers: { "Access-Token": token, "Content-Type": "application/json" } }
@@ -111,19 +110,13 @@ serve(async (req) => {
       }
     }
 
-    // Update connection_status in DB
     await supabaseAdmin
       .from("api_integrations")
       .update({ connection_status: result.ok ? "active" : "error" })
       .eq("id", integration_id);
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ ok: false, message: err.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse(result);
+  } catch (err) {
+    return errorResponse(err);
   }
 });
