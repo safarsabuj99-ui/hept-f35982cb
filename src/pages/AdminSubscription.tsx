@@ -612,16 +612,11 @@ export default function AdminSubscription() {
             </TabsContent>
 
             <TabsContent value="gateway" className="mt-4">
-              <div className="flex flex-col items-center justify-center py-8 text-center space-y-3">
-                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-                  <Wifi className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold">Online Payment</h3>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  Automatic payment gateway integration is coming soon. Please use manual payment for now.
-                </p>
-                <Badge variant="outline" className="text-xs">Coming Soon</Badge>
-              </div>
+              <OnlineGatewayList
+                orgId={org.id}
+                invoiceId={payingInvoice?.id || null}
+                amountBdt={Number(payAmount) || 0}
+              />
             </TabsContent>
           </Tabs>
         </DialogContent>
