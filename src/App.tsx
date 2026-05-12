@@ -72,6 +72,7 @@ const AffiliateEarnings = lazy(() => import("@/pages/AffiliateEarnings"));
 const AffiliatePayouts = lazy(() => import("@/pages/AffiliatePayouts"));
 const AffiliateProfile = lazy(() => import("@/pages/AffiliateProfile"));
 const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
+const PlatformPaymentGateways = lazy(() => import("@/pages/PlatformPaymentGateways"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
