@@ -34,6 +34,7 @@ const allSections: NavSection[] = [
     { to: "/platform/announcements", icon: Megaphone, label: "Announcements" },
   ]},
   { title: "System", items: [
+    { to: "/platform/payment-gateways", icon: CreditCard, label: "Payment Gateways" },
     { to: "/platform/audit", icon: Shield, label: "Audit Logs" },
   ]},
 ];

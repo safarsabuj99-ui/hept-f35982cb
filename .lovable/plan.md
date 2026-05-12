@@ -1,93 +1,141 @@
 
-# Commercial / Billing Hardening Plan
+# Owner-Side Payment Gateway Configuration
 
-Goal: make the app capable of accepting **real money today**, globally and in BD, and prove the trial → grace → dunning → recovery loop works on a clean tenant.
-
----
-
-## 1. Dual payment rails (smart routing)
-
-Keep SSLCommerz for BDT customers, add Stripe for everyone else. Route by org country / currency, with manual override.
-
-### 1a. Activate SSLCommerz (BD rail)
-The `payment-gateway` edge function is already coded — it just needs live credentials.
-
-Request 3 secrets via `add_secret`:
-- `SSLCOMMERZ_STORE_ID`
-- `SSLCOMMERZ_STORE_PASSWORD`
-- `SSLCOMMERZ_SANDBOX` (`true` for first test, then flip to `false`)
-
-No code change needed — function already reads these.
-
-### 1b. Enable Stripe (global rail)
-Use Lovable's **built-in seamless Stripe payments** (`enable_stripe_payments`) — no API key paste, no Stripe account claim required to start testing. Sandbox is created instantly.
-
-Workflow:
-1. Run `recommend_payment_provider` (required pre-check)
-2. Enable Stripe payments
-3. Choose tax handling: recommend **`automatic_tax`** (calc + collect, user files) — fits a multi-region SaaS without locking out non-eligible Stripe seller countries
-4. Create the same plan SKUs already in `subscription_plans` as Stripe products via `batch_create_product`
-5. Add `stripe-checkout` + `stripe-webhook` edge functions mirroring the SSLCommerz IPN flow (mark invoice paid → extend subscription → activate org → notify → recover dunning)
-
-### 1c. Routing layer
-In `AdminSubscription.tsx` "Pay now" UI:
-- Detect org currency / country from `organizations` row
-- BD / BDT → SSLCommerz
-- Everywhere else → Stripe
-- Show both buttons with the recommended one primary; let user override
-
-Backend: extend `gateway_transactions.gateway` enum to include `stripe`.
+Goal: instead of hardcoding gateway secrets, the **platform owner** manages all payment gateway credentials through a dedicated UI. Each agency/tenant uses whatever gateways the owner has enabled.
 
 ---
 
-## 2. Lifecycle smoke test on clean tenant
+## 1. New table: `platform_payment_gateways`
 
-Create a throwaway org and walk the full money loop:
+Stores one row per gateway the owner connects.
 
+| column | type | notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `gateway` | text | `sslcommerz` \| `stripe` \| `paddle` \| `bkash` \| `nagad` \| `manual` |
+| `display_name` | text | shown to payers ("SSLCommerz", "Stripe Card", …) |
+| `mode` | text | `sandbox` \| `live` |
+| `is_enabled` | bool | owner toggle |
+| `supported_currencies` | text[] | `['BDT']`, `['USD','EUR',…]` — drives routing |
+| `priority` | int | sort order in checkout |
+| `credentials` | jsonb | **encrypted via Vault** — store_id, store_pass, secret_key, webhook_secret, etc. |
+| `public_config` | jsonb | non-secret display info (logo URL, fees note) |
+| `created_at` / `updated_at` | timestamptz | |
+
+RLS:
+- SELECT public-safe view (`gateway`, `display_name`, `mode`, `is_enabled`, `supported_currencies`, `priority`, `public_config`) → any authenticated user (so checkout can list options).
+- Full row SELECT/INSERT/UPDATE/DELETE → only `has_role(auth.uid(),'platform_owner')`.
+- `credentials` JSONB never leaves the DB — only the `payment-gateway` edge function (service role) reads it.
+
+Helper RPC `get_active_gateways_for_currency(text)` returns the public-safe list.
+
+---
+
+## 2. Platform owner UI — `/platform/payment-gateways`
+
+New page in `PlatformLayout` sidebar ("Payment Gateways").
+
+Layout:
 ```text
-signup (trial=14d)
-   → connect 1 ad account
-   → run sync-fast-lane
-   → subscription-lifecycle marks trial_ending at T-3
-   → trial expires → SubscriptionGate blocks app
-   → dunning-processor creates invoice + email
-   → pay via Stripe sandbox (4242 4242 …) and SSLCommerz sandbox
-   → webhook/IPN flips invoice=paid, subscription=active
-   → dunning_runs.status=recovered
-   → org returns to normal
+┌─ Payment Gateways ──────────────────────────────────┐
+│ [+ Add Gateway]                                     │
+│                                                     │
+│ ┌─ SSLCommerz ─────────── [Live ●] [Enabled ✓] ──┐ │
+│ │ Currencies: BDT     Priority: 1                 │ │
+│ │ Store ID: ••••••8472   Last used: 2h ago        │ │
+│ │ [Edit] [Test] [Disable] [Delete]                │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                     │
+│ ┌─ Stripe ────────────── [Sandbox ●] [Enabled ✓] ┐ │
+│ │ Currencies: USD, EUR, GBP                       │ │
+│ │ Secret: sk_test_••••  Webhook: whsec_••••       │ │
+│ │ [Edit] [Test] [Disable] [Delete]                │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
 ```
 
-For each step, capture: edge function logs, DB row deltas, notification fired. Fix any gap found (most likely: dunning email template, gateway → invoice linkage on Stripe side, grace-period banner copy).
+Add/Edit dialog is **gateway-aware** — picks the right credential schema based on `gateway`:
+- **SSLCommerz**: store_id, store_password, sandbox toggle
+- **Stripe**: secret_key, publishable_key, webhook_secret
+- **Paddle**: api_key, webhook_secret, vendor_id
+- **bKash / Nagad**: app_key, app_secret, username, password
+- **Manual**: instructions text + bank details (already covered by `subscription-proofs` flow — surfaces as "Manual Bank Transfer" gateway)
 
-A short Deno test (`supabase/functions/payment-gateway/lifecycle_test.ts`) will assert the IPN happy-path against a mocked SSLCommerz response so regressions are caught.
+[Test] button calls a `payment-gateway-test` edge function that performs a no-op auth ping (e.g. SSLCommerz token endpoint, Stripe `/v1/balance`) and shows ✅/❌ in the dialog.
+
+---
+
+## 3. Refactor `payment-gateway` edge function
+
+Replace `Deno.env.get("SSLCOMMERZ_STORE_ID")` reads with a DB lookup:
+
+```ts
+const { data: gw } = await supabase
+  .from("platform_payment_gateways")
+  .select("credentials, mode, is_enabled")
+  .eq("gateway", "sslcommerz")
+  .eq("is_enabled", true)
+  .maybeSingle();
+
+if (!gw) return error("SSLCommerz not configured by platform owner");
+const { store_id, store_password } = gw.credentials;
+const isSandbox = gw.mode === "sandbox";
+```
+
+Same pattern added for new branches: `action === "stripe-initiate"`, `action === "stripe-webhook"`, etc. — single function, one router, one config source.
+
+Keep all existing IPN / invoice update / dunning recovery logic untouched.
+
+---
+
+## 4. Smart routing in `AdminSubscription.tsx`
+
+Replace the single "Pay via SSLCommerz" button with a dynamic list:
+
+```tsx
+const { data: gateways } = useQuery(['active-gateways', org.currency], () =>
+  supabase.rpc('get_active_gateways_for_currency', { _currency: org.currency })
+);
+
+gateways.map(gw => <PayButton gateway={gw} ... />)
+```
+
+If the owner has enabled multiple gateways for the org's currency, all show up sorted by `priority`. If none, fall back to manual proof upload (existing flow).
+
+---
+
+## 5. Lifecycle smoke test (unchanged from previous plan)
+
+Run the trial → grace → dunning → recovery loop on a clean tenant once **at least one** gateway is configured. Capture logs, fix gaps.
 
 ---
 
 ## Technical details
 
-- **Files to add**
-  - `supabase/functions/stripe-checkout/index.ts`
-  - `supabase/functions/stripe-webhook/index.ts` (verify_jwt = false in `config.toml`)
-  - `supabase/functions/payment-gateway/lifecycle_test.ts`
-- **Files to edit**
-  - `src/pages/AdminSubscription.tsx` — dual-button routing + currency detection
-  - `src/components/SubscriptionGate.tsx` — make sure CTA points to chosen gateway
-  - `supabase/config.toml` — add `[functions.stripe-webhook]` block
-- **DB migration** — extend gateway enum, add index on `gateway_transactions(org_id, status)` for dunning lookups
-- **No changes** to existing SSLCommerz logic, trial logic, or RLS
+**Files to add**
+- `supabase/migrations/<ts>_platform_payment_gateways.sql` (table + RLS + RPC + Vault encryption helper)
+- `src/pages/PlatformPaymentGateways.tsx`
+- `src/components/platform/AddGatewayDialog.tsx`
+- `supabase/functions/payment-gateway-test/index.ts`
+
+**Files to edit**
+- `src/App.tsx` — add `/platform/payment-gateways` route
+- `src/components/PlatformLayout.tsx` — add sidebar link
+- `supabase/functions/payment-gateway/index.ts` — DB lookup + Stripe action
+- `src/pages/AdminSubscription.tsx` — dynamic gateway buttons
+
+**No changes** to RLS on existing tables, trial/dunning logic, or BDT/USD currency policy.
 
 ---
 
-## Out of scope
+## Out of scope (deferred)
 
-- Paddle (Stripe + SSLCommerz already cover global + BD)
-- Replacing manual proof-upload (kept as fallback for bKash/Nagad direct)
-- Legal pages / DPA (separate launch task)
-- Email DKIM / deliverability (separate)
+- Per-tenant gateway overrides (owner configs apply to all agencies for now)
+- Paddle / bKash / Nagad — UI placeholders only; backend wiring later
+- Migrating the existing `SSLCOMMERZ_*` secrets if previously set — owner just re-enters them in the UI
 
 ---
 
 ## What I need from you to start
 
-1. Confirm: **enable Stripe via Lovable Payments** (recommended) or BYOK Stripe?
-2. Have your **SSLCommerz live (or sandbox) Store ID + Password** ready — I'll trigger the secret prompt as soon as you approve.
+Just approve. After approval I'll create the migration; you'll then enter your SSLCommerz / Stripe credentials directly in the new UI — no secret prompts.

@@ -72,6 +72,7 @@ const AffiliateEarnings = lazy(() => import("@/pages/AffiliateEarnings"));
 const AffiliatePayouts = lazy(() => import("@/pages/AffiliatePayouts"));
 const AffiliateProfile = lazy(() => import("@/pages/AffiliateProfile"));
 const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
+const PlatformPaymentGateways = lazy(() => import("@/pages/PlatformPaymentGateways"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -178,6 +179,7 @@ const FullApp = () => (
                   <Route path="/platform/announcements" element={<PlatformAnnouncements />} />
                   <Route path="/platform/affiliates" element={<PlatformAffiliates />} />
                   <Route path="/platform/audit" element={<PlatformAudit />} />
+                  <Route path="/platform/payment-gateways" element={<PlatformPaymentGateways />} />
                 </Route>
 
                 {/* Super Admin routes */}

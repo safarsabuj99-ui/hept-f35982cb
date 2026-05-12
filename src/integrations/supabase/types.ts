@@ -2924,6 +2924,54 @@ export type Database = {
           },
         ]
       }
+      platform_payment_gateways: {
+        Row: {
+          created_at: string
+          credentials: Json
+          display_name: string
+          gateway: string
+          id: string
+          is_enabled: boolean
+          last_test_status: string | null
+          last_tested_at: string | null
+          mode: string
+          priority: number
+          public_config: Json
+          supported_currencies: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credentials?: Json
+          display_name: string
+          gateway: string
+          id?: string
+          is_enabled?: boolean
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          mode?: string
+          priority?: number
+          public_config?: Json
+          supported_currencies?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credentials?: Json
+          display_name?: string
+          gateway?: string
+          id?: string
+          is_enabled?: boolean
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          mode?: string
+          priority?: number
+          public_config?: Json
+          supported_currencies?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       platform_plans: {
         Row: {
           allow_self_downgrade: boolean
@@ -4169,6 +4217,18 @@ export type Database = {
       }
       cleanup_old_notifications: { Args: never; Returns: undefined }
       compute_chunk_days: { Args: { p_ad_account_id: string }; Returns: number }
+      get_active_gateways_for_currency: {
+        Args: { _currency: string }
+        Returns: {
+          display_name: string
+          gateway: string
+          id: string
+          mode: string
+          priority: number
+          public_config: Json
+          supported_currencies: string[]
+        }[]
+      }
       get_admin_dashboard_summary:
         | { Args: { p_date_from: string; p_date_to: string }; Returns: Json }
         | {
