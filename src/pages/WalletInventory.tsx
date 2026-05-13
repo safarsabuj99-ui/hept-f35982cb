@@ -37,6 +37,8 @@ interface UsdOverview {
   clientObligations: number;
   usdNeeded: number;
   snapshotDate: string | null;
+  previousCloseDate: string | null;
+  previousCloseBalance: number;
   loading: boolean;
   clientBalances: ClientBalance[];
 }
