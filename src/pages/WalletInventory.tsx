@@ -37,6 +37,8 @@ interface UsdOverview {
   clientObligations: number;
   usdNeeded: number;
   snapshotDate: string | null;
+  previousCloseDate: string | null;
+  previousCloseBalance: number;
   loading: boolean;
   clientBalances: ClientBalance[];
 }
@@ -108,7 +110,8 @@ export default function WalletInventory() {
   const [overview, setOverview] = useState<UsdOverview>({
     carryForward: 0, boughtSince: 0, spentSince: 0, manualSpend: 0, availableBalance: 0,
     dailyBurn: 0, runwayDays: 0, clientObligations: 0, usdNeeded: 0,
-    snapshotDate: null, loading: true, clientBalances: [],
+    snapshotDate: null, previousCloseDate: null, previousCloseBalance: 0,
+    loading: true, clientBalances: [],
   });
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -148,6 +151,7 @@ export default function WalletInventory() {
     if (!profile?.org_id) return;
     setOverview(prev => ({ ...prev, loading: true }));
 
+    // Load latest auto/manual snapshot for the live metrics
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
@@ -155,8 +159,21 @@ export default function WalletInventory() {
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
+    // Load last 2 MANUAL snapshots — these represent period closes / opening balances
+    const SYSTEM_UUID = "00000000-0000-0000-0000-000000000000";
+    const { data: manualSnaps } = await supabase
+      .from("usd_inventory_snapshots" as any)
+      .select("snapshot_date, balance_usd, baseline_balance_usd, created_by")
+      .eq("org_id", profile.org_id)
+      .neq("created_by", SYSTEM_UUID)
+      .order("snapshot_date", { ascending: false })
+      .limit(2);
+
     const snap = (snapshots as any[])?.[0] ?? null;
     const metrics = (snap?.metrics as any) ?? {};
+    const manualArr = (manualSnaps as any[]) ?? [];
+    const currentManual = manualArr[0] ?? null;
+    const previousManual = manualArr[1] ?? null;
 
     setOverview({
       carryForward: snap?.baseline_balance_usd != null
@@ -170,7 +187,11 @@ export default function WalletInventory() {
       runwayDays: metrics.runway_days ?? 0,
       clientObligations: metrics.client_obligations ?? 0,
       usdNeeded: metrics.usd_needed ?? 0,
-      snapshotDate: snap?.snapshot_date ?? null,
+      snapshotDate: currentManual?.snapshot_date ?? snap?.snapshot_date ?? null,
+      previousCloseDate: previousManual?.snapshot_date ?? null,
+      previousCloseBalance: previousManual
+        ? Number(previousManual.baseline_balance_usd ?? previousManual.balance_usd)
+        : 0,
       loading: false,
       clientBalances: (metrics.client_balances as ClientBalance[]) ?? [],
     });
@@ -511,9 +532,14 @@ export default function WalletInventory() {
               </CardTitle>
               {overview.snapshotDate && (
                 <div className="flex flex-wrap items-center gap-1 mt-1">
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    Since {overview.snapshotDate}
+                  <Badge variant="outline" className="text-[10px] font-normal border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    Period start: {overview.snapshotDate}
                   </Badge>
+                  {overview.previousCloseDate && (
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      Last close: {overview.previousCloseDate} → ${overview.previousCloseBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </Badge>
+                  )}
                   <Badge variant="secondary" className="text-[10px] font-normal gap-1">
                     <Clock className="h-2.5 w-2.5" /> Auto: 5 min
                   </Badge>
