@@ -532,9 +532,14 @@ export default function WalletInventory() {
               </CardTitle>
               {overview.snapshotDate && (
                 <div className="flex flex-wrap items-center gap-1 mt-1">
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    Since {overview.snapshotDate}
+                  <Badge variant="outline" className="text-[10px] font-normal border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    Period start: {overview.snapshotDate}
                   </Badge>
+                  {overview.previousCloseDate && (
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      Last close: {overview.previousCloseDate} → ${overview.previousCloseBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </Badge>
+                  )}
                   <Badge variant="secondary" className="text-[10px] font-normal gap-1">
                     <Clock className="h-2.5 w-2.5" /> Auto: 5 min
                   </Badge>
