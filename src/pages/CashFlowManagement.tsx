@@ -22,6 +22,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useProfile } from "@/hooks/useProfile";
+import CashFlowPeriodCard from "@/components/finance/CashFlowPeriodCard";
 
 interface AgencyAccount {
   id: string;
@@ -1157,6 +1158,13 @@ export default function CashFlowManagement() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Cash Flow Period Tracker */}
+      <CashFlowPeriodCard
+        currentBalance={accounts.filter(a => a.is_active).reduce((s, a) => s + Number(a.current_balance_bdt), 0)}
+        fallbackPeriodStart={accounts.length > 0 ? accounts.reduce((m, a) => (a.created_at < m ? a.created_at : m), accounts[0].created_at) : null}
+        onClosed={fetchData}
+      />
 
       {/* Premium KPI Cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3">

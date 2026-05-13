@@ -940,6 +940,51 @@ export type Database = {
           },
         ]
       }
+      cash_flow_snapshots: {
+        Row: {
+          carry_forward_bdt: number
+          closing_balance_bdt: number
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          opening_balance_bdt: number
+          org_id: string | null
+          period_start_date: string
+          snapshot_date: string
+          take_home_profit_bdt: number
+          variance_bdt: number
+        }
+        Insert: {
+          carry_forward_bdt?: number
+          closing_balance_bdt?: number
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          opening_balance_bdt?: number
+          org_id?: string | null
+          period_start_date: string
+          snapshot_date?: string
+          take_home_profit_bdt?: number
+          variance_bdt?: number
+        }
+        Update: {
+          carry_forward_bdt?: number
+          closing_balance_bdt?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          opening_balance_bdt?: number
+          org_id?: string | null
+          period_start_date?: string
+          snapshot_date?: string
+          take_home_profit_bdt?: number
+          variance_bdt?: number
+        }
+        Relationships: []
+      }
       cash_withdrawal_returns: {
         Row: {
           amount_bdt: number
