@@ -22,6 +22,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { TablePagination } from "@/components/TablePagination";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { useProfile } from "@/hooks/useProfile";
+import CashFlowPeriodCard from "@/components/finance/CashFlowPeriodCard";
 
 interface AgencyAccount {
   id: string;
