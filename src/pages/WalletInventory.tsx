@@ -151,6 +151,7 @@ export default function WalletInventory() {
     if (!profile?.org_id) return;
     setOverview(prev => ({ ...prev, loading: true }));
 
+    // Load latest auto/manual snapshot for the live metrics
     const { data: snapshots } = await supabase
       .from("usd_inventory_snapshots" as any)
       .select("*")
@@ -158,8 +159,21 @@ export default function WalletInventory() {
       .order("snapshot_date", { ascending: false })
       .limit(1);
 
+    // Load last 2 MANUAL snapshots — these represent period closes / opening balances
+    const SYSTEM_UUID = "00000000-0000-0000-0000-000000000000";
+    const { data: manualSnaps } = await supabase
+      .from("usd_inventory_snapshots" as any)
+      .select("snapshot_date, balance_usd, baseline_balance_usd, created_by")
+      .eq("org_id", profile.org_id)
+      .neq("created_by", SYSTEM_UUID)
+      .order("snapshot_date", { ascending: false })
+      .limit(2);
+
     const snap = (snapshots as any[])?.[0] ?? null;
     const metrics = (snap?.metrics as any) ?? {};
+    const manualArr = (manualSnaps as any[]) ?? [];
+    const currentManual = manualArr[0] ?? null;
+    const previousManual = manualArr[1] ?? null;
 
     setOverview({
       carryForward: snap?.baseline_balance_usd != null
@@ -173,7 +187,11 @@ export default function WalletInventory() {
       runwayDays: metrics.runway_days ?? 0,
       clientObligations: metrics.client_obligations ?? 0,
       usdNeeded: metrics.usd_needed ?? 0,
-      snapshotDate: snap?.snapshot_date ?? null,
+      snapshotDate: currentManual?.snapshot_date ?? snap?.snapshot_date ?? null,
+      previousCloseDate: previousManual?.snapshot_date ?? null,
+      previousCloseBalance: previousManual
+        ? Number(previousManual.baseline_balance_usd ?? previousManual.balance_usd)
+        : 0,
       loading: false,
       clientBalances: (metrics.client_balances as ClientBalance[]) ?? [],
     });
