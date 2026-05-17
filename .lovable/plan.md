@@ -1,62 +1,46 @@
-## Goal
+## Problem
 
-Fully reverse the **May 17 ৳5,000 Bank deposit** for **Akram Ahmed (Our's Heritage)** so that every number it affected goes back to what it was before approval. No UI changes — backend data only.
+The DB trigger `notify_on_guard_resume` fires on **any** campaign status change from `paused`/`guard_paused` → `active` and always says *"{client}'s campaigns auto-resumed after deposit."* — even when an admin/manager manually resumes a campaign or bulk-activates from the campaign hub. Result: misleading notifications like "Niloy's campaigns auto-resumed after deposit" when no deposit happened.
 
-## Target record (confirmed)
+## Fix
 
-| Field | Value |
-|---|---|
-| Payment request | `0a751007-37e0-4ae9-9d7e-0d8125a71f81` |
-| Client | Akram Ahmed (`6385b339-394b-4970-b807-683500b60af0`) — Our's Heritage |
-| Method | Bank · Platform TikTok · ৳5,000 |
-| Rate / Credited | ৳145 → **$34.48** |
-| Payment date | 2026-05-14 (created 2026-05-17) |
-| Agency account credited | `c3787088…1162c` — *MD SABUJ MIAH (CITY)*, balance **৳96,712.76** |
-| Linked wallet transaction | `d0e70e0c-f487-4cee-84fa-efb6645ec5e9` (credit $34.48, completed) |
+Two database changes (no UI code edits needed — `useNotifications` just displays whatever the DB writes).
 
-## What this approval changed
+### 1. Tag deposit-driven resumes
 
-1. `payment_requests` row → status `approved`, `final_amount_usd 34.48`, snapshot `{tiktok:145}`, `received_in_account_id` set.
-2. `transactions` row → +$34.48 credit (TikTok) to the client's wallet.
-3. `agency_accounts.current_balance_bdt` for *MD SABUJ MIAH (CITY)* → +৳5,000 (no trigger; updated in code).
-4. `audit_logs` → one `payment_approved` row + one `funds_added` row.
-
-Everything else (admin dashboard collections, client wallet, USD inventory, P&L cash-flow KPIs, ClientDetail history) is **computed live** from those four rows, so reversing them automatically corrects every downstream number — no extra writes needed.
-
-## Rollback steps (single migration / data ops, in order)
+Update `check_auto_resume()` (the trigger that runs on a `transactions` credit and flips paused campaigns back to active) to set a session-local marker before its `UPDATE public.campaigns SET status = 'active'`:
 
 ```text
-1.  DELETE FROM transactions
-      WHERE id = 'd0e70e0c-f487-4cee-84fa-efb6645ec5e9';
-        -- removes $34.48 from client wallet + dashboard collections-USD
-
-2.  UPDATE agency_accounts
-      SET current_balance_bdt = current_balance_bdt - 5000
-      WHERE id = 'c3787088-a635-45f3-b48c-6ba72d01162c';
-        -- restores bank account balance to ৳91,712.76
-
-3.  DELETE FROM payment_requests
-      WHERE id = '0a751007-37e0-4ae9-9d7e-0d8125a71f81';
-        -- removes the row entirely (per "permanent delete" choice)
-
-4.  Optional cleanup (recommended for clean audit):
-    DELETE FROM audit_logs
-      WHERE description LIKE 'Approved payment ৳5,000 → $34.48%for client 6385b339-394b-4970-b807-683500b60af0%'
-         OR description LIKE 'Deposit $34.48 (status: completed)';
-    -- limit to rows created within ~1 min of 2026-05-17 02:42 to avoid touching unrelated logs.
+PERFORM set_config('app.guard_auto_resume', 'true', true);
 ```
 
-All four ops run as one batch via the data-mutation tool.
+This GUC lives only for the duration of the current statement, so it cannot leak across requests.
 
-## Verification (after rollback)
+### 2. Branch `notify_on_guard_resume` on that marker
 
-- Akram Ahmed wallet TikTok balance drops by **$34.48**.
-- *MD SABUJ MIAH (CITY)* bank balance shows **৳91,712.76**.
-- `/admin/payment-requests` no longer lists this May 17 row.
-- Admin dashboard collections, P&L revenue, Cash-flow recent activity, and client portal Payment Requests list all auto-refresh (realtime is subscribed) and reflect the reversed totals.
+Rewrite the trigger to read the marker and pick one of two notification paths:
 
-## Notes / risks
+- **Auto path** (`app.guard_auto_resume = 'true'`): keep the existing wording.
+  - Client: "Campaigns Resumed ✅ — Your campaigns have been resumed after balance top-up."
+  - Admins: "Campaigns Resumed — {client}'s campaigns auto-resumed after deposit."
 
-- This is **destructive and permanent** (your chosen option). No code-side undo button.
-- The other 7 similar ৳5,000 Akram Ahmed rows are **not touched**.
-- No frontend code changes are required.
+- **Manual path** (marker not set → admin/manager toggled status, bulk-activate, platform-side flip, etc.):
+  - Client: "Campaign Resumed ▶️ — Your campaign was resumed by your account manager."
+  - Admins: "Campaign Resumed — {client}'s campaign was manually resumed."
+  - Link unchanged (`/admin/clients/{id}?tab=automation` for admins, `/dashboard?highlight=resumed` for clients).
+
+The 30-second dedup guard stays, but the title check is widened so the two variants don't double-fire.
+
+### Technical details
+
+- Touched objects: `public.check_auto_resume()` (1 line added), `public.notify_on_guard_resume()` (rewrite body).
+- Trigger bindings on `campaigns` and `transactions` stay as-is.
+- `notify_on_guard_pause` and `check_auto_resume`'s resume logic, audit log entries, and pg_net push delivery are untouched.
+- No frontend changes; `NotificationBell`, `useNotifications`, and the push trigger render whatever title/body the DB inserts.
+- Reads `current_setting('app.guard_auto_resume', true)` (the second arg suppresses the "unrecognised parameter" error when unset).
+
+### Not touched
+
+- Existing historical "Campaigns Resumed" rows in the `notifications` table — only future events use the new wording.
+- The threshold-based legacy path inside `check_auto_resume` (deposit detection covers it).
+- Client-side ad-guard UI, settings, or thresholds.
