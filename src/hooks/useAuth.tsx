@@ -150,28 +150,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Step 2: Get initial session (triggers INITIAL_SESSION event above)
+    // Step 2: Get initial session directly. Don't rely solely on the auth
+    // event firing (some browsers/PWA modes delay INITIAL_SESSION). Resolve
+    // auth state from the explicit getSession() result so we never get stuck
+    // in a "restoring" state that would force a redirect to /login.
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (!mounted) return;
-      // If no session and no auth event fired yet, mark ready
-      if (!initialSession) {
-        setAuthReady(true);
-        setLoading(false);
-      }
-    });
 
-    // Safety timeout: if auth hasn't resolved in 5 seconds, unblock UI
-    const safetyTimer = setTimeout(() => {
-      if (mounted && !authReady) {
-        console.warn("[Auth] Safety timeout: forcing authReady");
+      if (!initialSession) {
+        // Definitively unauthenticated.
+        setSession(null);
+        setUser(null);
+        setRole(null);
+        lastHandledUserIdRef.current = null;
         setAuthReady(true);
         setLoading(false);
+        return;
       }
-    }, 5000);
+
+      // Authenticated. Seed state from this call so protected routes never
+      // see a momentary `!user` and redirect to /login while the listener
+      // is still warming up.
+      setSession(initialSession);
+      setUser(initialSession.user);
+
+      const uid = initialSession.user.id;
+      if (lastHandledUserIdRef.current === uid) {
+        setAuthReady(true);
+        setLoading(false);
+        return;
+      }
+      lastHandledUserIdRef.current = uid;
+      const fetchId = ++roleFetchIdRef.current;
+      fetchRole(uid, fetchId).finally(() => {
+        if (!mounted) return;
+        setAuthReady(true);
+        setLoading(false);
+      });
+    }).catch(() => {
+      if (!mounted) return;
+      // Network failure on initial session lookup: don't strand the UI on
+      // the spinner, but also don't pretend the user is signed out — leave
+      // user/session null and let onAuthStateChange recover when it can.
+      setAuthReady(true);
+      setLoading(false);
+    });
 
     return () => {
       mounted = false;
-      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, [fetchRole, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
