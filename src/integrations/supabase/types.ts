@@ -4262,6 +4262,7 @@ export type Database = {
       }
       cleanup_old_notifications: { Args: never; Returns: undefined }
       compute_chunk_days: { Args: { p_ad_account_id: string }; Returns: number }
+      fmt_money: { Args: { n: number }; Returns: string }
       get_active_gateways_for_currency: {
         Args: { _currency: string }
         Returns: {
