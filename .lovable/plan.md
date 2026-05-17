@@ -1,47 +1,52 @@
+## Goal
+Stop the app from repeatedly bouncing protected pages through the login screen, which looks like a full page reload with a white flash and sidebar remount.
+
 ## What I found
+- The preview/session replay shows `/admin` rendering, then the app falls back to the login screen.
+- Console shows `[Auth] Safety timeout: forcing authReady`.
+- In `useAuth.tsx`, the provider can force `authReady=true` after 5s even when session resolution is still incomplete.
+- In `ProtectedRoute.tsx`, once `authReady` becomes true, `!user` immediately redirects to `/login`.
+- That means a slow or delayed auth restore becomes a redirect loop: protected page -> forced auth ready -> login -> auth resumes -> route remount -> repeat.
+- The earlier service worker fix was good, but the current bug is primarily an auth state race.
 
-Searched every reload trigger in the codebase. There is **no `window.location.reload()`, no `<meta http-equiv="refresh">`, no `navigate(0)`, and no `controllerchange` listener** anywhere. So the reload is being caused indirectly. The 2 most plausible culprits, in order of likelihood:
+## Plan
+1. Harden auth bootstrapping in `src/hooks/useAuth.tsx`
+- Replace the current timeout-based “force ready” behavior with a two-phase auth initialization flow.
+- Track whether the initial auth check has actually completed before allowing the app to treat auth as settled.
+- Prevent stale async role fetches from mutating state after a newer auth event.
+- Only mark `authReady` after one of these is true:
+  - an actual auth event resolved the session, or
+  - `getSession()` returned definitively with no session.
 
-### Culprit #1 — Service worker churn (most likely)
-`public/sw.js` calls `self.skipWaiting()` on **every** install and `clients.claim()` on **every** activate. Lovable's edge serves `/sw.js` with `Cache-Control: no-cache`, so the browser re-validates it on every page load. Combined with PWA `display: standalone` in `manifest.json`, on some platforms (iOS PWA, certain Android Chrome builds) `clients.claim()` racing with an in-flight HTML request causes the browser to re-fetch the document — looking exactly like a full reload with white flash and sidebar re-render. The console even shows two `[Auth] Safety timeout` warnings ~90 s apart, which only fires once per AuthProvider mount — meaning the provider did remount between them.
+2. Make protected routes resilient in `src/components/ProtectedRoute.tsx`
+- Stop redirecting to `/login` while auth is still in an indeterminate restore state.
+- Add a small “restoring session” hold state so temporary auth lag does not trigger a route bounce.
+- Keep role/org checks behind authenticated state only, so org fetches never race against a missing session.
 
-### Culprit #2 — Aggressive query invalidation on auth events
-`src/hooks/useAuth.tsx` calls `queryClient.invalidateQueries()` (no key — nukes the whole cache) on every `SIGNED_IN` event, and `queryClient.clear()` on `SIGNED_OUT`. If a TOKEN_REFRESHED is misclassified or the listener fires twice (which Supabase does fire `INITIAL_SESSION` + `SIGNED_IN` back-to-back on first load), the entire cache refetches and the screen flashes loaders — readable as "reload" to the user.
+3. Tighten login redirect behavior in `src/pages/Login.tsx` and app shell routing
+- Ensure the login page only redirects after both user and role are truly stable.
+- Remove any path where `/login` can briefly render during an in-progress session restore for already signed-in users.
+- Verify root/app-shell logic does not choose an anonymous fast path when a valid session token exists but auth hydration is still pending.
 
----
+4. Add targeted diagnostics for verification
+- Keep lightweight dev-only logs around auth phase transitions so we can confirm the loop is gone.
+- Verify that idle time on `/admin`, `/dashboard`, `/manager`, and `/platform` no longer causes route remounts or document-level flashes.
 
-## Fix plan (frontend-only, no business logic touched)
+## Technical details
+Files to update:
+- `src/hooks/useAuth.tsx`
+- `src/components/ProtectedRoute.tsx`
+- `src/pages/Login.tsx`
+- `src/App.tsx` if the shell needs a small guard adjustment
 
-### 1. Harden the service worker
-Edit `public/sw.js`:
-- Move `skipWaiting()` behind a `controller`-presence check so a fresh install on an uncontrolled page doesn't try to steal control mid-navigation.
-- Keep `clients.claim()` but wrap it so it only runs when there is no existing controller — preventing the activation race that triggers reloads.
-- Bump the version comment to `v3 — reload-loop fix` to force one final activation across already-installed clients.
+Expected result:
+- No repeated jump from protected pages to `/login`
+- No visible white-flash “reload” every few seconds
+- Sidebar/layout stays mounted while idle
+- Auth restore is stable across all roles
 
-### 2. Guard registration against iframe / preview hosts
-Edit `src/hooks/usePushNotifications.ts` — the guard already checks `window.self === window.top`, but add a hostname check so the SW never registers on `*.lovableproject.com` or `id-preview--*`. This eliminates reload risk in the Lovable preview iframe entirely.
-
-### 3. Stop the global cache nuke on SIGNED_IN
-Edit `src/hooks/useAuth.tsx`:
-- Remove the unconditional `queryClient.invalidateQueries()` on `SIGNED_IN`. The per-user `queryKey: [..., user?.id]` pattern already auto-invalidates when the user changes, so this is redundant and causes a refetch storm.
-- Keep `queryClient.clear()` on `SIGNED_OUT` (correct behavior).
-- Skip `fetchRole` if `INITIAL_SESSION` and `SIGNED_IN` fire back-to-back for the same user id (guard with a ref).
-
-### 4. Add a one-time reload detector (diagnostic)
-Add 4 lines in `src/main.tsx` that log to console whenever the page mounts, with a `performance.navigation.type` tag. If after the above fixes the user still sees flashes, we'll instantly know whether they're real reloads (`type: 'reload'` or `'navigate'`) or just re-renders.
-
----
-
-## Out of scope
-- No database changes
-- No edge function changes
-- No P&L / wallet / cash-flow logic touched
-- No UI redesign
-
-## Acceptance
-- Open `/admin`, `/dashboard`, `/manager`, `/platform` and idle for 2 minutes → zero new document requests in Network tab.
-- Console shows `[App] mounted (type: navigate)` exactly **once** per route entry.
-- No more `[Auth] Safety timeout` warnings.
-- Sidebar items don't pop in/out after the first 500 ms.
-
-Approve and I'll implement all 4 steps in one pass.
+## Validation
+- Reproduce on `/admin`
+- Confirm no repeated auth timeout warnings leading to redirects
+- Confirm protected pages remain stable for an idle observation window
+- Confirm signed-out users still correctly land on `/login`
