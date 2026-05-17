@@ -23,16 +23,32 @@ export function usePushNotifications() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isPreviewHost =
+    hostname.includes("lovableproject.com") ||
+    hostname.includes("id-preview--") ||
+    hostname.includes("lovable.app");
+
   const isSupported =
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
     "PushManager" in window &&
-    window.self === window.top;
+    window.self === window.top &&
+    !isPreviewHost;
 
   useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    // On preview/iframe hosts, proactively unregister any stale SW that could
+    // be causing reload loops, and skip registration entirely.
+    if (isPreviewHost || window.self !== window.top) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister().catch(() => {}));
+      }).catch(() => {});
+      return;
+    }
     if (!isSupported) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
-  }, [isSupported]);
+  }, [isSupported, isPreviewHost]);
 
   // Check existing subscription — gated on authReady
   useEffect(() => {

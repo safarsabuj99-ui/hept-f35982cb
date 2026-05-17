@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const roleFetchIdRef = useRef(0);
+  const lastHandledUserIdRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
 
   const fetchRole = useCallback(async (userId: string, fetchId: number) => {
@@ -107,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(newSession?.user ?? null);
 
         if (_event === 'SIGNED_OUT') {
+          lastHandledUserIdRef.current = null;
           setRole(null);
           setAuthReady(true);
           setLoading(false);
@@ -120,22 +122,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (_event === 'SIGNED_IN' && newSession?.user) {
-          // Invalidate stale caches from before login
-          queryClient.invalidateQueries();
-          // Fire-and-forget role fetch (no await!)
-          const fetchId = ++roleFetchIdRef.current;
-          fetchRole(newSession.user.id, fetchId).then(() => {
-            if (mounted) {
-              setAuthReady(true);
-              setLoading(false);
-            }
-          });
-          return;
-        }
-
-        // INITIAL_SESSION event
+        // SIGNED_IN and INITIAL_SESSION can fire back-to-back for the same
+        // user on initial page load. Dedup by uid so we don't refetch roles
+        // (and re-flash the UI) twice. Also no longer nuke the whole query
+        // cache on SIGNED_IN — per-user queryKeys handle invalidation.
         if (newSession?.user) {
+          if (lastHandledUserIdRef.current === newSession.user.id) {
+            // Already handled this user — ensure ready flags but skip refetch
+            setAuthReady(true);
+            setLoading(false);
+            return;
+          }
+          lastHandledUserIdRef.current = newSession.user.id;
           const fetchId = ++roleFetchIdRef.current;
           fetchRole(newSession.user.id, fetchId).then(() => {
             if (mounted) {
@@ -144,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           });
         } else {
+          lastHandledUserIdRef.current = null;
           setRole(null);
           setAuthReady(true);
           setLoading(false);
