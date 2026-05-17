@@ -61,7 +61,29 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  // Guard: if auth says "no user" but a Supabase session token still exists in
+  // localStorage, we're in a transient restore window. Show the loader instead
+  // of bouncing to /login (which causes the reload-flash loop).
+  if (!user) {
+    let hasToken = false;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("sb-") && k.endsWith("-auth-token")) {
+          const v = localStorage.getItem(k);
+          if (v && v.length > 10) { hasToken = true; break; }
+        }
+      }
+    } catch {}
+    if (hasToken) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    return <Navigate to="/login" replace />;
+  }
 
   // Block admin users whose org is in a non-active state
   if (role === "admin" && requiredRole === "admin" && orgId) {
