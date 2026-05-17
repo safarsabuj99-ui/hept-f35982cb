@@ -1,52 +1,62 @@
 ## Goal
-Stop the app from repeatedly bouncing protected pages through the login screen, which looks like a full page reload with a white flash and sidebar remount.
 
-## What I found
-- The preview/session replay shows `/admin` rendering, then the app falls back to the login screen.
-- Console shows `[Auth] Safety timeout: forcing authReady`.
-- In `useAuth.tsx`, the provider can force `authReady=true` after 5s even when session resolution is still incomplete.
-- In `ProtectedRoute.tsx`, once `authReady` becomes true, `!user` immediately redirects to `/login`.
-- That means a slow or delayed auth restore becomes a redirect loop: protected page -> forced auth ready -> login -> auth resumes -> route remount -> repeat.
-- The earlier service worker fix was good, but the current bug is primarily an auth state race.
+Fully reverse the **May 17 ৳5,000 Bank deposit** for **Akram Ahmed (Our's Heritage)** so that every number it affected goes back to what it was before approval. No UI changes — backend data only.
 
-## Plan
-1. Harden auth bootstrapping in `src/hooks/useAuth.tsx`
-- Replace the current timeout-based “force ready” behavior with a two-phase auth initialization flow.
-- Track whether the initial auth check has actually completed before allowing the app to treat auth as settled.
-- Prevent stale async role fetches from mutating state after a newer auth event.
-- Only mark `authReady` after one of these is true:
-  - an actual auth event resolved the session, or
-  - `getSession()` returned definitively with no session.
+## Target record (confirmed)
 
-2. Make protected routes resilient in `src/components/ProtectedRoute.tsx`
-- Stop redirecting to `/login` while auth is still in an indeterminate restore state.
-- Add a small “restoring session” hold state so temporary auth lag does not trigger a route bounce.
-- Keep role/org checks behind authenticated state only, so org fetches never race against a missing session.
+| Field | Value |
+|---|---|
+| Payment request | `0a751007-37e0-4ae9-9d7e-0d8125a71f81` |
+| Client | Akram Ahmed (`6385b339-394b-4970-b807-683500b60af0`) — Our's Heritage |
+| Method | Bank · Platform TikTok · ৳5,000 |
+| Rate / Credited | ৳145 → **$34.48** |
+| Payment date | 2026-05-14 (created 2026-05-17) |
+| Agency account credited | `c3787088…1162c` — *MD SABUJ MIAH (CITY)*, balance **৳96,712.76** |
+| Linked wallet transaction | `d0e70e0c-f487-4cee-84fa-efb6645ec5e9` (credit $34.48, completed) |
 
-3. Tighten login redirect behavior in `src/pages/Login.tsx` and app shell routing
-- Ensure the login page only redirects after both user and role are truly stable.
-- Remove any path where `/login` can briefly render during an in-progress session restore for already signed-in users.
-- Verify root/app-shell logic does not choose an anonymous fast path when a valid session token exists but auth hydration is still pending.
+## What this approval changed
 
-4. Add targeted diagnostics for verification
-- Keep lightweight dev-only logs around auth phase transitions so we can confirm the loop is gone.
-- Verify that idle time on `/admin`, `/dashboard`, `/manager`, and `/platform` no longer causes route remounts or document-level flashes.
+1. `payment_requests` row → status `approved`, `final_amount_usd 34.48`, snapshot `{tiktok:145}`, `received_in_account_id` set.
+2. `transactions` row → +$34.48 credit (TikTok) to the client's wallet.
+3. `agency_accounts.current_balance_bdt` for *MD SABUJ MIAH (CITY)* → +৳5,000 (no trigger; updated in code).
+4. `audit_logs` → one `payment_approved` row + one `funds_added` row.
 
-## Technical details
-Files to update:
-- `src/hooks/useAuth.tsx`
-- `src/components/ProtectedRoute.tsx`
-- `src/pages/Login.tsx`
-- `src/App.tsx` if the shell needs a small guard adjustment
+Everything else (admin dashboard collections, client wallet, USD inventory, P&L cash-flow KPIs, ClientDetail history) is **computed live** from those four rows, so reversing them automatically corrects every downstream number — no extra writes needed.
 
-Expected result:
-- No repeated jump from protected pages to `/login`
-- No visible white-flash “reload” every few seconds
-- Sidebar/layout stays mounted while idle
-- Auth restore is stable across all roles
+## Rollback steps (single migration / data ops, in order)
 
-## Validation
-- Reproduce on `/admin`
-- Confirm no repeated auth timeout warnings leading to redirects
-- Confirm protected pages remain stable for an idle observation window
-- Confirm signed-out users still correctly land on `/login`
+```text
+1.  DELETE FROM transactions
+      WHERE id = 'd0e70e0c-f487-4cee-84fa-efb6645ec5e9';
+        -- removes $34.48 from client wallet + dashboard collections-USD
+
+2.  UPDATE agency_accounts
+      SET current_balance_bdt = current_balance_bdt - 5000
+      WHERE id = 'c3787088-a635-45f3-b48c-6ba72d01162c';
+        -- restores bank account balance to ৳91,712.76
+
+3.  DELETE FROM payment_requests
+      WHERE id = '0a751007-37e0-4ae9-9d7e-0d8125a71f81';
+        -- removes the row entirely (per "permanent delete" choice)
+
+4.  Optional cleanup (recommended for clean audit):
+    DELETE FROM audit_logs
+      WHERE description LIKE 'Approved payment ৳5,000 → $34.48%for client 6385b339-394b-4970-b807-683500b60af0%'
+         OR description LIKE 'Deposit $34.48 (status: completed)';
+    -- limit to rows created within ~1 min of 2026-05-17 02:42 to avoid touching unrelated logs.
+```
+
+All four ops run as one batch via the data-mutation tool.
+
+## Verification (after rollback)
+
+- Akram Ahmed wallet TikTok balance drops by **$34.48**.
+- *MD SABUJ MIAH (CITY)* bank balance shows **৳91,712.76**.
+- `/admin/payment-requests` no longer lists this May 17 row.
+- Admin dashboard collections, P&L revenue, Cash-flow recent activity, and client portal Payment Requests list all auto-refresh (realtime is subscribed) and reflect the reversed totals.
+
+## Notes / risks
+
+- This is **destructive and permanent** (your chosen option). No code-side undo button.
+- The other 7 similar ৳5,000 Akram Ahmed rows are **not touched**.
+- No frontend code changes are required.
