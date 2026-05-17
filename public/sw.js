@@ -1,13 +1,32 @@
 // Service Worker for Web Push Notifications
-// v2 — global search filter rewrite (force PWA refresh)
+// v3 — reload-loop fix: no aggressive skipWaiting/claim on already-controlled pages
 // Does NOT cache anything — purely for push notification handling
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
+self.addEventListener("install", (event) => {
+  // Only skip waiting on the very first install (no existing controller).
+  // On subsequent installs we let the new SW wait until all tabs close,
+  // which prevents activation races that look like full-page reloads.
+  event.waitUntil((async () => {
+    const existing = await self.registration.active;
+    if (!existing) {
+      await self.skipWaiting();
+    }
+  })());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil((async () => {
+    // Only claim uncontrolled clients (first ever activation).
+    // Claiming already-controlled tabs is what triggers the reload flash on
+    // some browsers / installed PWAs.
+    const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const anyUncontrolled = clientList.some((c) => !c.frameType || c.frameType === "top-level");
+    const alreadyControlled = clientList.some((c) => (c).type === "window" && self.registration.active && (c).url);
+    if (!alreadyControlled || clientList.length === 0) {
+      try { await self.clients.claim(); } catch {}
+    }
+    if (!anyUncontrolled) return;
+  })());
 });
 
 self.addEventListener("push", (event) => {
