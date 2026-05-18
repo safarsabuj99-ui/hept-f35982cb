@@ -211,21 +211,60 @@ export default function AICopilot() {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleComposerSubmit(); }
+  };
+
+  // Handle slash-command expansion before sending
+  const handleComposerSubmit = () => {
+    const raw = input.trim();
+    if (!raw) return;
+    if (raw.startsWith("/")) {
+      const [cmd] = raw.split(/\s+/);
+      const match = SLASH_COMMANDS.find((s) => s.cmd === cmd.toLowerCase());
+      if (match) {
+        if (match.mode) setMode(match.mode);
+        send(match.prompt);
+        return;
+      }
+    }
+    send();
+  };
+
+  const slashHints = input.startsWith("/")
+    ? SLASH_COMMANDS.filter((s) => s.cmd.startsWith(input.split(/\s+/)[0].toLowerCase())).slice(0, 6)
+    : [];
+
+  const runQuickAction = (qa: typeof QUICK_ACTIONS[number]) => {
+    setMode(qa.mode);
+    setActiveId(null);
+    setMessages([]);
+    // brief async to let mode state apply before send creates the thread
+    setTimeout(() => send(qa.prompt), 50);
   };
 
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-4">
       <aside className={cn("transition-all overflow-hidden flex-shrink-0", showSidebar ? "w-72" : "w-0")}>
         <Card className="h-full flex flex-col">
-          <div className="p-3 border-b">
-            <Button onClick={() => newThread(mode)} className="w-full gap-2" size="sm">
-              <Plus className="h-4 w-4" /> New chat
+          <div className="p-3 border-b space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
+                <Bot className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold leading-tight">Nova</div>
+                <div className="text-[10px] text-muted-foreground leading-tight">Growth Operator</div>
+              </div>
+              <Badge variant="outline" className="gap-1 text-[9px] h-5 px-1.5"><Zap className="h-2.5 w-2.5" /> Agentic</Badge>
+            </div>
+            <Button onClick={() => { setActiveId(null); setMessages([]); }} className="w-full gap-2" size="sm" variant="default">
+              <Plus className="h-4 w-4" /> New mission
             </Button>
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {threads.length === 0 && <p className="text-xs text-muted-foreground text-center py-6">No conversations yet.</p>}
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 pt-2 pb-1">Recent</div>
+              {threads.length === 0 && <p className="text-xs text-muted-foreground text-center py-6">No missions yet.</p>}
               {threads.map((t) => {
                 const M = MODES.find((m) => m.id === t.mode) || MODES[0];
                 const Icon = M.icon;
@@ -264,9 +303,8 @@ export default function AICopilot() {
               );
             })}
           </div>
-          <Badge variant="outline" className="gap-1 text-[10px]"><Zap className="h-3 w-3" /> Agentic</Badge>
           <Select value={provider} onValueChange={(v) => { setProvider(v as Provider); setModel(""); }}>
-            <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[200px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {PROVIDER_OPTIONS.map((p) => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
             </SelectContent>
@@ -275,23 +313,71 @@ export default function AICopilot() {
 
         <Card className="flex-1 flex flex-col min-h-0">
           <ScrollArea className="flex-1" ref={scrollRef as any}>
-            <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
+            <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
               {messages.length === 0 ? (
-                <div className="py-8 text-center space-y-4">
-                  <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-primary/10 text-primary">
-                    <Sparkles className="h-7 w-7" />
+                <div className="py-4 space-y-6">
+                  {/* Hero */}
+                  <div className="text-center space-y-3 pt-2">
+                    <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-primary/50 text-primary-foreground shadow-lg shadow-primary/20">
+                      <Bot className="h-8 w-8" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight">Hi, I'm Nova.</h2>
+                      <p className="text-sm text-muted-foreground mt-1.5 max-w-lg mx-auto">
+                        Your senior media buyer + growth strategist. Give me a goal — I'll pull live data,
+                        diagnose, and hand you a numbered action list. <span className="text-foreground/80 font-medium">No fluff.</span>
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-1">
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Mode: <span className="text-foreground font-medium">{activeMode.label}</span></span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">13 live tools</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Up to 16 reasoning steps</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Diagnose → Insight → Action</span>
+                    </div>
                   </div>
+
+                  {/* Quick-action workflows */}
                   <div>
-                    <h2 className="text-xl font-bold">{activeMode.label}</h2>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">{activeMode.tagline}</p>
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">⚡ One-click missions</h3>
+                      <span className="text-[10px] text-muted-foreground">Tap to run end-to-end</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {QUICK_ACTIONS.map((qa) => {
+                        const Icon = qa.icon;
+                        return (
+                          <button key={qa.id} onClick={() => runQuickAction(qa)}
+                            className="group text-left p-3 rounded-xl border border-border/60 bg-card hover:border-primary/50 hover:shadow-md hover:shadow-primary/5 transition-all">
+                            <div className="flex items-start gap-2.5">
+                              <div className={cn("h-8 w-8 rounded-lg bg-muted/60 flex items-center justify-center shrink-0", qa.accent)}>
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
+                                  {qa.title}
+                                  <ArrowUpRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />
+                                </div>
+                                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{qa.sub}</p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-2xl mx-auto pt-4">
-                    {activeMode.quickPrompts.map((p, i) => (
-                      <button key={i} onClick={() => send(p)}
-                        className="text-left text-sm p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/40 transition">
-                        {p}
-                      </button>
-                    ))}
+
+                  {/* Slash commands hint */}
+                  <div className="border border-dashed border-border/60 rounded-xl p-3 bg-muted/20">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 px-1">⌨️ Slash commands</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SLASH_COMMANDS.map((s) => (
+                        <button key={s.cmd} onClick={() => { if (s.mode) setMode(s.mode); send(s.prompt); }}
+                          className="px-2 py-1 rounded-md bg-background border border-border/60 text-[11px] hover:border-primary/50 hover:bg-accent/40 transition">
+                          <code className="font-mono text-primary">{s.cmd}</code>
+                          <span className="text-muted-foreground ml-1.5">{s.desc}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -301,7 +387,7 @@ export default function AICopilot() {
                   return (
                     <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                       <div className={cn(
-                        "rounded-2xl px-4 py-2.5 max-w-[90%] text-sm",
+                        "rounded-2xl px-4 py-2.5 max-w-[92%] text-sm",
                         m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/30 border border-border/50 w-full",
                       )}>
                         {m.role === "user" ? (
@@ -317,19 +403,30 @@ export default function AICopilot() {
             </div>
           </ScrollArea>
 
-          <div className="border-t p-3">
-            <div className="flex gap-2 items-end max-w-3xl mx-auto">
+          <div className="border-t p-3 relative">
+            {slashHints.length > 0 && (
+              <div className="absolute bottom-full left-3 right-3 mb-2 max-w-3xl mx-auto bg-popover border border-border rounded-lg shadow-lg p-1 z-10">
+                {slashHints.map((s) => (
+                  <button key={s.cmd} onClick={() => { setInput(""); if (s.mode) setMode(s.mode); send(s.prompt); }}
+                    className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-accent flex items-center gap-2">
+                    <code className="font-mono text-primary font-semibold">{s.cmd}</code>
+                    <span className="text-muted-foreground">{s.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 items-end max-w-4xl mx-auto">
               <Textarea
-                placeholder={`Give the agent a goal…  (Enter to send, Shift+Enter for newline)`}
+                placeholder={`Give Nova a goal…  Try /audit, /leaks, /runway  (Enter to send, Shift+Enter for newline)`}
                 value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                 rows={1} className="resize-none min-h-[44px] max-h-40" disabled={sending}
               />
-              <Button onClick={() => send()} disabled={sending || !input.trim()} size="icon" className="h-11 w-11">
+              <Button onClick={handleComposerSubmit} disabled={sending || !input.trim()} size="icon" className="h-11 w-11">
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground text-center mt-2">
-              Agentic — uses live data via tools. {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`} Verify critical decisions.
+              Nova chains live data tools (up to 16 steps). {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`} Verify critical decisions before acting.
             </p>
           </div>
         </Card>
@@ -337,6 +434,7 @@ export default function AICopilot() {
     </div>
   );
 }
+
 
 function AssistantBody({ parts, live, currentStep }: { parts: Part[]; live: boolean; currentStep: number }) {
   if (!parts.length && live) {
