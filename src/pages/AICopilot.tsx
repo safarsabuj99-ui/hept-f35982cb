@@ -11,7 +11,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import {
   Send, Loader2, Plus, Trash2, Brain, TrendingUp, PenTool, MessageSquareText, Sparkles, MenuIcon,
-  Wrench, CheckCircle2, AlertCircle, ChevronRight, ChevronDown, Zap,
+  Wrench, CheckCircle2, AlertCircle, ChevronRight, ChevronDown, Zap, Target, Flame, Wallet,
+  AlertTriangle, Users, Calendar, ArrowUpRight, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -27,51 +28,36 @@ type Part =
 interface Thread { id: string; title: string; mode: Mode; updated_at: string; }
 interface Message { id: string; role: "user" | "assistant"; parts: Part[]; }
 
-const MODES: { id: Mode; label: string; icon: any; tagline: string; quickPrompts: string[] }[] = [
-  {
-    id: "analyst", label: "Campaign Analyst", icon: Brain,
-    tagline: "I read your live campaign data and find winners, losers, and money leaks. Give me a goal.",
-    quickPrompts: [
-      "Find my 5 worst-performing campaigns this month and tell me why.",
-      "Which of my clients is wasting the most money on ads right now?",
-      "Show me the top 5 campaigns I should scale today.",
-      "Compare this week vs last week across the whole agency.",
-    ],
-  },
-  {
-    id: "coach", label: "Growth Coach", icon: TrendingUp,
-    tagline: "Strategy, pricing, retention. I'll pull real numbers from your agency before advising.",
-    quickPrompts: [
-      "Look at my top 3 clients by spend and tell me how to grow each one.",
-      "Which clients are about to run out of balance? Draft top-up reminders.",
-      "What's my agency P&L this month? Where am I leaking profit?",
-      "How should I price a new e-commerce client doing 5 lakh BDT/month revenue?",
-    ],
-  },
-  {
-    id: "copy", label: "Ad Copy", icon: PenTool,
-    tagline: "Bangla + English ad copy, hooks, headlines, CTAs.",
-    quickPrompts: [
-      "5 Facebook hooks for a Bangladesh organic skincare brand.",
-      "Banglish primary text for a 50% off Eid sale on women's clothing.",
-      "3 TikTok hook variants for a Dhaka restaurant.",
-      "Google Search headlines for an IELTS coaching center.",
-    ],
-  },
-  {
-    id: "comms", label: "Client Comms", icon: MessageSquareText,
-    tagline: "Draft factual client updates. I'll pull real spend/results numbers first.",
-    quickPrompts: [
-      "Audit Rafin's account this month and draft a WhatsApp recap in Banglish.",
-      "Polite email to clients with low balance asking for a top-up.",
-      "Monthly recap template I can reuse for every client.",
-      "Apology email — Meta ad account got restricted, here's the fix plan.",
-    ],
-  },
+const MODES: { id: Mode; label: string; icon: any; tagline: string }[] = [
+  { id: "analyst", label: "Analyst", icon: Brain, tagline: "Diagnose performance. Find winners, losers, money leaks, creative fatigue, funnel bottlenecks." },
+  { id: "coach", label: "Strategist", icon: TrendingUp, tagline: "Scale the agency. P&L, pricing, retention, cash-flow, hiring — grounded in real numbers." },
+  { id: "copy", label: "Creative", icon: PenTool, tagline: "Bangla + English ad copy, hooks, headlines, CTAs — grounded in the client's actual niche." },
+  { id: "comms", label: "Client Comms", icon: MessageSquareText, tagline: "Draft factual WhatsApp/email/recaps. Real numbers, bilingual, ready to send." },
+];
+
+// One-click agentic workflows
+const QUICK_ACTIONS: { id: string; mode: Mode; icon: any; title: string; sub: string; prompt: string; accent: string }[] = [
+  { id: "audit", mode: "analyst", icon: Target, accent: "text-blue-500", title: "Weekly audit", sub: "Scan every client, surface 3 leaks + 3 winners with action items.", prompt: "Run a full weekly audit of my agency. For each of my top 10 clients by spend this last 7 days: compute ROAS, list any loss-making campaigns, flag creative fatigue on top spenders, then give me the top 3 money leaks and top 3 winners across the whole agency with concrete next actions." },
+  { id: "leaks", mode: "analyst", icon: AlertTriangle, accent: "text-red-500", title: "Find money leaks now", sub: "Loss-making active campaigns this week + pause recommendations.", prompt: "List the loss-making campaigns this last 7 days across all clients (min spend $20). For the top 5 by money wasted, run an optimization brief and tell me which to pause, refresh, or reallocate." },
+  { id: "runway", mode: "coach", icon: Wallet, accent: "text-amber-500", title: "Runway risk sweep", sub: "Clients close to zero balance + bilingual top-up reminders.", prompt: "Find clients with low wallet balance. For each one with ≤7 days runway at current spend pace, draft a bilingual (Bangla + English) WhatsApp top-up reminder with the exact recommended top-up amount." },
+  { id: "fatigue", mode: "analyst", icon: Flame, accent: "text-orange-500", title: "Creative refresh radar", sub: "Top spending campaigns with fatigue signals + new copy ideas.", prompt: "For my top 5 spending campaigns this last 14 days, run creative fatigue diagnosis. For any tagged 'fatigued' or 'dead', draft 3 new ad copy hooks in Banglish to replace them." },
+  { id: "checkin", mode: "comms", icon: MessageSquareText, accent: "text-emerald-500", title: "Client check-in batch", sub: "Status updates for every active client this week.", prompt: "For my top 5 clients by spend this last 7 days, pull a client summary and draft a short Banglish WhatsApp recap (spend, results, ROAS, what we changed, what's next). One block per client." },
+  { id: "pnl", mode: "coach", icon: TrendingUp, accent: "text-violet-500", title: "Agency P&L pulse", sub: "Where are you leaking profit this month?", prompt: "Compute my agency-wide P&L for this month. Compare to last month. Rank my top 10 clients by profit contribution. Identify the 3 highest-leverage moves I can make THIS WEEK to improve profit." },
+];
+
+const SLASH_COMMANDS: { cmd: string; desc: string; prompt: string; mode?: Mode }[] = [
+  { cmd: "/audit", desc: "Run weekly agency audit", prompt: QUICK_ACTIONS[0].prompt, mode: "analyst" },
+  { cmd: "/leaks", desc: "Find money leaks", prompt: QUICK_ACTIONS[1].prompt, mode: "analyst" },
+  { cmd: "/runway", desc: "Runway risk sweep", prompt: QUICK_ACTIONS[2].prompt, mode: "coach" },
+  { cmd: "/fatigue", desc: "Creative fatigue radar", prompt: QUICK_ACTIONS[3].prompt, mode: "analyst" },
+  { cmd: "/checkin", desc: "Draft client check-ins", prompt: QUICK_ACTIONS[4].prompt, mode: "comms" },
+  { cmd: "/pnl", desc: "Agency P&L pulse", prompt: QUICK_ACTIONS[5].prompt, mode: "coach" },
+  { cmd: "/winners", desc: "Top campaigns to scale", prompt: "Find my winning campaigns this last 14 days (min ROAS 2.5, min spend $20). For the top 5, tell me how aggressively to scale each one and what the next bottleneck will be.", mode: "analyst" },
+  { cmd: "/copy", desc: "Draft ad copy variants", prompt: "I need 5 ad copy variants in Banglish. Ask me which client and product first if not provided.", mode: "copy" },
 ];
 
 const PROVIDER_OPTIONS: { id: Provider; label: string }[] = [
-  { id: "lovable", label: "Lovable AI (built-in)" },
+  { id: "lovable", label: "Nova default (Lovable AI)" },
   { id: "openai", label: "OpenAI" },
   { id: "anthropic", label: "Claude" },
   { id: "gemini", label: "Gemini" },
@@ -87,6 +73,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_low_balance_clients: "Checking low balances",
   compare_periods: "Comparing time periods",
   list_top_clients_by_spend: "Ranking clients by spend",
+  get_creative_fatigue: "Diagnosing creative fatigue",
+  get_funnel_health: "Analyzing funnel health",
+  get_runway_forecast: "Forecasting wallet runway",
+  draft_optimization_brief: "Writing optimization brief",
 };
 
 export default function AICopilot() {
