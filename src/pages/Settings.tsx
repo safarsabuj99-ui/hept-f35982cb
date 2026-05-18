@@ -1,16 +1,18 @@
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings as SettingsIcon, UserCircle, Plug, Activity, Bell, Paintbrush } from "lucide-react";
+import { Settings as SettingsIcon, UserCircle, Plug, Activity, Bell, Paintbrush, Sparkles } from "lucide-react";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { ProfileTab } from "@/components/settings/ProfileTab";
 import { IntegrationsTab } from "@/components/settings/IntegrationsTab";
 import { SyncTab } from "@/components/settings/SyncTab";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { BrandingTab } from "@/components/settings/BrandingTab";
+import { AIProvidersTab } from "@/components/settings/AIProvidersTab";
 
 const TABS = [
   { value: "general", label: "General", icon: SettingsIcon },
   { value: "branding", label: "Branding", icon: Paintbrush },
+  { value: "ai", label: "AI Providers", icon: Sparkles },
   { value: "profile", label: "Profile", icon: UserCircle },
   { value: "integrations", label: "Integrations", icon: Plug },
   { value: "sync", label: "Sync", icon: Activity },
@@ -48,6 +50,7 @@ export default function Settings() {
 
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="branding"><BrandingTab /></TabsContent>
+        <TabsContent value="ai"><AIProvidersTab /></TabsContent>
         <TabsContent value="profile"><ProfileTab /></TabsContent>
         <TabsContent value="integrations"><IntegrationsTab /></TabsContent>
         <TabsContent value="sync"><SyncTab /></TabsContent>
