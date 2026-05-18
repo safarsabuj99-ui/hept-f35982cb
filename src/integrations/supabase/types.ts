@@ -467,6 +467,257 @@ export type Database = {
           },
         ]
       }
+      ai_messages: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          id: string
+          model: string | null
+          org_id: string
+          parts: Json
+          provider: string | null
+          role: string
+          thread_id: string
+          tokens_in: number | null
+          tokens_out: number | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          org_id: string
+          parts?: Json
+          provider?: string | null
+          role: string
+          thread_id: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          org_id?: string
+          parts?: Json
+          provider?: string | null
+          role?: string
+          thread_id?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_provider_configs: {
+        Row: {
+          api_key: string | null
+          created_at: string
+          default_model: string | null
+          id: string
+          is_active: boolean
+          monthly_budget_usd: number
+          oauth_token: string | null
+          org_id: string
+          provider: string
+          updated_at: string
+          usage_month: string
+          usage_this_month_usd: number
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string
+          default_model?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_budget_usd?: number
+          oauth_token?: string | null
+          org_id: string
+          provider: string
+          updated_at?: string
+          usage_month?: string
+          usage_this_month_usd?: number
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string
+          default_model?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_budget_usd?: number
+          oauth_token?: string | null
+          org_id?: string
+          provider?: string
+          updated_at?: string
+          usage_month?: string
+          usage_this_month_usd?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_provider_configs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_reports: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          created_by: string
+          date_from: string
+          date_to: string
+          id: string
+          model: string
+          org_id: string
+          payload: Json
+          provider: string
+          summary: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          created_by: string
+          date_from: string
+          date_to: string
+          id?: string
+          model: string
+          org_id: string
+          payload?: Json
+          provider: string
+          summary?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string
+          date_from?: string
+          date_to?: string
+          id?: string
+          model?: string
+          org_id?: string
+          payload?: Json
+          provider?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_reports_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_threads: {
+        Row: {
+          context_client_id: string | null
+          created_at: string
+          id: string
+          mode: string
+          model: string | null
+          org_id: string
+          provider: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          context_client_id?: string | null
+          created_at?: string
+          id?: string
+          mode?: string
+          model?: string | null
+          org_id: string
+          provider?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          context_client_id?: string | null
+          created_at?: string
+          id?: string
+          mode?: string
+          model?: string | null
+          org_id?: string
+          provider?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_threads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_log: {
+        Row: {
+          cost_usd: number
+          created_at: string
+          id: string
+          model: string
+          org_id: string
+          provider: string
+          tokens_in: number
+          tokens_out: number
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model: string
+          org_id: string
+          provider: string
+          tokens_in?: number
+          tokens_out?: number
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model?: string
+          org_id?: string
+          provider?: string
+          tokens_in?: number
+          tokens_out?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_integrations: {
         Row: {
           api_token: string
@@ -4281,6 +4532,16 @@ export type Database = {
             Args: { p_date_from: string; p_date_to: string; p_org_id: string }
             Returns: Json
           }
+      get_ai_provider_config: {
+        Args: { _org_id: string; _provider: string }
+        Returns: {
+          api_key: string
+          default_model: string
+          monthly_budget_usd: number
+          oauth_token: string
+          usage_this_month_usd: number
+        }[]
+      }
       get_managed_client_ids: {
         Args: { _manager_id: string }
         Returns: string[]

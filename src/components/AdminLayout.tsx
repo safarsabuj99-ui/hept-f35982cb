@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
 import {
   BarChart3, Users, PlusCircle, LogOut, Settings, ScrollText,
-  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon, CreditCard, LifeBuoy,
+  UserCog, Monitor, MapPin, TrendingUp, Banknote, Megaphone, AlertTriangle, Bell as BellIcon, CreditCard, LifeBuoy, Sparkles,
 } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { GlobalSearchMount } from "@/components/GlobalSearchMount";
@@ -50,6 +50,7 @@ const allSections: NavSection[] = [
     items: [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
       { to: "/admin/attention", icon: AlertTriangle, label: "Attention", permKey: "can_view_dashboard_stats" },
+      { to: "/admin/ai-copilot", icon: Sparkles, label: "AI Copilot", permKey: "can_view_dashboard_stats" },
     ],
   },
   {

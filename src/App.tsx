@@ -73,6 +73,7 @@ const AffiliatePayouts = lazy(() => import("@/pages/AffiliatePayouts"));
 const AffiliateProfile = lazy(() => import("@/pages/AffiliateProfile"));
 const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
 const PlatformPaymentGateways = lazy(() => import("@/pages/PlatformPaymentGateways"));
+const AICopilot = lazy(() => import("@/pages/AICopilot"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -217,6 +218,7 @@ const FullApp = () => (
                   <Route path="/admin/notifications" element={<Notifications />} />
                   <Route path="/admin/subscription" element={<AdminSubscription />} />
                   <Route path="/admin/support" element={<AgencySupport />} />
+                  <Route path="/admin/ai-copilot" element={<AICopilot />} />
                 </Route>
 
                 {/* Public payment callback routes */}
