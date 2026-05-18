@@ -1,142 +1,144 @@
-# AI Growth Copilot for Agencies
+# AI Growth Copilot → Fully Agentic AI System
 
-A powerful in-app AI assistant that helps agency admins/managers grow profit, analyze campaigns, write ad copy, and communicate with clients — powered by **OpenAI, Claude, or Gemini** using the agency's own API keys, with Lovable AI as a free fallback.
+Upgrade the existing Phase 1 chat shell into a **true agentic AI** that doesn't just answer questions — it **investigates, plans, executes multi-step actions, and proposes changes** across your agency data (with human approval for anything that mutates state).
 
-## Core idea
+## What "agentic" means here
 
-One unified "AI Copilot" surface with **four modes**, sharing a single chat engine + tool layer:
+Today: user asks → AI replies with text.
+After: user states a goal → AI **plans steps → calls tools → reads results → calls more tools → reasons → proposes/executes actions → reports back** — autonomously, in a loop, with streaming progress visible to you.
 
-| Mode | What it does |
-|---|---|
-| **Campaign Analyst** | Analyzes any client's campaigns, finds winners/losers, recommends actions, generates one-click deep reports |
-| **Growth Coach** | Open chat — ask anything about agency pricing, scaling, client acquisition, retention, hiring |
-| **Ad Copy Generator** | Bangla/English ad copy, hooks, headlines, CTAs tuned per client niche & objective |
-| **Client Communication** | Drafts client reports, follow-up emails, WhatsApp updates, performance recaps in your tone |
+Example goals it will handle end-to-end:
+- *"Audit all my clients this month, find the 3 worst campaigns, draft a pause recommendation + client email for each."*
+- *"Find which clients are about to run out of balance and draft top-up reminders in Bangla."*
+- *"Compare last 7 days vs previous 7 days across all clients, surface anomalies, and create a deep report for the worst."*
+- *"Write 5 Bangla ad copy variants for Rafin's fashion campaign, then save them as a campaign request."*
 
-All four live in one route `/admin/ai-copilot` with a mode switcher. One conversation can fluidly move between modes.
+## Core architecture (AI SDK agent loop)
 
-## Provider system (BYO Keys)
+```text
+┌──────────────────────────────────────────────────┐
+│  User goal                                       │
+│        ↓                                         │
+│  Planner step (LLM)  →  decides next action      │
+│        ↓                                         │
+│  Tool call  →  ai-tools-runtime executes         │
+│        ↓                                         │
+│  Tool result  →  fed back to model               │
+│        ↓                                         │
+│  Reflect → next tool OR final answer             │
+│  (loop up to 50 steps, stopWhen)                 │
+└──────────────────────────────────────────────────┘
+```
 
-**Per-agency keys** — agency owner adds one set of keys in Settings → AI Providers; whole team uses them.
+Built on **Vercel AI SDK** `streamText` + `tool()` + `stopWhen: stepCountIs(50)`, streamed to a Conversation UI that renders each step (thinking / tool call / tool result / proposal).
 
-Supported:
-- **OpenAI** (GPT-5, GPT-4o, GPT-4o-mini)
-- **Anthropic Claude** (Sonnet 4.5, Opus 4, Haiku)
-- **Google Gemini** (2.5 Pro, 2.5 Flash) — *also supports Google OAuth sign-in (uses your Google account quota via OAuth token) as an alternative to pasting an API key*
-- **Lovable AI** (built-in fallback — no key needed, works out of the box)
+## The tool layer (the agent's "hands")
 
-User picks the default provider + model per mode in settings. Per-message override available in chat ("ask with Claude Opus instead").
+All tools enforce `org_id = get_user_org_id(auth.uid())`. Two categories:
 
-**Note on OAuth:** OpenAI and Anthropic don't offer consumer login for API access — only API keys. Only Gemini supports Google OAuth for API access. The UI will reflect this clearly.
+**Read tools (auto-execute, no approval)**
+- `search_clients(query)` · `get_client_summary(client_id, range)` · `get_campaign_breakdown(client_id, range)`
+- `list_loss_making_campaigns(threshold, range)` · `list_winning_campaigns(min_roas, range)`
+- `get_agency_pnl(range)` · `get_client_wallet(client_id)` · `get_low_balance_clients(threshold)`
+- `compare_periods(range_a, range_b, scope)` · `detect_anomalies(client_id, range)`
+- `get_campaign_metrics_timeseries(campaign_id, range)` · `list_clients_needing_attention()`
+- `get_ad_creative(campaign_id)` · `web_search(query)` (Lovable AI grounded)
 
-## Where it lives
+**Write tools (require human approval via `needsApproval`)**
+- `propose_pause_campaign(campaign_id, reason)` — shows Apply button → calls existing `pause-campaign` edge function
+- `propose_campaign_request(client_id, payload)` — drafts in `campaign_requests` table as pending
+- `draft_client_email(client_id, topic, language)` — saves to drafts, never auto-sends
+- `draft_whatsapp_message(client_id, topic, language)` — copy-to-clipboard
+- `save_ad_copy_variants(client_id, copies[])` — stored in new `ai_ad_copy_drafts` table
+- `generate_deep_report(client_id, range)` — saves to `ai_reports`
+- `create_internal_note(client_id, note)` — appended to client timeline
 
-- **New main route:** `/admin/ai-copilot` (sidebar item with sparkle/brain icon, Admin + Manager only)
-- **Floating "Ask AI" button** on Client Detail, Campaign Hub, Finance Hub — opens copilot pre-scoped to that context
-- **Dashboard widget:** "Today's AI insights" — top 3 auto-generated alerts (nightly cron)
-- **Settings tab:** `/admin/settings` → new "AI Providers" tab to manage keys, default models, usage caps
+Every write tool returns a **proposal card** in chat with diff/preview + Apply/Reject buttons. Nothing mutates without your click.
 
-## How AI gets real data (Tools)
+## Agentic capabilities added on top of Phase 1
 
-The AI never sees raw DB dumps. It calls **typed tools** that return pre-aggregated, clean JSON:
+1. **Multi-step planning** — `stopWhen: stepCountIs(50)`, model sees its own tool results and decides what to do next.
+2. **Streamed reasoning trace** — every tool call/result renders as an expandable accordion (AI Elements `Tool` component) so you see *what* the agent did and *why*.
+3. **Approval gates** — `needsApproval` on all mutating tools; chat renders Apply / Edit / Reject buttons.
+4. **Context chips** — attach a client / campaign / date range to ground the whole conversation; auto-injected into every tool call.
+5. **Slash commands** — `/audit <client>`, `/report <client>`, `/copy <product>`, `/email <client>`, `/find losers`, `/find winners`.
+6. **Quick-action launcher** — pre-built agentic workflows on the AI Copilot home: *"Weekly audit"*, *"Find money leaks"*, *"Draft client check-ins"*, *"Reactivate dormant clients"*.
+7. **Background agents (Phase 4)** — `pg_cron` nightly runs `ai-nightly-agent` that produces *"Today's AI insights"* on the dashboard + weekly digest email.
+8. **Memory** — per-org `ai_memory` table the agent can write to (`remember_fact`, `recall_facts` tools) so it learns your preferences, tone, client niches, naming conventions across sessions.
+9. **Tool-use budget** — per-message max steps + per-org monthly USD budget enforced in `ai-copilot-chat` before each step.
+10. **Multi-provider routing** — Planner uses **GPT-5 / Claude Sonnet 4.5 / Gemini 2.5 Pro** (your choice); cheap sub-tasks (summarize tool output, format) auto-route to **Flash / Haiku / 4o-mini** to cut cost ~70%.
 
-- `get_client_summary(client_id, date_range)` — spend, revenue, profit, ROAS, top campaigns
-- `get_campaign_breakdown(client_id, date_range)` — per-campaign metrics with winner/loser tags
-- `list_loss_making_campaigns(threshold)` — flagged underperformers
-- `get_agency_pnl(date_range)` — overall agency profit/loss
-- `get_client_wallet(client_id)` — balance + recent transactions
-- `search_clients(query)` — fuzzy client lookup
+## UI changes
 
-All tools enforce **org isolation** via `get_user_org_id` — AI can never see another agency's data, even if prompt-injected.
+- `/admin/ai-copilot` becomes an **agent workspace**:
+  - Left: thread list (existing)
+  - Center: streaming conversation with **step timeline** (Plan → Tool → Result → Proposal → Answer)
+  - Right rail: active **context chips**, **provider/model**, **step counter**, **token/cost meter**, **memory inspector**
+- **Proposal cards** inline in chat: preview of what will change + Apply/Reject
+- **Quick-actions grid** on empty state (6 pre-built agentic workflows)
+- Floating **"Ask AI"** button on Client Detail / Campaign Hub / Finance Hub — opens copilot pre-scoped with context chip already attached
+- Dashboard widget: **"Today's AI insights"** (3 nightly-generated cards with Apply buttons)
 
-## Deep Reports (one-click)
+## Database additions
 
-In Campaign Analyst mode: pick client + date range → "Generate Report" → AI produces:
-- Executive summary (3–5 bullets)
-- Winners table with profit + reason
-- Losers table with root cause (high CPM / low CTR / weak conversion / wrong objective)
-- "You wasted $X" headline figure
-- Ranked recommendations with severity (Pause / Scale / Reallocate / Fix Creative) — each cites the metric that drove it
-- Risk flags (frequency fatigue, sudden CPM spike, account-level issues)
+- `ai_tool_calls` — `(message_id, tool_name, args JSONB, result JSONB, status, latency_ms, cost_usd)` — full audit trail of every agent action
+- `ai_proposals` — `(thread_id, kind, payload JSONB, status: pending|applied|rejected, applied_at, applied_by)` — pending write actions
+- `ai_memory` — `(org_id, key, value, embedding vector(1536), updated_at)` — long-term agent memory with semantic recall
+- `ai_ad_copy_drafts` — saved ad copy variants
+- `ai_scheduled_runs` — `(org_id, workflow, cron, last_run_at, last_result JSONB)` — background agent runs
+- Extend `ai_messages.parts` JSONB to store AI SDK UIMessage parts (text, tool-call, tool-result, reasoning, proposal)
 
-Reports are saved to DB → re-openable, exportable to PDF, shareable. Same range = cached (free + instant).
+All org-scoped via RLS using `get_user_org_id`.
 
-## Conversation features
+## Edge functions
 
-- **Persistent threads** per user (database-backed, scoped to user + org)
-- **Streaming responses** with markdown rendering
-- **Tool call accordion** — see what the AI fetched and why
-- **Quick prompts** per mode ("Find my worst-performing client", "Write a follow-up to Rafin about his August report", "Bangla ad copy for fashion sale")
-- **Context chips** — attach a client/campaign to ground the conversation
-- **Slash commands** — `/report <client>`, `/copy <product>`, `/email <client>`
-
-## Database (new)
-
-- `ai_provider_configs` — org_id, provider (openai/anthropic/gemini), encrypted_api_key, oauth_token (nullable), default_models JSONB, monthly_budget_usd, usage_this_month
-- `ai_threads` — id, org_id, user_id, title, mode, context_client_id (nullable), updated_at
-- `ai_messages` — thread_id, role, parts JSONB (AI SDK UIMessage format), tool_calls, token_count, cost_usd
-- `ai_reports` — client_id, org_id, date_from, date_to, provider, model, payload JSONB, created_by
-- `ai_usage_log` — org_id, user_id, provider, model, tokens_in, tokens_out, cost_usd, created_at (for monthly budget enforcement)
-
-All org-scoped via RLS. API keys encrypted at rest via Supabase vault.
-
-## Edge functions (new)
-
-1. `ai-copilot-chat` — streaming chat with Vercel AI SDK, supports OpenAI/Anthropic/Gemini/Lovable, executes tools, persists messages, logs usage
-2. `ai-generate-report` — Campaign deep report with structured Zod output
-3. `ai-tools-runtime` — Server-side tool execution layer (aggregations, queries — never raw SQL from AI)
-4. `ai-nightly-insights` — pg_cron-scheduled; pre-computes top alerts per client for dashboard widget
-5. `ai-provider-test` — Validates an API key works before saving
+- **`ai-copilot-chat`** (rewrite) — `streamText` with full tool registry, `stopWhen: stepCountIs(50)`, `toUIMessageStreamResponse({ originalMessages, onFinish })`, persists messages + tool calls + proposals
+- **`ai-tools-runtime`** (new) — pure server-side tool executors (each tool a function, args validated with Zod, org-scoped queries)
+- **`ai-apply-proposal`** (new) — executes a single approved proposal (pause campaign, send email, etc.); logs to audit trail
+- **`ai-generate-report`** (new) — long-form report with structured Zod output
+- **`ai-nightly-agent`** (new, cron) — runs the *daily audit* workflow per org, writes results to `ai_scheduled_runs` + creates dashboard insight cards
+- **`ai-provider-test`** (exists) — kept
 
 ## Security
 
-- API keys encrypted with Supabase vault, never returned to frontend
-- Tool layer enforces `org_id = get_user_org_id(auth.uid())` on every query
-- Prompt injection guard: tools validate `client_id` belongs to caller's org before returning data
-- Monthly USD budget cap per org — blocks new calls when exceeded
-- Audit log entry for every AI report generation & provider key change
-- New permission flag `can_use_ai_copilot` in existing 13-flag system
-
-## UI / Design
-
-- Premium glassmorphism matching existing design system (`ios-glass`, `blur(40px)`, glow-borders)
-- AI Elements components (Conversation, Message, PromptInput, Tool accordion, Shimmer loader)
-- Mode switcher: pill tabs at top (Analyst / Coach / Copy / Comms)
-- Right rail: provider/model selector, usage meter, context chips
-- Mobile-first: full-screen chat, bottom prompt input
+- Every tool validates `org_id` before reading/writing
+- Prompt-injection guard: tool descriptions explicitly tell model it cannot escape org scope; tool implementations re-verify
+- Write tools **always** require human Apply click (no auto-execute path, even for the agent)
+- API keys encrypted at rest (Supabase vault)
+- Per-org monthly USD cap blocks new agent runs when exceeded
+- Audit log entry for every Apply
+- New permission flags: `can_use_ai_copilot`, `can_approve_ai_proposals` (admin-only by default)
 
 ## Phasing
 
-**Phase 1 — Foundation (ship first)**
-- AI Providers settings tab (add OpenAI/Claude/Gemini keys, test, set default)
-- `/admin/ai-copilot` chat shell with Lovable AI fallback
-- Growth Coach mode (open chat, no tools yet)
-- Database tables + permissions + RLS
+**Phase 2A — Agent loop + read tools** (ship first)
+- Rewrite `ai-copilot-chat` with AI SDK tool loop + `stopWhen`
+- Build `ai-tools-runtime` with the 13 read tools
+- UI: streaming step timeline + tool accordions + context chips + slash commands
+- `ai_tool_calls` table + audit trail
 
-**Phase 2 — Campaign intelligence**
-- Tools layer (`get_client_summary`, `get_campaign_breakdown`, `list_loss_making_campaigns`, etc.)
-- Campaign Analyst mode with tool calling
-- Deep Reports (one-click, saved, exportable)
-- "Ask AI" buttons on Client Detail & Campaign Hub
+**Phase 2B — Write tools + proposals**
+- 7 write tools with `needsApproval`
+- `ai_proposals` table + Apply/Reject flow + `ai-apply-proposal` function
+- Floating "Ask AI" buttons on Client Detail / Campaign Hub / Finance Hub
 
-**Phase 3 — Creative & comms**
-- Ad Copy Generator mode (Bangla + English templates per niche)
-- Client Communication mode (email/WhatsApp draft generator, learns your tone)
-- Slash commands
+**Phase 3 — Memory + quick workflows**
+- `ai_memory` + `remember_fact` / `recall_facts` tools (pgvector)
+- 6 pre-built quick-action workflows
+- Smart provider routing (cheap model for sub-tasks)
 
-**Phase 4 — Automation**
-- Nightly auto-insights cron
-- Dashboard "Today's AI insights" widget
-- Weekly AI digest email to admins
-- Gemini OAuth sign-in option (alternative to pasting Gemini key)
+**Phase 4 — Background agents**
+- `ai-nightly-agent` cron + dashboard "Today's AI insights" widget
+- Weekly AI digest email
+- `ai_scheduled_runs` UI
 
-## Out of scope (this plan)
+## Out of scope
 
-- Client-facing AI (admin/manager only)
-- Auto-executing AI recommendations — always human-in-the-loop with "Apply" buttons
-- Fine-tuning custom models
-- Voice input/output
+- Fully autonomous mutations (write actions always require Apply click)
+- Client-facing agent (admin/manager only)
+- Fine-tuning / custom models
+- Voice I/O
 
 ---
 
-**Approve to start with Phase 1** (Foundation: provider settings + chat shell + Growth Coach), or tell me to bundle Phase 1+2 together for a bigger first ship.
+**Approve to start with Phase 2A** (agent loop + read tools + step timeline UI), or say *"bundle 2A+2B"* to ship the agent with write proposals in one go.

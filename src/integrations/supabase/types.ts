@@ -674,6 +674,66 @@ export type Database = {
           },
         ]
       }
+      ai_tool_calls: {
+        Row: {
+          args: Json
+          created_at: string
+          error: string | null
+          id: string
+          latency_ms: number | null
+          message_id: string | null
+          org_id: string
+          result: Json | null
+          status: string
+          thread_id: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          args?: Json
+          created_at?: string
+          error?: string | null
+          id?: string
+          latency_ms?: number | null
+          message_id?: string | null
+          org_id: string
+          result?: Json | null
+          status?: string
+          thread_id: string
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          args?: Json
+          created_at?: string
+          error?: string | null
+          id?: string
+          latency_ms?: number | null
+          message_id?: string | null
+          org_id?: string
+          result?: Json | null
+          status?: string
+          thread_id?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_tool_calls_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_tool_calls_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage_log: {
         Row: {
           cost_usd: number

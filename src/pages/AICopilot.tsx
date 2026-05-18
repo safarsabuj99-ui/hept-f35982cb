@@ -7,9 +7,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import {
   Send, Loader2, Plus, Trash2, Brain, TrendingUp, PenTool, MessageSquareText, Sparkles, MenuIcon,
+  Wrench, CheckCircle2, AlertCircle, ChevronRight, ChevronDown, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -17,45 +19,53 @@ import ReactMarkdown from "react-markdown";
 type Mode = "coach" | "analyst" | "copy" | "comms";
 type Provider = "openai" | "anthropic" | "gemini" | "lovable";
 
+type Part =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; id: string; name: string; args: any }
+  | { type: "tool_result"; id: string; name: string; status: string; latency_ms: number; result: any };
+
+interface Thread { id: string; title: string; mode: Mode; updated_at: string; }
+interface Message { id: string; role: "user" | "assistant"; parts: Part[]; }
+
 const MODES: { id: Mode; label: string; icon: any; tagline: string; quickPrompts: string[] }[] = [
   {
-    id: "coach", label: "Growth Coach", icon: TrendingUp,
-    tagline: "Ask anything about scaling your agency — pricing, clients, retention, hiring.",
+    id: "analyst", label: "Campaign Analyst", icon: Brain,
+    tagline: "I read your live campaign data and find winners, losers, and money leaks. Give me a goal.",
     quickPrompts: [
-      "How should I price my service for a new e-commerce client doing 5 lakh BDT/month revenue?",
-      "Give me a 30-day plan to land 3 new clients in Bangladesh.",
-      "What's the right way to fire an unprofitable client without burning bridges?",
-      "How do I move from project work to monthly retainers?",
+      "Find my 5 worst-performing campaigns this month and tell me why.",
+      "Which of my clients is wasting the most money on ads right now?",
+      "Show me the top 5 campaigns I should scale today.",
+      "Compare this week vs last week across the whole agency.",
     ],
   },
   {
-    id: "analyst", label: "Campaign Analyst", icon: Brain,
-    tagline: "Analyze campaign performance, find winners/losers, recommend next moves.",
+    id: "coach", label: "Growth Coach", icon: TrendingUp,
+    tagline: "Strategy, pricing, retention. I'll pull real numbers from your agency before advising.",
     quickPrompts: [
-      "I have a client spending $1,200/month on Meta with 1.8 ROAS. Worth keeping?",
-      "My CPM doubled this week — what should I check first?",
-      "How do I tell if a creative is fatigued vs the audience is wrong?",
-      "Walk me through a profitability audit for a Bangladesh fashion brand.",
+      "Look at my top 3 clients by spend and tell me how to grow each one.",
+      "Which clients are about to run out of balance? Draft top-up reminders.",
+      "What's my agency P&L this month? Where am I leaking profit?",
+      "How should I price a new e-commerce client doing 5 lakh BDT/month revenue?",
     ],
   },
   {
     id: "copy", label: "Ad Copy", icon: PenTool,
-    tagline: "Bangla + English ad copy, hooks, headlines, primary text.",
+    tagline: "Bangla + English ad copy, hooks, headlines, CTAs.",
     quickPrompts: [
-      "Write 5 Facebook hooks for a Bangladesh organic skincare brand.",
+      "5 Facebook hooks for a Bangladesh organic skincare brand.",
       "Banglish primary text for a 50% off Eid sale on women's clothing.",
-      "3 TikTok hook variants for a restaurant in Dhaka.",
-      "Headlines for Google Search ads — IELTS coaching center.",
+      "3 TikTok hook variants for a Dhaka restaurant.",
+      "Google Search headlines for an IELTS coaching center.",
     ],
   },
   {
     id: "comms", label: "Client Comms", icon: MessageSquareText,
-    tagline: "Draft client emails, performance recaps, WhatsApp updates.",
+    tagline: "Draft factual client updates. I'll pull real spend/results numbers first.",
     quickPrompts: [
-      "Polite email asking a client to top up their wallet — 3 days overdue.",
-      "WhatsApp update: spent $300 this week, got 14 leads, CPL down 22%.",
+      "Audit Rafin's account this month and draft a WhatsApp recap in Banglish.",
+      "Polite email to clients with low balance asking for a top-up.",
+      "Monthly recap template I can reuse for every client.",
       "Apology email — Meta ad account got restricted, here's the fix plan.",
-      "Monthly performance recap template I can reuse for every client.",
     ],
   },
 ];
@@ -67,25 +77,30 @@ const PROVIDER_OPTIONS: { id: Provider; label: string }[] = [
   { id: "gemini", label: "Gemini" },
 ];
 
-interface Thread { id: string; title: string; mode: Mode; updated_at: string; }
-interface Message { id: string; role: "user" | "assistant"; text: string; }
-
-function partsToText(parts: any): string {
-  if (!Array.isArray(parts)) return "";
-  return parts.filter((p: any) => p?.type === "text").map((p: any) => p.text).join("");
-}
+const TOOL_LABELS: Record<string, string> = {
+  search_clients: "Searching clients",
+  get_client_summary: "Pulling client summary",
+  get_campaign_breakdown: "Breaking down campaigns",
+  list_loss_making_campaigns: "Hunting money leaks",
+  list_winning_campaigns: "Finding winners",
+  get_agency_pnl: "Computing agency P&L",
+  get_low_balance_clients: "Checking low balances",
+  compare_periods: "Comparing time periods",
+  list_top_clients_by_spend: "Ranking clients by spend",
+};
 
 export default function AICopilot() {
   const { user, session } = useAuth();
   const { toast } = useToast();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("coach");
+  const [mode, setMode] = useState<Mode>("analyst");
   const [provider, setProvider] = useState<Provider>("lovable");
   const [model, setModel] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [showSidebar, setShowSidebar] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -94,54 +109,42 @@ export default function AICopilot() {
   const loadThreads = async () => {
     if (!user) return;
     const { data } = await supabase
-      .from("ai_threads")
-      .select("id, title, mode, updated_at")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(50);
+      .from("ai_threads").select("id, title, mode, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50);
     setThreads((data || []) as Thread[]);
   };
 
   const loadMessages = async (threadId: string) => {
     const { data } = await supabase
-      .from("ai_messages")
-      .select("id, role, parts")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: true });
-    setMessages(
-      (data || []).map((m: any) => ({ id: m.id, role: m.role, text: partsToText(m.parts) })) as Message[],
-    );
+      .from("ai_messages").select("id, role, parts")
+      .eq("thread_id", threadId).order("created_at", { ascending: true });
+    setMessages((data || []).map((m: any) => ({
+      id: m.id, role: m.role, parts: Array.isArray(m.parts) ? m.parts : [{ type: "text", text: "" }],
+    })));
   };
 
   useEffect(() => { loadThreads(); /* eslint-disable-next-line */ }, [user]);
-
   useEffect(() => {
     if (activeId) {
       loadMessages(activeId);
       const t = threads.find((x) => x.id === activeId);
       if (t) setMode(t.mode);
-    } else {
-      setMessages([]);
-    }
+    } else { setMessages([]); }
   }, [activeId]); // eslint-disable-line
-
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, currentStep]);
 
   const newThread = async (forMode: Mode = mode) => {
-    if (!user) return;
+    if (!user) return null;
     const { data: profile } = await supabase.from("profiles").select("org_id").eq("user_id", user.id).single();
     const { data, error } = await supabase
       .from("ai_threads")
       .insert({ user_id: user.id, mode: forMode, title: "New chat", org_id: profile?.org_id })
-      .select("id, title, mode, updated_at")
-      .single();
+      .select("id, title, mode, updated_at").single();
     if (error) { toast({ title: "Failed", description: error.message, variant: "destructive" }); return null; }
     setThreads([data as Thread, ...threads]);
-    setActiveId(data!.id);
-    setMode(forMode);
-    setMessages([]);
+    setActiveId(data!.id); setMode(forMode); setMessages([]);
     return data!.id;
   };
 
@@ -155,55 +158,65 @@ export default function AICopilot() {
   const send = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
     if (!text || sending) return;
-
     let tid = activeId;
-    if (!tid) {
-      tid = await newThread(mode);
-      if (!tid) return;
-    }
+    if (!tid) { tid = await newThread(mode); if (!tid) return; }
 
-    setSending(true);
-    setInput("");
-    const userMsg: Message = { id: `temp-u-${Date.now()}`, role: "user", text };
-    const assistantMsg: Message = { id: `temp-a-${Date.now()}`, role: "assistant", text: "" };
+    setSending(true); setInput(""); setCurrentStep(0);
+    const userMsg: Message = { id: `temp-u-${Date.now()}`, role: "user", parts: [{ type: "text", text }] };
+    const assistantMsg: Message = { id: `temp-a-${Date.now()}`, role: "assistant", parts: [] };
     setMessages((m) => [...m, userMsg, assistantMsg]);
 
     try {
       const url = `https://hhpiimnvkgmpfnldgdhc.supabase.co/functions/v1/ai-copilot-chat`;
       const res = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ thread_id: tid, text, mode, provider, model: model || undefined }),
       });
-
       if (!res.ok || !res.body) {
         const errText = await res.text();
-        let errMsg = errText;
-        try { errMsg = JSON.parse(errText).error || errText; } catch { /* */ }
-        setMessages((m) => m.map((x) => x.id === assistantMsg.id ? { ...x, text: `❌ ${errMsg}` } : x));
+        let errMsg = errText; try { errMsg = JSON.parse(errText).error || errText; } catch { /* */ }
+        setMessages((m) => m.map((x) => x.id === assistantMsg.id ? { ...x, parts: [{ type: "text", text: `❌ ${errMsg}` }] } : x));
         toast({ title: "Request failed", description: errMsg, variant: "destructive" });
         return;
       }
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let acc = "";
+      let buf = "";
+      const parts: Part[] = [];
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        acc += dec.decode(value, { stream: true });
-        setMessages((m) => m.map((x) => x.id === assistantMsg.id ? { ...x, text: acc } : x));
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const t = line.trim(); if (!t) continue;
+          let evt: any; try { evt = JSON.parse(t); } catch { continue; }
+          if (evt.type === "step") {
+            setCurrentStep(evt.step);
+          } else if (evt.type === "text") {
+            // Append/merge into a trailing text part
+            const last = parts[parts.length - 1];
+            if (last && last.type === "text") last.text += evt.text;
+            else parts.push({ type: "text", text: evt.text });
+          } else if (evt.type === "tool_call") {
+            parts.push({ type: "tool_call", id: evt.id, name: evt.name, args: evt.args });
+          } else if (evt.type === "tool_result") {
+            parts.push({ type: "tool_result", id: evt.id, name: evt.name, status: evt.status, latency_ms: evt.latency_ms, result: evt.result });
+          } else if (evt.type === "error") {
+            parts.push({ type: "text", text: `\n\n❌ ${evt.error}` });
+          }
+          setMessages((m) => m.map((x) => x.id === assistantMsg.id ? { ...x, parts: [...parts] } : x));
+        }
       }
-
-      // Refresh thread list for updated title/timestamp
       loadThreads();
     } catch (e: any) {
       toast({ title: "Network error", description: e.message, variant: "destructive" });
     } finally {
-      setSending(false);
+      setSending(false); setCurrentStep(0);
     }
   };
 
@@ -213,11 +226,7 @@ export default function AICopilot() {
 
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-4">
-      {/* Sidebar */}
-      <aside className={cn(
-        "transition-all overflow-hidden flex-shrink-0",
-        showSidebar ? "w-72" : "w-0"
-      )}>
+      <aside className={cn("transition-all overflow-hidden flex-shrink-0", showSidebar ? "w-72" : "w-0")}>
         <Card className="h-full flex flex-col">
           <div className="p-3 border-b">
             <Button onClick={() => newThread(mode)} className="w-full gap-2" size="sm">
@@ -226,30 +235,21 @@ export default function AICopilot() {
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {threads.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-6">No conversations yet.</p>
-              )}
+              {threads.length === 0 && <p className="text-xs text-muted-foreground text-center py-6">No conversations yet.</p>}
               {threads.map((t) => {
                 const M = MODES.find((m) => m.id === t.mode) || MODES[0];
                 const Icon = M.icon;
                 return (
-                  <div
-                    key={t.id}
-                    onClick={() => setActiveId(t.id)}
-                    className={cn(
-                      "group cursor-pointer rounded-lg px-2.5 py-2 text-sm flex items-start gap-2 transition-colors",
-                      activeId === t.id ? "bg-accent" : "hover:bg-accent/50",
-                    )}
-                  >
+                  <div key={t.id} onClick={() => setActiveId(t.id)}
+                    className={cn("group cursor-pointer rounded-lg px-2.5 py-2 text-sm flex items-start gap-2 transition-colors",
+                      activeId === t.id ? "bg-accent" : "hover:bg-accent/50")}>
                     <Icon className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="truncate font-medium">{t.title}</div>
                       <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{M.label}</div>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition"
-                    >
+                    <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -260,30 +260,21 @@ export default function AICopilot() {
         </Card>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Header */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <Button variant="ghost" size="icon" onClick={() => setShowSidebar(!showSidebar)}>
-            <MenuIcon className="h-4 w-4" />
-          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setShowSidebar(!showSidebar)}><MenuIcon className="h-4 w-4" /></Button>
           <div className="flex flex-wrap gap-1 mr-auto">
             {MODES.map((m) => {
               const Icon = m.icon;
               return (
-                <Button
-                  key={m.id}
-                  size="sm"
-                  variant={mode === m.id ? "default" : "outline"}
-                  onClick={() => { setMode(m.id); setActiveId(null); setMessages([]); }}
-                  className="gap-1.5"
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {m.label}
+                <Button key={m.id} size="sm" variant={mode === m.id ? "default" : "outline"}
+                  onClick={() => { setMode(m.id); setActiveId(null); setMessages([]); }} className="gap-1.5">
+                  <Icon className="h-3.5 w-3.5" />{m.label}
                 </Button>
               );
             })}
           </div>
+          <Badge variant="outline" className="gap-1 text-[10px]"><Zap className="h-3 w-3" /> Agentic</Badge>
           <Select value={provider} onValueChange={(v) => { setProvider(v as Provider); setModel(""); }}>
             <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -292,7 +283,6 @@ export default function AICopilot() {
           </Select>
         </div>
 
-        {/* Messages */}
         <Card className="flex-1 flex flex-col min-h-0">
           <ScrollArea className="flex-1" ref={scrollRef as any}>
             <div className="p-4 md:p-6 space-y-4 max-w-3xl mx-auto">
@@ -307,61 +297,135 @@ export default function AICopilot() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-2xl mx-auto pt-4">
                     {activeMode.quickPrompts.map((p, i) => (
-                      <button
-                        key={i}
-                        onClick={() => send(p)}
-                        className="text-left text-sm p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/40 transition"
-                      >
+                      <button key={i} onClick={() => send(p)}
+                        className="text-left text-sm p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/40 transition">
                         {p}
                       </button>
                     ))}
                   </div>
                 </div>
               ) : (
-                messages.map((m) => (
-                  <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                    <div className={cn(
-                      "rounded-2xl px-4 py-2.5 max-w-[85%] text-sm",
-                      m.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50",
-                    )}>
-                      {m.role === "assistant" ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-headings:mt-3 prose-headings:mb-1">
-                          {m.text ? <ReactMarkdown>{m.text}</ReactMarkdown> : <span className="inline-flex gap-1 items-center text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> thinking…</span>}
-                        </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap">{m.text}</div>
-                      )}
+                messages.map((m, idx) => {
+                  const isLast = idx === messages.length - 1;
+                  const isLiveAssistant = isLast && sending && m.role === "assistant";
+                  return (
+                    <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+                      <div className={cn(
+                        "rounded-2xl px-4 py-2.5 max-w-[90%] text-sm",
+                        m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/30 border border-border/50 w-full",
+                      )}>
+                        {m.role === "user" ? (
+                          <div className="whitespace-pre-wrap">{(m.parts[0] as any)?.text || ""}</div>
+                        ) : (
+                          <AssistantBody parts={m.parts} live={isLiveAssistant} currentStep={currentStep} />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </ScrollArea>
 
-          {/* Composer */}
           <div className="border-t p-3">
             <div className="flex gap-2 items-end max-w-3xl mx-auto">
               <Textarea
-                placeholder={`Message ${activeMode.label}…  (Enter to send, Shift+Enter for newline)`}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                rows={1}
-                className="resize-none min-h-[44px] max-h-40"
-                disabled={sending}
+                placeholder={`Give the agent a goal…  (Enter to send, Shift+Enter for newline)`}
+                value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
+                rows={1} className="resize-none min-h-[44px] max-h-40" disabled={sending}
               />
               <Button onClick={() => send()} disabled={sending || !input.trim()} size="icon" className="h-11 w-11">
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground text-center mt-2">
-              {provider === "lovable" ? "Using Lovable AI (built-in)" : `Using your ${provider} key`} · AI can make mistakes. Verify critical decisions.
+              Agentic — uses live data via tools. {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`} Verify critical decisions.
             </p>
           </div>
         </Card>
       </div>
     </div>
+  );
+}
+
+function AssistantBody({ parts, live, currentStep }: { parts: Part[]; live: boolean; currentStep: number }) {
+  if (!parts.length && live) {
+    return (
+      <span className="inline-flex gap-1.5 items-center text-muted-foreground text-xs">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {currentStep > 0 ? `Thinking (step ${currentStep})…` : "Thinking…"}
+      </span>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {parts.map((p, i) => {
+        if (p.type === "text") {
+          if (!p.text.trim()) return null;
+          return (
+            <div key={i} className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-table:text-xs">
+              <ReactMarkdown>{p.text}</ReactMarkdown>
+            </div>
+          );
+        }
+        if (p.type === "tool_call") {
+          // pair with following tool_result if any
+          const next = parts[i + 1];
+          const paired = next && next.type === "tool_result" && (next as any).id === p.id ? (next as any) : null;
+          if (paired) return null; // render via the result block below
+          return <ToolCard key={i} name={p.name} args={p.args} pending />;
+        }
+        if (p.type === "tool_result") {
+          // find the preceding call
+          const prev = parts[i - 1];
+          const call = prev && prev.type === "tool_call" && (prev as any).id === p.id ? prev : null;
+          return <ToolCard key={i} name={p.name} args={(call as any)?.args || {}} result={p.result} status={p.status} latencyMs={p.latency_ms} />;
+        }
+        return null;
+      })}
+      {live && (
+        <span className="inline-flex gap-1.5 items-center text-muted-foreground text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {currentStep > 0 ? `Step ${currentStep}…` : "Thinking…"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ToolCard({ name, args, result, status, latencyMs, pending }: { name: string; args: any; result?: any; status?: string; latencyMs?: number; pending?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const label = TOOL_LABELS[name] || name;
+  const ok = !pending && status === "ok";
+  const err = status === "error";
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 hover:bg-accent/40 px-3 py-2 text-xs transition text-left">
+          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            : err ? <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+            : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+          <Wrench className="h-3 w-3 text-muted-foreground" />
+          <span className="font-medium">{label}</span>
+          <code className="text-[10px] text-muted-foreground">{name}</code>
+          {latencyMs != null && <span className="ml-auto text-[10px] text-muted-foreground">{latencyMs}ms</span>}
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-1 ml-5 space-y-1">
+        {args && Object.keys(args).length > 0 && (
+          <div className="text-[11px]">
+            <div className="text-muted-foreground mb-0.5">Input</div>
+            <pre className="bg-muted/40 rounded p-2 overflow-x-auto text-[10px] leading-tight">{JSON.stringify(args, null, 2)}</pre>
+          </div>
+        )}
+        {result !== undefined && (
+          <div className="text-[11px]">
+            <div className="text-muted-foreground mb-0.5">Result</div>
+            <pre className="bg-muted/40 rounded p-2 overflow-x-auto text-[10px] leading-tight max-h-64">{JSON.stringify(result, null, 2)}</pre>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
