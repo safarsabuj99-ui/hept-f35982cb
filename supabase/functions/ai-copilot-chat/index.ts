@@ -24,27 +24,43 @@ type Msg = {
 // ---------------- System prompts ----------------
 
 const BASE_AGENT_RULES = `
-You are an autonomous AI agent for a digital marketing agency in Bangladesh.
-You have access to tools that read live data from the agency's database (campaigns, clients, ad spend, profit, wallet balances).
+You are **Nova**, a senior digital-marketing operator embedded inside a Bangladesh-based ad agency. You think like a 10-year media buyer + account strategist who has personally scaled Meta, TikTok, and Google campaigns for BD e-commerce, restaurants, education, real estate, and D2C brands.
 
-How you work:
-1. When the user gives a goal, plan the steps needed and call tools to gather facts. Do NOT guess data — call tools.
-2. You may call tools multiple times in sequence. After each tool result, decide what to do next.
-3. Once you have enough data, give a clear, concrete answer with numbers and recommendations.
-4. Currency: ad spend is USD, client revenue/billing is BDT (৳). Always label units.
-5. Be tactical and specific. Cite the exact metric that drove each recommendation.
-6. Use markdown: short sections, bullet lists, tables for comparisons.
-7. NEVER fabricate client/campaign names. If a tool returns nothing, say so honestly.
+You speak the language of marketers fluently: ROAS, CAC, CPM, CPC, CTR, CVR, frequency, creative fatigue, audience saturation, funnel stages (TOF/MOF/BOF), attribution window, MER, LTV/CAC, post-purchase ROAS, blended ROAS, budget pacing.
 
-You CANNOT directly modify data in this version — only read and recommend.
-Org isolation is enforced by the tool layer; you can only see this agency's data.
+## How you think
+1. **Diagnose first.** When the user gives a goal, plan tool calls to gather the real facts BEFORE recommending anything. Never guess numbers.
+2. **Chain tools.** You can call up to 16 tools per turn. After each result, ask: "what's the missing piece?" and call another tool. Common chains: search_clients → get_client_summary → get_campaign_breakdown → get_creative_fatigue → draft_optimization_brief.
+3. **Be a peer, not a cheerleader.** Push back on weak ideas. If the data says "this campaign is dying", say it plainly with the metric that proves it.
+4. **Always end with a next action.** Every answer must include what to do tomorrow morning — pause campaign X, refresh creative Y, top up client Z, draft email to W. No vague advice.
+
+## Output contract
+For any analytical or strategic answer, structure your final reply as:
+
+**🔍 Diagnose** — 2-4 bullets of what the data actually shows (numbers + units).
+**💡 Insight** — the root cause / pattern / opportunity in 1-2 sentences.
+**⚡ Action** — a numbered list of concrete next steps, each with the campaign/client name and the expected outcome. Mark each action with one of: \`[Pause]\` \`[Scale]\` \`[Refresh]\` \`[Reallocate]\` \`[Top-up]\` \`[Message]\` \`[Investigate]\`.
+
+For pure ad-copy or message-drafting tasks, skip the contract — return the deliverable directly with 3+ variants and a short "why this works" note.
+
+## Currency & locale
+- Ad spend, ROAS, CPM, CPC = **USD ($)**.
+- Client billing, revenue, wallet balance, BD financials = **BDT (৳)**.
+- Always label units. Format BDT in Bangla numerals when appropriate (e.g. ৳5,00,000).
+- Bangla / Banglish / English: match the user's language. For client-facing drafts, default to bilingual unless told otherwise.
+
+## Hard rules
+- NEVER fabricate client names, campaign names, or numbers. If a tool returns empty, say so.
+- Org isolation is enforced by the tool layer — every tool already filters to this agency only.
+- You can read everything but you cannot mutate data yet (no pause, no send, no top-up). You DRAFT and PROPOSE; the human applies.
+- Keep responses scannable: short sections, bullets, small tables. Avoid wall-of-text.
 `;
 
 const MODE_PROMPTS: Record<string, string> = {
-  coach: `Mode: Growth Coach. Help the agency owner scale: pricing, packaging, acquisition, retention, hiring, cash-flow. Use tools to look up real numbers (revenue, profit, top clients, low-balance clients) before giving advice. Push back on weak ideas — be a peer, not a cheerleader.`,
-  analyst: `Mode: Campaign Analyst. Find winners, losers, anomalies, and money leaks. Always use tools to fetch real campaign data, never invent numbers. Recommend pause/scale/reallocate/fix-creative with reasons.`,
-  copy: `Mode: Ad Copy. Write Bangla/English ad copy. You can still use search_clients + get_client_summary to ground copy in the client's niche/spend pattern. Produce multiple variants.`,
-  comms: `Mode: Client Communication. Draft client emails/WhatsApp/recaps. Use tools to pull real numbers (spend, results, ROAS, wallet balance) before drafting, so messages are factual.`,
+  coach: `**Focus: Growth Strategy.** The agency owner needs help scaling — pricing, packaging, client acquisition, retention, hiring, cash-flow, P&L health. Use get_agency_pnl, list_top_clients_by_spend, get_low_balance_clients, compare_periods to ground every recommendation in real numbers. Frame advice as "given your current $X spend / Y ROAS / Z clients, the highest-leverage move is…".`,
+  analyst: `**Focus: Performance Audit.** Find winners to scale, losers to pause, anomalies to investigate, and money leaks to plug. Always lead with list_loss_making_campaigns / list_winning_campaigns / get_creative_fatigue / get_funnel_health. Every recommendation must cite the metric that drove it (ROAS, frequency, CPM trend, funnel drop-off).`,
+  copy: `**Focus: Creative.** Produce ad copy, hooks, headlines, CTAs in Bangla / Banglish / English. When a client is mentioned, run search_clients → get_client_summary first to understand their niche, average AOV, and winning angles. Deliver 3-5 variants with a "why this works" angle for each (hook type, emotional driver, CTA strength).`,
+  comms: `**Focus: Client Communication.** Draft factual, professional client messages (WhatsApp / email / monthly recap). ALWAYS pull real data first (get_client_summary, get_campaign_breakdown, get_low_balance_clients) so numbers in the draft are correct. Default tone: warm, confident, data-led. Default language: Banglish unless specified.`,
 };
 
 // ---------------- Tool registry ----------------
@@ -544,6 +560,241 @@ const TOOLS: Tool[] = [
       return { from, to, clients: rows };
     },
   },
+
+  {
+    name: "get_creative_fatigue",
+    description: "Diagnose creative fatigue for a single campaign over a date range. Returns CTR trend (slope %), CPM trend (slope %), avg frequency band, and a fatigue verdict: fresh | warming | fatigued | dead. Use this BEFORE recommending pause vs creative-refresh.",
+    parameters: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "string" },
+        preset: { type: "string" }, from: { type: "string" }, to: { type: "string" },
+      },
+      required: ["campaign_id"],
+    },
+    execute: async (args, { service, orgId }) => {
+      const { from, to } = resolveRange(args);
+      const { data: camp } = await service
+        .from("campaigns").select("id, name, platform, status")
+        .eq("id", args.campaign_id).eq("org_id", orgId).maybeSingle();
+      if (!camp) return { error: "Campaign not found in your org." };
+      const { data: rows } = await service
+        .from("daily_metrics")
+        .select("data_date, spend, impressions, clicks, results, conversion_value, cpm, ctr, reach")
+        .eq("campaign_id", args.campaign_id)
+        .gte("data_date", from).lte("data_date", to)
+        .order("data_date", { ascending: true });
+      const series = rows || [];
+      if (series.length < 3) return { campaign: camp.name, from, to, verdict: "insufficient_data", points: series.length };
+      // simple linear slope over normalized index for CTR and CPM
+      const slope = (vals: number[]) => {
+        const n = vals.length;
+        const xMean = (n - 1) / 2;
+        const yMean = vals.reduce((a, b) => a + b, 0) / n;
+        let num = 0, den = 0;
+        for (let i = 0; i < n; i++) { num += (i - xMean) * (vals[i] - yMean); den += (i - xMean) ** 2; }
+        return den === 0 ? 0 : num / den;
+      };
+      const ctrs = series.map((r: any) => Number(r.ctr || 0));
+      const cpms = series.map((r: any) => Number(r.cpm || 0));
+      const ctrSlope = slope(ctrs); const cpmSlope = slope(cpms);
+      const avgCtr = ctrs.reduce((a, b) => a + b, 0) / ctrs.length;
+      const avgCpm = cpms.reduce((a, b) => a + b, 0) / cpms.length;
+      const totalImpr = series.reduce((s: number, r: any) => s + Number(r.impressions || 0), 0);
+      const totalReach = series.reduce((s: number, r: any) => s + Number(r.reach || 0), 0);
+      const frequency = totalReach > 0 ? +(totalImpr / totalReach).toFixed(2) : 0;
+      const ctrTrendPct = avgCtr > 0 ? +((ctrSlope / avgCtr) * 100).toFixed(1) : 0;
+      const cpmTrendPct = avgCpm > 0 ? +((cpmSlope / avgCpm) * 100).toFixed(1) : 0;
+      let verdict: string;
+      if (frequency >= 5 && ctrTrendPct < -10) verdict = "dead";
+      else if (frequency >= 3.5 && (ctrTrendPct < -5 || cpmTrendPct > 10)) verdict = "fatigued";
+      else if (ctrTrendPct < -3 || cpmTrendPct > 5) verdict = "warming";
+      else verdict = "fresh";
+      const recommendation = verdict === "dead" ? "Pause and replace creative immediately."
+        : verdict === "fatigued" ? "Launch 3 new creative variants this week; phase out old ones."
+        : verdict === "warming" ? "Queue refresh creative; not urgent but plan it."
+        : "Healthy — scale budget if ROAS supports it.";
+      return {
+        campaign: camp.name, platform: camp.platform, from, to,
+        avg_ctr_pct: +avgCtr.toFixed(2), avg_cpm_usd: +avgCpm.toFixed(2),
+        ctr_trend_pct_per_day: ctrTrendPct, cpm_trend_pct_per_day: cpmTrendPct,
+        avg_frequency: frequency,
+        days_analyzed: series.length,
+        verdict, recommendation,
+      };
+    },
+  },
+
+  {
+    name: "get_funnel_health",
+    description: "Analyze the e-commerce funnel for a client: impressions → clicks → view_content → add_to_cart → initiate_checkout → purchase. Returns drop-off rates per step and flags the biggest bottleneck. Use to diagnose whether the problem is creative (low CTR), landing page (low ATC), or checkout (low purchase).",
+    parameters: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        preset: { type: "string" }, from: { type: "string" }, to: { type: "string" },
+      },
+      required: ["client_id"],
+    },
+    execute: async (args, { service, orgId }) => {
+      const { from, to } = resolveRange(args);
+      const { data: camps } = await service.from("campaigns").select("id").eq("client_id", args.client_id).eq("org_id", orgId);
+      const ids = (camps || []).map((c: any) => c.id);
+      if (ids.length === 0) return { from, to, message: "No campaigns for this client." };
+      let impressions = 0, clicks = 0, vc = 0, atc = 0, ic = 0, purchases = 0, spend = 0, value = 0;
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        const { data: ms } = await service
+          .from("daily_metrics")
+          .select("impressions, clicks, view_content, add_to_cart, initiate_checkout, purchase, spend, conversion_value")
+          .in("campaign_id", chunk).gte("data_date", from).lte("data_date", to);
+        for (const m of ms || []) {
+          impressions += Number(m.impressions || 0); clicks += Number(m.clicks || 0);
+          vc += Number(m.view_content || 0); atc += Number(m.add_to_cart || 0);
+          ic += Number(m.initiate_checkout || 0); purchases += Number(m.purchase || 0);
+          spend += Number(m.spend || 0); value += Number(m.conversion_value || 0);
+        }
+      }
+      const rate = (a: number, b: number) => b > 0 ? +((a / b) * 100).toFixed(2) : 0;
+      const steps = [
+        { step: "Impression → Click (CTR)", rate_pct: rate(clicks, impressions), from: impressions, to: clicks },
+        { step: "Click → View Content", rate_pct: rate(vc, clicks), from: clicks, to: vc },
+        { step: "View → Add to Cart", rate_pct: rate(atc, vc), from: vc, to: atc },
+        { step: "ATC → Initiate Checkout", rate_pct: rate(ic, atc), from: atc, to: ic },
+        { step: "Checkout → Purchase", rate_pct: rate(purchases, ic), from: ic, to: purchases },
+      ].filter((s) => s.from > 0);
+      // healthy benchmarks
+      const bench: Record<string, number> = { "Impression → Click (CTR)": 1.0, "Click → View Content": 60, "View → Add to Cart": 8, "ATC → Initiate Checkout": 50, "Checkout → Purchase": 40 };
+      const bottleneck = steps
+        .map((s) => ({ ...s, gap: bench[s.step] != null ? +(bench[s.step] - s.rate_pct).toFixed(2) : 0 }))
+        .filter((s) => s.gap > 0)
+        .sort((a, b) => b.gap - a.gap)[0];
+      const diagnosis = !bottleneck ? "Funnel healthy across all steps."
+        : bottleneck.step.startsWith("Impression") ? "Creative problem — hook is weak. Test new hooks/thumbnails."
+        : bottleneck.step.startsWith("Click") ? "Landing page problem — slow load, broken link, or wrong audience."
+        : bottleneck.step.startsWith("View") ? "Product/offer problem — price, value-prop, or product page UX."
+        : bottleneck.step.startsWith("ATC") ? "Checkout friction — shipping cost shock, account-required, or trust gap."
+        : "Payment/COD problem — gateway failures or COD verification drop-off.";
+      return {
+        from, to, total_spend_usd: +spend.toFixed(2), total_revenue_usd: +value.toFixed(2),
+        roas: spend > 0 ? +(value / spend).toFixed(2) : 0,
+        funnel: steps, bottleneck, diagnosis,
+      };
+    },
+  },
+
+  {
+    name: "get_runway_forecast",
+    description: "Forecast how many days a client's wallet balance will last at the current spend pace. Returns balance (BDT), avg daily spend (USD), conversion-adjusted runway in days, and urgency level. Use to spot top-up reminders before clients hit zero.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        lookback_days: { type: "number", description: "Days of spend history to average over. Default 7." },
+      },
+      required: ["client_id"],
+    },
+    execute: async (args, { service, orgId }) => {
+      const lookback = Number(args.lookback_days || 7);
+      const { data: client } = await service.from("profiles").select("full_name, business_name").eq("user_id", args.client_id).maybeSingle();
+      // balance = sum of transactions (deposits - debits) — schema uses signed amounts via type
+      const { data: txs } = await service
+        .from("transactions")
+        .select("type, amount, exchange_rate")
+        .eq("client_id", args.client_id);
+      let balanceBdt = 0;
+      for (const t of txs || []) {
+        const amt = Number(t.amount || 0);
+        const signed = t.type === "deposit" || t.type === "refund" || t.type === "adjustment_credit" ? amt : -amt;
+        balanceBdt += signed;
+      }
+      // avg recent daily spend (USD)
+      const { data: camps } = await service.from("campaigns").select("id").eq("client_id", args.client_id).eq("org_id", orgId);
+      const ids = (camps || []).map((c: any) => c.id);
+      const { from, to } = resolveRange({ preset: lookback === 30 ? "last_30_days" : lookback === 14 ? "last_14_days" : "last_7_days" });
+      let spendUsd = 0;
+      if (ids.length > 0) {
+        for (let i = 0; i < ids.length; i += 500) {
+          const chunk = ids.slice(i, i + 500);
+          const { data: ms } = await service.from("daily_metrics").select("spend").in("campaign_id", chunk).gte("data_date", from).lte("data_date", to);
+          for (const m of ms || []) spendUsd += Number(m.spend || 0);
+        }
+      }
+      const avgDailySpendUsd = +(spendUsd / lookback).toFixed(2);
+      // approx BDT spend pace = USD * 125 (BD agency markup proxy); real exchange rate varies
+      const usdToBdt = 125;
+      const dailyBurnBdt = avgDailySpendUsd * usdToBdt;
+      const runwayDays = dailyBurnBdt > 0 ? +(balanceBdt / dailyBurnBdt).toFixed(1) : null;
+      let urgency: string;
+      if (runwayDays == null) urgency = "no_spend";
+      else if (runwayDays <= 2) urgency = "critical";
+      else if (runwayDays <= 5) urgency = "high";
+      else if (runwayDays <= 10) urgency = "medium";
+      else urgency = "ok";
+      const action = urgency === "critical" ? "Send top-up reminder TODAY. Recommend ৳" + Math.ceil(dailyBurnBdt * 15).toLocaleString("en-BD") + " minimum."
+        : urgency === "high" ? "Top-up reminder this week."
+        : urgency === "medium" ? "Soft reminder in next client check-in."
+        : urgency === "no_spend" ? "Client not actively running ads — investigate."
+        : "No action needed.";
+      return {
+        client: client?.business_name || client?.full_name,
+        balance_bdt: +balanceBdt.toFixed(2),
+        avg_daily_spend_usd: avgDailySpendUsd,
+        avg_daily_burn_bdt: +dailyBurnBdt.toFixed(2),
+        runway_days: runwayDays,
+        urgency, action,
+        based_on_last_days: lookback,
+      };
+    },
+  },
+
+  {
+    name: "draft_optimization_brief",
+    description: "Produce a structured optimization brief for one campaign — combines campaign perf + creative fatigue into a single Pause/Scale/Refresh/Reallocate recommendation with reasoning and KPI targets. Use this as the FINAL diagnostic step before recommending action.",
+    parameters: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "string" },
+        preset: { type: "string" }, from: { type: "string" }, to: { type: "string" },
+      },
+      required: ["campaign_id"],
+    },
+    execute: async (args, { service, orgId }) => {
+      const { from, to } = resolveRange(args);
+      const { data: camp } = await service.from("campaigns")
+        .select("id, name, platform, status, client_id, objective")
+        .eq("id", args.campaign_id).eq("org_id", orgId).maybeSingle();
+      if (!camp) return { error: "Campaign not found." };
+      const { data: rows } = await service
+        .from("daily_metrics")
+        .select("spend, impressions, clicks, results, conversion_value, cpm, ctr, reach, purchase")
+        .eq("campaign_id", args.campaign_id)
+        .gte("data_date", from).lte("data_date", to);
+      const series = rows || [];
+      const sum = (k: string) => series.reduce((s: number, r: any) => s + Number(r[k] || 0), 0);
+      const spend = sum("spend"), impr = sum("impressions"), clicks = sum("clicks"), results = sum("results"), value = sum("conversion_value"), reach = sum("reach");
+      const roas = spend > 0 ? +(value / spend).toFixed(2) : 0;
+      const ctr = impr > 0 ? +((clicks / impr) * 100).toFixed(2) : 0;
+      const cpm = impr > 0 ? +((spend / impr) * 1000).toFixed(2) : 0;
+      const cpa = results > 0 ? +(spend / results).toFixed(2) : 0;
+      const freq = reach > 0 ? +(impr / reach).toFixed(2) : 0;
+      let verdict: string; let reasoning: string;
+      if (spend < 5) { verdict = "INVESTIGATE"; reasoning = "Too little spend to judge — let it run with daily budget cap or check delivery issues."; }
+      else if (results === 0 && spend >= 20) { verdict = "PAUSE"; reasoning = `$${spend.toFixed(0)} spent with 0 results. Hard kill — rebuild from scratch.`; }
+      else if (roas >= 3.0 && freq < 3.5) { verdict = "SCALE"; reasoning = `ROAS ${roas} with frequency ${freq} — safe to raise budget 20-30% per day.`; }
+      else if (roas < 1.0 && spend >= 20) { verdict = "PAUSE"; reasoning = `Losing money — ROAS ${roas} below break-even after $${spend.toFixed(0)} spend.`; }
+      else if (freq >= 4.5 || ctr < 0.8) { verdict = "REFRESH"; reasoning = `Frequency ${freq} / CTR ${ctr}% — creative is burning out. New variants needed.`; }
+      else if (roas >= 1.5 && roas < 3.0) { verdict = "REALLOCATE"; reasoning = `Marginal performance (ROAS ${roas}) — shift budget to higher-ROAS campaigns and keep this on minimum.`; }
+      else { verdict = "HOLD"; reasoning = "Performance acceptable — keep running and monitor weekly."; }
+      return {
+        campaign: camp.name, platform: camp.platform, objective: camp.objective, status: camp.status,
+        period: { from, to },
+        metrics: { spend_usd: +spend.toFixed(2), roas, ctr_pct: ctr, cpm_usd: cpm, cpa_usd: cpa, frequency: freq, results, revenue_usd: +value.toFixed(2) },
+        verdict, reasoning,
+        kpi_targets: { target_roas: 2.5, target_ctr_pct: 1.5, target_frequency_max: 3.5 },
+      };
+    },
+  },
 ];
 
 const TOOL_MAP: Record<string, Tool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
@@ -756,7 +1007,7 @@ Deno.serve(async (req) => {
     const toolCallLog: any[] = [];
 
     const ctx: ToolCtx = { service, supabase, orgId, userId: user.id };
-    const MAX_STEPS = 8;
+    const MAX_STEPS = 16;
 
     const stream = new ReadableStream({
       async start(controller) {

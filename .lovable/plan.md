@@ -1,144 +1,147 @@
-# AI Growth Copilot → Fully Agentic AI System
+# AI Copilot v2 — The Agency Growth Operator
 
-Upgrade the existing Phase 1 chat shell into a **true agentic AI** that doesn't just answer questions — it **investigates, plans, executes multi-step actions, and proposes changes** across your agency data (with human approval for anything that mutates state).
-
-## What "agentic" means here
-
-Today: user asks → AI replies with text.
-After: user states a goal → AI **plans steps → calls tools → reads results → calls more tools → reasons → proposes/executes actions → reports back** — autonomously, in a loop, with streaming progress visible to you.
-
-Example goals it will handle end-to-end:
-- *"Audit all my clients this month, find the 3 worst campaigns, draft a pause recommendation + client email for each."*
-- *"Find which clients are about to run out of balance and draft top-up reminders in Bangla."*
-- *"Compare last 7 days vs previous 7 days across all clients, surface anomalies, and create a deep report for the worst."*
-- *"Write 5 Bangla ad copy variants for Rafin's fashion campaign, then save them as a campaign request."*
-
-## Core architecture (AI SDK agent loop)
-
-```text
-┌──────────────────────────────────────────────────┐
-│  User goal                                       │
-│        ↓                                         │
-│  Planner step (LLM)  →  decides next action      │
-│        ↓                                         │
-│  Tool call  →  ai-tools-runtime executes         │
-│        ↓                                         │
-│  Tool result  →  fed back to model               │
-│        ↓                                         │
-│  Reflect → next tool OR final answer             │
-│  (loop up to 50 steps, stopWhen)                 │
-└──────────────────────────────────────────────────┘
-```
-
-Built on **Vercel AI SDK** `streamText` + `tool()` + `stopWhen: stepCountIs(50)`, streamed to a Conversation UI that renders each step (thinking / tool call / tool result / proposal).
-
-## The tool layer (the agent's "hands")
-
-All tools enforce `org_id = get_user_org_id(auth.uid())`. Two categories:
-
-**Read tools (auto-execute, no approval)**
-- `search_clients(query)` · `get_client_summary(client_id, range)` · `get_campaign_breakdown(client_id, range)`
-- `list_loss_making_campaigns(threshold, range)` · `list_winning_campaigns(min_roas, range)`
-- `get_agency_pnl(range)` · `get_client_wallet(client_id)` · `get_low_balance_clients(threshold)`
-- `compare_periods(range_a, range_b, scope)` · `detect_anomalies(client_id, range)`
-- `get_campaign_metrics_timeseries(campaign_id, range)` · `list_clients_needing_attention()`
-- `get_ad_creative(campaign_id)` · `web_search(query)` (Lovable AI grounded)
-
-**Write tools (require human approval via `needsApproval`)**
-- `propose_pause_campaign(campaign_id, reason)` — shows Apply button → calls existing `pause-campaign` edge function
-- `propose_campaign_request(client_id, payload)` — drafts in `campaign_requests` table as pending
-- `draft_client_email(client_id, topic, language)` — saves to drafts, never auto-sends
-- `draft_whatsapp_message(client_id, topic, language)` — copy-to-clipboard
-- `save_ad_copy_variants(client_id, copies[])` — stored in new `ai_ad_copy_drafts` table
-- `generate_deep_report(client_id, range)` — saves to `ai_reports`
-- `create_internal_note(client_id, note)` — appended to client timeline
-
-Every write tool returns a **proposal card** in chat with diff/preview + Apply/Reject buttons. Nothing mutates without your click.
-
-## Agentic capabilities added on top of Phase 1
-
-1. **Multi-step planning** — `stopWhen: stepCountIs(50)`, model sees its own tool results and decides what to do next.
-2. **Streamed reasoning trace** — every tool call/result renders as an expandable accordion (AI Elements `Tool` component) so you see *what* the agent did and *why*.
-3. **Approval gates** — `needsApproval` on all mutating tools; chat renders Apply / Edit / Reject buttons.
-4. **Context chips** — attach a client / campaign / date range to ground the whole conversation; auto-injected into every tool call.
-5. **Slash commands** — `/audit <client>`, `/report <client>`, `/copy <product>`, `/email <client>`, `/find losers`, `/find winners`.
-6. **Quick-action launcher** — pre-built agentic workflows on the AI Copilot home: *"Weekly audit"*, *"Find money leaks"*, *"Draft client check-ins"*, *"Reactivate dormant clients"*.
-7. **Background agents (Phase 4)** — `pg_cron` nightly runs `ai-nightly-agent` that produces *"Today's AI insights"* on the dashboard + weekly digest email.
-8. **Memory** — per-org `ai_memory` table the agent can write to (`remember_fact`, `recall_facts` tools) so it learns your preferences, tone, client niches, naming conventions across sessions.
-9. **Tool-use budget** — per-message max steps + per-org monthly USD budget enforced in `ai-copilot-chat` before each step.
-10. **Multi-provider routing** — Planner uses **GPT-5 / Claude Sonnet 4.5 / Gemini 2.5 Pro** (your choice); cheap sub-tasks (summarize tool output, format) auto-route to **Flash / Haiku / 4o-mini** to cut cost ~70%.
-
-## UI changes
-
-- `/admin/ai-copilot` becomes an **agent workspace**:
-  - Left: thread list (existing)
-  - Center: streaming conversation with **step timeline** (Plan → Tool → Result → Proposal → Answer)
-  - Right rail: active **context chips**, **provider/model**, **step counter**, **token/cost meter**, **memory inspector**
-- **Proposal cards** inline in chat: preview of what will change + Apply/Reject
-- **Quick-actions grid** on empty state (6 pre-built agentic workflows)
-- Floating **"Ask AI"** button on Client Detail / Campaign Hub / Finance Hub — opens copilot pre-scoped with context chip already attached
-- Dashboard widget: **"Today's AI insights"** (3 nightly-generated cards with Apply buttons)
-
-## Database additions
-
-- `ai_tool_calls` — `(message_id, tool_name, args JSONB, result JSONB, status, latency_ms, cost_usd)` — full audit trail of every agent action
-- `ai_proposals` — `(thread_id, kind, payload JSONB, status: pending|applied|rejected, applied_at, applied_by)` — pending write actions
-- `ai_memory` — `(org_id, key, value, embedding vector(1536), updated_at)` — long-term agent memory with semantic recall
-- `ai_ad_copy_drafts` — saved ad copy variants
-- `ai_scheduled_runs` — `(org_id, workflow, cron, last_run_at, last_result JSONB)` — background agent runs
-- Extend `ai_messages.parts` JSONB to store AI SDK UIMessage parts (text, tool-call, tool-result, reasoning, proposal)
-
-All org-scoped via RLS using `get_user_org_id`.
-
-## Edge functions
-
-- **`ai-copilot-chat`** (rewrite) — `streamText` with full tool registry, `stopWhen: stepCountIs(50)`, `toUIMessageStreamResponse({ originalMessages, onFinish })`, persists messages + tool calls + proposals
-- **`ai-tools-runtime`** (new) — pure server-side tool executors (each tool a function, args validated with Zod, org-scoped queries)
-- **`ai-apply-proposal`** (new) — executes a single approved proposal (pause campaign, send email, etc.); logs to audit trail
-- **`ai-generate-report`** (new) — long-form report with structured Zod output
-- **`ai-nightly-agent`** (new, cron) — runs the *daily audit* workflow per org, writes results to `ai_scheduled_runs` + creates dashboard insight cards
-- **`ai-provider-test`** (exists) — kept
-
-## Security
-
-- Every tool validates `org_id` before reading/writing
-- Prompt-injection guard: tool descriptions explicitly tell model it cannot escape org scope; tool implementations re-verify
-- Write tools **always** require human Apply click (no auto-execute path, even for the agent)
-- API keys encrypted at rest (Supabase vault)
-- Per-org monthly USD cap blocks new agent runs when exceeded
-- Audit log entry for every Apply
-- New permission flags: `can_use_ai_copilot`, `can_approve_ai_proposals` (admin-only by default)
-
-## Phasing
-
-**Phase 2A — Agent loop + read tools** (ship first)
-- Rewrite `ai-copilot-chat` with AI SDK tool loop + `stopWhen`
-- Build `ai-tools-runtime` with the 13 read tools
-- UI: streaming step timeline + tool accordions + context chips + slash commands
-- `ai_tool_calls` table + audit trail
-
-**Phase 2B — Write tools + proposals**
-- 7 write tools with `needsApproval`
-- `ai_proposals` table + Apply/Reject flow + `ai-apply-proposal` function
-- Floating "Ask AI" buttons on Client Detail / Campaign Hub / Finance Hub
-
-**Phase 3 — Memory + quick workflows**
-- `ai_memory` + `remember_fact` / `recall_facts` tools (pgvector)
-- 6 pre-built quick-action workflows
-- Smart provider routing (cheap model for sub-tasks)
-
-**Phase 4 — Background agents**
-- `ai-nightly-agent` cron + dashboard "Today's AI insights" widget
-- Weekly AI digest email
-- `ai_scheduled_runs` UI
-
-## Out of scope
-
-- Fully autonomous mutations (write actions always require Apply click)
-- Client-facing agent (admin/manager only)
-- Fine-tuning / custom models
-- Voice I/O
+Transform the current AI Copilot into a **specialist digital-marketing operator** that thinks like a senior media buyer + account strategist, not a generic chatbot. Two tracks: **brain upgrade** (smarter agent) + **workspace redesign** (purpose-built UI for marketers).
 
 ---
 
-**Approve to start with Phase 2A** (agent loop + read tools + step timeline UI), or say *"bundle 2A+2B"* to ship the agent with write proposals in one go.
+## Track 1 — Brain: from "chat with tools" to "marketing operator"
+
+### 1.1 Domain-trained system prompt (Persona: "Nova, Growth Operator")
+Replace the generic prompt with a **role-locked persona** that:
+- Thinks in marketer language: ROAS, CAC, CPM, CPC, CTR, CVR, frequency, creative fatigue, funnel stages, audience saturation, attribution windows, MER, LTV/CAC.
+- Always asks: *what's the goal, what's the constraint, what's the next action?* — never answers without a recommendation.
+- Speaks bilingual BD context (Bangla + English), uses BDT for billing/revenue and USD for ad spend (matches project memory).
+- Outputs in a fixed **Diagnose → Insight → Action** format with confidence + a next-step proposal.
+
+### 1.2 Reasoning upgrade — Planner / Executor / Critic loop
+Today: single LLM loops tools. Upgrade to a 3-role internal pipeline (still one streamed conversation):
+- **Planner (Pro model)** — breaks the goal into a numbered investigation plan, picks tools.
+- **Executor (Flash)** — runs the tool calls cheaply.
+- **Critic (Pro)** — reviews results, catches gaps ("you didn't check frequency"), asks for one more tool call, then writes the final answer.
+This raises answer quality without raising cost, because expensive thinking only runs at plan + critique time.
+
+### 1.3 Expanded tool registry (the marketing toolbelt)
+Add ~15 tools on top of Phase 2A's 9 reads. Grouped by job-to-be-done:
+
+**Diagnose performance**
+- `get_creative_fatigue(campaign_id, range)` — CTR/CPM trend slope, frequency band, recommends refresh.
+- `get_funnel_health(client_id, range)` — impressions → clicks → leads → purchases drop-off + bottleneck flag.
+- `get_attribution_breakdown(client_id, range)` — platform mix vs revenue mix.
+- `detect_budget_pacing(client_id)` — over/under-pacing vs daily target.
+- `benchmark_against_agency(campaign_id)` — % vs agency median ROAS/CPM for same objective.
+
+**Money + risk**
+- `get_runway_forecast(client_id)` — days until balance burns out at current pace.
+- `get_unbilled_spend(client_id)` — gap between ad spend and recorded revenue.
+- `get_loss_leak_summary(range)` — total $ wasted on campaigns with 0 results, by client.
+
+**Creative + growth**
+- `generate_ad_copy_variants(brief, lang, count)` — Bangla/English hook+body+CTA sets, RTB-grounded.
+- `suggest_audience_angles(client_id)` — based on winning campaigns' targeting patterns.
+- `draft_optimization_brief(campaign_id)` — structured "pause/scale/refresh/retarget" recommendation.
+- `propose_weekly_plan(client_id)` — next 7 days action list with KPIs.
+
+**Comms (drafts, never auto-send)**
+- `draft_client_update(client_id, range, tone)` — WhatsApp/email status report in client's language.
+- `draft_topup_reminder(client_id)` — bilingual, ties to runway forecast.
+- `draft_pitch_for_new_service(client_id)` — upsell angle from data.
+
+All tools stay org-scoped via `get_user_org_id`. Write tools (drafts, proposals) flow through Phase 2B's approval cards.
+
+### 1.4 Memory + grounding
+- `ai_memory` table (per org) — Nova remembers: client niches, preferred tone, KPI thresholds, naming conventions, past decisions ("we paused Rafin's video ads because frequency hit 6").
+- Auto-grounded context — when the user is on `/admin/clients/:id`, the active client + date range are auto-attached as context chips, so Nova never asks "which client?"
+- Slash commands as power-user shortcuts: `/audit`, `/leaks`, `/winners`, `/runway`, `/copy`, `/update <client>`, `/plan <client>`.
+
+### 1.5 Quick-action workflows (one-click agentic runs)
+Empty-state grid of pre-built operator workflows:
+1. **Weekly agency audit** — scans every active client, finds top 3 leaks + top 3 winners, drafts an action list.
+2. **Find money leaks now** — loss-making campaigns this week with proposed pauses.
+3. **Runway risk sweep** — clients ≤7 days of balance + bilingual top-up reminders.
+4. **Creative refresh radar** — campaigns with fatigue signals + new copy variants.
+5. **Client check-in batch** — draft status updates for every client with activity this week.
+6. **Reactivate dormant clients** — clients with no spend in 30d + tailored re-engagement pitch.
+
+---
+
+## Track 2 — Workspace: redesign for marketers (not generic chat)
+
+Current page is a chat with a sidebar. Replace with a **3-pane Operator Workspace**.
+
+```text
+┌────────────┬───────────────────────────────────┬──────────────┐
+│ THREADS    │   CONVERSATION + STEP TIMELINE    │  CONTEXT     │
+│ + Quick    │   ─ Plan card                     │  • Active    │
+│   Actions  │   ─ Tool cards (collapsed)        │    client    │
+│ + Recent   │   ─ Insight cards (charts/KPIs)   │  • Date range│
+│   reports  │   ─ Proposal cards (Apply/Reject) │  • Model     │
+│            │   ─ Final answer (markdown)       │  • Step #    │
+│            │                                   │  • Cost $    │
+│            │   [ slash-command composer ]      │  • Memory    │
+└────────────┴───────────────────────────────────┴──────────────┘
+```
+
+### 2.1 Empty state = the launch pad
+Not "hi, how can I help?" — a **mission console**:
+- 6 quick-action workflow cards (above).
+- Top row: live KPI strip (today's spend, ROAS, low-balance clients, leaks $) so Nova feels embedded in the agency.
+- Bottom: 3 suggested questions generated from real account state ("Rafin's CPM doubled this week — investigate?").
+
+### 2.2 Conversation surface (AI Elements)
+Install AI Elements primitives (`conversation`, `message`, `prompt-input`, `tool`, `shimmer`) instead of the current hand-rolled chat. Built-in spec-compliant streaming, tool accordions, and shimmer "Thinking…" state.
+
+### 2.3 Rich, marketing-native message parts
+Beyond text + tool JSON, render:
+- **KPI card** — for metric answers (big number + delta + sparkline).
+- **Table card** — for client/campaign lists with sortable columns.
+- **Chart card** — sparklines for trend tools (Recharts).
+- **Diagnosis card** — color-coded Diagnose / Insight / Action blocks.
+- **Proposal card** — preview + Apply / Edit / Reject (Phase 2B).
+- **Copy card** — ad copy variants with copy-to-clipboard per variant.
+
+### 2.4 Right-rail context inspector
+- Active context chips (client / campaign / date range) — removable.
+- Provider + model picker (Pro / Flash / Claude / GPT-5) with cost hint.
+- Live step counter + cumulative token + USD cost for this run.
+- Memory inspector — list of facts Nova remembers about this org, editable.
+
+### 2.5 Embedded "Ask Nova" everywhere
+Floating button on Client Detail, Campaign Hub, Finance Hub — opens a slide-over copilot pre-scoped with the page's context chip. The agent feels like it lives *inside* the workflow, not in a separate tab.
+
+### 2.6 Visual language
+Match project memory (glassmorphism, `ios-glass`, blur(40px), glow borders, BDT ৳ / USD $ formatting). New accent: a subtle "agent active" glow on the composer while the loop runs. Step timeline uses thin vertical rail with status dots (planning → tool → result → answer).
+
+---
+
+## Phasing
+
+**Phase A — Brain v2 (ship first)**
+- New persona system prompt + Diagnose/Insight/Action output contract.
+- Planner/Executor/Critic pipeline in `ai-copilot-chat`.
+- 8 highest-leverage new read tools (fatigue, funnel, runway, leaks, benchmark, pacing, attribution, unbilled).
+- Auto-context injection from route.
+
+**Phase B — Workspace redesign**
+- AI Elements install + 3-pane layout.
+- KPI / Table / Chart / Diagnosis message renderers.
+- Right-rail inspector + step/cost meter.
+- Empty-state mission console + 6 quick-action workflows.
+
+**Phase C — Memory + write proposals**
+- `ai_memory` table + remember/recall tools.
+- Phase 2B write tools + Apply/Reject proposal cards.
+- Floating "Ask Nova" on Client Detail / Campaign Hub / Finance Hub.
+
+**Phase D — Background operator** (optional, after C)
+- `pg_cron` nightly run → "Today's AI insights" dashboard widget + weekly digest email.
+
+---
+
+## Out of scope
+- Auto-execute mutations (always human-approved).
+- Client-facing chatbot.
+- Voice I/O / fine-tuning.
+
+---
+
+**Approve to start Phase A (brain v2)**, or say *"A+B together"* to ship the smarter agent inside the new workspace in one go.
