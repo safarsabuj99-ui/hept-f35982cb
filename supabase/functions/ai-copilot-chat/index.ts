@@ -1136,7 +1136,7 @@ Deno.serve(async (req) => {
     const toolCallLog: any[] = [];
 
     const ctx: ToolCtx = { service, supabase, orgId, userId: user.id };
-    const MAX_STEPS = 16;
+    const MAX_STEPS = 32;
 
     const stream = new ReadableStream({
       async start(controller) {
