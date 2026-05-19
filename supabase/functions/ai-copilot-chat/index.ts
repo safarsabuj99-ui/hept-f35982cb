@@ -801,6 +801,103 @@ const TOOLS: Tool[] = [
       };
     },
   },
+
+  // ---------------- Memory tools ----------------
+  {
+    name: "remember_fact",
+    description: "Save a durable fact about the agency, a client, or the user's preferences so future conversations remember it. Use for things like 'client X's AOV is ৳2500', 'owner prefers Banglish drafts', 'agency mgmt fee is 15%', 'client Y's primary KPI is purchases not leads'. Do NOT use for transient session state.",
+    parameters: {
+      type: "object",
+      properties: {
+        scope: { type: "string", enum: ["agency","client","user"], description: "agency = agency-wide; client = about a specific client (provide scope_id); user = about the current user's preferences" },
+        scope_id: { type: "string", description: "Client user_id when scope='client'. Omit otherwise." },
+        key: { type: "string", description: "Short stable key, snake_case. e.g. 'aov_bdt', 'preferred_language', 'mgmt_fee_pct'" },
+        value: { type: "string", description: "The fact value as a short string. e.g. '2500', 'banglish', '15'" },
+      },
+      required: ["scope","key","value"],
+    },
+    execute: async (args, { service, orgId, userId }) => {
+      const row = {
+        org_id: orgId,
+        scope: args.scope,
+        scope_id: args.scope_id || null,
+        key: String(args.key).trim().toLowerCase(),
+        value: String(args.value).trim(),
+        source: "agent",
+        created_by: userId,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await service.from("ai_agent_memory").upsert(row, { onConflict: "org_id,scope,scope_id,key" });
+      if (error) return { error: error.message };
+      return { saved: true, scope: row.scope, key: row.key, value: row.value };
+    },
+  },
+
+  {
+    name: "recall_facts",
+    description: "Recall previously saved facts. Filter by scope or client. Returns up to 50.",
+    parameters: {
+      type: "object",
+      properties: {
+        scope: { type: "string", enum: ["agency","client","user","any"], description: "Default 'any'" },
+        scope_id: { type: "string" },
+        query: { type: "string", description: "Optional substring match on key or value" },
+      },
+    },
+    execute: async (args, { service, orgId }) => {
+      let q = service.from("ai_agent_memory").select("scope, scope_id, key, value, updated_at").eq("org_id", orgId).limit(50).order("updated_at", { ascending: false });
+      if (args.scope && args.scope !== "any") q = q.eq("scope", args.scope);
+      if (args.scope_id) q = q.eq("scope_id", args.scope_id);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      let rows = data || [];
+      if (args.query) {
+        const t = String(args.query).toLowerCase();
+        rows = rows.filter((r: any) => r.key.toLowerCase().includes(t) || String(r.value).toLowerCase().includes(t));
+      }
+      return { facts: rows };
+    },
+  },
+
+  // ---------------- Action proposal (human approval gate) ----------------
+  {
+    name: "propose_action",
+    description: "Propose a mutating action (pause/resume campaign, send WhatsApp/email, log expense, draft top-up reminder, adjust client balance, etc.) for the human to approve. This DOES NOT execute — it parks a card the user clicks Approve/Reject on. Always call this BEFORE referencing a mutating step in your final answer.",
+    parameters: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string", description: "Stable action key. Examples: 'campaign.pause', 'campaign.resume', 'client.whatsapp_message', 'client.email_message', 'expense.log', 'client.topup_reminder', 'creative.refresh_brief'" },
+        summary: { type: "string", description: "One-line human-readable summary the approver sees on the card. Include the entity name. e.g. 'Pause campaign \"Eid Sale TOF\" for Akram Ahmed (spent $42, 0 results, ROAS 0)'" },
+        args: { type: "object", description: "Structured payload the executor will read. Free-form per tool_name. e.g. { campaign_id, reason } or { client_id, channel, message }" },
+      },
+      required: ["tool_name","summary"],
+    },
+    execute: async (args, { service, orgId, userId }) => {
+      const { data, error } = await service.from("ai_pending_actions").insert({
+        org_id: orgId,
+        user_id: userId,
+        tool_name: String(args.tool_name).trim(),
+        summary: String(args.summary).trim(),
+        args: args.args || {},
+        status: "pending",
+      }).select("id, created_at").single();
+      if (error) return { error: error.message };
+      return { proposal_id: data.id, status: "pending", created_at: data.created_at, note: "Awaiting human approval. Reference this id in your final answer." };
+    },
+  },
+
+  {
+    name: "list_pending_actions",
+    description: "List the current user's pending action proposals (newest first).",
+    parameters: { type: "object", properties: { status: { type: "string", enum: ["pending","approved","rejected","executed","failed","any"] } } },
+    execute: async (args, { service, userId }) => {
+      let q = service.from("ai_pending_actions").select("id, tool_name, summary, args, status, created_at, decided_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
+      if (args.status && args.status !== "any") q = q.eq("status", args.status);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      return { actions: data || [] };
+    },
+  },
 ];
 
 const TOOL_MAP: Record<string, Tool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
