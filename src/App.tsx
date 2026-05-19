@@ -176,6 +176,8 @@ const FullApp = () => (
             <Toaster />
             <Sonner />
             <NotifNavigator />
+            <RouteTracker />
+
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
