@@ -467,6 +467,45 @@ export type Database = {
           },
         ]
       }
+      ai_agent_memory: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key: string
+          org_id: string
+          scope: string
+          scope_id: string | null
+          source: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key: string
+          org_id: string
+          scope: string
+          scope_id?: string | null
+          source?: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key?: string
+          org_id?: string
+          scope?: string
+          scope_id?: string | null
+          source?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       ai_messages: {
         Row: {
           cost_usd: number | null
@@ -517,6 +556,72 @@ export type Database = {
           },
           {
             foreignKeyName: "ai_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_pending_actions: {
+        Row: {
+          args: Json
+          created_at: string
+          decided_at: string | null
+          error: string | null
+          executed_at: string | null
+          id: string
+          message_id: string | null
+          org_id: string
+          result: Json | null
+          status: string
+          summary: string
+          thread_id: string | null
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          args?: Json
+          created_at?: string
+          decided_at?: string | null
+          error?: string | null
+          executed_at?: string | null
+          id?: string
+          message_id?: string | null
+          org_id: string
+          result?: Json | null
+          status?: string
+          summary: string
+          thread_id?: string | null
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          args?: Json
+          created_at?: string
+          decided_at?: string | null
+          error?: string | null
+          executed_at?: string | null
+          id?: string
+          message_id?: string | null
+          org_id?: string
+          result?: Json | null
+          status?: string
+          summary?: string
+          thread_id?: string | null
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_pending_actions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_pending_actions_thread_id_fkey"
             columns: ["thread_id"]
             isOneToOne: false
             referencedRelation: "ai_threads"
@@ -626,6 +731,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_scheduled_missions: {
+        Row: {
+          created_at: string
+          cron: string
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          last_thread_id: string | null
+          mode: string
+          next_run_at: string | null
+          notify: boolean
+          org_id: string
+          prompt: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          cron?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          last_thread_id?: string | null
+          mode?: string
+          next_run_at?: string | null
+          notify?: boolean
+          org_id: string
+          prompt: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          cron?: string
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          last_thread_id?: string | null
+          mode?: string
+          next_run_at?: string | null
+          notify?: boolean
+          org_id?: string
+          prompt?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       ai_threads: {
         Row: {
