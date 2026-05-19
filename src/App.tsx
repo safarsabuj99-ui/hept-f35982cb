@@ -94,23 +94,46 @@ function PageLoader() {
   );
 }
 
-function SmartHome() {
-  const { user, role, loading } = useAuth();
-  if (loading) return <PageLoader />;
-  if (user && role) {
-    const home = roleHomeMap[role] || "/login";
-    return <Navigate to={home} replace />;
-  }
-  return <LandingPage />;
-}
-
-const roleHomeMap: Record<string, string> = {
+const LAST_ROUTE_KEY = "hept:last-route";
+const rolePrefixMap: Record<string, string> = {
   admin: "/admin",
   manager: "/manager",
   client: "/dashboard",
   platform_owner: "/platform",
   affiliate: "/affiliate",
 };
+
+function SmartHome() {
+  const { user, role, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (user && role) {
+    const home = rolePrefixMap[role] || "/login";
+    // Resume last route within the user's role scope to survive
+    // preview-iframe hard reloads without bouncing back to dashboard.
+    try {
+      const last = sessionStorage.getItem(LAST_ROUTE_KEY);
+      if (last && last.startsWith(home) && last !== "/") {
+        return <Navigate to={last} replace />;
+      }
+    } catch {}
+    return <Navigate to={home} replace />;
+  }
+  return <LandingPage />;
+}
+
+const roleHomeMap = rolePrefixMap;
+
+/** Persists the current in-app route so SmartHome can restore it on reload. */
+function RouteTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    const path = location.pathname + location.search;
+    if (path === "/" || path.startsWith("/login") || path.startsWith("/signup")) return;
+    try { sessionStorage.setItem(LAST_ROUTE_KEY, path); } catch {}
+  }, [location.pathname, location.search]);
+  return null;
+}
+
 
 /**
  * Detect if visitor likely has an active session.
