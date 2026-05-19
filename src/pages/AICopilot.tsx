@@ -15,6 +15,7 @@ import {
   AlertTriangle, Users, Calendar, ArrowUpRight, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NovaPendingActions } from "@/components/ai/NovaPendingActions";
 import ReactMarkdown from "react-markdown";
 
 type Mode = "coach" | "analyst" | "copy" | "comms";
@@ -77,6 +78,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_funnel_health: "Analyzing funnel health",
   get_runway_forecast: "Forecasting wallet runway",
   draft_optimization_brief: "Writing optimization brief",
+  remember_fact: "Saving to long-term memory",
+  recall_facts: "Recalling memory",
+  propose_action: "Proposing action for approval",
+  list_pending_actions: "Listing pending actions",
 };
 
 export default function AICopilot() {
@@ -314,6 +319,7 @@ export default function AICopilot() {
         <Card className="flex-1 flex flex-col min-h-0">
           <ScrollArea className="flex-1" ref={scrollRef as any}>
             <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
+              <NovaPendingActions />
               {messages.length === 0 ? (
                 <div className="py-4 space-y-6">
                   {/* Hero */}
@@ -330,9 +336,9 @@ export default function AICopilot() {
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-1">
                       <span className="px-2 py-0.5 rounded-full bg-muted/60">Mode: <span className="text-foreground font-medium">{activeMode.label}</span></span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">13 live tools</span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Up to 16 reasoning steps</span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Diagnose → Insight → Action</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">17 live tools</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Up to 32 reasoning steps</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Memory + human-approved actions</span>
                     </div>
                   </div>
 
@@ -426,7 +432,7 @@ export default function AICopilot() {
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground text-center mt-2">
-              Nova chains live data tools (up to 16 steps). {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`} Verify critical decisions before acting.
+              Nova chains live data tools (up to 32 steps), remembers facts across chats, and proposes mutating actions for your approval. {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`}
             </p>
           </div>
         </Card>

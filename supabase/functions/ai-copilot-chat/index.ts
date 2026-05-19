@@ -28,18 +28,23 @@ You are **Nova**, a senior digital-marketing operator embedded inside a Banglade
 
 You speak the language of marketers fluently: ROAS, CAC, CPM, CPC, CTR, CVR, frequency, creative fatigue, audience saturation, funnel stages (TOF/MOF/BOF), attribution window, MER, LTV/CAC, post-purchase ROAS, blended ROAS, budget pacing.
 
-## How you think
-1. **Diagnose first.** When the user gives a goal, plan tool calls to gather the real facts BEFORE recommending anything. Never guess numbers.
-2. **Chain tools.** You can call up to 16 tools per turn. After each result, ask: "what's the missing piece?" and call another tool. Common chains: search_clients → get_client_summary → get_campaign_breakdown → get_creative_fatigue → draft_optimization_brief.
-3. **Be a peer, not a cheerleader.** Push back on weak ideas. If the data says "this campaign is dying", say it plainly with the metric that proves it.
-4. **Always end with a next action.** Every answer must include what to do tomorrow morning — pause campaign X, refresh creative Y, top up client Z, draft email to W. No vague advice.
+## How you think — PLANNER CONTRACT
+You operate in a **plan → act → reflect → finalize** loop with up to 32 steps per turn:
+
+1. **PLAN** (silent): break the user's request into 2-5 sub-goals. Identify which tools resolve each.
+2. **ACT**: call tools in parallel when possible. NEVER answer from memory of the agency state — always re-pull live data.
+3. **REFLECT**: after each batch, ask "did this confirm or change my hypothesis? what's still missing?" Then call more tools or finalize.
+4. **REMEMBER**: when you learn a durable fact about the agency / a client / the user's preferences ("client X's AOV is ৳2,500", "owner prefers Banglish drafts", "we charge 15% mgmt fee"), call \`remember_fact\` so future turns have it.
+5. **PROPOSE, DON'T EXECUTE**: when you want to take a real action (pause campaign, send WhatsApp, log expense, draft top-up reminder), call \`propose_action\` — the human approves before anything ships.
+6. **FINALIZE**: once you have enough signal, deliver the answer using the OUTPUT CONTRACT below.
 
 ## Output contract
 For any analytical or strategic answer, structure your final reply as:
 
-**🔍 Diagnose** — 2-4 bullets of what the data actually shows (numbers + units).
+**🔍 Diagnose** — 2-4 bullets of what the data actually shows (numbers + units, plus the tool name in parens, e.g. "spend ৳1,24,300 over 7d (get_agency_pnl)").
 **💡 Insight** — the root cause / pattern / opportunity in 1-2 sentences.
-**⚡ Action** — a numbered list of concrete next steps, each with the campaign/client name and the expected outcome. Mark each action with one of: \`[Pause]\` \`[Scale]\` \`[Refresh]\` \`[Reallocate]\` \`[Top-up]\` \`[Message]\` \`[Investigate]\`.
+**⚡ Action** — a numbered list of concrete next steps. Mark each action with one of: \`[Pause]\` \`[Scale]\` \`[Refresh]\` \`[Reallocate]\` \`[Top-up]\` \`[Message]\` \`[Investigate]\`. If the action is mutating (pause, send, log), you MUST first call \`propose_action\` and reference the proposal id in the bullet.
+**🧭 Confidence** — Low / Medium / High, with a one-line reason.
 
 For pure ad-copy or message-drafting tasks, skip the contract — return the deliverable directly with 3+ variants and a short "why this works" note.
 
@@ -52,7 +57,8 @@ For pure ad-copy or message-drafting tasks, skip the contract — return the del
 ## Hard rules
 - NEVER fabricate client names, campaign names, or numbers. If a tool returns empty, say so.
 - Org isolation is enforced by the tool layer — every tool already filters to this agency only.
-- You can read everything but you cannot mutate data yet (no pause, no send, no top-up). You DRAFT and PROPOSE; the human applies.
+- Mutating actions are NEVER auto-executed. You DRAFT a proposal via \`propose_action\`; the human approves.
+- If a question can be answered from \`recall_facts\` alone (e.g. "what's my mgmt fee?"), skip tool-chains — answer directly.
 - Keep responses scannable: short sections, bullets, small tables. Avoid wall-of-text.
 `;
 
@@ -795,6 +801,103 @@ const TOOLS: Tool[] = [
       };
     },
   },
+
+  // ---------------- Memory tools ----------------
+  {
+    name: "remember_fact",
+    description: "Save a durable fact about the agency, a client, or the user's preferences so future conversations remember it. Use for things like 'client X's AOV is ৳2500', 'owner prefers Banglish drafts', 'agency mgmt fee is 15%', 'client Y's primary KPI is purchases not leads'. Do NOT use for transient session state.",
+    parameters: {
+      type: "object",
+      properties: {
+        scope: { type: "string", enum: ["agency","client","user"], description: "agency = agency-wide; client = about a specific client (provide scope_id); user = about the current user's preferences" },
+        scope_id: { type: "string", description: "Client user_id when scope='client'. Omit otherwise." },
+        key: { type: "string", description: "Short stable key, snake_case. e.g. 'aov_bdt', 'preferred_language', 'mgmt_fee_pct'" },
+        value: { type: "string", description: "The fact value as a short string. e.g. '2500', 'banglish', '15'" },
+      },
+      required: ["scope","key","value"],
+    },
+    execute: async (args, { service, orgId, userId }) => {
+      const row = {
+        org_id: orgId,
+        scope: args.scope,
+        scope_id: args.scope_id || null,
+        key: String(args.key).trim().toLowerCase(),
+        value: String(args.value).trim(),
+        source: "agent",
+        created_by: userId,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await service.from("ai_agent_memory").upsert(row, { onConflict: "org_id,scope,scope_id,key" });
+      if (error) return { error: error.message };
+      return { saved: true, scope: row.scope, key: row.key, value: row.value };
+    },
+  },
+
+  {
+    name: "recall_facts",
+    description: "Recall previously saved facts. Filter by scope or client. Returns up to 50.",
+    parameters: {
+      type: "object",
+      properties: {
+        scope: { type: "string", enum: ["agency","client","user","any"], description: "Default 'any'" },
+        scope_id: { type: "string" },
+        query: { type: "string", description: "Optional substring match on key or value" },
+      },
+    },
+    execute: async (args, { service, orgId }) => {
+      let q = service.from("ai_agent_memory").select("scope, scope_id, key, value, updated_at").eq("org_id", orgId).limit(50).order("updated_at", { ascending: false });
+      if (args.scope && args.scope !== "any") q = q.eq("scope", args.scope);
+      if (args.scope_id) q = q.eq("scope_id", args.scope_id);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      let rows = data || [];
+      if (args.query) {
+        const t = String(args.query).toLowerCase();
+        rows = rows.filter((r: any) => r.key.toLowerCase().includes(t) || String(r.value).toLowerCase().includes(t));
+      }
+      return { facts: rows };
+    },
+  },
+
+  // ---------------- Action proposal (human approval gate) ----------------
+  {
+    name: "propose_action",
+    description: "Propose a mutating action (pause/resume campaign, send WhatsApp/email, log expense, draft top-up reminder, adjust client balance, etc.) for the human to approve. This DOES NOT execute — it parks a card the user clicks Approve/Reject on. Always call this BEFORE referencing a mutating step in your final answer.",
+    parameters: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string", description: "Stable action key. Examples: 'campaign.pause', 'campaign.resume', 'client.whatsapp_message', 'client.email_message', 'expense.log', 'client.topup_reminder', 'creative.refresh_brief'" },
+        summary: { type: "string", description: "One-line human-readable summary the approver sees on the card. Include the entity name. e.g. 'Pause campaign \"Eid Sale TOF\" for Akram Ahmed (spent $42, 0 results, ROAS 0)'" },
+        args: { type: "object", description: "Structured payload the executor will read. Free-form per tool_name. e.g. { campaign_id, reason } or { client_id, channel, message }" },
+      },
+      required: ["tool_name","summary"],
+    },
+    execute: async (args, { service, orgId, userId }) => {
+      const { data, error } = await service.from("ai_pending_actions").insert({
+        org_id: orgId,
+        user_id: userId,
+        tool_name: String(args.tool_name).trim(),
+        summary: String(args.summary).trim(),
+        args: args.args || {},
+        status: "pending",
+      }).select("id, created_at").single();
+      if (error) return { error: error.message };
+      return { proposal_id: data.id, status: "pending", created_at: data.created_at, note: "Awaiting human approval. Reference this id in your final answer." };
+    },
+  },
+
+  {
+    name: "list_pending_actions",
+    description: "List the current user's pending action proposals (newest first).",
+    parameters: { type: "object", properties: { status: { type: "string", enum: ["pending","approved","rejected","executed","failed","any"] } } },
+    execute: async (args, { service, userId }) => {
+      let q = service.from("ai_pending_actions").select("id, tool_name, summary, args, status, created_at, decided_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
+      if (args.status && args.status !== "any") q = q.eq("status", args.status);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      return { actions: data || [] };
+    },
+  },
 ];
 
 const TOOL_MAP: Record<string, Tool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
@@ -987,7 +1090,33 @@ Deno.serve(async (req) => {
       return { role: m.role === "assistant" ? "assistant" : "user", content: text } as Msg;
     }).filter((m) => (m.content || "").length > 0);
 
-    const system = `${BASE_AGENT_RULES}\n\n${MODE_PROMPTS[mode] || MODE_PROMPTS.coach}`;
+    // Load agent memory so Nova starts the turn already knowing durable facts
+    const { data: memRows } = await service
+      .from("ai_agent_memory")
+      .select("scope, scope_id, key, value")
+      .eq("org_id", orgId)
+      .order("updated_at", { ascending: false })
+      .limit(80);
+    let memoryBlock = "";
+    if (memRows && memRows.length) {
+      const lines = memRows.map((r: any) => `- [${r.scope}${r.scope_id ? `:${String(r.scope_id).slice(0,8)}` : ""}] ${r.key} = ${r.value}`);
+      memoryBlock = `\n\n## Long-term memory (recall these — do not re-ask)\n${lines.join("\n")}`;
+    }
+    // Surface unresolved pending actions so Nova doesn't re-propose duplicates
+    const { data: pending } = await service
+      .from("ai_pending_actions")
+      .select("id, tool_name, summary, status, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    let pendingBlock = "";
+    if (pending && pending.length) {
+      const lines = pending.map((p: any) => `- ${p.id} | ${p.tool_name} — ${p.summary}`);
+      pendingBlock = `\n\n## Pending action proposals (awaiting human approval)\n${lines.join("\n")}\nDo NOT re-propose these. Reference the id if relevant.`;
+    }
+
+    const system = `${BASE_AGENT_RULES}\n\n${MODE_PROMPTS[mode] || MODE_PROMPTS.coach}${memoryBlock}${pendingBlock}`;
     const messages: Msg[] = [{ role: "system", content: system }, ...historyMsgs, { role: "user", content: userText }];
 
     // Persist user message
@@ -1007,7 +1136,7 @@ Deno.serve(async (req) => {
     const toolCallLog: any[] = [];
 
     const ctx: ToolCtx = { service, supabase, orgId, userId: user.id };
-    const MAX_STEPS = 16;
+    const MAX_STEPS = 32;
 
     const stream = new ReadableStream({
       async start(controller) {
