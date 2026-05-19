@@ -319,6 +319,7 @@ export default function AICopilot() {
         <Card className="flex-1 flex flex-col min-h-0">
           <ScrollArea className="flex-1" ref={scrollRef as any}>
             <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
+              <NovaPendingActions />
               {messages.length === 0 ? (
                 <div className="py-4 space-y-6">
                   {/* Hero */}
