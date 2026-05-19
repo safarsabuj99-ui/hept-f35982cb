@@ -15,6 +15,7 @@ import {
   AlertTriangle, Users, Calendar, ArrowUpRight, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NovaPendingActions } from "@/components/ai/NovaPendingActions";
 import ReactMarkdown from "react-markdown";
 
 type Mode = "coach" | "analyst" | "copy" | "comms";
