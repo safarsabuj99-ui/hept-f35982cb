@@ -78,6 +78,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_funnel_health: "Analyzing funnel health",
   get_runway_forecast: "Forecasting wallet runway",
   draft_optimization_brief: "Writing optimization brief",
+  remember_fact: "Saving to long-term memory",
+  recall_facts: "Recalling memory",
+  propose_action: "Proposing action for approval",
+  list_pending_actions: "Listing pending actions",
 };
 
 export default function AICopilot() {
