@@ -432,7 +432,7 @@ export default function AICopilot() {
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground text-center mt-2">
-              Nova chains live data tools (up to 16 steps). {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`} Verify critical decisions before acting.
+              Nova chains live data tools (up to 32 steps), remembers facts across chats, and proposes mutating actions for your approval. {provider === "lovable" ? "Running on Lovable AI." : `Using your ${provider} key.`}
             </p>
           </div>
         </Card>
