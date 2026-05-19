@@ -335,9 +335,9 @@ export default function AICopilot() {
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-1">
                       <span className="px-2 py-0.5 rounded-full bg-muted/60">Mode: <span className="text-foreground font-medium">{activeMode.label}</span></span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">13 live tools</span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Up to 16 reasoning steps</span>
-                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Diagnose → Insight → Action</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">17 live tools</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Up to 32 reasoning steps</span>
+                      <span className="px-2 py-0.5 rounded-full bg-muted/60">Memory + human-approved actions</span>
                     </div>
                   </div>
 
