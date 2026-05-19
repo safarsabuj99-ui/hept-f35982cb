@@ -1090,7 +1090,33 @@ Deno.serve(async (req) => {
       return { role: m.role === "assistant" ? "assistant" : "user", content: text } as Msg;
     }).filter((m) => (m.content || "").length > 0);
 
-    const system = `${BASE_AGENT_RULES}\n\n${MODE_PROMPTS[mode] || MODE_PROMPTS.coach}`;
+    // Load agent memory so Nova starts the turn already knowing durable facts
+    const { data: memRows } = await service
+      .from("ai_agent_memory")
+      .select("scope, scope_id, key, value")
+      .eq("org_id", orgId)
+      .order("updated_at", { ascending: false })
+      .limit(80);
+    let memoryBlock = "";
+    if (memRows && memRows.length) {
+      const lines = memRows.map((r: any) => `- [${r.scope}${r.scope_id ? `:${String(r.scope_id).slice(0,8)}` : ""}] ${r.key} = ${r.value}`);
+      memoryBlock = `\n\n## Long-term memory (recall these — do not re-ask)\n${lines.join("\n")}`;
+    }
+    // Surface unresolved pending actions so Nova doesn't re-propose duplicates
+    const { data: pending } = await service
+      .from("ai_pending_actions")
+      .select("id, tool_name, summary, status, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    let pendingBlock = "";
+    if (pending && pending.length) {
+      const lines = pending.map((p: any) => `- ${p.id} | ${p.tool_name} — ${p.summary}`);
+      pendingBlock = `\n\n## Pending action proposals (awaiting human approval)\n${lines.join("\n")}\nDo NOT re-propose these. Reference the id if relevant.`;
+    }
+
+    const system = `${BASE_AGENT_RULES}\n\n${MODE_PROMPTS[mode] || MODE_PROMPTS.coach}${memoryBlock}${pendingBlock}`;
     const messages: Msg[] = [{ role: "system", content: system }, ...historyMsgs, { role: "user", content: userText }];
 
     // Persist user message
