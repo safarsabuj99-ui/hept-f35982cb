@@ -1,40 +1,32 @@
 ## Goal
-Stop the Lovable preview from auto-reloading every 2–3 seconds on `/admin` without changing normal published-app behavior.
+Stop the Lovable preview from reloading every 1–3 seconds without changing the published app behavior.
+
+## What I found
+- This does not look like an intentional app reload (`location.reload()` is not in the app).
+- The preview host is repeatedly failing to load `/manifest.json` with `401`.
+- Push/service-worker code is already mostly disabled in preview, so the remaining preview-only instability is likely the PWA bootstrap from `index.html`, not normal app routing.
+- The issue appears specific to Lovable preview; published behavior should remain unchanged.
 
 ## Plan
-1. **Make preview bootstrap fully passive**
-   - Update preview detection and disable all service-worker interaction on Lovable preview/iframe hosts.
-   - In preview, do not register a worker and do not call `getRegistrations()` / `unregister()` at startup, since even cleanup work can destabilize the iframe session.
+1. Remove preview-host PWA bootstrap from the app shell.
+   - Replace the static manifest link in `index.html` with a runtime-safe injection from `src/main.tsx`.
+   - Only attach the manifest link on normal top-level hosts, never inside Lovable preview/iframe hosts.
 
-2. **Harden auth and route guards against preview reconnects**
-   - Tighten the auth restore path so a transient preview reconnect cannot look like a fresh app boot.
-   - Prevent protected routes from bouncing between loader/redirect states while auth and role hydration are still settling.
-   - Keep last-route restore logic, but ensure it never participates in a redirect loop during preview reconnects.
+2. Harden preview detection in startup code.
+   - Centralize the preview-host check used by startup logic.
+   - Reuse that check for manifest injection and any service-worker related startup gating so preview stays fully passive.
 
-3. **Remove any preview-only full-page navigation risks**
-   - Audit global startup hooks and notification/navigation helpers for anything that can cause a document navigation or repeated mount cycle in preview.
-   - Gate any iframe-sensitive logic so preview stays SPA-only and passive while idle.
+3. Keep published/PWA behavior intact outside preview.
+   - Preserve manifest support and push/service-worker behavior on real app hosts.
+   - Do not change auth flow, redirect URIs, or backend configuration.
 
-4. **Add short-lived diagnostics, then verify**
-   - Add targeted preview-safe logging to distinguish:
-     - real document reloads
-     - route changes
-     - auth-state transitions
-     - Vite reconnects
-   - Verify by leaving `/admin` open in Lovable preview and confirming the page no longer remounts every few seconds.
-   - Remove or reduce diagnostics once the loop is confirmed fixed.
+4. Verify the exact preview symptom is gone.
+   - Re-open `/admin` in Lovable preview.
+   - Confirm there are no repeated `manifest.json` 401 loops and no repeated app mounts/reloads over the same waiting window.
 
-## Files likely involved
-- `src/hooks/usePushNotifications.ts`
-- `src/components/ProtectedRoute.tsx`
-- `src/hooks/useAuth.tsx`
-- `src/App.tsx`
-- `src/main.tsx`
-- potentially `src/hooks/useNotifications.tsx` if a global navigator side effect is contributing
-
-## Technical notes
-- Current evidence points more to a **preview transport / iframe-sensitive startup issue** than a true backend session loss:
-  - preview console shows `server connection lost. Polling for restart...`
-  - sandbox Vite logs do **not** show repeated server restarts
-  - the earlier `localStorage` route fix addressed “new session after reload”, but not this separate auto-reload loop
-- The implementation will focus on **preview-only safeguards** so production behavior remains unchanged.
+## Technical details
+- Files to update:
+  - `index.html`
+  - `src/main.tsx`
+  - possibly `src/hooks/usePushNotifications.ts` if I factor the preview detection into shared startup logic
+- I will keep the fix minimal and preview-specific so the live site still behaves like a PWA where supported.

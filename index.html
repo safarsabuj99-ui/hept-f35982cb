@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="HEPT" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <!-- Manifest is injected at runtime from src/main.tsx so we can skip it on Lovable preview hosts where /manifest.json returns 401 and triggers reload loops. -->
 
     <!-- Tiny critical CSS: just background color to prevent FOUC. No duplicate hero markup. -->
     <style>

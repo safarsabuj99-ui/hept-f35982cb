@@ -20,4 +20,22 @@ try {
   console.info(`[App] mounted (nav type: ${type}) @ ${new Date().toISOString()} ${location.pathname}`);
 } catch {}
 
+// Inject PWA manifest ONLY on non-preview hosts. The Lovable preview host
+// returns 401 for /manifest.json, which the browser logs repeatedly and can
+// destabilize the preview iframe. Real published hosts get the manifest.
+try {
+  const host = window.location.hostname;
+  const inIframe = window.self !== window.top;
+  const isPreviewHost =
+    host.includes("lovableproject.com") ||
+    host.includes("id-preview--") ||
+    host.endsWith("lovable.app");
+  if (!isPreviewHost && !inIframe && !document.querySelector('link[rel="manifest"]')) {
+    const link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest.json";
+    document.head.appendChild(link);
+  }
+} catch {}
+
 createRoot(document.getElementById("root")!).render(<App />);
