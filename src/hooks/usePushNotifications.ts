@@ -38,17 +38,15 @@ export function usePushNotifications() {
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-    // On preview/iframe hosts, proactively unregister any stale SW that could
-    // be causing reload loops, and skip registration entirely.
-    if (isPreviewHost || window.self !== window.top) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((r) => r.unregister().catch(() => {}));
-      }).catch(() => {});
-      return;
-    }
+    // On preview/iframe hosts, do NOTHING with the service worker.
+    // Even calling getRegistrations()/unregister() can trigger SW lifecycle
+    // events that the Lovable preview iframe interprets as a reload signal,
+    // producing a 2-3s auto-reload loop. Stay fully passive in preview.
+    if (isPreviewHost || window.self !== window.top) return;
     if (!isSupported) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, [isSupported, isPreviewHost]);
+
 
   // Check existing subscription — gated on authReady
   useEffect(() => {
