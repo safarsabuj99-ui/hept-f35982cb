@@ -104,6 +104,26 @@ const rolePrefixMap: Record<string, string> = {
   affiliate: "/affiliate",
 };
 
+function readLastRoute(): string | null {
+  try {
+    // Prefer localStorage so the route survives preview-iframe recreation
+    // (sessionStorage is wiped when Lovable's preview iframe is replaced).
+    return (
+      localStorage.getItem(LAST_ROUTE_KEY) ||
+      sessionStorage.getItem(LAST_ROUTE_KEY)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeLastRoute(path: string) {
+  try {
+    localStorage.setItem(LAST_ROUTE_KEY, path);
+    sessionStorage.setItem(LAST_ROUTE_KEY, path);
+  } catch {}
+}
+
 function SmartHome() {
   const { user, role, loading } = useAuth();
   if (loading) return <PageLoader />;
@@ -111,12 +131,10 @@ function SmartHome() {
     const home = rolePrefixMap[role] || "/login";
     // Resume last route within the user's role scope to survive
     // preview-iframe hard reloads without bouncing back to dashboard.
-    try {
-      const last = sessionStorage.getItem(LAST_ROUTE_KEY);
-      if (last && last.startsWith(home) && last !== "/") {
-        return <Navigate to={last} replace />;
-      }
-    } catch {}
+    const last = readLastRoute();
+    if (last && last.startsWith(home) && last !== "/") {
+      return <Navigate to={last} replace />;
+    }
     return <Navigate to={home} replace />;
   }
   return <LandingPage />;
@@ -130,7 +148,7 @@ function RouteTracker() {
   useEffect(() => {
     const path = location.pathname + location.search;
     if (path === "/" || path.startsWith("/login") || path.startsWith("/signup")) return;
-    try { sessionStorage.setItem(LAST_ROUTE_KEY, path); } catch {}
+    writeLastRoute(path);
   }, [location.pathname, location.search]);
   return null;
 }
