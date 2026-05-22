@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isPreviewEnv } from "@/lib/previewEnv";
 
 const VAPID_PUBLIC_KEY = "BApytxnwgrWgRXe4jlovIcb0-mDVXL8jxm1acUxrunW4ZgeK1z5TGUkuP682ald5mhsYKLePfQh0fwtydvQT9EM";
 
@@ -23,29 +24,23 @@ export function usePushNotifications() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-  const isPreviewHost =
-    hostname.includes("lovableproject.com") ||
-    hostname.includes("id-preview--") ||
-    hostname.includes("lovable.app");
+  const previewEnv = isPreviewEnv();
 
   const isSupported =
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
     "PushManager" in window &&
-    window.self === window.top &&
-    !isPreviewHost;
+    !previewEnv;
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-    // On preview/iframe hosts, do NOTHING with the service worker.
-    // Even calling getRegistrations()/unregister() can trigger SW lifecycle
-    // events that the Lovable preview iframe interprets as a reload signal,
-    // producing a 2-3s auto-reload loop. Stay fully passive in preview.
-    if (isPreviewHost || window.self !== window.top) return;
+    // Preview cleanup happens once in main.tsx. This hook stays fully
+    // passive inside the Lovable preview/iframe so no SW lifecycle event
+    // can trigger the 1–3s reload loop.
+    if (previewEnv) return;
     if (!isSupported) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
-  }, [isSupported, isPreviewHost]);
+  }, [isSupported, previewEnv]);
 
 
   // Check existing subscription — gated on authReady
