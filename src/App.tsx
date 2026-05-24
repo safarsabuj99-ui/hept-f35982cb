@@ -264,6 +264,7 @@ const FullApp = () => (
                   <Route path="/admin/subscription" element={<AdminSubscription />} />
                   <Route path="/admin/support" element={<AgencySupport />} />
                   <Route path="/admin/ai-copilot" element={<AICopilot />} />
+                  <Route path="/admin/ai-campaign-builder" element={<AICampaignBuilder />} />
                 </Route>
 
                 {/* Public payment callback routes */}
