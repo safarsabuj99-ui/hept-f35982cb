@@ -108,12 +108,14 @@ Deno.serve(async (req) => {
     if (!draft.research_json) return j({ error: "Run research first" }, 400);
 
     const [{ data: client }, { data: account }, { data: mapping }] = await Promise.all([
-      service.from("profiles").select("id, full_name, business_name, country, language").eq("id", draft.client_id).maybeSingle(),
+      service.from("profiles").select("id, user_id, full_name, business_name, country, language").eq("user_id", draft.client_id).maybeSingle(),
       service.from("ad_accounts").select("id, platform_name, account_currency, account_name").eq("id", draft.ad_account_id).maybeSingle(),
       service.from("ad_account_clients").select("mapping_keyword").eq("ad_account_id", draft.ad_account_id).eq("client_id", draft.client_id).maybeSingle(),
     ]);
 
     const keyword = (mapping?.mapping_keyword || client?.business_name || "client").trim();
+    const productName = (draft.product_name || "product").trim();
+    const objective = (draft.objective || "SALES").toUpperCase();
     const today = new Date();
     const datestamp = `${String(today.getFullYear()).slice(2)}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
 
@@ -122,10 +124,13 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `You are an elite performance-marketing campaign architect for ${account?.platform_name?.toUpperCase() ?? "META"}. Produce a launch-ready Campaign → Ad Set → Ads tree.
 
-NAMING CONVENTION (MUST USE EXACTLY):
-- Campaign: "${keyword} | {OBJECTIVE} | {ANGLE_SHORT} | ${datestamp}"
-- Ad Set:   "${keyword} | {AUDIENCE_LABEL} | {PLACEMENT}"
-- Ad:       "${keyword} | {FORMAT} | {HOOK_SHORT} | v{N}"
+NAMING CONVENTION (MUST USE EXACTLY — DO NOT DEVIATE):
+- Campaign: "${keyword} | ${productName} | ${objective} | ${datestamp}"
+- Ad Set:   "${keyword} | ${productName} | {AUDIENCE_LABEL} | {PLACEMENT}"
+- Ad:       "${keyword} | ${productName} | {FORMAT} | v{N}"
+  Where {AUDIENCE_LABEL} is a 1-2 word persona tag, {PLACEMENT} is feeds/stories/reels/auto, {FORMAT} is image/video/carousel, and {N} is a sequential number (1, 2, 3…).
+
+CAMPAIGN OBJECTIVE (LOCKED): The campaign.objective field MUST be exactly "${objective}". Do not change it.
 
 RULES:
 - Daily budget should be sensible for ${account?.account_currency ?? "USD"} and the audience size. Default 10-25 ${account?.account_currency ?? "USD"}/day unless brief justifies more.
@@ -173,6 +178,30 @@ Produce the campaign tree now.`;
     if (!tree) {
       await service.from("ai_campaign_drafts").update({ status: "failed", error: "No structured tree returned" }).eq("id", draft_id);
       return j({ error: "Model did not return structured tree" }, 500);
+    }
+
+    // Hard-lock the campaign objective and canonical name in case the model deviated.
+    if (tree.campaign) {
+      tree.campaign.objective = objective;
+      tree.campaign.name = `${keyword} | ${productName} | ${objective} | ${datestamp}`;
+    }
+    // Normalise ad-set / ad name prefixes to "{keyword} | {productName} | …".
+    const prefix = `${keyword} | ${productName} | `;
+    if (Array.isArray(tree.ad_sets)) {
+      tree.ad_sets.forEach((as: any, asIdx: number) => {
+        if (as && typeof as.name === "string" && !as.name.startsWith(prefix)) {
+          const tail = as.name.split("|").slice(1).join("|").trim() || `set_${asIdx + 1}`;
+          as.name = `${prefix}${tail}`;
+        }
+        if (Array.isArray(as?.ads)) {
+          as.ads.forEach((ad: any, adIdx: number) => {
+            if (ad && typeof ad.name === "string" && !ad.name.startsWith(prefix)) {
+              const tail = ad.name.split("|").slice(1).join("|").trim() || `${ad.format || "ad"} | v${adIdx + 1}`;
+              ad.name = `${prefix}${tail}`;
+            }
+          });
+        }
+      });
     }
 
     const nextVersion = (draft.version || 1) + (draft.draft_json ? 1 : 0);

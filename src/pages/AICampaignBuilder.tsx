@@ -39,11 +39,15 @@ export default function AICampaignBuilder() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => localStorage.getItem("aicb:lastClientId") || "");
   const [adAccountId, setAdAccountId] = useState<string>(() => localStorage.getItem("aicb:lastAdAccountId") || "");
+  const [objective, setObjective] = useState<string>(() => localStorage.getItem("aicb:lastObjective") || "");
+  const [productName, setProductName] = useState<string>(() => localStorage.getItem("aicb:lastProductName") || "");
   const [productBrief, setProductBrief] = useState("");
   const [productUrl, setProductUrl] = useState("");
 
   useEffect(() => { if (clientId) localStorage.setItem("aicb:lastClientId", clientId); }, [clientId]);
   useEffect(() => { if (adAccountId) localStorage.setItem("aicb:lastAdAccountId", adAccountId); }, [adAccountId]);
+  useEffect(() => { if (objective) localStorage.setItem("aicb:lastObjective", objective); }, [objective]);
+  useEffect(() => { if (productName) localStorage.setItem("aicb:lastProductName", productName); }, [productName]);
 
   // Clients (role='client' only, keyed by auth user_id — same key used in ad_account_clients.client_id)
   const clientsQ = useQuery({
@@ -111,6 +115,8 @@ export default function AICampaignBuilder() {
   const startMutation = useMutation({
     mutationFn: async () => {
       if (!clientId || !adAccountId) throw new Error("Select client and ad account");
+      if (!objective) throw new Error("Select a campaign objective");
+      if (!productName.trim()) throw new Error("Enter the product / offer name");
       if (!productBrief.trim()) throw new Error("Describe the product first");
       const acc = accountsQ.data?.find((a: any) => a.id === adAccountId);
       const { data: ins, error } = await supabase.from("ai_campaign_drafts").insert({
@@ -120,6 +126,8 @@ export default function AICampaignBuilder() {
         platform: (acc?.platform_name ?? "meta") as any,
         product_brief: productBrief,
         product_url: productUrl || null,
+        objective,
+        product_name: productName.trim(),
         status: "researching",
         org_id: (profile as any)?.org_id ?? null,
       } as any).select("id").single();
@@ -192,14 +200,16 @@ export default function AICampaignBuilder() {
           clientsLoading={clientsQ.isLoading}
           accounts={accountsQ.data ?? []}
           accountsLoading={accountsQ.isLoading}
-          clientId={clientId} setClientId={(v) => { setClientId(v); setAdAccountId(""); }}
+          clientId={clientId} setClientId={(v: string) => { setClientId(v); setAdAccountId(""); }}
           adAccountId={adAccountId} setAdAccountId={setAdAccountId}
+          objective={objective} setObjective={setObjective}
+          productName={productName} setProductName={setProductName}
           productBrief={productBrief} setProductBrief={setProductBrief}
           productUrl={productUrl} setProductUrl={setProductUrl}
           onStart={() => startMutation.mutate()}
           starting={startMutation.isPending}
           recent={recentQ.data ?? []}
-          onOpen={(id) => setDraftId(id)}
+          onOpen={(id: string) => setDraftId(id)}
         />
       )}
 
@@ -229,6 +239,18 @@ export default function AICampaignBuilder() {
 // ─────────────────────────────────────────────────────────────
 
 function SetupCard(props: any) {
+  const OBJECTIVES = ["SALES", "LEADS", "TRAFFIC", "MESSAGES", "AWARENESS", "APP_INSTALLS"];
+  const datestamp = (() => {
+    const t = new Date();
+    return `${String(t.getFullYear()).slice(2)}${String(t.getMonth()+1).padStart(2,"0")}${String(t.getDate()).padStart(2,"0")}`;
+  })();
+  const selectedClient = props.clients.find((c: any) => c.user_id === props.clientId);
+  const keyword = (selectedClient?.business_name || selectedClient?.full_name || "client").trim();
+  const product = (props.productName || "{product}").trim();
+  const obj = props.objective || "{OBJECTIVE}";
+  const namePreview = `${keyword} | ${product} | ${obj} | ${datestamp}`;
+  const ready = props.clientId && props.adAccountId && props.objective && props.productName.trim() && props.productBrief.trim();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="lg:col-span-2 p-6 space-y-5 ios-glass">
@@ -267,8 +289,32 @@ function SetupCard(props: any) {
               <p className="text-xs text-muted-foreground">No ad accounts mapped to this client. Map one in Client → Ad Accounts.</p>
             )}
           </div>
-
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Objective</label>
+            <Select value={props.objective} onValueChange={props.setObjective}>
+              <SelectTrigger><SelectValue placeholder="Select objective…" /></SelectTrigger>
+              <SelectContent>
+                {OBJECTIVES.map((o) => (
+                  <SelectItem key={o} value={o}>{o.replace("_", " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Product / Offer name</label>
+            <Input
+              placeholder="e.g. Premium Honey 500g"
+              value={props.productName}
+              onChange={(e) => props.setProductName(e.target.value)}
+            />
+          </div>
         </div>
+
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Campaign name preview</div>
+          <code className="text-xs break-all">{namePreview}</code>
+        </div>
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Product brief</label>
           <Textarea
@@ -285,7 +331,7 @@ function SetupCard(props: any) {
         <Button
           size="lg"
           className="w-full gap-2"
-          disabled={props.starting || !props.clientId || !props.adAccountId || !props.productBrief.trim()}
+          disabled={props.starting || !ready}
           onClick={props.onStart}
         >
           {props.starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
