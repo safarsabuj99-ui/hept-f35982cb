@@ -51,6 +51,7 @@ const allSections: NavSection[] = [
       { to: "/admin", icon: BarChart3, label: "Dashboard", permKey: "can_view_dashboard_stats" },
       { to: "/admin/attention", icon: AlertTriangle, label: "Attention", permKey: "can_view_dashboard_stats" },
       { to: "/admin/ai-copilot", icon: Sparkles, label: "AI Copilot", permKey: "can_view_dashboard_stats" },
+      { to: "/admin/ai-campaign-builder", icon: Sparkles, label: "AI Campaign Builder", permKey: "can_manage_campaigns" },
     ],
   },
   {
