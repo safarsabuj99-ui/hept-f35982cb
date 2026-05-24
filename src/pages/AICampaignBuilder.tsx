@@ -170,8 +170,8 @@ export default function AICampaignBuilder() {
     <div className="space-y-6">
       <PageHeader
         title="AI Campaign Architect"
-        description="Describe a product. Get a launch-ready campaign in under 2 minutes."
-        icon={Sparkles}
+        subtitle="Describe a product. Get a launch-ready campaign in under 2 minutes."
+        icon={<Sparkles className="h-5 w-5 text-primary" />}
       />
 
       {!draftId && (
