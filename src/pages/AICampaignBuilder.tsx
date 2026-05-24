@@ -105,11 +105,12 @@ export default function AICampaignBuilder() {
         user_id: user!.id,
         client_id: clientId,
         ad_account_id: adAccountId,
-        platform: acc?.platform_name ?? "meta",
+        platform: (acc?.platform_name ?? "meta") as any,
         product_brief: productBrief,
         product_url: productUrl || null,
         status: "researching",
-      }).select("id").single();
+        org_id: (profile as any)?.org_id ?? null,
+      } as any).select("id").single();
       if (error) throw error;
       const draft_id = ins.id;
       setDraftId(draft_id);
