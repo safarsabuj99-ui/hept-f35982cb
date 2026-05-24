@@ -239,6 +239,18 @@ export default function AICampaignBuilder() {
 // ─────────────────────────────────────────────────────────────
 
 function SetupCard(props: any) {
+  const OBJECTIVES = ["SALES", "LEADS", "TRAFFIC", "MESSAGES", "AWARENESS", "APP_INSTALLS"];
+  const datestamp = (() => {
+    const t = new Date();
+    return `${String(t.getFullYear()).slice(2)}${String(t.getMonth()+1).padStart(2,"0")}${String(t.getDate()).padStart(2,"0")}`;
+  })();
+  const selectedClient = props.clients.find((c: any) => c.user_id === props.clientId);
+  const keyword = (selectedClient?.business_name || selectedClient?.full_name || "client").trim();
+  const product = (props.productName || "{product}").trim();
+  const obj = props.objective || "{OBJECTIVE}";
+  const namePreview = `${keyword} | ${product} | ${obj} | ${datestamp}`;
+  const ready = props.clientId && props.adAccountId && props.objective && props.productName.trim() && props.productBrief.trim();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="lg:col-span-2 p-6 space-y-5 ios-glass">
@@ -277,8 +289,32 @@ function SetupCard(props: any) {
               <p className="text-xs text-muted-foreground">No ad accounts mapped to this client. Map one in Client → Ad Accounts.</p>
             )}
           </div>
-
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Objective</label>
+            <Select value={props.objective} onValueChange={props.setObjective}>
+              <SelectTrigger><SelectValue placeholder="Select objective…" /></SelectTrigger>
+              <SelectContent>
+                {OBJECTIVES.map((o) => (
+                  <SelectItem key={o} value={o}>{o.replace("_", " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Product / Offer name</label>
+            <Input
+              placeholder="e.g. Premium Honey 500g"
+              value={props.productName}
+              onChange={(e) => props.setProductName(e.target.value)}
+            />
+          </div>
         </div>
+
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Campaign name preview</div>
+          <code className="text-xs break-all">{namePreview}</code>
+        </div>
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Product brief</label>
           <Textarea
@@ -295,7 +331,7 @@ function SetupCard(props: any) {
         <Button
           size="lg"
           className="w-full gap-2"
-          disabled={props.starting || !props.clientId || !props.adAccountId || !props.productBrief.trim()}
+          disabled={props.starting || !ready}
           onClick={props.onStart}
         >
           {props.starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
