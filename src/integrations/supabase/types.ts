@@ -506,6 +506,189 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_campaign_draft_versions: {
+        Row: {
+          change_note: string | null
+          created_at: string
+          draft_id: string
+          draft_json: Json
+          edited_by: string | null
+          id: string
+          org_id: string
+          version: number
+        }
+        Insert: {
+          change_note?: string | null
+          created_at?: string
+          draft_id: string
+          draft_json: Json
+          edited_by?: string | null
+          id?: string
+          org_id: string
+          version: number
+        }
+        Update: {
+          change_note?: string | null
+          created_at?: string
+          draft_id?: string
+          draft_json?: Json
+          edited_by?: string | null
+          id?: string
+          org_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_campaign_draft_versions_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "ai_campaign_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_campaign_draft_versions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_campaign_drafts: {
+        Row: {
+          ad_account_id: string
+          client_id: string
+          created_at: string
+          draft_json: Json | null
+          error: string | null
+          id: string
+          org_id: string
+          pending_action_id: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          platform_ids: Json
+          product_brief: string
+          product_images: Json
+          product_url: string | null
+          research_json: Json | null
+          status: string
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          ad_account_id: string
+          client_id: string
+          created_at?: string
+          draft_json?: Json | null
+          error?: string | null
+          id?: string
+          org_id: string
+          pending_action_id?: string | null
+          platform: Database["public"]["Enums"]["ad_platform"]
+          platform_ids?: Json
+          product_brief?: string
+          product_images?: Json
+          product_url?: string | null
+          research_json?: Json | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          ad_account_id?: string
+          client_id?: string
+          created_at?: string
+          draft_json?: Json | null
+          error?: string | null
+          id?: string
+          org_id?: string
+          pending_action_id?: string | null
+          platform?: Database["public"]["Enums"]["ad_platform"]
+          platform_ids?: Json
+          product_brief?: string
+          product_images?: Json
+          product_url?: string | null
+          research_json?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_campaign_drafts_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_campaign_drafts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_campaign_publish_logs: {
+        Row: {
+          created_at: string
+          draft_id: string
+          error: string | null
+          id: string
+          node_label: string | null
+          node_type: string
+          org_id: string
+          platform_id: string | null
+          request: Json | null
+          response: Json | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          draft_id: string
+          error?: string | null
+          id?: string
+          node_label?: string | null
+          node_type: string
+          org_id: string
+          platform_id?: string | null
+          request?: Json | null
+          response?: Json | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          draft_id?: string
+          error?: string | null
+          id?: string
+          node_label?: string | null
+          node_type?: string
+          org_id?: string
+          platform_id?: string | null
+          request?: Json | null
+          response?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_campaign_publish_logs_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "ai_campaign_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_campaign_publish_logs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_messages: {
         Row: {
           cost_usd: number | null
