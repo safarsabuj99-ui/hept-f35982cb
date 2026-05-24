@@ -39,11 +39,15 @@ export default function AICampaignBuilder() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => localStorage.getItem("aicb:lastClientId") || "");
   const [adAccountId, setAdAccountId] = useState<string>(() => localStorage.getItem("aicb:lastAdAccountId") || "");
+  const [objective, setObjective] = useState<string>(() => localStorage.getItem("aicb:lastObjective") || "");
+  const [productName, setProductName] = useState<string>(() => localStorage.getItem("aicb:lastProductName") || "");
   const [productBrief, setProductBrief] = useState("");
   const [productUrl, setProductUrl] = useState("");
 
   useEffect(() => { if (clientId) localStorage.setItem("aicb:lastClientId", clientId); }, [clientId]);
   useEffect(() => { if (adAccountId) localStorage.setItem("aicb:lastAdAccountId", adAccountId); }, [adAccountId]);
+  useEffect(() => { if (objective) localStorage.setItem("aicb:lastObjective", objective); }, [objective]);
+  useEffect(() => { if (productName) localStorage.setItem("aicb:lastProductName", productName); }, [productName]);
 
   // Clients (role='client' only, keyed by auth user_id — same key used in ad_account_clients.client_id)
   const clientsQ = useQuery({
