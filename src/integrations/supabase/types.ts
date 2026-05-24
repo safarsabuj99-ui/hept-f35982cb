@@ -562,12 +562,14 @@ export type Database = {
           draft_json: Json | null
           error: string | null
           id: string
+          objective: string | null
           org_id: string
           pending_action_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_ids: Json
           product_brief: string
           product_images: Json
+          product_name: string | null
           product_url: string | null
           research_json: Json | null
           status: string
@@ -582,12 +584,14 @@ export type Database = {
           draft_json?: Json | null
           error?: string | null
           id?: string
+          objective?: string | null
           org_id: string
           pending_action_id?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_ids?: Json
           product_brief?: string
           product_images?: Json
+          product_name?: string | null
           product_url?: string | null
           research_json?: Json | null
           status?: string
@@ -602,12 +606,14 @@ export type Database = {
           draft_json?: Json | null
           error?: string | null
           id?: string
+          objective?: string | null
           org_id?: string
           pending_action_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_ids?: Json
           product_brief?: string
           product_images?: Json
+          product_name?: string | null
           product_url?: string | null
           research_json?: Json | null
           status?: string
