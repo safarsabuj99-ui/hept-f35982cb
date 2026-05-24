@@ -1,27 +1,42 @@
-## Bug Found
+## Goal
 
-**Root cause:** `AICampaignBuilder.tsx` queries `profiles.id` for the Client dropdown and uses that value as the `clientId` filter against `ad_account_clients.client_id`. But across the entire app, `ad_account_clients.client_id` stores the **auth user_id** (i.e. `profiles.user_id`), not `profiles.id`. So the filter always returns 0 rows — the ad-account dropdown stays empty even when a client (e.g. Atyab) has 6 ad accounts mapped.
+Fix two issues in the AI Campaign Builder:
+1. No way to pick a campaign **Objective**.
+2. Campaign/Ad Set/Ad names should follow a strict convention based on client keyword + product/offer name.
 
-Verified in DB:
-- `Atyab` → `profiles.id = 14818d42…` (used today) → 0 rows in `ad_account_clients`
-- `Atyab` → `profiles.user_id` → **6 rows** in `ad_account_clients` ✅
+## Changes
 
-Also, the client list isn't restricted to users with role `client`, so admins/managers/owners pollute the dropdown.
+### 1. DB migration — `ai_campaign_drafts`
+Add two columns:
+- `objective text` — Sales | Leads | Traffic | Messages | Awareness | App Installs
+- `product_name text` — free-text product/offer name
 
-## Fix
+Nullable for backward compatibility with existing drafts.
 
-1. **Restrict clients to role = 'client'** — query `user_roles` (`role = 'client'`), then load matching `profiles` by `user_id`, mirroring `ClientList.tsx`.
-2. **Use `user_id` as the value** of the Client select (not `profiles.id`).
-3. **Filter ad accounts** with `ad_account_clients.client_id = <user_id>` (no other code change needed since the query already uses `clientId`).
-4. **Empty states & UX polish:**
-   - Loading skeletons on both selects while fetching.
-   - When a client has zero mapped ad accounts, show inline hint: *"No ad accounts mapped to this client. Go to Client → Ad Accounts to map one."*
-   - Searchable client combobox (Atyab/agency lists can be long).
-   - Show ad-account currency + platform badge in the option, already partly there — keep it.
-5. **Persist last selection** in `localStorage` (`aicb:lastClientId`, `aicb:lastAdAccountId`) for faster repeat use.
+### 2. UI — `src/pages/AICampaignBuilder.tsx`
+In the Setup card, add two new required fields after Ad Account:
+- **Objective** (Select): Sales, Leads, Traffic, Messages, Awareness, App Installs.
+- **Product / Offer name** (Input): e.g. "Premium Honey 500g".
+
+Behavior:
+- Persist both in `localStorage` (`aicb:lastObjective`, `aicb:lastProductName`).
+- Show a live naming preview chip:
+  `{keyword} | {product_name} | {OBJECTIVE} | YYMMDD`
+- Disable Research and Generate Draft buttons until Client, Ad Account, Objective, and Product Name are all set.
+- Send `objective` and `product_name` when inserting into `ai_campaign_drafts`.
+
+### 3. Edge function — `supabase/functions/ai-campaign-generate/index.ts`
+- Fix client lookup: query `profiles` by `user_id` (current code uses `profiles.id`, which now breaks because `draft.client_id` holds `auth user_id`).
+- Read `draft.objective` and `draft.product_name`.
+- Hard-lock naming convention in the AI prompt:
+  - Campaign: `{keyword} | {product_name} | {OBJECTIVE} | {YYMMDD}`
+  - Ad Set:   `{keyword} | {product_name} | {AUDIENCE_LABEL} | {PLACEMENT}`
+  - Ad:       `{keyword} | {product_name} | {FORMAT} | v{N}`
+- After the model returns JSON, validate/overwrite `campaign.objective` to match the user-selected value (in case the model deviates).
 
 ## Files touched
+- New migration (adds `objective`, `product_name` to `ai_campaign_drafts`)
+- `src/pages/AICampaignBuilder.tsx`
+- `supabase/functions/ai-campaign-generate/index.ts`
 
-- `src/pages/AICampaignBuilder.tsx` — fix queries, swap `id` → `user_id`, add role gate, loading/empty states, searchable client picker, persistence.
-
-No DB migration, no edge-function change required.
+No changes to `ai-campaign-research`, RLS, or auth.
