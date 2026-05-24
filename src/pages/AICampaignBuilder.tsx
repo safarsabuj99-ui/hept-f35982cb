@@ -189,7 +189,9 @@ export default function AICampaignBuilder() {
       {!draftId && (
         <SetupCard
           clients={clientsQ.data ?? []}
+          clientsLoading={clientsQ.isLoading}
           accounts={accountsQ.data ?? []}
+          accountsLoading={accountsQ.isLoading}
           clientId={clientId} setClientId={(v) => { setClientId(v); setAdAccountId(""); }}
           adAccountId={adAccountId} setAdAccountId={setAdAccountId}
           productBrief={productBrief} setProductBrief={setProductBrief}
