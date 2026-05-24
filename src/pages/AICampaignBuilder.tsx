@@ -115,6 +115,8 @@ export default function AICampaignBuilder() {
   const startMutation = useMutation({
     mutationFn: async () => {
       if (!clientId || !adAccountId) throw new Error("Select client and ad account");
+      if (!objective) throw new Error("Select a campaign objective");
+      if (!productName.trim()) throw new Error("Enter the product / offer name");
       if (!productBrief.trim()) throw new Error("Describe the product first");
       const acc = accountsQ.data?.find((a: any) => a.id === adAccountId);
       const { data: ins, error } = await supabase.from("ai_campaign_drafts").insert({
@@ -124,6 +126,8 @@ export default function AICampaignBuilder() {
         platform: (acc?.platform_name ?? "meta") as any,
         product_brief: productBrief,
         product_url: productUrl || null,
+        objective,
+        product_name: productName.trim(),
         status: "researching",
         org_id: (profile as any)?.org_id ?? null,
       } as any).select("id").single();
