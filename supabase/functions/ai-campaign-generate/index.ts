@@ -180,6 +180,30 @@ Produce the campaign tree now.`;
       return j({ error: "Model did not return structured tree" }, 500);
     }
 
+    // Hard-lock the campaign objective and canonical name in case the model deviated.
+    if (tree.campaign) {
+      tree.campaign.objective = objective;
+      tree.campaign.name = `${keyword} | ${productName} | ${objective} | ${datestamp}`;
+    }
+    // Normalise ad-set / ad name prefixes to "{keyword} | {productName} | …".
+    const prefix = `${keyword} | ${productName} | `;
+    if (Array.isArray(tree.ad_sets)) {
+      tree.ad_sets.forEach((as: any, asIdx: number) => {
+        if (as && typeof as.name === "string" && !as.name.startsWith(prefix)) {
+          const tail = as.name.split("|").slice(1).join("|").trim() || `set_${asIdx + 1}`;
+          as.name = `${prefix}${tail}`;
+        }
+        if (Array.isArray(as?.ads)) {
+          as.ads.forEach((ad: any, adIdx: number) => {
+            if (ad && typeof ad.name === "string" && !ad.name.startsWith(prefix)) {
+              const tail = ad.name.split("|").slice(1).join("|").trim() || `${ad.format || "ad"} | v${adIdx + 1}`;
+              ad.name = `${prefix}${tail}`;
+            }
+          });
+        }
+      });
+    }
+
     const nextVersion = (draft.version || 1) + (draft.draft_json ? 1 : 0);
 
     await service.from("ai_campaign_drafts").update({
