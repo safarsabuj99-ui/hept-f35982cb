@@ -37,25 +37,35 @@ export default function AICampaignBuilder() {
   const { profile } = useProfile();
   const qc = useQueryClient();
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [clientId, setClientId] = useState<string>("");
-  const [adAccountId, setAdAccountId] = useState<string>("");
+  const [clientId, setClientId] = useState<string>(() => localStorage.getItem("aicb:lastClientId") || "");
+  const [adAccountId, setAdAccountId] = useState<string>(() => localStorage.getItem("aicb:lastAdAccountId") || "");
   const [productBrief, setProductBrief] = useState("");
   const [productUrl, setProductUrl] = useState("");
 
-  // Clients (those mapped to ad accounts in this org)
+  useEffect(() => { if (clientId) localStorage.setItem("aicb:lastClientId", clientId); }, [clientId]);
+  useEffect(() => { if (adAccountId) localStorage.setItem("aicb:lastAdAccountId", adAccountId); }, [adAccountId]);
+
+  // Clients (role='client' only, keyed by auth user_id — same key used in ad_account_clients.client_id)
   const clientsQ = useQuery({
     queryKey: ["aicb-clients"],
     enabled: authReady && !!user,
     queryFn: async () => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "client");
+      const ids = (roles ?? []).map((r: any) => r.user_id);
+      if (!ids.length) return [];
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, business_name")
+        .select("user_id, full_name, business_name")
+        .in("user_id", ids)
         .order("business_name", { ascending: true });
       return data ?? [];
     },
   });
 
-  // Ad accounts filtered by selected client
+  // Ad accounts filtered by selected client (client_id stores auth user_id)
   const accountsQ = useQuery({
     queryKey: ["aicb-accounts", clientId],
     enabled: authReady && !!user && !!clientId,
@@ -64,7 +74,9 @@ export default function AICampaignBuilder() {
         .from("ad_account_clients")
         .select("ad_account:ad_accounts(id, account_name, platform_name, account_currency)")
         .eq("client_id", clientId);
-      return (data ?? []).map((r: any) => r.ad_account).filter(Boolean);
+      const accounts = (data ?? []).map((r: any) => r.ad_account).filter(Boolean);
+      const seen = new Set<string>();
+      return accounts.filter((a: any) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
     },
   });
 
@@ -177,7 +189,9 @@ export default function AICampaignBuilder() {
       {!draftId && (
         <SetupCard
           clients={clientsQ.data ?? []}
+          clientsLoading={clientsQ.isLoading}
           accounts={accountsQ.data ?? []}
+          accountsLoading={accountsQ.isLoading}
           clientId={clientId} setClientId={(v) => { setClientId(v); setAdAccountId(""); }}
           adAccountId={adAccountId} setAdAccountId={setAdAccountId}
           productBrief={productBrief} setProductBrief={setProductBrief}
@@ -226,10 +240,13 @@ function SetupCard(props: any) {
           <div className="space-y-2">
             <label className="text-sm font-medium">Client</label>
             <Select value={props.clientId} onValueChange={props.setClientId}>
-              <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={props.clientsLoading ? "Loading clients…" : "Select client…"} /></SelectTrigger>
               <SelectContent>
+                {props.clients.length === 0 && !props.clientsLoading && (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No clients found.</div>
+                )}
                 {props.clients.map((c: any) => (
-                  <SelectItem key={c.id} value={c.id}>{c.business_name || c.full_name}</SelectItem>
+                  <SelectItem key={c.user_id} value={c.user_id}>{c.business_name || c.full_name || "Unnamed"}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -237,7 +254,7 @@ function SetupCard(props: any) {
           <div className="space-y-2">
             <label className="text-sm font-medium">Ad account</label>
             <Select value={props.adAccountId} onValueChange={props.setAdAccountId} disabled={!props.clientId}>
-              <SelectTrigger><SelectValue placeholder={props.clientId ? "Select ad account…" : "Select client first"} /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={!props.clientId ? "Select client first" : props.accountsLoading ? "Loading…" : props.accounts.length === 0 ? "No ad accounts mapped" : "Select ad account…"} /></SelectTrigger>
               <SelectContent>
                 {props.accounts.map((a: any) => (
                   <SelectItem key={a.id} value={a.id}>
@@ -246,7 +263,11 @@ function SetupCard(props: any) {
                 ))}
               </SelectContent>
             </Select>
+            {props.clientId && !props.accountsLoading && props.accounts.length === 0 && (
+              <p className="text-xs text-muted-foreground">No ad accounts mapped to this client. Map one in Client → Ad Accounts.</p>
+            )}
           </div>
+
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium">Product brief</label>
