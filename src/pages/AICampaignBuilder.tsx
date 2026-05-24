@@ -34,6 +34,7 @@ type Draft = {
 
 export default function AICampaignBuilder() {
   const { user, authReady } = useAuth();
+  const { profile } = useProfile();
   const qc = useQueryClient();
   const [draftId, setDraftId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>("");
