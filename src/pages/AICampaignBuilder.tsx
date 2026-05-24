@@ -200,14 +200,16 @@ export default function AICampaignBuilder() {
           clientsLoading={clientsQ.isLoading}
           accounts={accountsQ.data ?? []}
           accountsLoading={accountsQ.isLoading}
-          clientId={clientId} setClientId={(v) => { setClientId(v); setAdAccountId(""); }}
+          clientId={clientId} setClientId={(v: string) => { setClientId(v); setAdAccountId(""); }}
           adAccountId={adAccountId} setAdAccountId={setAdAccountId}
+          objective={objective} setObjective={setObjective}
+          productName={productName} setProductName={setProductName}
           productBrief={productBrief} setProductBrief={setProductBrief}
           productUrl={productUrl} setProductUrl={setProductUrl}
           onStart={() => startMutation.mutate()}
           starting={startMutation.isPending}
           recent={recentQ.data ?? []}
-          onOpen={(id) => setDraftId(id)}
+          onOpen={(id: string) => setDraftId(id)}
         />
       )}
 
