@@ -238,10 +238,13 @@ function SetupCard(props: any) {
           <div className="space-y-2">
             <label className="text-sm font-medium">Client</label>
             <Select value={props.clientId} onValueChange={props.setClientId}>
-              <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={props.clientsLoading ? "Loading clients…" : "Select client…"} /></SelectTrigger>
               <SelectContent>
+                {props.clients.length === 0 && !props.clientsLoading && (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No clients found.</div>
+                )}
                 {props.clients.map((c: any) => (
-                  <SelectItem key={c.id} value={c.id}>{c.business_name || c.full_name}</SelectItem>
+                  <SelectItem key={c.user_id} value={c.user_id}>{c.business_name || c.full_name || "Unnamed"}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -249,7 +252,7 @@ function SetupCard(props: any) {
           <div className="space-y-2">
             <label className="text-sm font-medium">Ad account</label>
             <Select value={props.adAccountId} onValueChange={props.setAdAccountId} disabled={!props.clientId}>
-              <SelectTrigger><SelectValue placeholder={props.clientId ? "Select ad account…" : "Select client first"} /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={!props.clientId ? "Select client first" : props.accountsLoading ? "Loading…" : props.accounts.length === 0 ? "No ad accounts mapped" : "Select ad account…"} /></SelectTrigger>
               <SelectContent>
                 {props.accounts.map((a: any) => (
                   <SelectItem key={a.id} value={a.id}>
@@ -258,7 +261,11 @@ function SetupCard(props: any) {
                 ))}
               </SelectContent>
             </Select>
+            {props.clientId && !props.accountsLoading && props.accounts.length === 0 && (
+              <p className="text-xs text-muted-foreground">No ad accounts mapped to this client. Map one in Client → Ad Accounts.</p>
+            )}
           </div>
+
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium">Product brief</label>
