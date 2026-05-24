@@ -37,25 +37,35 @@ export default function AICampaignBuilder() {
   const { profile } = useProfile();
   const qc = useQueryClient();
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [clientId, setClientId] = useState<string>("");
-  const [adAccountId, setAdAccountId] = useState<string>("");
+  const [clientId, setClientId] = useState<string>(() => localStorage.getItem("aicb:lastClientId") || "");
+  const [adAccountId, setAdAccountId] = useState<string>(() => localStorage.getItem("aicb:lastAdAccountId") || "");
   const [productBrief, setProductBrief] = useState("");
   const [productUrl, setProductUrl] = useState("");
 
-  // Clients (those mapped to ad accounts in this org)
+  useEffect(() => { if (clientId) localStorage.setItem("aicb:lastClientId", clientId); }, [clientId]);
+  useEffect(() => { if (adAccountId) localStorage.setItem("aicb:lastAdAccountId", adAccountId); }, [adAccountId]);
+
+  // Clients (role='client' only, keyed by auth user_id — same key used in ad_account_clients.client_id)
   const clientsQ = useQuery({
     queryKey: ["aicb-clients"],
     enabled: authReady && !!user,
     queryFn: async () => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "client");
+      const ids = (roles ?? []).map((r: any) => r.user_id);
+      if (!ids.length) return [];
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, business_name")
+        .select("user_id, full_name, business_name")
+        .in("user_id", ids)
         .order("business_name", { ascending: true });
       return data ?? [];
     },
   });
 
-  // Ad accounts filtered by selected client
+  // Ad accounts filtered by selected client (client_id stores auth user_id)
   const accountsQ = useQuery({
     queryKey: ["aicb-accounts", clientId],
     enabled: authReady && !!user && !!clientId,
@@ -64,7 +74,9 @@ export default function AICampaignBuilder() {
         .from("ad_account_clients")
         .select("ad_account:ad_accounts(id, account_name, platform_name, account_currency)")
         .eq("client_id", clientId);
-      return (data ?? []).map((r: any) => r.ad_account).filter(Boolean);
+      const accounts = (data ?? []).map((r: any) => r.ad_account).filter(Boolean);
+      const seen = new Set<string>();
+      return accounts.filter((a: any) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
     },
   });
 
