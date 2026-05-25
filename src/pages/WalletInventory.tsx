@@ -371,11 +371,16 @@ export default function WalletInventory() {
   };
 
   const handleClosePeriod = async () => {
+    const parsedCarry = Number(closeCarryAmount);
+    if (!Number.isFinite(parsedCarry) || parsedCarry < 0) {
+      toast({ title: "Error", description: "Please enter a valid carry-forward amount", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     const { error } = await supabase.from("usd_inventory_snapshots" as any).insert({
       snapshot_date: getDhakaDateString(),
-      balance_usd: overview.availableBalance,
-      notes: closeNotes || `Period close — Balance: $${overview.availableBalance.toLocaleString()}`,
+      balance_usd: parsedCarry,
+      notes: closeNotes || `Period close — Balance: $${parsedCarry.toLocaleString()}`,
       created_by: user?.id,
       org_id: profile?.org_id || null,
     } as any);
@@ -383,8 +388,9 @@ export default function WalletInventory() {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Period Closed", description: `Snapshot saved with $${overview.availableBalance.toLocaleString()} balance.` });
+      toast({ title: "Period Closed", description: `Snapshot saved with $${parsedCarry.toLocaleString()} balance.` });
       setCloseNotes("");
+      setCloseCarryAmount("");
       setClosePeriodDialogOpen(false);
       refreshSnapshot().then(() => fetchOverview());
     }
