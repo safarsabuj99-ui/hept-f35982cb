@@ -557,6 +557,8 @@ export type Database = {
       ai_campaign_drafts: {
         Row: {
           ad_account_id: string
+          agent_log: Json
+          agent_stage: string | null
           client_id: string
           created_at: string
           draft_json: Json | null
@@ -564,6 +566,7 @@ export type Database = {
           id: string
           objective: string | null
           org_id: string
+          past_performance_json: Json | null
           pending_action_id: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_ids: Json
@@ -573,12 +576,15 @@ export type Database = {
           product_url: string | null
           research_json: Json | null
           status: string
+          strategy_json: Json | null
           updated_at: string
           user_id: string
           version: number
         }
         Insert: {
           ad_account_id: string
+          agent_log?: Json
+          agent_stage?: string | null
           client_id: string
           created_at?: string
           draft_json?: Json | null
@@ -586,6 +592,7 @@ export type Database = {
           id?: string
           objective?: string | null
           org_id: string
+          past_performance_json?: Json | null
           pending_action_id?: string | null
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_ids?: Json
@@ -595,12 +602,15 @@ export type Database = {
           product_url?: string | null
           research_json?: Json | null
           status?: string
+          strategy_json?: Json | null
           updated_at?: string
           user_id: string
           version?: number
         }
         Update: {
           ad_account_id?: string
+          agent_log?: Json
+          agent_stage?: string | null
           client_id?: string
           created_at?: string
           draft_json?: Json | null
@@ -608,6 +618,7 @@ export type Database = {
           id?: string
           objective?: string | null
           org_id?: string
+          past_performance_json?: Json | null
           pending_action_id?: string | null
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_ids?: Json
@@ -617,6 +628,7 @@ export type Database = {
           product_url?: string | null
           research_json?: Json | null
           status?: string
+          strategy_json?: Json | null
           updated_at?: string
           user_id?: string
           version?: number
