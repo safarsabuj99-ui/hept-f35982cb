@@ -588,7 +588,10 @@ export default function WalletInventory() {
                 </Dialog>
               )}
               {!overview.loading && hasSnapshot && (
-                <Dialog open={closePeriodDialogOpen} onOpenChange={setClosePeriodDialogOpen}>
+                <Dialog open={closePeriodDialogOpen} onOpenChange={(open) => {
+                  setClosePeriodDialogOpen(open);
+                  if (open) setCloseCarryAmount(String(overview.availableBalance ?? 0));
+                }}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="outline">
                       <RotateCcw className="mr-1 h-3.5 w-3.5" /> Close Period
@@ -597,12 +600,23 @@ export default function WalletInventory() {
                   <DialogContent>
                     <DialogHeader><DialogTitle>Close Period & Reset</DialogTitle></DialogHeader>
                     <p className="text-sm text-muted-foreground">
-                      This saves your current balance (<span className="font-mono font-medium">${overview.availableBalance.toLocaleString()}</span>) as a new snapshot. Future calculations will start from today.
+                      This saves the carry-forward balance as a new snapshot. Future calculations will start from today.
                     </p>
                     <div className="space-y-4 pt-2">
-                      <div className="rounded-lg bg-muted p-4 text-center">
-                        <p className="text-xs text-muted-foreground">Current Balance to Carry Forward</p>
-                        <p className="text-3xl font-bold font-mono">${overview.availableBalance.toLocaleString()}</p>
+                      <div>
+                        <Label>Carry Forward Balance (USD)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={closeCarryAmount}
+                          onChange={e => setCloseCarryAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="font-mono"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Defaults to current available balance (${overview.availableBalance.toLocaleString()}) — edit if you want to manually set the carry-forward.
+                        </p>
                       </div>
                       <div>
                         <Label>Notes (optional)</Label>
