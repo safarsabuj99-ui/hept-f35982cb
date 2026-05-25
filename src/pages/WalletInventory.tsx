@@ -86,6 +86,7 @@ export default function WalletInventory() {
   const [openingBalance, setOpeningBalance] = useState("");
   const [openingNotes, setOpeningNotes] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
+  const [closeCarryAmount, setCloseCarryAmount] = useState("");
   const [bdtPaid, setBdtPaid] = useState("");
   const [usdReceived, setUsdReceived] = useState("");
   const [chargePercent, setChargePercent] = useState("");
