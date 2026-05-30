@@ -352,13 +352,13 @@ export default function WalletInventory() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("usd_inventory_snapshots" as any).insert({
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
       snapshot_date: getDhakaDateString(),
       balance_usd: Number(openingBalance),
       notes: openingNotes || "Opening balance",
       created_by: user?.id,
       org_id: profile?.org_id || null,
-    } as any);
+    } as any, { onConflict: "snapshot_date,org_id" });
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -377,13 +377,13 @@ export default function WalletInventory() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("usd_inventory_snapshots" as any).insert({
+    const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
       snapshot_date: getDhakaDateString(),
       balance_usd: parsedCarry,
       notes: closeNotes || `Period close — Balance: $${parsedCarry.toLocaleString()}`,
       created_by: user?.id,
       org_id: profile?.org_id || null,
-    } as any);
+    } as any, { onConflict: "snapshot_date,org_id" });
     setSubmitting(false);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
