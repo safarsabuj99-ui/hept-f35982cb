@@ -681,6 +681,14 @@ Deno.serve(async (req) => {
           }
 
           const gResults = json[0]?.results || [];
+          type GPrepared = {
+            platformId: string; campaignDbId: string; campaignName: string; clientId: string;
+            dataDate: string; spendUsd: number; cpcUsd: number; impressions: number; clicks: number;
+            ctr: number; conversions: number; conversionValue: number; roas: number; finalStatus: string;
+          };
+          const gPrepared: GPrepared[] = [];
+          const syncedAtIsoG = new Date().toISOString();
+
           for (const row of gResults) {
             const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
             const spend = costMicros / 1_000_000;
@@ -697,13 +705,9 @@ Deno.serve(async (req) => {
             const cpcUsd = convertSpend(cpc);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const platformId = `google_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
+            if (!clientId) { skippedCampaigns++; continue; }
 
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
             const googleStatusConfirmed = !!row.campaign?.status;
@@ -711,44 +715,81 @@ Deno.serve(async (req) => {
 
             const campaignResult = await upsertCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalStatus = campaignResult.status;
 
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
-
-            await upsertMetrics(campaignDbId, dataDate, {
-              spend: spendUsd, impressions, clicks, results: Math.round(conversions),
-              conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
+            gPrepared.push({
+              platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate,
+              spendUsd, cpcUsd, impressions, clicks, ctr, conversions: Math.round(conversions),
+              conversionValue, roas, finalStatus: campaignResult.status,
             });
-
-            // Legacy write
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: platformId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate, impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd,
-                results: Math.round(conversions), conversion_value: conversionValue,
-                roas, status: finalStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`Google legacy upsert: ${error.message}`);
           }
 
-          console.log(`Google deep-dive: ${gResults.length} rows for ${account.ad_account_id}`);
+          // Bulk writes
+          {
+            const mappingMap = new Map<string, any>();
+            for (const p of gPrepared) {
+              mappingMap.set(p.platformId, {
+                campaign_id: p.platformId, campaign_name: p.campaignName, platform,
+                client_id: p.clientId, ad_account_id: account.id, is_active: true, org_id: account.org_id,
+              });
+            }
+            if (mappingMap.size > 0) {
+              const allIds = Array.from(mappingMap.keys());
+              const existingIds = new Set<string>();
+              for (let i = 0; i < allIds.length; i += 200) {
+                const { data: ex } = await supabase.from("campaign_mappings").select("campaign_id").in("campaign_id", allIds.slice(i, i + 200));
+                for (const r of ex ?? []) existingIds.add(r.campaign_id);
+              }
+              const toInsert = Array.from(mappingMap.values()).filter((r: any) => !existingIds.has(r.campaign_id));
+              for (let i = 0; i < toInsert.length; i += 100) {
+                const { error: mErr } = await supabase.from("campaign_mappings").insert(toInsert.slice(i, i + 100));
+                if (mErr) errors.push(`Google campaign_mappings insert: ${mErr.message}`);
+              }
+            }
+          }
+          {
+            const mDedup = new Map<string, any>();
+            for (const p of gPrepared) {
+              mDedup.set(`${p.campaignDbId}|${p.dataDate}`, {
+                campaign_id: p.campaignDbId, data_date: p.dataDate,
+                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
+                results: p.conversions, conversion_value: p.conversionValue,
+                ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
+                view_content: 0, add_to_cart: 0, initiate_checkout: 0, purchase: 0,
+                messaging_conversations: 0, new_messaging_contacts: 0, create_order: 0,
+                reach: 0, cost_per_purchase: 0, cost_per_message: 0, cpm: 0, budget: 0,
+                conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+                synced_at: syncedAtIsoG, org_id: account.org_id,
+              });
+            }
+            const finalMetrics = Array.from(mDedup.values());
+            for (let i = 0; i < finalMetrics.length; i += 100) {
+              const { error: dErr } = await supabase.from("daily_metrics")
+                .upsert(finalMetrics.slice(i, i + 100), { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
+              if (dErr) errors.push(`Google daily_metrics upsert: ${dErr.message}`);
+            }
+          }
+          if (writeLegacyPerf) {
+            const perfMap = new Map<string, any>();
+            for (const p of gPrepared) {
+              perfMap.set(`${p.platformId}|${p.dataDate}`, {
+                campaign_id: p.platformId, campaign_name: p.campaignName,
+                ad_account_id: account.id, client_id: p.clientId, date: p.dataDate,
+                impressions: p.impressions, clicks: p.clicks, ctr: p.ctr, cpc: p.cpcUsd, spend: p.spendUsd,
+                results: p.conversions, conversion_value: p.conversionValue,
+                roas: p.roas, status: p.finalStatus, synced_at: syncedAtIsoG, org_id: account.org_id,
+              });
+            }
+            const perfRows = Array.from(perfMap.values());
+            for (let i = 0; i < perfRows.length; i += 100) {
+              const { error: pErr } = await supabase.from("campaign_performance")
+                .upsert(perfRows.slice(i, i + 100), { onConflict: "campaign_id,date", ignoreDuplicates: false });
+              if (pErr) errors.push(`Google campaign_performance upsert: ${pErr.message}`);
+            }
+          }
+
+          console.log(`Google deep-dive: ${gResults.length} rows (${gPrepared.length} matched) for ${account.ad_account_id}`);
+
+
 
         } else if (platform === "tiktok") {
           if (!integration?.api_token) {
