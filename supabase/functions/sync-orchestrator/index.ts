@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 const TOTAL_WINDOW_DAYS = 25;
-const PARALLEL_WORKER_TRIGGERS = 4;
+const PARALLEL_WORKER_TRIGGERS = 6;
+
 
 /** Format date as YYYY-MM-DD (UTC) */
 function fmt(d: Date): string {
