@@ -152,13 +152,15 @@ Deno.serve(async (req) => {
       }
 
       // Fast-lane: always 1-day full job
-      const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 5);
+      // Fast-lane: always 1-day full job. Deep-dive: tighter 3-day default for unseen accounts.
+      const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 3);
       const useChunking = !isFastLane && (
         chunkDays < TOTAL_WINDOW_DAYS ||
         (stat?.consecutive_failures ?? 0) >= 1 ||
-        (stat?.total_rows_last_sync ?? 0) >= 200 ||
+        (stat?.total_rows_last_sync ?? 0) >= 100 ||
         !stat
       );
+
 
       if (!useChunking) {
         // Single full-window job (light account or fast-lane)
