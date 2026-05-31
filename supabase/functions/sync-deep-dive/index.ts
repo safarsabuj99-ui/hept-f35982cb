@@ -186,6 +186,12 @@ Deno.serve(async (req) => {
     const tiktokBase = getTikTokBaseUrl(tiktokProxyUrl);
     if (tiktokProxyUrl) console.log(`Using TikTok proxy: ${tiktokProxyUrl}`);
 
+    // Feature flag: legacy campaign_performance double-write (disabled by default for CPU savings)
+    const { data: legacyFlag } = await supabase
+      .from("settings").select("value").eq("key", "enable_legacy_perf_write").maybeSingle();
+    const writeLegacyPerf = String(legacyFlag?.value ?? "false").toLowerCase() === "true";
+
+
     for (const account of accounts) {
       // Soft time budget: stop enqueuing new accounts past the budget so the next
       // run picks them up. Prevents mid-write aborts that leave daily_metrics stale.
