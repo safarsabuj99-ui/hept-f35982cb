@@ -1117,40 +1117,42 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
             }
           }
 
-          // 3) campaign_performance (legacy) — single bulk upsert per account.
-          //    Dedupe by (campaign_id, date) to satisfy the unique constraint.
-          const perfMap = new Map<string, any>();
-          for (const p of prepared) {
-            const key = `${p.platformId}|${p.dataDate}`;
-            perfMap.set(key, {
-              campaign_id: p.platformId,
-              campaign_name: p.campaignName,
-              ad_account_id: account.id,
-              client_id: p.clientId,
-              date: p.dataDate,
-              impressions: p.impressions,
-              clicks: p.clicks,
-              ctr: p.ctr,
-              cpc: p.cpcUsd,
-              spend: p.spendUsd,
-              results: p.conversions,
-              conversion_value: 0,
-              roas: p.roas,
-              status: p.finalTiktokStatus,
-              synced_at: syncedAtIso,
-              org_id: account.org_id,
-            });
-          }
-          if (perfMap.size > 0) {
-            const perfRows = Array.from(perfMap.values());
-            for (let i = 0; i < perfRows.length; i += 100) {
-              const batch = perfRows.slice(i, i + 100);
-              const { error: pErr } = await supabase
-                .from("campaign_performance")
-                .upsert(batch, { onConflict: "campaign_id,date", ignoreDuplicates: false });
-              if (pErr) errors.push(`TikTok campaign_performance bulk upsert: ${pErr.message}`);
+          // 3) campaign_performance (legacy) — gated by feature flag for CPU savings.
+          if (writeLegacyPerf) {
+            const perfMap = new Map<string, any>();
+            for (const p of prepared) {
+              const key = `${p.platformId}|${p.dataDate}`;
+              perfMap.set(key, {
+                campaign_id: p.platformId,
+                campaign_name: p.campaignName,
+                ad_account_id: account.id,
+                client_id: p.clientId,
+                date: p.dataDate,
+                impressions: p.impressions,
+                clicks: p.clicks,
+                ctr: p.ctr,
+                cpc: p.cpcUsd,
+                spend: p.spendUsd,
+                results: p.conversions,
+                conversion_value: 0,
+                roas: p.roas,
+                status: p.finalTiktokStatus,
+                synced_at: syncedAtIso,
+                org_id: account.org_id,
+              });
+            }
+            if (perfMap.size > 0) {
+              const perfRows = Array.from(perfMap.values());
+              for (let i = 0; i < perfRows.length; i += 100) {
+                const batch = perfRows.slice(i, i + 100);
+                const { error: pErr } = await supabase
+                  .from("campaign_performance")
+                  .upsert(batch, { onConflict: "campaign_id,date", ignoreDuplicates: false });
+                if (pErr) errors.push(`TikTok campaign_performance bulk upsert: ${pErr.message}`);
+              }
             }
           }
+
 
           console.log(`TikTok deep-dive: ${rows.length} rows (${prepared.length} matched) for ${account.ad_account_id}`);
         }
