@@ -4392,17 +4392,21 @@ export type Database = {
         Row: {
           ad_account_id: string
           attempts: number
+          campaign_limit: number | null
+          campaign_offset: number | null
           chunk_index: number | null
           chunk_strategy: string
           chunk_total: number | null
           completed_at: string | null
           created_at: string
+          cursor_date: string | null
           date_from: string | null
           date_to: string | null
           error_code: string | null
           function_name: string
           id: string
           last_error: string | null
+          last_progress_at: string | null
           max_attempts: number
           org_id: string | null
           parent_job_id: string | null
@@ -4414,17 +4418,21 @@ export type Database = {
         Insert: {
           ad_account_id: string
           attempts?: number
+          campaign_limit?: number | null
+          campaign_offset?: number | null
           chunk_index?: number | null
           chunk_strategy?: string
           chunk_total?: number | null
           completed_at?: string | null
           created_at?: string
+          cursor_date?: string | null
           date_from?: string | null
           date_to?: string | null
           error_code?: string | null
           function_name: string
           id?: string
           last_error?: string | null
+          last_progress_at?: string | null
           max_attempts?: number
           org_id?: string | null
           parent_job_id?: string | null
@@ -4436,17 +4444,21 @@ export type Database = {
         Update: {
           ad_account_id?: string
           attempts?: number
+          campaign_limit?: number | null
+          campaign_offset?: number | null
           chunk_index?: number | null
           chunk_strategy?: string
           chunk_total?: number | null
           completed_at?: string | null
           created_at?: string
+          cursor_date?: string | null
           date_from?: string | null
           date_to?: string | null
           error_code?: string | null
           function_name?: string
           id?: string
           last_error?: string | null
+          last_progress_at?: string | null
           max_attempts?: number
           org_id?: string | null
           parent_job_id?: string | null
