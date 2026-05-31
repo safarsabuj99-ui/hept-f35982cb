@@ -464,6 +464,38 @@ Deno.serve(async (req) => {
             nextUrl = json.paging?.next || null;
           }
 
+          // ===== PHASE A: parse + sequential upsertCampaign (needs row ID + guard handling) =====
+          type MetaPrepared = {
+            platformId: string;
+            campaignDbId: string;
+            campaignName: string;
+            clientId: string;
+            dataDate: string;
+            rawCampaignId: string;
+            spendUsd: number;
+            cpcUsd: number;
+            impressions: number;
+            reach: number;
+            clicks: number;
+            ctr: number;
+            results: number;
+            conversionValue: number;
+            roas: number;
+            cpmValue: number;
+            costPerPurchase: number;
+            costPerMessage: number;
+            viewContent: number;
+            addToCart: number;
+            initiateCheckout: number;
+            purchaseCount: number;
+            messagingConversations: number;
+            newMessagingContacts: number;
+            createOrder: number;
+            finalStatus: string;
+          };
+          const metaPrepared: MetaPrepared[] = [];
+          const syncedAtIsoMeta = new Date().toISOString();
+
           let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
@@ -474,28 +506,17 @@ Deno.serve(async (req) => {
             const cpc = parseFloat(row.cpc || "0");
             const rawCampaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
             const campaignName = row.campaign_name || "Unknown Campaign";
-            const dataDate = row.date_start; // API's actual date
+            const dataDate = row.date_start;
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const clientId = resolveClientId(campaignName, rawCampaignId);
-            if (!clientId) {
-              skippedCampaigns++;
-              continue;
-            }
+            if (!clientId) { skippedCampaigns++; continue; }
 
-            // Extract results, conversion_value, and granular funnel actions
             let results = 0;
             let conversionValue = 0;
-            let viewContent = 0;
-            let addToCart = 0;
-            let initiateCheckout = 0;
-            let purchaseCount = 0;
-            let messagingConversations = 0;
-            let newMessagingContacts = 0;
-            let createOrder = 0;
+            let viewContent = 0, addToCart = 0, initiateCheckout = 0, purchaseCount = 0;
+            let messagingConversations = 0, newMessagingContacts = 0, createOrder = 0;
 
             if (row.actions) {
-              // Debug: log all action types for the first row of each account
               if (metaRowIndex < 3) {
                 const allTypes = row.actions.map((a: any) => `${a.action_type}=${a.value}`);
                 console.log(`Meta actions [${account.ad_account_id}] campaign="${campaignName}" date=${row.date_start}: ${allTypes.join(', ')}`);
@@ -503,18 +524,13 @@ Deno.serve(async (req) => {
               for (const action of row.actions) {
                 const at = action.action_type;
                 const val = parseInt(action.value || "0", 10);
-                // Generic results
-                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) {
-                  results += val;
-                }
-                // Granular funnel actions
+                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) results += val;
                 if (at === "offsite_conversion.fb_pixel_view_content") viewContent += val;
                 if (at === "offsite_conversion.fb_pixel_add_to_cart") addToCart += val;
                 if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
                 if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
                 if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
                 if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
-                // Broad match for create_order - covers multiple possible Meta action types
                 if (at === "onsite_conversion.messaging_order_created_v2" || at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order") || at.includes("order_created")) {
                   createOrder += val;
                 }
@@ -537,62 +553,106 @@ Deno.serve(async (req) => {
             const costPerMessage = messagingConversations > 0 ? spendUsd / messagingConversations : 0;
             const platformId = `meta_${rawCampaignId}`;
             const objective = metaObjectiveMap[rawCampaignId] || "";
-
-            // ID Locking: upsert into campaigns table
             const statusConfirmed = rawCampaignId in metaStatusMap;
             const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
+
             const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
-            const campaignDbId = campaignResult.id;
-            const finalStatus = campaignResult.status;
 
-            // Auto-create campaign_mappings entry
-            await supabase.from("campaign_mappings").upsert({
-              campaign_id: platformId,
-              campaign_name: campaignName,
-              platform,
-              client_id: clientId,
-              ad_account_id: account.id,
-              is_active: true,
-              org_id: account.org_id,
-            }, { onConflict: "campaign_id" });
-
-            // Upsert daily metrics with funnel actions
-            await upsertMetrics(campaignDbId, dataDate, {
-              spend: spendUsd, impressions, clicks, results, conversion_value: conversionValue, ctr, cpc: cpcUsd, roas,
-              view_content: viewContent,
-              add_to_cart: addToCart,
-              initiate_checkout: initiateCheckout,
-              purchase: purchaseCount,
-              messaging_conversations: messagingConversations,
-              new_messaging_contacts: newMessagingContacts,
-              create_order: createOrder,
-              reach,
-              cost_per_purchase: Math.round(costPerPurchase * 100) / 100,
-              cost_per_message: Math.round(costPerMessage * 100) / 100,
-              cpm: Math.round(cpmValue * 100) / 100,
+            metaPrepared.push({
+              platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate, rawCampaignId,
+              spendUsd, cpcUsd, impressions, reach, clicks, ctr, results, conversionValue, roas,
+              cpmValue, costPerPurchase, costPerMessage,
+              viewContent, addToCart, initiateCheckout, purchaseCount,
+              messagingConversations, newMessagingContacts, createOrder,
+              finalStatus: campaignResult.status,
             });
-
-            // Also write to legacy campaign_performance for backward compatibility
-            const { error } = await supabase.from("campaign_performance").upsert(
-              {
-                campaign_id: rawCampaignId,
-                campaign_name: campaignName,
-                ad_account_id: account.id,
-                client_id: clientId,
-                date: dataDate,
-                impressions, clicks, ctr, cpc: cpcUsd, spend: spendUsd, results,
-                conversion_value: conversionValue, roas,
-                status: finalStatus,
-                synced_at: new Date().toISOString(),
-                org_id: account.org_id,
-              },
-              { onConflict: "campaign_id,date", ignoreDuplicates: false }
-            );
-            if (error) errors.push(`Meta legacy upsert: ${error.message}`);
           }
 
-          console.log(`Meta deep-dive: ${allInsights.length} rows for ${account.ad_account_id}`);
+          // ===== PHASE B: bulk + parallel writes =====
+          // 1) campaign_mappings: select-then-insert (no unique index on campaign_id)
+          {
+            const mappingMap = new Map<string, any>();
+            for (const p of metaPrepared) {
+              mappingMap.set(p.platformId, {
+                campaign_id: p.platformId, campaign_name: p.campaignName, platform,
+                client_id: p.clientId, ad_account_id: account.id, is_active: true, org_id: account.org_id,
+              });
+            }
+            if (mappingMap.size > 0) {
+              const allIds = Array.from(mappingMap.keys());
+              const existingIds = new Set<string>();
+              for (let i = 0; i < allIds.length; i += 200) {
+                const slice = allIds.slice(i, i + 200);
+                const { data: ex } = await supabase.from("campaign_mappings").select("campaign_id").in("campaign_id", slice);
+                for (const r of ex ?? []) existingIds.add(r.campaign_id);
+              }
+              const toInsert = Array.from(mappingMap.values()).filter((r: any) => !existingIds.has(r.campaign_id));
+              for (let i = 0; i < toInsert.length; i += 100) {
+                const { error: mErr } = await supabase.from("campaign_mappings").insert(toInsert.slice(i, i + 100));
+                if (mErr) errors.push(`Meta campaign_mappings insert: ${mErr.message}`);
+              }
+            }
+          }
+
+          // 2) daily_metrics: bulk upsert in 100-row batches
+          {
+            const metricsRows = metaPrepared.map((p) => ({
+              campaign_id: p.campaignDbId,
+              data_date: p.dataDate,
+              spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
+              results: p.results, conversion_value: p.conversionValue,
+              ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
+              view_content: p.viewContent, add_to_cart: p.addToCart,
+              initiate_checkout: p.initiateCheckout, purchase: p.purchaseCount,
+              messaging_conversations: p.messagingConversations,
+              new_messaging_contacts: p.newMessagingContacts,
+              create_order: p.createOrder,
+              reach: p.reach,
+              cost_per_purchase: Math.round(p.costPerPurchase * 100) / 100,
+              cost_per_message: Math.round(p.costPerMessage * 100) / 100,
+              cpm: Math.round(p.cpmValue * 100) / 100,
+              cost_per_message: Math.round(p.costPerMessage * 100) / 100,
+              budget: 0,
+              messaging_conversations: p.messagingConversations,
+              new_messaging_contacts: p.newMessagingContacts,
+              conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+              synced_at: syncedAtIsoMeta,
+              org_id: account.org_id,
+            }));
+            // Dedupe by (campaign_id, data_date) — same composite conflict key
+            const mDedup = new Map<string, any>();
+            for (const r of metricsRows) mDedup.set(`${r.campaign_id}|${r.data_date}`, r);
+            const finalMetrics = Array.from(mDedup.values());
+            for (let i = 0; i < finalMetrics.length; i += 100) {
+              const { error: dErr } = await supabase.from("daily_metrics")
+                .upsert(finalMetrics.slice(i, i + 100), { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
+              if (dErr) errors.push(`Meta daily_metrics upsert: ${dErr.message}`);
+            }
+          }
+
+          // 3) campaign_performance (legacy): only when explicitly enabled
+          if (writeLegacyPerf) {
+            const perfMap = new Map<string, any>();
+            for (const p of metaPrepared) {
+              perfMap.set(`${p.rawCampaignId}|${p.dataDate}`, {
+                campaign_id: p.rawCampaignId, campaign_name: p.campaignName,
+                ad_account_id: account.id, client_id: p.clientId, date: p.dataDate,
+                impressions: p.impressions, clicks: p.clicks, ctr: p.ctr, cpc: p.cpcUsd,
+                spend: p.spendUsd, results: p.results, conversion_value: p.conversionValue,
+                roas: p.roas, status: p.finalStatus, synced_at: syncedAtIsoMeta, org_id: account.org_id,
+              });
+            }
+            const perfRows = Array.from(perfMap.values());
+            for (let i = 0; i < perfRows.length; i += 100) {
+              const { error: pErr } = await supabase.from("campaign_performance")
+                .upsert(perfRows.slice(i, i + 100), { onConflict: "campaign_id,date", ignoreDuplicates: false });
+              if (pErr) errors.push(`Meta campaign_performance upsert: ${pErr.message}`);
+            }
+          }
+
+          console.log(`Meta deep-dive: ${allInsights.length} rows (${metaPrepared.length} matched) for ${account.ad_account_id}`);
+
 
         } else if (platform === "google") {
           if (!integration?.api_token) {
