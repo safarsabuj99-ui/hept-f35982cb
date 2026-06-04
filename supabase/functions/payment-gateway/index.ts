@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { crypto as stdCrypto } from "https://deno.land/std@0.224.0/crypto/mod.ts";
 import { requireCaller, requireOrgAccess, requireRole, AuthError } from "../_shared/auth.ts";
 
 const corsHeaders = {
