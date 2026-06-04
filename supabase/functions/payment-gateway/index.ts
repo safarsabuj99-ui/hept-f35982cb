@@ -33,7 +33,21 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, ...payload } = await req.json();
+    // Read raw body once so we can both verify signatures (SSLCommerz MD5,
+    // Stripe HMAC) and re-parse it as JSON / form data downstream.
+    const rawBody = await req.text();
+    let payload: any = {};
+    let action: string | undefined;
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try { payload = rawBody ? JSON.parse(rawBody) : {}; } catch { payload = {}; }
+      action = payload.action;
+    } else {
+      // SSLCommerz posts IPN as application/x-www-form-urlencoded
+      const params = new URLSearchParams(rawBody);
+      for (const [k, v] of params.entries()) payload[k] = v;
+      action = payload.action || (req.headers.get("x-sslcommerz-ipn") ? "ipn" : undefined);
+    }
 
     // Guard user-initiated payment sessions. Webhooks/IPN come from external gateways.
     const isInitiate = action === "initiate" || action === "sslcommerz-initiate" || action === "stripe-initiate";
