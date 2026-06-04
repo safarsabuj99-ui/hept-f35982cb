@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { crypto as stdCrypto } from "https://deno.land/std@0.224.0/crypto/mod.ts";
 import { requireCaller, requireOrgAccess, requireRole, AuthError } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -33,7 +34,21 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, ...payload } = await req.json();
+    // Read raw body once so we can both verify signatures (SSLCommerz MD5,
+    // Stripe HMAC) and re-parse it as JSON / form data downstream.
+    const rawBody = await req.text();
+    let payload: any = {};
+    let action: string | undefined;
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try { payload = rawBody ? JSON.parse(rawBody) : {}; } catch { payload = {}; }
+      action = payload.action;
+    } else {
+      // SSLCommerz posts IPN as application/x-www-form-urlencoded
+      const params = new URLSearchParams(rawBody);
+      for (const [k, v] of params.entries()) payload[k] = v;
+      action = payload.action || (req.headers.get("x-sslcommerz-ipn") ? "ipn" : undefined);
+    }
 
     // Guard user-initiated payment sessions. Webhooks/IPN come from external gateways.
     const isInitiate = action === "initiate" || action === "sslcommerz-initiate" || action === "stripe-initiate";
@@ -147,6 +162,42 @@ Deno.serve(async (req) => {
 
     // ===== SSLCommerz IPN / Callbacks =====
     if (action === "ipn" || action === "success" || action === "fail" || action === "cancel") {
+      // SECURITY: Verify SSLCommerz IPN signature (MD5 of sorted params + store_passwd hash).
+      // Spec: https://developer.sslcommerz.com/doc/v4/#ipn
+      const gw = await loadGateway("sslcommerz");
+      if (!gw) return jsonResp({ error: "SSLCommerz gateway not configured" }, 400);
+      const storePassword = gw.credentials?.store_password;
+      if (!storePassword) return jsonResp({ error: "SSLCommerz store_password missing" }, 400);
+
+      const verifySign = payload.verify_sign;
+      const verifyKey = payload.verify_key;
+      if (!verifySign || !verifyKey) {
+        return jsonResp({ error: "Missing IPN signature" }, 400);
+      }
+
+      // Build hash per SSLCommerz spec: md5(store_passwd) first, then
+      // alphabetically-sorted key=value of fields listed in verify_key,
+      // joined with '&', md5'd again.
+      const md5 = async (input: string) => {
+        const buf = await stdCrypto.subtle.digest("MD5", new TextEncoder().encode(input));
+        return Array.from(new Uint8Array(buf))
+          .map((b) => b.toString(16).padStart(2, "0")).join("");
+      };
+      const storeHash = await md5(storePassword);
+      const keys = String(verifyKey).split(",").sort();
+      const parts: string[] = [];
+      for (const k of keys) {
+        const v = payload[k] ?? "";
+        parts.push(`${k}=${v}`);
+      }
+      parts.push(`store_passwd=${storeHash}`);
+      parts.sort();
+      const expected = await md5(parts.join("&"));
+      if (expected !== String(verifySign).toLowerCase()) {
+        console.warn("[payment-gateway] SSLCommerz IPN signature mismatch", { tran_id: payload.tran_id });
+        return jsonResp({ error: "Invalid IPN signature" }, 401);
+      }
+
       const { value_a, value_b, value_c, status: payStatus } = payload;
       const txnId = value_a;
       const orgId = value_b;
@@ -166,8 +217,46 @@ Deno.serve(async (req) => {
       return jsonResp({ ok: true, status: newStatus });
     }
 
-    // ===== Stripe webhook (signature verification skipped — set webhook secret to enforce) =====
+    // ===== Stripe webhook (HMAC-SHA256 signature verified) =====
     if (action === "stripe-webhook") {
+      const sigHeader = req.headers.get("stripe-signature");
+      const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+      if (!sigHeader || !webhookSecret) {
+        return jsonResp({ error: "Stripe webhook signature/secret missing" }, 401);
+      }
+      // Parse "t=...,v1=..." header
+      const parts = Object.fromEntries(
+        sigHeader.split(",").map((kv) => {
+          const i = kv.indexOf("=");
+          return [kv.slice(0, i), kv.slice(i + 1)];
+        })
+      ) as Record<string, string>;
+      const timestamp = parts.t;
+      const v1 = parts.v1;
+      if (!timestamp || !v1) return jsonResp({ error: "Malformed Stripe signature" }, 401);
+
+      // Reject replays > 5 minutes old
+      const tsNum = Number(timestamp);
+      if (!Number.isFinite(tsNum) || Math.abs(Date.now() / 1000 - tsNum) > 300) {
+        return jsonResp({ error: "Stripe signature timestamp out of tolerance" }, 401);
+      }
+
+      const signedPayload = `${timestamp}.${rawBody}`;
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(webhookSecret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+      );
+      const macBuf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedPayload));
+      const expected = Array.from(new Uint8Array(macBuf))
+        .map((b) => b.toString(16).padStart(2, "0")).join("");
+      if (expected !== v1) {
+        console.warn("[payment-gateway] Stripe webhook signature mismatch");
+        return jsonResp({ error: "Invalid Stripe signature" }, 401);
+      }
+
       const event = payload;
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;

@@ -1,9 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { requireCaller, requireRole, AuthError, corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,6 +7,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require authenticated caller. Only admins/platform_owner (or service-role
+    // cron / DB triggers) may dispatch push notifications to arbitrary users.
+    const ctx = await requireCaller(req);
+    if (!ctx.isServiceCall) {
+      requireRole(ctx, ["admin", "platform_owner"]);
+    }
+
     const { user_id, title, body, link, type, priority, group_key } = await req.json();
 
     if (!user_id || !title) {
@@ -18,6 +21,23 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Enforce tenant boundary: non-service admin callers may only push to
+    // users in their own org.
+    if (!ctx.isServiceCall && ctx.orgId) {
+      const supabaseAuthCheck = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: targetProfile } = await supabaseAuthCheck
+        .from("profiles").select("org_id").eq("user_id", user_id).maybeSingle();
+      if (targetProfile?.org_id && targetProfile.org_id !== ctx.orgId) {
+        return new Response(JSON.stringify({ error: "Forbidden: cross-tenant push" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -161,6 +181,12 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("send-push error:", err);
+    if (err instanceof AuthError) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: err.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -60,7 +60,7 @@ export function AIProvidersTab() {
     setLoading(true);
     const { data, error } = await supabase
       .from("ai_provider_configs")
-      .select("id, provider, api_key, default_model, is_active, monthly_budget_usd, usage_this_month_usd");
+      .select("id, provider, api_key_present, default_model, is_active, monthly_budget_usd, usage_this_month_usd");
     if (error) {
       toast({ title: "Failed to load", description: error.message, variant: "destructive" });
     }
@@ -70,7 +70,7 @@ export function AIProvidersTab() {
       map[p.id] = {
         id: row?.id,
         provider: p.id,
-        has_key: !!row?.api_key,
+        has_key: !!row?.api_key_present,
         default_model: row?.default_model ?? p.defaultModel,
         is_active: row?.is_active ?? true,
         monthly_budget_usd: Number(row?.monthly_budget_usd ?? 50),
