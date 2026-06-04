@@ -25,9 +25,41 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+    // SECURITY: This is a one-time bootstrap endpoint. Once a platform_owner
+    // exists, the only way to invoke this is by presenting the service role
+    // key as a Bearer token (server-side / migration use).
+    const { data: existingOwners } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "platform_owner")
+      .limit(1);
+
+    if (existingOwners && existingOwners.length > 0) {
+      const authHeader = req.headers.get("Authorization") || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      let allowed = false;
+      if (token && token === svcKey) {
+        allowed = true;
+      } else if (token) {
+        const { data: userData } = await supabaseAdmin.auth.getUser(token);
+        if (userData?.user) {
+          const { data: roleRow } = await supabaseAdmin
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", userData.user.id)
+            .eq("role", "platform_owner")
+            .maybeSingle();
+          allowed = !!roleRow;
+        }
+      }
+      if (!allowed) {
+        return new Response(
+          JSON.stringify({ error: "Bootstrap already completed. Only an existing platform owner can call this." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     let userId: string;
 
