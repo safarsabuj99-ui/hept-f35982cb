@@ -833,12 +833,14 @@ export type Database = {
       ai_provider_configs: {
         Row: {
           api_key: string | null
+          api_key_present: boolean | null
           created_at: string
           default_model: string | null
           id: string
           is_active: boolean
           monthly_budget_usd: number
           oauth_token: string | null
+          oauth_token_present: boolean | null
           org_id: string
           provider: string
           updated_at: string
@@ -847,12 +849,14 @@ export type Database = {
         }
         Insert: {
           api_key?: string | null
+          api_key_present?: boolean | null
           created_at?: string
           default_model?: string | null
           id?: string
           is_active?: boolean
           monthly_budget_usd?: number
           oauth_token?: string | null
+          oauth_token_present?: boolean | null
           org_id: string
           provider: string
           updated_at?: string
@@ -861,12 +865,14 @@ export type Database = {
         }
         Update: {
           api_key?: string | null
+          api_key_present?: boolean | null
           created_at?: string
           default_model?: string | null
           id?: string
           is_active?: boolean
           monthly_budget_usd?: number
           oauth_token?: string | null
+          oauth_token_present?: boolean | null
           org_id?: string
           provider?: string
           updated_at?: string
