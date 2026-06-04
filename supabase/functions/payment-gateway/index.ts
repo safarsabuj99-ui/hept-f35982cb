@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
       // alphabetically-sorted key=value of fields listed in verify_key,
       // joined with '&', md5'd again.
       const md5 = async (input: string) => {
-        const buf = await crypto.subtle.digest("MD5", new TextEncoder().encode(input));
+        const buf = await stdCrypto.subtle.digest("MD5", new TextEncoder().encode(input));
         return Array.from(new Uint8Array(buf))
           .map((b) => b.toString(16).padStart(2, "0")).join("");
       };
