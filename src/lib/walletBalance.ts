@@ -126,7 +126,51 @@ export function computeBdtDebt(
       120,
     );
     bdt = Math.abs(total) * fallbackRate;
+}
+
+/**
+ * Signed net BDT across all known platforms, each converted at its own rate.
+ * Positive platform balances add, negative subtract.
+ * Untagged USD is converted at the highest configured rate.
+ */
+export function computeNetBdt(
+  pricingConfig: any,
+  source: WalletBalance | { total?: number; platforms?: Partial<PlatformBalances> },
+): number {
+  const rates = getPlatformRates(pricingConfig) as Record<string, number>;
+  const platBals: Partial<PlatformBalances> = {};
+  let total = 0;
+
+  if ("platforms" in source && source.platforms) {
+    total = Number((source as any).total ?? 0);
+    Object.assign(platBals, source.platforms);
+  } else {
+    total = Number((source as any).total ?? 0);
   }
+
+  let bdt = 0;
+  let knownSum = 0;
+  for (const p of KNOWN_PLATFORMS) {
+    const bal = Number(platBals[p]) || 0;
+    const rate = Number(rates[p]) || 120;
+    bdt += bal * rate;
+    knownSum += bal;
+  }
+
+  // Untagged residual = total - sum(known buckets). Convert at highest rate.
+  const untagged = Math.round((total - knownSum) * 100) / 100;
+  if (untagged !== 0) {
+    const fallbackRate = Math.max(
+      Number(rates.meta) || 0,
+      Number(rates.tiktok) || 0,
+      Number(rates.google) || 0,
+      120,
+    );
+    bdt += untagged * fallbackRate;
+  }
+
+  return Math.round(bdt * 100) / 100;
+}
 
   return Math.round(bdt * 100) / 100;
 }
