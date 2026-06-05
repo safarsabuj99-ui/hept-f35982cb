@@ -1,41 +1,26 @@
-# Net BDT Balance — Per-Platform Rate Conversion
+# Show Client Wallet Balance Consistently Everywhere
 
-## What you want
+Rule (matches the Client Wallet hero card):
 
-Aggregate BDT line on the "Available Balance" card should be the **true net** across every platform, each converted at its **own** billing rate:
+- If overall USD balance **≥ 0** → show `$X.XX` (USD)
+- If overall USD balance **< 0** → show `-৳X.XX` using the **net BDT** across platforms (`computeNetBdt`), so TikTok surplus offsets Meta debt using each platform's own rate.
 
-```
-total_bdt = (meta_usd   × meta_rate)
-          + (tiktok_usd × tiktok_rate)
-          + (google_usd × google_rate)
-```
+The only change vs. today is **which BDT formula is used when negative**: switch from `computeBdtDebt` (sum of negative buckets only) → `computeNetBdt` (signed sum across all platforms). This matches the wallet hero and fixes the inflated debt shown when one platform has a positive offset.
 
-Example from your screen:
-- TikTok: +$9.86 × tiktok_rate
-- Meta:   −$11.27 × meta_rate (≈ 132) → ≈ −৳1,487
-- Google:  $0.00 × google_rate
-- **Net BDT** = sum of the three (signed)
+## Files to update
 
-Display:
-- If net ≥ 0 → show as positive green `৳…`
-- If net < 0 → show as `-৳…` red (current style)
+### 1. `src/pages/ClientList.tsx` (admin Client List)
+- In the fetch block, replace `computeBdtDebt(...)` with `Math.abs(computeNetBdt(...))` for the `bdtMap` value (only stored/used when balance < 0).
+- Keep existing UI: USD pill when `bal ≥ 0`, `-৳…` pill when `bal < 0`. No layout changes.
 
-## What changes
+### 2. `src/components/dashboard/ClientSearchCommand.tsx` (global ⌘K search)
+- Inside `computeBdtDebt(client)` local wrapper, call `sharedComputeNetBdt` instead of `sharedComputeBdtDebt` and return its absolute value (it's only used when `c.balance < 0`).
+- Rename local helper to `computeBdtAmount` to avoid confusion. No UI changes — row still shows `$X` when positive, `−৳X` when negative; portfolio strip's "bdt debt" total is now the sum of *net* BDT for negative clients (more accurate).
 
-### 1. `src/lib/walletBalance.ts` — new helper `computeNetBdt`
-Add a function that takes `pricingConfig` + `WalletBalance` and returns the **signed** net BDT across all known platforms (meta/tiktok/google), using each platform's own rate from `getPlatformRates`. Untagged USD is converted at the highest configured rate (same fallback rule already used for debt).
-
-`computeBdtDebt` stays as-is (still used elsewhere for debt-only displays); the new helper is for the aggregate balance card.
-
-### 2. `src/pages/ClientWallet.tsx` — aggregate balance card
-Replace the current `totalNegativeBdt` (which only sums negative buckets) with `computeNetBdt(...)`. Render rules on the main "Available Balance" card:
-
-- Always show the BDT line under the USD figure (not only when negative).
-- Sign-aware: positive → no minus, success color; negative → `-৳…`, destructive color.
-- Per-platform mini-cards are unchanged (they already show each platform's own BDT correctly).
+### 3. `src/pages/ClientDashboard.tsx` (client's own dashboard)
+- Replace the hand-rolled `balanceBdt` `useMemo` body with `computeNetBdt(pricingConfig, wallet)` so the client dashboard hero uses the same single source of truth as the wallet hero. Behavior is unchanged for already-correct cases; fixes mismatch when one platform is positive and another negative.
 
 ## Out of scope
-
-- No DB / RLS / edge-function changes.
-- No changes to `computeBdtDebt` consumers (admin dashboard, low-balance alerts) — those intentionally show debt, not net.
-- No changes to platform transfer logic or pricing config.
+- No UI/layout changes — only the BDT number changes when negative.
+- `LowBalanceAlerts`, admin dashboard debt KPIs, payment-request views: these are intentionally *debt-only* alarms, kept on `computeBdtDebt`.
+- No DB / RPC / edge-function changes. `get_admin_dashboard_summary` already returns `pricing_config` + `platform_balances` needed by `computeNetBdt`.

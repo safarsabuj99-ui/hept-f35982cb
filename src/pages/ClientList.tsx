@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getPlatformRates } from "@/lib/pricing";
-import { computeWalletBalance, computeBdtDebt } from "@/lib/walletBalance";
+import { computeWalletBalance, computeNetBdt } from "@/lib/walletBalance";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Link } from "react-router-dom";
@@ -180,7 +180,7 @@ export default function ClientList() {
         const wb = computeWalletBalance(txnsByClient[profile.user_id] ?? []);
         balMap[profile.user_id] = wb.total;
         if (wb.total < 0) {
-          bdtMap[profile.user_id] = computeBdtDebt(profile.pricing_config, wb);
+          bdtMap[profile.user_id] = Math.abs(computeNetBdt(profile.pricing_config, wb));
         }
       }
       setBalances(balMap);
