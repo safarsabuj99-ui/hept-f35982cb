@@ -123,10 +123,10 @@ function formatCompactBdt(n: number): string {
 
 
 function computeBdtDebt(client: ClientItem): number {
-  return sharedComputeBdtDebt(client.pricing_config, {
-    balance: Number(client.balance) || 0,
-    platform_balances: client.platform_balances ?? {},
-  });
+  return Math.abs(sharedComputeNetBdt(client.pricing_config, {
+    total: Number(client.balance) || 0,
+    platforms: (client.platform_balances ?? {}) as any,
+  }));
 }
 
 const RECENTS_LIMIT = 5;
