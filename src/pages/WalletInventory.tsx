@@ -381,6 +381,7 @@ export default function WalletInventory() {
     const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
       snapshot_date: getDhakaDateString(),
       balance_usd: parsedCarry,
+      baseline_balance_usd: parsedCarry,
       notes: closeNotes || `Period close — Balance: $${parsedCarry.toLocaleString()}`,
       created_by: user?.id,
       org_id: profile?.org_id || null,
