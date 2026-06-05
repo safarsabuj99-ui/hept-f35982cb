@@ -160,8 +160,10 @@ export default function ClientWallet() {
             <p className="text-xs font-medium uppercase tracking-wider text-primary-foreground/70">Available Balance</p>
           </div>
           <p className="text-3xl md:text-5xl font-bold font-mono count-up">{fmt(balance)}</p>
-          {balance < 0 && totalNegativeBdt > 0 && (
-            <p className="text-base font-bold font-mono text-red-300 mt-1">-{fmtBdt(totalNegativeBdt)}</p>
+          {netBdt !== 0 && (
+            <p className={cn("text-base font-bold font-mono mt-1", netBdt < 0 ? "text-red-300" : "text-emerald-300")}>
+              {netBdt < 0 ? "-" : ""}{fmtBdt(Math.abs(netBdt))}
+            </p>
           )}
         </div>
 
