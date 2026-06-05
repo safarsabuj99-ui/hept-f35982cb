@@ -126,6 +126,9 @@ export function computeBdtDebt(
       120,
     );
     bdt = Math.abs(total) * fallbackRate;
+  }
+
+  return Math.round(bdt * 100) / 100;
 }
 
 /**
@@ -157,7 +160,6 @@ export function computeNetBdt(
     knownSum += bal;
   }
 
-  // Untagged residual = total - sum(known buckets). Convert at highest rate.
   const untagged = Math.round((total - knownSum) * 100) / 100;
   if (untagged !== 0) {
     const fallbackRate = Math.max(
@@ -172,5 +174,3 @@ export function computeNetBdt(
   return Math.round(bdt * 100) / 100;
 }
 
-  return Math.round(bdt * 100) / 100;
-}
