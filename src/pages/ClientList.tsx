@@ -180,7 +180,7 @@ export default function ClientList() {
         const wb = computeWalletBalance(txnsByClient[profile.user_id] ?? []);
         balMap[profile.user_id] = wb.total;
         if (wb.total < 0) {
-          bdtMap[profile.user_id] = computeBdtDebt(profile.pricing_config, wb);
+          bdtMap[profile.user_id] = Math.abs(computeNetBdt(profile.pricing_config, wb));
         }
       }
       setBalances(balMap);
