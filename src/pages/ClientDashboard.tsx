@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useDeepLinkAction } from "@/hooks/useDeepLinkAction";
 import { getPlatformRates } from "@/lib/pricing";
-import { computeWalletBalance, computeBdtDebt } from "@/lib/walletBalance";
+import { computeWalletBalance, computeNetBdt } from "@/lib/walletBalance";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
