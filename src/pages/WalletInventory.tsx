@@ -377,6 +377,38 @@ export default function WalletInventory() {
       toast({ title: "Error", description: "Please enter a valid carry-forward amount", variant: "destructive" });
       return;
     }
+    if (!profile?.org_id) {
+      toast({ title: "Error", description: "Organization not loaded", variant: "destructive" });
+      return;
+    }
+
+    // Guard: a period cannot be closed unless an opening baseline has been established for this org.
+    const SYSTEM_UUID = "00000000-0000-0000-0000-000000000000";
+    const { data: priorBaseline, error: baselineErr } = await supabase
+      .from("usd_inventory_snapshots" as any)
+      .select("snapshot_date, baseline_balance_usd")
+      .eq("org_id", profile.org_id)
+      .neq("created_by", SYSTEM_UUID)
+      .not("baseline_balance_usd", "is", null)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (baselineErr) {
+      toast({ title: "Error", description: baselineErr.message, variant: "destructive" });
+      return;
+    }
+    if (!priorBaseline) {
+      toast({
+        title: "Set opening balance first",
+        description: "You must establish an opening USD balance before closing a period.",
+        variant: "destructive",
+      });
+      setClosePeriodDialogOpen(false);
+      setOpeningBalanceDialogOpen(true);
+      return;
+    }
+
     setSubmitting(true);
     const { error } = await supabase.from("usd_inventory_snapshots" as any).upsert({
       snapshot_date: getDhakaDateString(),
@@ -384,7 +416,7 @@ export default function WalletInventory() {
       baseline_balance_usd: parsedCarry,
       notes: closeNotes || `Period close — Balance: $${parsedCarry.toLocaleString()}`,
       created_by: user?.id,
-      org_id: profile?.org_id || null,
+      org_id: profile.org_id,
     } as any, { onConflict: "snapshot_date,org_id" });
     setSubmitting(false);
     if (error) {
@@ -397,6 +429,7 @@ export default function WalletInventory() {
       refreshSnapshot().then(() => fetchOverview());
     }
   };
+
 
   const previewRate = bdtPaid && effectiveUsd > 0
     ? (Number(bdtPaid) / effectiveUsd).toFixed(2)
