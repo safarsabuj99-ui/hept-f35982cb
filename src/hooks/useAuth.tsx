@@ -254,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    try { localStorage.removeItem(CACHED_ROLE_KEY); } catch {}
     queryClient.clear();
   };
 
