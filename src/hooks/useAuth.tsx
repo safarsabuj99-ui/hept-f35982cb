@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(null);
           setAuthReady(true);
           setLoading(false);
+          try { localStorage.removeItem(CACHED_ROLE_KEY); } catch {}
           // Clear all cached queries on sign out
           queryClient.clear();
           return;
