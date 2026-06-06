@@ -105,6 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const userRole = (data?.role as AppRole) ?? null;
       setRole(userRole);
+      try {
+        if (userRole) localStorage.setItem(CACHED_ROLE_KEY, userRole);
+        else localStorage.removeItem(CACHED_ROLE_KEY);
+      } catch {}
 
       // Check is_active for manager role
       if (userRole === "manager") {
