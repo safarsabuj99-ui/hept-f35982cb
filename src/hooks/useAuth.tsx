@@ -17,21 +17,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const SB_TOKEN_KEY = "sb-hhpiimnvkgmpfnldgdhc-auth-token";
+const CACHED_ROLE_KEY = "hept:cached-role";
+
 /** Detect obviously broken sessions in localStorage */
 function isSessionCorrupted(): boolean {
   try {
-    const raw = localStorage.getItem("sb-hhpiimnvkgmpfnldgdhc-auth-token");
+    const raw = localStorage.getItem(SB_TOKEN_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     const token = parsed?.access_token || parsed?.currentSession?.access_token;
     if (!token) return true;
-    // Check JWT has 3 parts
     const parts = token.split(".");
     if (parts.length !== 3) return true;
-    // Decode payload and check for sub claim
     const payload = JSON.parse(atob(parts[1]));
     if (!payload.sub) return true;
-    // Check if expired (with 60s grace)
     if (payload.exp && payload.exp * 1000 < Date.now() - 60000) return true;
     return false;
   } catch {
@@ -41,18 +41,55 @@ function isSessionCorrupted(): boolean {
 
 function clearCorruptedSession() {
   try {
-    localStorage.removeItem("sb-hhpiimnvkgmpfnldgdhc-auth-token");
+    localStorage.removeItem(SB_TOKEN_KEY);
+    localStorage.removeItem(CACHED_ROLE_KEY);
   } catch {}
 }
 
+/**
+ * Synchronously read the cached Supabase session from localStorage so the
+ * AuthProvider can hydrate `user`/`role` on first render. Eliminates the
+ * full-screen spinner flash on every Vite HMR full-reload in the preview.
+ */
+function readCachedSession(): { user: User; role: AppRole } | null {
+  try {
+    const raw = localStorage.getItem(SB_TOKEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const token = parsed?.access_token || parsed?.currentSession?.access_token;
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    if (!payload?.sub) return null;
+    if (payload.exp && payload.exp * 1000 < Date.now() - 60000) return null;
+
+    const cachedUser = (parsed?.user || parsed?.currentSession?.user || {
+      id: payload.sub,
+      email: payload.email,
+    }) as User;
+
+    let role: AppRole = null;
+    try {
+      const r = localStorage.getItem(CACHED_ROLE_KEY);
+      if (r) role = r as AppRole;
+    } catch {}
+
+    return { user: cachedUser, role };
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const cached = typeof window !== "undefined" ? readCachedSession() : null;
+  const [user, setUser] = useState<User | null>(cached?.user ?? null);
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<AppRole>(null);
-  const [loading, setLoading] = useState(true);
-  const [authReady, setAuthReady] = useState(false);
+  const [role, setRole] = useState<AppRole>(cached?.role ?? null);
+  const [loading, setLoading] = useState(!cached);
+  const [authReady, setAuthReady] = useState(!!cached);
   const roleFetchIdRef = useRef(0);
-  const lastHandledUserIdRef = useRef<string | null>(null);
+  const lastHandledUserIdRef = useRef<string | null>(cached?.user?.id ?? null);
   const queryClient = useQueryClient();
 
   const fetchRole = useCallback(async (userId: string, fetchId: number) => {
@@ -68,6 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const userRole = (data?.role as AppRole) ?? null;
       setRole(userRole);
+      try {
+        if (userRole) localStorage.setItem(CACHED_ROLE_KEY, userRole);
+        else localStorage.removeItem(CACHED_ROLE_KEY);
+      } catch {}
 
       // Check is_active for manager role
       if (userRole === "manager") {
@@ -112,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRole(null);
           setAuthReady(true);
           setLoading(false);
+          try { localStorage.removeItem(CACHED_ROLE_KEY); } catch {}
           // Clear all cached queries on sign out
           queryClient.clear();
           return;
@@ -212,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    try { localStorage.removeItem(CACHED_ROLE_KEY); } catch {}
     queryClient.clear();
   };
 

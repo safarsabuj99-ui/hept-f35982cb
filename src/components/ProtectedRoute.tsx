@@ -53,17 +53,10 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
       });
   }, [user, role]);
 
-  if (!authReady || loading || checkingOrg) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Guard: if auth says "no user" but a Supabase session token still exists in
-  // localStorage, we're in a transient restore window. Show the loader instead
-  // of bouncing to /login (which causes the reload-flash loop).
+  // Only show the full-screen spinner on a true cold start (no cached user
+  // AND no token in localStorage). When a session is hydrated from cache,
+  // render children immediately so HMR full-reloads in the Lovable preview
+  // don't flash the spinner every time.
   if (!user) {
     let hasToken = false;
     try {
@@ -75,7 +68,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
         }
       }
     } catch {}
-    if (hasToken) {
+    if (hasToken || !authReady || loading) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -83,6 +76,17 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
       );
     }
     return <Navigate to="/login" replace />;
+  }
+
+  // User present (cached or live). If the org-status check is still running
+  // on first cold-start (no role known yet), block briefly. Otherwise let it
+  // run silently in the background so HMR reloads stay invisible.
+  if (checkingOrg && !role) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   // Block admin users whose org is in a non-active state
