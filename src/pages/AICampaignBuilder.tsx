@@ -160,18 +160,23 @@ export default function AICampaignBuilder() {
   const approveMutation = useMutation({
     mutationFn: async () => {
       if (!draftId || !draftQ.data) return;
-      const { error } = await supabase.from("ai_campaign_drafts").update({ status: "approved" }).eq("id", draftId);
-      if (error) throw error;
-      await supabase.from("ai_pending_actions").insert({
-        org_id: (draftQ.data as any).org_id,
-        user_id: user!.id,
-        tool_name: "campaign.publish_draft",
-        args: { draft_id: draftId, ad_account_id: draftQ.data.ad_account_id, client_id: draftQ.data.client_id },
-        summary: `Publish AI draft to ${draftQ.data.platform}`,
-      });
+      const { error: upErr } = await supabase.from("ai_campaign_drafts").update({ status: "approved" }).eq("id", draftId);
+      if (upErr) throw upErr;
+      const { data, error } = await supabase.functions.invoke("ai-campaign-publish", { body: { draft_id: draftId } });
+      if (error) throw new Error(error.message || "Publish failed");
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
     },
-    onSuccess: () => { toast.success("Approved & queued for publishing"); qc.invalidateQueries({ queryKey: ["aicb-draft", draftId] }); },
-    onError: (e: any) => toast.error(e.message || "Approval failed"),
+    onSuccess: (data: any) => {
+      const adSetsCount = data?.publish_result?.ad_sets?.length ?? 0;
+      const needsCreative = data?.publish_result?.ads?.length ?? 0;
+      toast.success(
+        `Published to ad account: 1 campaign + ${adSetsCount} ad set${adSetsCount === 1 ? "" : "s"} (paused).` +
+        (needsCreative ? ` ${needsCreative} ad${needsCreative === 1 ? "" : "s"} need creative upload in Ads Manager.` : "")
+      );
+      qc.invalidateQueries({ queryKey: ["aicb-draft", draftId] });
+    },
+    onError: (e: any) => toast.error(e.message || "Publish failed"),
   });
 
   const draft = draftQ.data;
