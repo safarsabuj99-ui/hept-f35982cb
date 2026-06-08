@@ -1,49 +1,54 @@
-# Why the preview keeps "reloading"
+## Why nothing is happening today
 
-What you're seeing is **not a reload loop**. Every time the Lovable AI saves a file, Vite's dev server pushes an HMR update to the preview. For most of our files (AuthProvider, hooks, App.tsx imports, etc.) React Fast Refresh can't preserve state, so Vite does a **full page reload of the preview iframe**. That part is normal Vite behavior — it cannot be turned off without breaking hot reload.
+When you click **Approve & queue**, the app does two things:
 
-What makes it *look like* a reload loop is what happens after each reload:
+1. Sets the draft's `status = "approved"` in `ai_campaign_drafts`.
+2. Inserts a row into `ai_pending_actions` with `tool_name = "campaign.publish_draft"`.
 
-1. `AuthProvider` starts with `loading: true`, `authReady: false`.
-2. `ProtectedRoute` sees `!authReady` → renders the **full-screen `Loader2` spinner** (the blue circle you see in the recording).
-3. It waits for `supabase.auth.getSession()` + role fetch (~500-1500 ms on mobile).
-4. Then the dashboard reappears.
+That's it. The "queue" never runs. When that pending action is approved through Nova, `supabase/functions/ai-action-execute/index.ts` looks at `tool_name`, doesn't find a `campaign.publish_draft` case in its `switch`, falls through to the **default branch**, and just returns `{ ok: true, handoff: true, ... }` — which means "approved and filed, copy-paste from here". No call to Meta or TikTok is ever made, so nothing appears in the ad account. There is no `ai-campaign-publish` edge function in the project at all.
 
-So every AI edit = 1-2 seconds of full-screen blue spinner. The published site doesn't show this because no HMR fires there. That's why your answers — "only in Lovable preview, only while AI is editing" — match perfectly.
+We need to actually publish the draft tree to the platform.
 
-## Fix: hydrate auth synchronously, never show the full-screen spinner if a session already exists
+## Plan
 
-We already store the Supabase session in `localStorage`. On mount we can read it synchronously and treat the user as authenticated immediately, then verify in the background. The spinner only shows on a true cold start with no token.
+### 1. New edge function `ai-campaign-publish`
+Path: `supabase/functions/ai-campaign-publish/index.ts`
 
-### Changes
+Input: `{ draft_id }` with the caller's JWT.
 
-**1. `src/hooks/useAuth.tsx`**
-- Add a synchronous `readCachedSession()` helper that parses `sb-hhpiimnvkgmpfnldgdhc-auth-token` from `localStorage` (we already do this in `isSessionCorrupted`) and returns `{ user, expiresAt }` when the JWT is well-formed and unexpired.
-- Initialize state from it:
-  - `user` = cached user (or `null`)
-  - `session` = `null` (real session arrives async, that's fine — nothing reads `session` synchronously)
-  - `authReady` = `true` when a cached user exists, else `false`
-  - `loading` = same logic
-- Also cache `role` in `localStorage` (`hept:cached-role`) whenever `fetchRole` succeeds, and seed `role` from it on init. Role is read synchronously by `ProtectedRoute` to pick the home route.
-- Background validation (`getSession()` + `fetchRole`) still runs and overwrites the cached values if they changed. The `onAuthStateChange` listener stays as-is.
-- On `SIGNED_OUT`, clear the cached role key.
+Flow:
+- Load the draft (must be `status in ('ready','approved')` and have `draft_json`).
+- Load the linked `ad_accounts` row → get `platform_name`, `platform_account_id`, decrypted `access_token`.
+- Set draft `status = 'publishing'`, clear `error`.
+- Build the platform tree from `draft_json` (campaign → ad_sets → ads) and create each node via the platform API in order, capturing the returned platform IDs.
+  - **Meta (v21.0)**: `POST /act_{account_id}/campaigns`, then `/adsets`, then `/ads` (with attached `adcreative`). Daily budget converted to account currency minor units. Status created as `PAUSED` so nothing spends accidentally on first publish — the user can flip it on inside the platform or from our Campaigns Hub.
+  - **TikTok**: route through the existing US Cloudflare Worker proxy (see memory `architecture/tiktok-proxy-egress-strategy`), endpoints `campaign/create/`, `adgroup/create/`, `ad/create/`.
+- On success: update draft to `status='published'`, store the returned IDs back into `draft_json.publish_result` and into a new row of `ai_campaign_publish_logs` (table already exists).
+- On any failure: roll the draft to `status='failed'`, write the error to `draft.error`, and best-effort delete already-created nodes in reverse order so the ad account isn't left with orphans.
 
-**2. `src/components/ProtectedRoute.tsx`**
-- Replace the `!authReady || loading || checkingOrg` full-screen spinner with a render-children-optimistically pattern: if `user` is already present (from cache), render children immediately and let `checkingOrg` run silently in the background. Only show the full-screen spinner when there is **no cached user AND no token in localStorage** (true cold start).
-- `checkingOrg` becomes a non-blocking effect — it still gates the suspended/pending-payment screens, but it no longer flashes the spinner on every HMR reload.
+CORS + JWT validation handled the standard way (mirror `ai-campaign-generate`). No `config.toml` change needed (default `verify_jwt = true` is fine here).
 
-**3. `src/App.tsx` — `SmartHome`**
-- Same treatment: if a cached user+role exists synchronously, redirect to their role home immediately instead of rendering `<PageLoader />`.
+### 2. Wire the Approve button to the real publisher
+File: `src/pages/AICampaignBuilder.tsx` (`approveMutation`, ~line 160-175)
 
-### Out of scope
-- No changes to Vite config, HMR, or the service worker — the preview will still reload on each save, but it will be **invisible** (the dashboard stays on screen during the reload, then re-renders with the same data thanks to react-query cache).
-- No changes to data fetching, RLS, or any UI other than the auth gate.
-- Published-site behavior is unchanged (still cold-loads with spinner once on first visit, since the cache is empty then too — which is the correct UX).
+- Keep the `status = 'approved'` update.
+- Replace the `ai_pending_actions` insert with a direct `supabase.functions.invoke("ai-campaign-publish", { body: { draft_id } })` call.
+- On success show `"Publishing to {platform}…"`, then poll/realtime the draft row until `status` becomes `published` or `failed` and surface the result (link to the new campaign in the Campaigns Hub on success, or the error message on failure).
+- Disable the button while `status in ('publishing','published')`.
 
-### Why this is safe
-- The cached user is only used for **UI gating**. Every Supabase query still re-validates the JWT on the server, so a stale/forged cache can't bypass RLS — it just lets the wrong UI flash for a few hundred ms before `getSession()` corrects it.
-- If the cached JWT is expired or malformed, `isSessionCorrupted()` already wipes it (existing code), so we fall back to the cold-start spinner.
-- Role caching is invalidated the moment `fetchRole` returns a different value, and cleared on `SIGNED_OUT`.
+### 3. Stop the dead-end Nova handoff for this tool
+File: `supabase/functions/ai-action-execute/index.ts`
 
-### Expected result
-After AI saves a file: the preview iframe still reloads under the hood, but you'll see the dashboard the entire time — no blue spinner, no blank screen, no perceived "reload".
+- Remove `"campaign.publish_draft"` references from the default handoff path (it's no longer used). No other behavior changes here.
+
+### 4. Verification
+- Approve a tiny test draft against a real Meta ad account → confirm a PAUSED campaign + ad set + ad appear in Ads Manager and the draft flips to `published` with the new IDs visible in `ai_campaign_publish_logs`.
+- Force-fail (e.g. invalid budget) → confirm draft goes to `failed`, error surfaces in the UI, and no orphan objects remain in the ad account.
+
+## Out of scope
+- No schema migrations — `ai_campaign_drafts`, `ai_campaign_publish_logs`, and `ad_accounts` already have the fields we need.
+- No change to research / generate / refine stages.
+- Creatives are published with the brief + provided URL only; image/video asset upload from the brief stays manual for now.
+
+## Open question
+Default initial status of newly created campaigns: **PAUSED** (safe — recommended) or **ACTIVE** (instant spend)? I'll go with PAUSED unless you say otherwise.

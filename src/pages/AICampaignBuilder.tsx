@@ -160,18 +160,23 @@ export default function AICampaignBuilder() {
   const approveMutation = useMutation({
     mutationFn: async () => {
       if (!draftId || !draftQ.data) return;
-      const { error } = await supabase.from("ai_campaign_drafts").update({ status: "approved" }).eq("id", draftId);
-      if (error) throw error;
-      await supabase.from("ai_pending_actions").insert({
-        org_id: (draftQ.data as any).org_id,
-        user_id: user!.id,
-        tool_name: "campaign.publish_draft",
-        args: { draft_id: draftId, ad_account_id: draftQ.data.ad_account_id, client_id: draftQ.data.client_id },
-        summary: `Publish AI draft to ${draftQ.data.platform}`,
-      });
+      const { error: upErr } = await supabase.from("ai_campaign_drafts").update({ status: "approved" }).eq("id", draftId);
+      if (upErr) throw upErr;
+      const { data, error } = await supabase.functions.invoke("ai-campaign-publish", { body: { draft_id: draftId } });
+      if (error) throw new Error(error.message || "Publish failed");
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
     },
-    onSuccess: () => { toast.success("Approved & queued for publishing"); qc.invalidateQueries({ queryKey: ["aicb-draft", draftId] }); },
-    onError: (e: any) => toast.error(e.message || "Approval failed"),
+    onSuccess: (data: any) => {
+      const adSetsCount = data?.publish_result?.ad_sets?.length ?? 0;
+      const needsCreative = data?.publish_result?.ads?.length ?? 0;
+      toast.success(
+        `Published to ad account: 1 campaign + ${adSetsCount} ad set${adSetsCount === 1 ? "" : "s"} (paused).` +
+        (needsCreative ? ` ${needsCreative} ad${needsCreative === 1 ? "" : "s"} need creative upload in Ads Manager.` : "")
+      );
+      qc.invalidateQueries({ queryKey: ["aicb-draft", draftId] });
+    },
+    onError: (e: any) => toast.error(e.message || "Publish failed"),
   });
 
   const draft = draftQ.data;
@@ -602,9 +607,9 @@ function DraftTreePanel({ draft, working, onRegenerate, onApprove, approving }: 
           <Button size="sm" variant="outline" onClick={onRegenerate} disabled={working}>
             <RefreshCw className={`h-3 w-3 mr-1 ${working ? "animate-spin" : ""}`} /> Re-run agent
           </Button>
-          <Button size="sm" onClick={onApprove} disabled={approving || draft.status === "approved" || draft.status === "published"} className="gap-1">
-            {approving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-            {draft.status === "approved" || draft.status === "published" ? "Approved" : "Approve & queue"}
+          <Button size="sm" onClick={onApprove} disabled={approving || ["publishing","published"].includes(draft.status)} className="gap-1">
+            {approving || draft.status === "publishing" ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+            {draft.status === "published" ? "Published" : draft.status === "publishing" ? "Publishing…" : "Approve & publish"}
           </Button>
         </div>
       </div>
@@ -630,9 +635,24 @@ function DraftTreePanel({ draft, working, onRegenerate, onApprove, approving }: 
        platform === "google" ? <GoogleTree tree={tree} /> :
        <MetaTree tree={tree} />}
 
-      {draft.status === "approved" && (
+      {draft.status === "published" && (
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-sm flex items-start gap-2">
+          <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <div className="font-medium">Published to ad account (paused).</div>
+            <div className="text-xs opacity-80 mt-0.5">Open Ads Manager to upload creatives for each ad, then unpause.</div>
+          </div>
+        </div>
+      )}
+      {draft.status === "publishing" && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 text-sm flex items-center gap-2">
-          <Send className="h-4 w-4" /> Queued for publishing.
+          <Loader2 className="h-4 w-4 animate-spin" /> Creating campaign + ad sets in your ad account…
+        </div>
+      )}
+      {draft.status === "failed" && draft.error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+          <div className="font-medium mb-0.5">Publish failed</div>
+          <div className="text-xs opacity-90 break-words">{draft.error}</div>
         </div>
       )}
     </Card>
