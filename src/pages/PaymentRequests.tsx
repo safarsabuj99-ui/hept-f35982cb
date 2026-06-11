@@ -275,7 +275,12 @@ export default function PaymentRequests() {
         setSelectedRateKey(matchingKey ?? "default");
       }
 
-      setAgencyAccounts((accRes.data as any[]) ?? []);
+      const accounts = (accRes.data as any[]) ?? [];
+      setAgencyAccounts(accounts);
+      // Validate pre-selected account still exists & active; otherwise clear silently
+      if (request.received_in_account_id && !accounts.some(a => a.id === request.received_in_account_id)) {
+        setSelectedAccountId("");
+      }
       setRateLoading(false);
     }
   };
