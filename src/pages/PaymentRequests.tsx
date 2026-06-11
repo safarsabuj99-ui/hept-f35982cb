@@ -936,19 +936,31 @@ export default function PaymentRequests() {
                 </div>
               )}
 
-              {confirmModal.action === "approved" && agencyAccounts.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Received In Account</Label>
-                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                    <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
-                    <SelectContent>
-                      {agencyAccounts.map(a => (
-                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.type})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              {confirmModal.action === "approved" && agencyAccounts.length > 0 && (() => {
+                const submittedId = confirmModal.request?.received_in_account_id ?? null;
+                const submittedExists = !!submittedId && agencyAccounts.some(a => a.id === submittedId);
+                const submittedMissing = !!submittedId && !submittedExists;
+                const isPrefilled = submittedExists && selectedAccountId === submittedId;
+                return (
+                  <div className="space-y-2">
+                    <Label>Received In Account</Label>
+                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                      <SelectTrigger><SelectValue placeholder="Select account (optional)" /></SelectTrigger>
+                      <SelectContent>
+                        {agencyAccounts.map(a => (
+                          <SelectItem key={a.id} value={a.id}>{a.name} ({a.type})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {isPrefilled && (
+                      <p className="text-xs text-muted-foreground">Pre-filled from client's submitted account — you can override.</p>
+                    )}
+                    {submittedMissing && (
+                      <p className="text-xs text-amber-500">Client's selected account is no longer available — please choose one.</p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="space-y-2">
                 <Label>Admin Note (optional)</Label>
