@@ -234,7 +234,7 @@ export default function PaymentRequests() {
     setAdminNote("");
     setRateOptions([]);
     setSelectedRateKey("");
-    setSelectedAccountId("");
+    setSelectedAccountId(request.received_in_account_id ?? "");
     setOverriddenPlatform(request.platform || "");
     setPerPlatformRates({});
     setMfsFeePercent(isMfsMethod(request.payment_method) ? 0.85 : 0);
