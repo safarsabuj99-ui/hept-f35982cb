@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
     await supabase.from("sync_logs").delete().lt("created_at", thirtyDaysAgo);
     await supabase.from("sync_jobs").delete().in("status", ["done", "failed"]).lt("completed_at", sevenDaysAgo);
 
-    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}, skipped silent: ${skippedSilent}, heartbeat: ${heartbeatRuns}), queue depth: ${queueDepth ?? 0}`);
+    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}, skipped silent: ${skippedSilent}, heartbeat: ${heartbeatRuns}, backlog: ${backlogEnqueued}), queue depth: ${queueDepth ?? 0}`);
 
     return new Response(
       JSON.stringify({
@@ -333,10 +333,12 @@ Deno.serve(async (req) => {
         full_accounts: fullAccounts,
         skipped_silent: skippedSilent,
         heartbeat_runs: heartbeatRuns,
+        backlog_enqueued: backlogEnqueued,
         enqueued: totalEnqueued,
         queue_depth: queueDepth ?? 0,
         timestamp: new Date().toISOString(),
       }),
+
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
