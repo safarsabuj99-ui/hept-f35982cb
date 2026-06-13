@@ -173,23 +173,22 @@ Deno.serve(async (req) => {
       } else {
         const isPermanent = isPermanentError(jobErrorCode);
         const exhausted = job.attempts >= job.max_attempts;
-        const isTimeoutOnChunk = jobErrorCode === "cpu_timeout" && isChunked;
+        const isTransientChunkFailure =
+          isChunked && (jobErrorCode === "cpu_timeout" || jobErrorCode === "proxy_upstream");
 
-        // SMART RETRY: timeout on chunked job → split into smaller sub-chunks
-        if (isTimeoutOnChunk && !exhausted) {
+        // SMART RETRY: timeout / proxy failure on chunked job → split into smaller sub-chunks
+        if (isTransientChunkFailure && !exhausted) {
           const subChunks = shrinkWindow(job.date_from!, job.date_to!);
           if (subChunks && subChunks.length > 1) {
-            console.log(`🔪 Splitting timed-out chunk ${chunkLabel} into ${subChunks.length} sub-chunks`);
-            // Mark this chunk done (its work will be redistributed)
+            console.log(`🔪 Splitting failed chunk ${chunkLabel} (${jobErrorCode}) into ${subChunks.length} sub-chunks`);
             await supabase.from("sync_jobs").update({
               status: "done",
               rows_synced: 0,
               completed_at: new Date().toISOString(),
-              last_error: `Auto-split into ${subChunks.length} smaller chunks`,
+              last_error: `Auto-split into ${subChunks.length} smaller chunks (${jobErrorCode})`,
               error_code: "auto_split",
             }).eq("id", job.id);
 
-            // Insert sub-chunks as siblings under the same parent
             const subRows = subChunks.map((c, idx) => ({
               ad_account_id: job.ad_account_id,
               function_name: job.function_name,
@@ -204,7 +203,6 @@ Deno.serve(async (req) => {
             }));
             await supabase.from("sync_jobs").insert(subRows);
 
-            // Update sibling chunk_total so parent completion math stays correct
             if (job.parent_job_id) {
               await supabase.from("sync_jobs").update({
                 chunk_total: (job.chunk_total ?? 0) + subChunks.length,
@@ -213,7 +211,45 @@ Deno.serve(async (req) => {
             failed++;
             continue;
           }
+
+          // Can't shrink further (already 1-day) → spill each day into deep_dive_backlog
+          // so the orchestrator picks them up later with escalating backoff.
+          if (job.function_name === "sync-deep-dive" && job.date_from && job.date_to) {
+            const start = new Date(job.date_from + "T00:00:00Z");
+            const end = new Date(job.date_to + "T00:00:00Z");
+            const days: string[] = [];
+            for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+              days.push(d.toISOString().split("T")[0]);
+            }
+            if (days.length > 0) {
+              // Compute backoff based on existing attempts (look up first day)
+              const { data: existing } = await supabase
+                .from("deep_dive_backlog")
+                .select("attempts")
+                .eq("ad_account_id", job.ad_account_id)
+                .in("data_date", days);
+              const maxAttempts = Math.max(0, ...((existing ?? []).map((r: any) => r.attempts)));
+              const backoffMin = Math.min(360, Math.pow(5, Math.min(maxAttempts, 4))); // 1, 5, 25, 125, 360 min
+              const nextRetryAt = new Date(Date.now() + backoffMin * 60_000).toISOString();
+
+              const backlogRows = days.map(date => ({
+                ad_account_id: job.ad_account_id,
+                org_id: job.org_id,
+                data_date: date,
+                attempts: maxAttempts + 1,
+                last_error: jobError.substring(0, 500),
+                last_error_code: jobErrorCode,
+                next_retry_at: nextRetryAt,
+              }));
+              // Upsert: incrementing attempts and updating last error/next retry
+              await supabase.from("deep_dive_backlog").upsert(backlogRows, {
+                onConflict: "ad_account_id,data_date",
+              });
+              console.log(`📥 Spilled ${days.length} day(s) into deep_dive_backlog for ${job.ad_account_id} (next retry in ${backoffMin}m)`);
+            }
+          }
         }
+
 
         const finalStatus = (isPermanent || exhausted) ? "failed" : "pending";
 
