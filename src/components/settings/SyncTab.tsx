@@ -14,6 +14,9 @@ interface QueueStats {
   failed_24h: number;
   done_24h: number;
   avg_ms: number;
+  chunks_in_flight: number;
+  backlog_total: number;
+  auto_shrunk_24h: number;
 }
 
 const FAST_LANE_FNS = new Set(["sync-fast-lane"]);
