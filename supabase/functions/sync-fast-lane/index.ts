@@ -893,6 +893,11 @@ Deno.serve(async (req) => {
           last_fast_lane_at: nowIso,
           last_fast_lane_rows: rows,
           consecutive_zero_runs: shouldReset ? 0 : prevZero + 1,
+          // Clear stale failure state once the lane succeeds for this account.
+          // Stops the UI from showing "api_error" after the engine has recovered.
+          ...(shouldReset
+            ? { consecutive_failures: 0, last_error: null, last_error_code: null }
+            : {}),
           updated_at: nowIso,
         };
       });
