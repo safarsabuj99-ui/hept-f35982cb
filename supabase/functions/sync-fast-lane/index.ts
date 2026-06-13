@@ -552,13 +552,15 @@ Deno.serve(async (req) => {
           const dateChunks = generateDateChunks(startDateStr, windowEndStr);
           console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${windowEndStr}], base=${tiktokBase}`);
           let allTiktokRows: any[] = [];
-          let tiktokFailed = false;
+          const failedChunks: Array<{ start: string; end: string; reason: string }> = [];
+          const MAX_PAGES_PER_CHUNK = 8;
 
           for (const chunk of dateChunks) {
             // Pagination loop for each chunk
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
+            let chunkFailed: string | null = null;
 
             do {
               let cJson: any = null;
@@ -584,8 +586,8 @@ Deno.serve(async (req) => {
                 );
 
                 cJson = bcRes;
-                if (cJson.code !== 0) {
-                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                if (cJson?.code !== 0) {
+                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson?.code}] ${cJson?.message}. Falling back.`);
                   cJson = null;
                 }
               }
@@ -609,10 +611,9 @@ Deno.serve(async (req) => {
                 );
 
                 cJson = directRes;
-                if (cJson.code !== 0) {
+                if (cJson?.code !== 0) {
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
-                  errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
-                  tiktokFailed = true;
+                  chunkFailed = `[code ${cJson?.code ?? "?"}] ${cJson?.message ?? "no response"}`;
                   break;
                 }
               }
@@ -622,13 +623,65 @@ Deno.serve(async (req) => {
               chunkRows += pageRows.length;
               totalPages = cJson.data?.page_info?.total_page || 1;
               page++;
+
+              // Page cap: bail and spill remainder to backlog
+              if (page > MAX_PAGES_PER_CHUNK && page <= totalPages) {
+                chunkFailed = `page cap exceeded (${MAX_PAGES_PER_CHUNK}/${totalPages}) — splitting`;
+                break;
+              }
             } while (page <= totalPages);
 
-            if (tiktokFailed) break;
+            if (chunkFailed) {
+              failedChunks.push({ start: chunk.start, end: chunk.end, reason: chunkFailed });
+              errors.push(`TikTok ${account.ad_account_id} chunk ${chunk.start}-${chunk.end}: ${chunkFailed}`);
+              continue; // PER-CHUNK ISOLATION: keep going for remaining chunks
+            }
             console.log(`TikTok fast-lane chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
           }
 
-          if (tiktokFailed) continue;
+          // Spill failed chunks into the shared backlog so the orchestrator drains them with backoff.
+          if (failedChunks.length > 0) {
+            const days: string[] = [];
+            for (const fc of failedChunks) {
+              const s = new Date(fc.start + "T00:00:00Z");
+              const e = new Date(fc.end + "T00:00:00Z");
+              for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
+                days.push(d.toISOString().split("T")[0]);
+              }
+            }
+            if (days.length > 0) {
+              const { data: existing } = await (supabase
+                .from("deep_dive_backlog") as any)
+                .select("attempts, data_date")
+                .eq("ad_account_id", account.id)
+                .eq("lane", "fast")
+                .in("data_date", days);
+              const attemptsByDate = new Map<string, number>(
+                (existing ?? []).map((r: any) => [r.data_date, r.attempts ?? 0]),
+              );
+              const reasonText = failedChunks[0].reason.slice(0, 200);
+              const backlogRows = days.map(date => {
+                const prev = attemptsByDate.get(date) ?? 0;
+                const next = prev + 1;
+                const backoffMin = Math.min(360, Math.pow(5, Math.min(prev, 4)));
+                return {
+                  ad_account_id: account.id,
+                  org_id: account.org_id,
+                  data_date: date,
+                  attempts: next,
+                  last_error: reasonText,
+                  last_error_code: "fast_lane_chunk_failed",
+                  next_retry_at: new Date(Date.now() + backoffMin * 60_000).toISOString(),
+                  lane: "fast",
+                };
+              });
+              await (supabase.from("deep_dive_backlog") as any).upsert(backlogRows, {
+                onConflict: "ad_account_id,data_date",
+              });
+              console.log(`📥 Fast-Lane spill: ${days.length} day(s) → backlog for ${account.id}`);
+            }
+          }
+
           const rows = allTiktokRows;
           const spendRecords: any[] = [];
 
