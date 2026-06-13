@@ -384,7 +384,7 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
                   ? `Engine auto-split ${acc.splits_24h} window${acc.splits_24h === 1 ? "" : "s"} in the last 24h and recovered without manual action.`
                   : acc.current_chunk_days && acc.current_chunk_days <= 3
                   ? `Heavy account — engine is using ${acc.current_chunk_days}-day windows to stay within timeouts.`
-                  : `Healthy — engine is running at ${acc.current_chunk_days ?? 25}-day windows. No backlog.`}
+                  : `Healthy — engine is running at ${acc.current_chunk_days ?? 10}-day windows. No backlog.`}
               </p>
             )}
           </div>
