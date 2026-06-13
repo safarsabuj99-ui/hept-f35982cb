@@ -16,18 +16,39 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+/** Fetch TikTok API with retry on transient errors (41000 geo, 5xx, 546, empty bodies, JSON parse). */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, { headers });
-    const json = await res.json();
-    if (json.code === 41000 && attempt < maxRetries) {
-      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
-      await new Promise(r => setTimeout(r, 2000));
-      continue;
+    try {
+      const res = await fetch(url, { headers });
+      const status = res.status;
+      const text = await res.text();
+      if (status >= 500 || status === 546 || !text || text.trim() === "") {
+        lastErr = { code: -1, message: `transient: HTTP ${status} body=${(text || "").slice(0, 60)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+        return lastErr;
+      }
+      let json: any;
+      try { json = JSON.parse(text); }
+      catch (e) {
+        lastErr = { code: -1, message: `JSON parse failed: ${String(e).slice(0, 80)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+        return lastErr;
+      }
+      if (json.code === 41000 && attempt < maxRetries) {
+        console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return json;
+    } catch (err: any) {
+      lastErr = { code: -1, message: err?.message || String(err) };
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+      return lastErr;
     }
-    return json;
   }
+  return lastErr ?? { code: -1, message: "unknown transient failure" };
 }
 
 /** Split a date range into 30-day chunks for TikTok API compatibility */
