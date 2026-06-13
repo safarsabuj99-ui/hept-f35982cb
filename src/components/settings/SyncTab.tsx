@@ -5,7 +5,7 @@ import { SyncAccountsRail, AccountProgress } from "./sync/SyncAccountsRail";
 import { SyncControlsAccordion } from "./sync/SyncControlsAccordion";
 import { FailedJob } from "./sync/SyncErrorPanel";
 import { SyncHealthMatrix } from "./sync/SyncHealthMatrix";
-import { AccountHealth } from "./sync/SyncHealthRow";
+import { AccountHealth, BacklogEntry } from "./sync/SyncHealthRow";
 import { computeLaneHealth, summarizeIssue, computeActivitySignal, LaneJobStats } from "./sync/healthScore";
 
 interface QueueStats {
