@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const BATCH_SIZE = 1; // 1 job per worker — sync-deep-dive is heavy
 const HARD_TIMEOUT_MS = 140000; // exit cleanly under 150s wall-clock limit
-const PER_JOB_TIMEOUT_MS = 90000; // chunk-sized jobs finish well under this
+const PER_JOB_TIMEOUT_FAST_MS = 90000;
+const PER_JOB_TIMEOUT_DEEP_MS = 120000; // deep-dive needs more headroom for heavy TikTok windows
 
 function classifyError(errorMsg: string, errorCode?: string): string {
   if (!errorMsg) return "unknown";
@@ -16,9 +17,19 @@ function classifyError(errorMsg: string, errorCode?: string): string {
   if (errorCode === "token_expired" || msg.includes("error 190") || msg.includes("40001") || (msg.includes("token") && msg.includes("expir"))) return "token_expired";
   if (errorCode === "geo_blocked" || msg.includes("41000") || msg.includes("banned country")) return "geo_blocked";
   if (errorCode === "rate_limited" || msg.includes("429") || msg.includes("rate limit")) return "rate_limited";
-  if (msg.includes("cpu time exceeded") || msg.includes("timeout") || msg.includes("aborted")) return "cpu_timeout";
+  // Cloudflare/TikTok proxy upstream failures (transient)
+  if (
+    errorCode === "proxy_upstream" ||
+    msg.includes("http 546") ||
+    msg.includes("status 546") ||
+    msg.includes("unexpected end of json input") ||
+    msg.includes("empty body") ||
+    msg.includes("upstream") && msg.includes("proxy")
+  ) return "proxy_upstream";
+  if (msg.includes("cpu time exceeded") || msg.includes("timeout") || msg.includes("aborted") || msg.includes("signal")) return "cpu_timeout";
   return errorCode || "api_error";
 }
+
 
 function isPermanentError(code: string): boolean {
   return code === "token_expired" || code === "geo_blocked";
@@ -98,9 +109,11 @@ Deno.serve(async (req) => {
       const isChunked = job.chunk_strategy === "chunked" && job.date_from && job.date_to;
       const chunkLabel = isChunked ? ` [${job.date_from}→${job.date_to} #${job.chunk_index! + 1}/${job.chunk_total}]` : "";
 
+      const perJobTimeoutMs = job.function_name === "sync-deep-dive" ? PER_JOB_TIMEOUT_DEEP_MS : PER_JOB_TIMEOUT_FAST_MS;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), PER_JOB_TIMEOUT_MS);
+        const timeout = setTimeout(() => controller.abort(), perJobTimeoutMs);
+
 
         const requestBody: any = { ad_account_ids: [job.ad_account_id] };
         if (isChunked) {
@@ -157,26 +170,36 @@ Deno.serve(async (req) => {
 
         // Check parent completion (also updates account stats)
         await supabase.rpc("mark_parent_complete", { p_job_id: job.id });
+
+        // Clear any backlog days now covered by this successful deep-dive chunk
+        if (job.function_name === "sync-deep-dive" && job.date_from && job.date_to) {
+          await supabase
+            .from("deep_dive_backlog")
+            .delete()
+            .eq("ad_account_id", job.ad_account_id)
+            .gte("data_date", job.date_from)
+            .lte("data_date", job.date_to);
+        }
+
       } else {
         const isPermanent = isPermanentError(jobErrorCode);
         const exhausted = job.attempts >= job.max_attempts;
-        const isTimeoutOnChunk = jobErrorCode === "cpu_timeout" && isChunked;
+        const isTransientChunkFailure =
+          isChunked && (jobErrorCode === "cpu_timeout" || jobErrorCode === "proxy_upstream");
 
-        // SMART RETRY: timeout on chunked job → split into smaller sub-chunks
-        if (isTimeoutOnChunk && !exhausted) {
+        // SMART RETRY: timeout / proxy failure on chunked job → split into smaller sub-chunks
+        if (isTransientChunkFailure && !exhausted) {
           const subChunks = shrinkWindow(job.date_from!, job.date_to!);
           if (subChunks && subChunks.length > 1) {
-            console.log(`🔪 Splitting timed-out chunk ${chunkLabel} into ${subChunks.length} sub-chunks`);
-            // Mark this chunk done (its work will be redistributed)
+            console.log(`🔪 Splitting failed chunk ${chunkLabel} (${jobErrorCode}) into ${subChunks.length} sub-chunks`);
             await supabase.from("sync_jobs").update({
               status: "done",
               rows_synced: 0,
               completed_at: new Date().toISOString(),
-              last_error: `Auto-split into ${subChunks.length} smaller chunks`,
+              last_error: `Auto-split into ${subChunks.length} smaller chunks (${jobErrorCode})`,
               error_code: "auto_split",
             }).eq("id", job.id);
 
-            // Insert sub-chunks as siblings under the same parent
             const subRows = subChunks.map((c, idx) => ({
               ad_account_id: job.ad_account_id,
               function_name: job.function_name,
@@ -191,7 +214,6 @@ Deno.serve(async (req) => {
             }));
             await supabase.from("sync_jobs").insert(subRows);
 
-            // Update sibling chunk_total so parent completion math stays correct
             if (job.parent_job_id) {
               await supabase.from("sync_jobs").update({
                 chunk_total: (job.chunk_total ?? 0) + subChunks.length,
@@ -200,7 +222,45 @@ Deno.serve(async (req) => {
             failed++;
             continue;
           }
+
+          // Can't shrink further (already 1-day) → spill each day into deep_dive_backlog
+          // so the orchestrator picks them up later with escalating backoff.
+          if (job.function_name === "sync-deep-dive" && job.date_from && job.date_to) {
+            const start = new Date(job.date_from + "T00:00:00Z");
+            const end = new Date(job.date_to + "T00:00:00Z");
+            const days: string[] = [];
+            for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+              days.push(d.toISOString().split("T")[0]);
+            }
+            if (days.length > 0) {
+              // Compute backoff based on existing attempts (look up first day)
+              const { data: existing } = await supabase
+                .from("deep_dive_backlog")
+                .select("attempts")
+                .eq("ad_account_id", job.ad_account_id)
+                .in("data_date", days);
+              const maxAttempts = Math.max(0, ...((existing ?? []).map((r: any) => r.attempts)));
+              const backoffMin = Math.min(360, Math.pow(5, Math.min(maxAttempts, 4))); // 1, 5, 25, 125, 360 min
+              const nextRetryAt = new Date(Date.now() + backoffMin * 60_000).toISOString();
+
+              const backlogRows = days.map(date => ({
+                ad_account_id: job.ad_account_id,
+                org_id: job.org_id,
+                data_date: date,
+                attempts: maxAttempts + 1,
+                last_error: jobError.substring(0, 500),
+                last_error_code: jobErrorCode,
+                next_retry_at: nextRetryAt,
+              }));
+              // Upsert: incrementing attempts and updating last error/next retry
+              await supabase.from("deep_dive_backlog").upsert(backlogRows, {
+                onConflict: "ad_account_id,data_date",
+              });
+              console.log(`📥 Spilled ${days.length} day(s) into deep_dive_backlog for ${job.ad_account_id} (next retry in ${backoffMin}m)`);
+            }
+          }
         }
+
 
         const finalStatus = (isPermanent || exhausted) ? "failed" : "pending";
 

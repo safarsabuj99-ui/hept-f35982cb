@@ -16,19 +16,54 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+/** Fetch TikTok API with retry on transient errors (41000 geo, 546 proxy upstream, empty body) */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, { headers });
-    const json = await res.json();
-    if (json.code === 41000 && attempt < maxRetries) {
-      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
-      await new Promise(r => setTimeout(r, 2000));
-      continue;
+    try {
+      const res = await fetch(url, { headers });
+      // 546 = Cloudflare worker upstream error; 5xx generally retryable
+      if (res.status === 546 || (res.status >= 500 && res.status < 600)) {
+        const txt = await res.text().catch(() => "");
+        lastErr = { code: -1 * res.status, message: `proxy_upstream HTTP ${res.status}: ${txt.slice(0, 200) || "empty body"}` };
+        if (attempt < maxRetries) {
+          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        return lastErr;
+      }
+      const bodyText = await res.text();
+      if (!bodyText || bodyText.trim() === "") {
+        lastErr = { code: -999, message: "proxy_upstream empty body" };
+        if (attempt < maxRetries) {
+          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        return lastErr;
+      }
+      let json: any;
+      try { json = JSON.parse(bodyText); } catch {
+        lastErr = { code: -998, message: `proxy_upstream invalid JSON: ${bodyText.slice(0, 200)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+        return lastErr;
+      }
+      if (json.code === 41000 && attempt < maxRetries) {
+        console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return json;
+    } catch (e: any) {
+      lastErr = { code: -997, message: `proxy_upstream fetch failed: ${e.message}` };
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      return lastErr;
     }
-    return json;
   }
+  return lastErr ?? { code: -1, message: "unknown" };
 }
+
 
 /** Split a date range into 30-day chunks for TikTok API compatibility */
 function generateDateChunks(startDate: string, endDate: string, maxDays = 30): Array<{start: string, end: string}> {
@@ -806,8 +841,8 @@ Deno.serve(async (req) => {
           let allTiktokRows: any[] = [];
           let tiktokFailed = false;
 
+          const MAX_PAGES = 8;
           for (const chunk of dateChunks) {
-            // Pagination loop for each chunk
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
@@ -865,7 +900,20 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
 
                 cJson = directRes;
                 if (cJson.code !== 0) {
+                  // Negative codes from tiktokFetchWithRetry indicate proxy/transport failures (retryable)
+                  const isProxyErr = typeof cJson.code === "number" && cJson.code < 0;
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
+                  if (isProxyErr) {
+                    // Bubble up as a structured failure so the worker classifies as proxy_upstream
+                    return new Response(
+                      JSON.stringify({
+                        ok: false,
+                        error: `TikTok proxy_upstream ${cJson.message}`,
+                        error_code: "proxy_upstream",
+                      }),
+                      { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                    );
+                  }
                   errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
                   tiktokFailed = true;
                   break;
@@ -877,11 +925,23 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               chunkRows += pageRows.length;
               totalPages = cJson.data?.page_info?.total_page || 1;
               page++;
-            } while (page <= totalPages);
+            } while (page <= totalPages && page <= MAX_PAGES);
 
             if (tiktokFailed) break;
+            if (page > MAX_PAGES && totalPages > MAX_PAGES) {
+              console.warn(`TikTok chunk ${chunk.start}-${chunk.end}: hit MAX_PAGES cap (${MAX_PAGES}/${totalPages}). Worker will auto-split.`);
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: `TikTok chunk too large: ${totalPages} pages > ${MAX_PAGES} cap`,
+                  error_code: "cpu_timeout",
+                }),
+                { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
             console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
           }
+
 
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };

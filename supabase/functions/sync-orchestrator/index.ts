@@ -128,12 +128,54 @@ Deno.serve(async (req) => {
     const HEARTBEAT_HOURS = 6;
     const nowMs = Date.now();
 
+    // ===== BACKLOG DRAIN: re-enqueue ready 1-day chunks first =====
+    let backlogEnqueued = 0;
+    if (isDeepDive) {
+      const accountIdSet = new Set(accounts.map(a => a.id));
+      const { data: backlogRows } = await supabase
+        .from("deep_dive_backlog")
+        .select("ad_account_id, org_id, data_date")
+        .lte("next_retry_at", new Date().toISOString())
+        .limit(200);
+
+      // Group by account so each account gets its own parent job
+      const byAccount = new Map<string, { org_id: string; dates: string[] }>();
+      for (const row of backlogRows ?? []) {
+        if (!accountIdSet.has(row.ad_account_id)) continue;
+        if (!byAccount.has(row.ad_account_id)) {
+          byAccount.set(row.ad_account_id, { org_id: row.org_id, dates: [] });
+        }
+        byAccount.get(row.ad_account_id)!.dates.push(row.data_date);
+      }
+
+      for (const [accId, info] of byAccount) {
+        const existing = existingByAccount.get(accId) ?? new Set();
+        const parentId = crypto.randomUUID();
+        const fresh = info.dates
+          .filter(d => !existing.has(`${d}_${d}`))
+          .map((d, idx, arr) => ({
+            ad_account_id: accId,
+            function_name: "sync-deep-dive",
+            status: "pending",
+            org_id: info.org_id,
+            parent_job_id: parentId,
+            chunk_index: idx,
+            chunk_total: arr.length,
+            date_from: d,
+            date_to: d,
+            chunk_strategy: "chunked",
+          }));
+        if (fresh.length === 0) continue;
+        const { data: ins } = await supabase.from("sync_jobs").insert(fresh).select("id");
+        backlogEnqueued += ins?.length ?? 0;
+      }
+      if (backlogEnqueued > 0) console.log(`📤 Backlog drained: enqueued ${backlogEnqueued} day-jobs`);
+    }
+
     for (const acc of accounts) {
       const stat = statsMap.get(acc.id) as any;
 
       // ===== ACTIVITY GATING for Deep-Dive =====
-      // Rule: skip Deep-Dive when Fast-Lane has shown no data for >= ZERO_RUN_GRACE consecutive runs.
-      // Heartbeat: still run once every 24h to catch reactivations.
       if (isDeepDive && stat?.last_fast_lane_at) {
         const zeroRuns = stat.consecutive_zero_runs ?? 0;
         const lastRows = stat.last_fast_lane_rows ?? 0;
@@ -151,22 +193,27 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fast-lane: always 1-day full job
-      // Fast-lane: always 1-day full job. Deep-dive: tighter 3-day default for unseen accounts.
-      const chunkDays = isFastLane ? 25 : (stat?.recommended_chunk_days ?? 3);
-      const useChunking = !isFastLane && (
-        chunkDays < TOTAL_WINDOW_DAYS ||
-        (stat?.consecutive_failures ?? 0) >= 1 ||
-        (stat?.total_rows_last_sync ?? 0) >= 100 ||
-        !stat
-      );
+      // ===== Pick chunk size =====
+      // Fast-lane stays single-shot (1-day-ish window).
+      // Deep-dive is ALWAYS chunked. TikTok is capped to 3-day windows because
+      // its proxy + report API regularly time out on wider windows.
+      const isTikTok = (acc.platform_name || "").toLowerCase() === "tiktok";
+      const failures = stat?.consecutive_failures ?? 0;
+      let chunkDays: number;
+      if (isFastLane) {
+        chunkDays = 25; // unchanged
+      } else if (isTikTok) {
+        chunkDays = failures >= 2 ? 1 : failures >= 1 ? 2 : 3;
+      } else {
+        // Meta / Google
+        chunkDays = failures >= 2 ? 1 : failures >= 1 ? 3 : (stat?.recommended_chunk_days ?? 7);
+      }
 
+      const useChunking = !isFastLane; // deep-dive always chunked
 
       if (!useChunking) {
-        // Single full-window job (light account or fast-lane)
-        const w = `_`; // no chunk dates → single key
+        const w = `_`;
         if (existingByAccount.get(acc.id)?.has(w)) continue;
-
         const { error } = await supabase.from("sync_jobs").insert({
           ad_account_id: acc.id,
           function_name: targetFunction,
@@ -176,7 +223,6 @@ Deno.serve(async (req) => {
         });
         if (!error) { totalEnqueued++; fullAccounts++; }
       } else {
-        // Build chunks
         const chunks = buildChunks(TOTAL_WINDOW_DAYS, chunkDays);
         const parentId = crypto.randomUUID();
         const rows = chunks.map((c, idx) => ({
@@ -192,7 +238,6 @@ Deno.serve(async (req) => {
           chunk_strategy: "chunked",
         }));
 
-        // Filter out already-queued chunks (same date window)
         const fresh = rows.filter(r => !existingByAccount.get(acc.id)?.has(`${r.date_from}_${r.date_to}`));
         if (fresh.length === 0) continue;
 
@@ -201,6 +246,7 @@ Deno.serve(async (req) => {
         if (cnt > 0) { totalEnqueued += cnt; chunkedAccounts++; }
       }
     }
+
 
     // Token health check (kept from original)
     const integrationIds = [...new Set(accounts.map(a => a.api_integration_id).filter(Boolean))];
@@ -276,7 +322,7 @@ Deno.serve(async (req) => {
     await supabase.from("sync_logs").delete().lt("created_at", thirtyDaysAgo);
     await supabase.from("sync_jobs").delete().in("status", ["done", "failed"]).lt("completed_at", sevenDaysAgo);
 
-    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}, skipped silent: ${skippedSilent}, heartbeat: ${heartbeatRuns}), queue depth: ${queueDepth ?? 0}`);
+    console.log(`Orchestrator: ${totalEnqueued} jobs (chunked: ${chunkedAccounts}, full: ${fullAccounts}, skipped silent: ${skippedSilent}, heartbeat: ${heartbeatRuns}, backlog: ${backlogEnqueued}), queue depth: ${queueDepth ?? 0}`);
 
     return new Response(
       JSON.stringify({
@@ -287,10 +333,12 @@ Deno.serve(async (req) => {
         full_accounts: fullAccounts,
         skipped_silent: skippedSilent,
         heartbeat_runs: heartbeatRuns,
+        backlog_enqueued: backlogEnqueued,
         enqueued: totalEnqueued,
         queue_depth: queueDepth ?? 0,
         timestamp: new Date().toISOString(),
       }),
+
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

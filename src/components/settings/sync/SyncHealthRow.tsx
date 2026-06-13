@@ -17,7 +17,9 @@ export interface AccountHealth {
   activity: ActivitySignal;
   issue: string | null;
   token_expiring_in_days: number | null;
+  backlog_days?: number;
 }
+
 
 function LanePill({ lane, label, icon: Icon }: { lane: LaneHealth; label: string; icon: React.ElementType }) {
   const meta = TIER_META[lane.tier];
