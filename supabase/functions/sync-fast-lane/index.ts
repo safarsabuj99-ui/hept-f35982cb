@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${windowEndStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
@@ -430,7 +430,7 @@ Deno.serve(async (req) => {
           }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${windowEndStr}'`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
@@ -549,8 +549,8 @@ Deno.serve(async (req) => {
           }
 
           const bcId = integration.app_id || "";
-          const dateChunks = generateDateChunks(startDateStr, endDateStr);
-          console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${endDateStr}], base=${tiktokBase}`);
+          const dateChunks = generateDateChunks(startDateStr, windowEndStr);
+          console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${windowEndStr}], base=${tiktokBase}`);
           let allTiktokRows: any[] = [];
           let tiktokFailed = false;
 
