@@ -387,6 +387,9 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
                   : `Healthy — engine is running at ${acc.current_chunk_days ?? 25}-day windows. No backlog.`}
               </p>
             )}
+          </div>
+
+
 
           {acc.token_expiring_in_days !== null && acc.token_expiring_in_days <= 14 && (
             <div className={cn("mt-3 rounded-md p-2 text-[11px] flex items-center gap-2",
