@@ -16,19 +16,54 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+/** Fetch TikTok API with retry on transient errors (41000 geo, 546 proxy upstream, empty body) */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, { headers });
-    const json = await res.json();
-    if (json.code === 41000 && attempt < maxRetries) {
-      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
-      await new Promise(r => setTimeout(r, 2000));
-      continue;
+    try {
+      const res = await fetch(url, { headers });
+      // 546 = Cloudflare worker upstream error; 5xx generally retryable
+      if (res.status === 546 || (res.status >= 500 && res.status < 600)) {
+        const txt = await res.text().catch(() => "");
+        lastErr = { code: -1 * res.status, message: `proxy_upstream HTTP ${res.status}: ${txt.slice(0, 200) || "empty body"}` };
+        if (attempt < maxRetries) {
+          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        return lastErr;
+      }
+      const bodyText = await res.text();
+      if (!bodyText || bodyText.trim() === "") {
+        lastErr = { code: -999, message: "proxy_upstream empty body" };
+        if (attempt < maxRetries) {
+          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        return lastErr;
+      }
+      let json: any;
+      try { json = JSON.parse(bodyText); } catch {
+        lastErr = { code: -998, message: `proxy_upstream invalid JSON: ${bodyText.slice(0, 200)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+        return lastErr;
+      }
+      if (json.code === 41000 && attempt < maxRetries) {
+        console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return json;
+    } catch (e: any) {
+      lastErr = { code: -997, message: `proxy_upstream fetch failed: ${e.message}` };
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      return lastErr;
     }
-    return json;
   }
+  return lastErr ?? { code: -1, message: "unknown" };
 }
+
 
 /** Split a date range into 30-day chunks for TikTok API compatibility */
 function generateDateChunks(startDate: string, endDate: string, maxDays = 30): Array<{start: string, end: string}> {
