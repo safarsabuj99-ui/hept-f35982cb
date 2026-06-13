@@ -2086,6 +2086,7 @@ export type Database = {
           created_at: string
           data_date: string
           id: string
+          lane: string
           last_error: string | null
           last_error_code: string | null
           next_retry_at: string
@@ -2098,6 +2099,7 @@ export type Database = {
           created_at?: string
           data_date: string
           id?: string
+          lane?: string
           last_error?: string | null
           last_error_code?: string | null
           next_retry_at?: string
@@ -2110,6 +2112,7 @@ export type Database = {
           created_at?: string
           data_date?: string
           id?: string
+          lane?: string
           last_error?: string | null
           last_error_code?: string | null
           next_retry_at?: string

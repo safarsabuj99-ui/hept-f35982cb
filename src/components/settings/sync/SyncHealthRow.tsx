@@ -234,7 +234,7 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
 
   const isCritical = acc.fast.tier === "critical" || acc.deep.tier === "critical";
   const isSkipped = !acc.activity.deep_dive_will_run;
-  const isAutoSplitting = acc.splits_24h > 0 && (acc.deep.tier === "degraded" || acc.deep.tier === "critical");
+  const isAutoSplitting = (acc.splits_24h > 0 || acc.backlog_count > 0) && (acc.deep.tier === "degraded" || acc.deep.tier === "critical" || acc.fast.tier === "degraded" || acc.fast.tier === "critical");
 
   return (
     <div className={cn(
@@ -384,7 +384,7 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
                   ? `Engine auto-split ${acc.splits_24h} window${acc.splits_24h === 1 ? "" : "s"} in the last 24h and recovered without manual action.`
                   : acc.current_chunk_days && acc.current_chunk_days <= 3
                   ? `Heavy account — engine is using ${acc.current_chunk_days}-day windows to stay within timeouts.`
-                  : `Healthy — engine is running at ${acc.current_chunk_days ?? 25}-day windows. No backlog.`}
+                  : `Healthy — engine is running at ${acc.current_chunk_days ?? 10}-day windows. No backlog.`}
               </p>
             )}
           </div>

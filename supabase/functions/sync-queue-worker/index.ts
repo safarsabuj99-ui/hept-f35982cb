@@ -184,8 +184,14 @@ Deno.serve(async (req) => {
       } else {
         const isPermanent = isPermanentError(jobErrorCode);
         const exhausted = job.attempts >= job.max_attempts;
+        const isFastLaneJob = job.function_name === "sync-fast-lane";
         const isTransientChunkFailure =
-          isChunked && (jobErrorCode === "cpu_timeout" || jobErrorCode === "proxy_upstream");
+          isChunked && (
+            jobErrorCode === "cpu_timeout" ||
+            jobErrorCode === "proxy_upstream" ||
+            // Fast-Lane: generic api_error on a multi-day chunk is almost always upstream throttling — auto-split
+            (isFastLaneJob && jobErrorCode === "api_error")
+          );
 
         // SMART RETRY: timeout / proxy failure on chunked job → split into smaller sub-chunks
         if (isTransientChunkFailure && !exhausted) {
@@ -225,7 +231,7 @@ Deno.serve(async (req) => {
 
           // Can't shrink further (already 1-day) → spill each day into deep_dive_backlog
           // so the orchestrator picks them up later with escalating backoff.
-          if (job.function_name === "sync-deep-dive" && job.date_from && job.date_to) {
+          if (job.date_from && job.date_to) {
             const start = new Date(job.date_from + "T00:00:00Z");
             const end = new Date(job.date_to + "T00:00:00Z");
             const days: string[] = [];
@@ -233,11 +239,13 @@ Deno.serve(async (req) => {
               days.push(d.toISOString().split("T")[0]);
             }
             if (days.length > 0) {
-              // Compute backoff based on existing attempts (look up first day)
-              const { data: existing } = await supabase
-                .from("deep_dive_backlog")
+              const lane = isFastLaneJob ? "fast" : "deep";
+              // Compute backoff based on existing attempts for this lane
+              const { data: existing } = await (supabase
+                .from("deep_dive_backlog") as any)
                 .select("attempts")
                 .eq("ad_account_id", job.ad_account_id)
+                .eq("lane", lane)
                 .in("data_date", days);
               const maxAttempts = Math.max(0, ...((existing ?? []).map((r: any) => r.attempts)));
               const backoffMin = Math.min(360, Math.pow(5, Math.min(maxAttempts, 4))); // 1, 5, 25, 125, 360 min
@@ -251,12 +259,12 @@ Deno.serve(async (req) => {
                 last_error: jobError.substring(0, 500),
                 last_error_code: jobErrorCode,
                 next_retry_at: nextRetryAt,
+                lane,
               }));
-              // Upsert: incrementing attempts and updating last error/next retry
-              await supabase.from("deep_dive_backlog").upsert(backlogRows, {
+              await (supabase.from("deep_dive_backlog") as any).upsert(backlogRows, {
                 onConflict: "ad_account_id,data_date",
               });
-              console.log(`📥 Spilled ${days.length} day(s) into deep_dive_backlog for ${job.ad_account_id} (next retry in ${backoffMin}m)`);
+              console.log(`📥 Spilled ${days.length} day(s) into ${lane}-lane backlog for ${job.ad_account_id} (next retry in ${backoffMin}m)`);
             }
           }
         }

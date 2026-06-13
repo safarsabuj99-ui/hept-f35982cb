@@ -16,18 +16,39 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on 41000 geo-restriction errors */
+/** Fetch TikTok API with retry on transient errors (41000 geo, 5xx, 546, empty bodies, JSON parse). */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+  let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, { headers });
-    const json = await res.json();
-    if (json.code === 41000 && attempt < maxRetries) {
-      console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
-      await new Promise(r => setTimeout(r, 2000));
-      continue;
+    try {
+      const res = await fetch(url, { headers });
+      const status = res.status;
+      const text = await res.text();
+      if (status >= 500 || status === 546 || !text || text.trim() === "") {
+        lastErr = { code: -1, message: `transient: HTTP ${status} body=${(text || "").slice(0, 60)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+        return lastErr;
+      }
+      let json: any;
+      try { json = JSON.parse(text); }
+      catch (e) {
+        lastErr = { code: -1, message: `JSON parse failed: ${String(e).slice(0, 80)}` };
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+        return lastErr;
+      }
+      if (json.code === 41000 && attempt < maxRetries) {
+        console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return json;
+    } catch (err: any) {
+      lastErr = { code: -1, message: err?.message || String(err) };
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * attempt)); continue; }
+      return lastErr;
     }
-    return json;
   }
+  return lastErr ?? { code: -1, message: "unknown transient failure" };
 }
 
 /** Split a date range into 30-day chunks for TikTok API compatibility */
@@ -146,17 +167,22 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Parse optional filters for manual sync
+    // Parse optional filters for manual sync + chunked worker retries
     let targetClientId: string | null = null;
     let adAccountIdsFilter: string[] | null = null;
+    let bodyDateFrom: string | null = null;
+    let bodyDateTo: string | null = null;
     if (req.method === "POST") {
       try {
         const body = await req.json();
         targetClientId = body.client_id || null;
         adAccountIdsFilter = body.ad_account_ids || null;
+        bodyDateFrom = body.date_from || null;
+        bodyDateTo = body.date_to || null;
       } catch { /* no body is fine for cron */ }
     }
     if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
+    if (bodyDateFrom && bodyDateTo) console.log(`Date override active: ${bodyDateFrom} → ${bodyDateTo}`);
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
@@ -273,19 +299,20 @@ Deno.serve(async (req) => {
       const platform = account.platform_name;
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
-      const startDateStr = getAccountStartDate(account.id);
-      accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
-
-      // Fast-Lane Meta: narrow window to last 3 days (today + 2 days late attribution).
-      // Reason: a 16-month range causes Meta to return huge paginated payloads that
-      // often time out or return empty for low-volume accounts, falsely tripping
-      // the zero-run counter. 3 days is enough to catch fresh + late-arriving spend;
-      // historical backfill is the Deep-Dive's job.
-      const metaFastLaneStart = (() => {
+      // Unified 10-day rolling fast-lane window (catches fresh + late-arriving spend).
+      // Historical backfill beyond 10 days is the Deep-Dive's job.
+      // When a worker retries a single backlog day it passes date_from/date_to in the body — honor it.
+      const defaultFastLaneStart = (() => {
         const d = new Date(endDateStr + "T00:00:00Z");
-        d.setUTCDate(d.getUTCDate() - 2);
-        return d.toISOString().split("T")[0];
+        d.setUTCDate(d.getUTCDate() - 9);
+        const accountFloor = getAccountStartDate(account.id);
+        const computed = d.toISOString().split("T")[0];
+        return computed >= accountFloor ? computed : accountFloor;
       })();
+      const startDateStr = bodyDateFrom || defaultFastLaneStart;
+      const windowEndStr = bodyDateTo || endDateStr;
+      const metaFastLaneStart = startDateStr;
+      accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
       try {
         if (platform === "meta") {
@@ -295,7 +322,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${endDateStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,date_start&time_range={"since":"${metaFastLaneStart}","until":"${windowEndStr}"}&time_increment=1&limit=500&access_token=${integration.api_token}`;
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
@@ -403,7 +430,7 @@ Deno.serve(async (req) => {
           }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, segments.date, metrics.cost_micros FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${windowEndStr}'`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
@@ -522,16 +549,18 @@ Deno.serve(async (req) => {
           }
 
           const bcId = integration.app_id || "";
-          const dateChunks = generateDateChunks(startDateStr, endDateStr);
-          console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${endDateStr}], base=${tiktokBase}`);
+          const dateChunks = generateDateChunks(startDateStr, windowEndStr);
+          console.log(`TikTok ${account.ad_account_id}: ${dateChunks.length} chunk(s) [${startDateStr}→${windowEndStr}], base=${tiktokBase}`);
           let allTiktokRows: any[] = [];
-          let tiktokFailed = false;
+          const failedChunks: Array<{ start: string; end: string; reason: string }> = [];
+          const MAX_PAGES_PER_CHUNK = 8;
 
           for (const chunk of dateChunks) {
             // Pagination loop for each chunk
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
+            let chunkFailed: string | null = null;
 
             do {
               let cJson: any = null;
@@ -557,8 +586,8 @@ Deno.serve(async (req) => {
                 );
 
                 cJson = bcRes;
-                if (cJson.code !== 0) {
-                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                if (cJson?.code !== 0) {
+                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson?.code}] ${cJson?.message}. Falling back.`);
                   cJson = null;
                 }
               }
@@ -582,10 +611,9 @@ Deno.serve(async (req) => {
                 );
 
                 cJson = directRes;
-                if (cJson.code !== 0) {
+                if (cJson?.code !== 0) {
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
-                  errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
-                  tiktokFailed = true;
+                  chunkFailed = `[code ${cJson?.code ?? "?"}] ${cJson?.message ?? "no response"}`;
                   break;
                 }
               }
@@ -595,13 +623,65 @@ Deno.serve(async (req) => {
               chunkRows += pageRows.length;
               totalPages = cJson.data?.page_info?.total_page || 1;
               page++;
+
+              // Page cap: bail and spill remainder to backlog
+              if (page > MAX_PAGES_PER_CHUNK && page <= totalPages) {
+                chunkFailed = `page cap exceeded (${MAX_PAGES_PER_CHUNK}/${totalPages}) — splitting`;
+                break;
+              }
             } while (page <= totalPages);
 
-            if (tiktokFailed) break;
+            if (chunkFailed) {
+              failedChunks.push({ start: chunk.start, end: chunk.end, reason: chunkFailed });
+              errors.push(`TikTok ${account.ad_account_id} chunk ${chunk.start}-${chunk.end}: ${chunkFailed}`);
+              continue; // PER-CHUNK ISOLATION: keep going for remaining chunks
+            }
             console.log(`TikTok fast-lane chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
           }
 
-          if (tiktokFailed) continue;
+          // Spill failed chunks into the shared backlog so the orchestrator drains them with backoff.
+          if (failedChunks.length > 0) {
+            const days: string[] = [];
+            for (const fc of failedChunks) {
+              const s = new Date(fc.start + "T00:00:00Z");
+              const e = new Date(fc.end + "T00:00:00Z");
+              for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
+                days.push(d.toISOString().split("T")[0]);
+              }
+            }
+            if (days.length > 0) {
+              const { data: existing } = await (supabase
+                .from("deep_dive_backlog") as any)
+                .select("attempts, data_date")
+                .eq("ad_account_id", account.id)
+                .eq("lane", "fast")
+                .in("data_date", days);
+              const attemptsByDate = new Map<string, number>(
+                (existing ?? []).map((r: any) => [r.data_date, r.attempts ?? 0]),
+              );
+              const reasonText = failedChunks[0].reason.slice(0, 200);
+              const backlogRows = days.map(date => {
+                const prev = attemptsByDate.get(date) ?? 0;
+                const next = prev + 1;
+                const backoffMin = Math.min(360, Math.pow(5, Math.min(prev, 4)));
+                return {
+                  ad_account_id: account.id,
+                  org_id: account.org_id,
+                  data_date: date,
+                  attempts: next,
+                  last_error: reasonText,
+                  last_error_code: "fast_lane_chunk_failed",
+                  next_retry_at: new Date(Date.now() + backoffMin * 60_000).toISOString(),
+                  lane: "fast",
+                };
+              });
+              await (supabase.from("deep_dive_backlog") as any).upsert(backlogRows, {
+                onConflict: "ad_account_id,data_date",
+              });
+              console.log(`📥 Fast-Lane spill: ${days.length} day(s) → backlog for ${account.id}`);
+            }
+          }
+
           const rows = allTiktokRows;
           const spendRecords: any[] = [];
 

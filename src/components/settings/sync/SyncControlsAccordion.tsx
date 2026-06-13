@@ -28,7 +28,7 @@ const SCHEDULE_ROWS: ScheduleRow[] = [
   { key: "sync_interval_meta_fastlane", label: "Meta", platform: "meta", recommended: "30", recommendedLabel: "30 min", reason: "Real-time reporting API with generous rate limits" },
   { key: "sync_interval_tiktok_fastlane", label: "TikTok", platform: "tiktok", recommended: "60", recommendedLabel: "1 hour", reason: "15-30 min data lag, strict 10 req/sec limit" },
   { key: "sync_interval_google_fastlane", label: "Google", platform: "google", recommended: "30", recommendedLabel: "30 min", reason: "Near real-time data, high API quotas" },
-  { key: "sync_interval_deepdive", label: "Deep Dive", platform: "all", recommended: "60", recommendedLabel: "1-2 hours", reason: "Heavy payload (25+ fields), TikTok bottleneck" },
+  { key: "sync_interval_deepdive", label: "Deep Dive", platform: "all", recommended: "60", recommendedLabel: "1-2 hours", reason: "Heavy payload (28 fields), TikTok bottleneck" },
 ];
 
 interface Props {
