@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const BATCH_SIZE = 1; // 1 job per worker — sync-deep-dive is heavy
 const HARD_TIMEOUT_MS = 140000; // exit cleanly under 150s wall-clock limit
-const PER_JOB_TIMEOUT_MS = 90000; // chunk-sized jobs finish well under this
+const PER_JOB_TIMEOUT_FAST_MS = 90000;
+const PER_JOB_TIMEOUT_DEEP_MS = 120000; // deep-dive needs more headroom for heavy TikTok windows
 
 function classifyError(errorMsg: string, errorCode?: string): string {
   if (!errorMsg) return "unknown";
@@ -16,9 +17,19 @@ function classifyError(errorMsg: string, errorCode?: string): string {
   if (errorCode === "token_expired" || msg.includes("error 190") || msg.includes("40001") || (msg.includes("token") && msg.includes("expir"))) return "token_expired";
   if (errorCode === "geo_blocked" || msg.includes("41000") || msg.includes("banned country")) return "geo_blocked";
   if (errorCode === "rate_limited" || msg.includes("429") || msg.includes("rate limit")) return "rate_limited";
-  if (msg.includes("cpu time exceeded") || msg.includes("timeout") || msg.includes("aborted")) return "cpu_timeout";
+  // Cloudflare/TikTok proxy upstream failures (transient)
+  if (
+    errorCode === "proxy_upstream" ||
+    msg.includes("http 546") ||
+    msg.includes("status 546") ||
+    msg.includes("unexpected end of json input") ||
+    msg.includes("empty body") ||
+    msg.includes("upstream") && msg.includes("proxy")
+  ) return "proxy_upstream";
+  if (msg.includes("cpu time exceeded") || msg.includes("timeout") || msg.includes("aborted") || msg.includes("signal")) return "cpu_timeout";
   return errorCode || "api_error";
 }
+
 
 function isPermanentError(code: string): boolean {
   return code === "token_expired" || code === "geo_blocked";
