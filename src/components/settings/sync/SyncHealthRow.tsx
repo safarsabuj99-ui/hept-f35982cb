@@ -340,6 +340,54 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
             </p>
           </div>
 
+          {/* Self-Heal Timeline */}
+          <div className="mt-3 rounded-md p-2.5 bg-background/60 border border-border/40 text-[11px]">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Sparkles className="h-3 w-3 text-primary" />
+                Self-Heal Timeline
+              </div>
+              {acc.backlog_count > 0 && (
+                <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1"
+                  disabled={retrying === "backlog"} onClick={(e) => { e.stopPropagation(); handleDrainBacklog(); }}>
+                  {retrying === "backlog" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Inbox className="h-3 w-3" />}
+                  Drain backlog now
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+              <Stat l="Chunk size" v={acc.current_chunk_days ?? 0} />
+              <Stat l="Splits 24h" v={acc.splits_24h} />
+              <Stat l="Backlog" v={acc.backlog_count} tone={acc.backlog_count > 0 ? "destructive" : undefined} />
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Next retry</span>
+                <span className="font-semibold tabular-nums text-[10px]">
+                  {acc.backlog_next_retry_at ? formatDistanceToNow(new Date(acc.backlog_next_retry_at), { addSuffix: true }) : "—"}
+                </span>
+              </div>
+            </div>
+            {acc.backlog_entries.length > 0 ? (
+              <div className="space-y-1 mt-2 border-t border-border/40 pt-2">
+                {acc.backlog_entries.map(b => (
+                  <div key={b.data_date} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="font-mono text-foreground">{b.data_date}</span>
+                    <span className="text-muted-foreground">attempt {b.attempts}/5</span>
+                    <span className="text-amber-600 dark:text-amber-400 tabular-nums">
+                      next {formatDistanceToNow(new Date(b.next_retry_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground leading-relaxed">
+                {acc.self_healed
+                  ? `Engine auto-split ${acc.splits_24h} window${acc.splits_24h === 1 ? "" : "s"} in the last 24h and recovered without manual action.`
+                  : acc.current_chunk_days && acc.current_chunk_days <= 3
+                  ? `Heavy account — engine is using ${acc.current_chunk_days}-day windows to stay within timeouts.`
+                  : `Healthy — engine is running at ${acc.current_chunk_days ?? 25}-day windows. No backlog.`}
+              </p>
+            )}
+
           {acc.token_expiring_in_days !== null && acc.token_expiring_in_days <= 14 && (
             <div className={cn("mt-3 rounded-md p-2 text-[11px] flex items-center gap-2",
               acc.token_expiring_in_days <= 0 ? "bg-destructive/10 text-destructive" : "bg-amber-500/10 text-amber-700 dark:text-amber-400")}>
