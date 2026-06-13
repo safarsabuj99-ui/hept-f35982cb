@@ -32,21 +32,24 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: accounts.length, critical: 0, degraded: 0, healthy: 0, excellent: 0, idle: 0, silent: 0 };
+    const c: Record<string, number> = { all: accounts.length, critical: 0, degraded: 0, healthy: 0, excellent: 0, idle: 0, silent: 0, backlog: 0 };
     for (const a of accounts) {
       const worst = TIER_RANK[a.fast.tier] < TIER_RANK[a.deep.tier] ? a.fast.tier : a.deep.tier;
       c[worst] = (c[worst] ?? 0) + 1;
       if (!a.activity.deep_dive_will_run) c.silent++;
+      if (a.backlog_count > 0) c.backlog++;
     }
     return c;
   }, [accounts]);
 
   const skippedCount = counts.silent ?? 0;
+  const backlogCount = counts.backlog ?? 0;
 
   const filtered = useMemo(() => {
     let list: AccountHealth[];
     if (filter === "all") list = accounts;
     else if (filter === "silent") list = accounts.filter(a => !a.activity.deep_dive_will_run);
+    else if (filter === "backlog") list = accounts.filter(a => a.backlog_count > 0);
     else list = accounts.filter(a => a.fast.tier === filter || a.deep.tier === filter);
 
     return [...list].sort((a, b) => {
