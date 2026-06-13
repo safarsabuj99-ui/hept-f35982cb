@@ -100,6 +100,11 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
               <SkipForward className="h-2.5 w-2.5" /> {skippedCount} Deep-Dive skipped (saving quota)
             </Badge>
           )}
+          {backlogCount > 0 && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+              <Inbox className="h-2.5 w-2.5" /> {backlogCount} account{backlogCount === 1 ? "" : "s"} with backlog
+            </Badge>
+          )}
         </div>
         <Button
           variant="ghost"
