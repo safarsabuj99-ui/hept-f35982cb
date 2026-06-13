@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const TOTAL_WINDOW_DAYS = 25;
+const TOTAL_WINDOW_DAYS = 10;
 const PARALLEL_WORKER_TRIGGERS = 6;
 
 
