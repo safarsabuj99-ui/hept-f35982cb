@@ -144,8 +144,9 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
       <div className="hidden md:grid grid-cols-12 gap-3 px-3.5 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
         <div className="col-span-2">Account</div>
         <div className="col-span-2">Fast-Lane</div>
-        <div className="col-span-3">Deep-Dive</div>
-        <div className="col-span-3">Activity</div>
+        <div className="col-span-2">Deep-Dive</div>
+        <div className="col-span-2">Engine</div>
+        <div className="col-span-2">Activity</div>
         <div className="col-span-2">Status</div>
       </div>
 
