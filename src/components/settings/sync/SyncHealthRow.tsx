@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers, Activity, SkipForward, CheckCircle2 } from "lucide-react";
+import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers, Activity, SkipForward, CheckCircle2, Sparkles, Inbox, Scissors } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { LaneHealth, TIER_META, ActivitySignal, ACTIVITY_META, formatAgoCompact } from "./healthScore";
 
 export interface BacklogEntry {
