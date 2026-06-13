@@ -299,19 +299,20 @@ Deno.serve(async (req) => {
       const platform = account.platform_name;
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
-      const startDateStr = getAccountStartDate(account.id);
-      accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
-
-      // Fast-Lane Meta: narrow window to last 3 days (today + 2 days late attribution).
-      // Reason: a 16-month range causes Meta to return huge paginated payloads that
-      // often time out or return empty for low-volume accounts, falsely tripping
-      // the zero-run counter. 3 days is enough to catch fresh + late-arriving spend;
-      // historical backfill is the Deep-Dive's job.
-      const metaFastLaneStart = (() => {
+      // Unified 10-day rolling fast-lane window (catches fresh + late-arriving spend).
+      // Historical backfill beyond 10 days is the Deep-Dive's job.
+      // When a worker retries a single backlog day it passes date_from/date_to in the body — honor it.
+      const defaultFastLaneStart = (() => {
         const d = new Date(endDateStr + "T00:00:00Z");
-        d.setUTCDate(d.getUTCDate() - 2);
-        return d.toISOString().split("T")[0];
+        d.setUTCDate(d.getUTCDate() - 9);
+        const accountFloor = getAccountStartDate(account.id);
+        const computed = d.toISOString().split("T")[0];
+        return computed >= accountFloor ? computed : accountFloor;
       })();
+      const startDateStr = bodyDateFrom || defaultFastLaneStart;
+      const windowEndStr = bodyDateTo || endDateStr;
+      const metaFastLaneStart = startDateStr;
+      accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
 
       try {
         if (platform === "meta") {
