@@ -135,10 +135,85 @@ function ActivityPill({ activity }: { activity: ActivitySignal }) {
   );
 }
 
+function EnginePill({ acc }: { acc: AccountHealth }) {
+  const chunk = acc.current_chunk_days;
+  const chunkLabel = chunk == null ? "—" : `${chunk}d`;
+  const heavy = chunk != null && chunk <= 3;
+  const nextRetry = acc.backlog_next_retry_at
+    ? formatDistanceToNow(new Date(acc.backlog_next_retry_at), { addSuffix: false })
+    : null;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn(
+            "rounded-lg border p-2.5 transition-all cursor-help",
+            acc.backlog_count > 0 && "border-amber-500/30 bg-amber-500/5",
+            acc.self_healed && acc.backlog_count === 0 && "border-emerald-500/25 bg-emerald-500/5",
+          )}>
+            <div className="flex items-center justify-between gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide">
+                <Sparkles className="h-3 w-3" /> Engine
+              </div>
+              <span className={cn(
+                "text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full tabular-nums",
+                heavy ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+              )}>
+                {chunkLabel}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-2 min-w-0">
+              <span className="text-[11px] font-medium truncate">
+                {acc.backlog_count > 0
+                  ? `${acc.backlog_count} day${acc.backlog_count === 1 ? "" : "s"} queued`
+                  : acc.self_healed
+                  ? "Self-healing"
+                  : acc.splits_24h > 0
+                  ? `${acc.splits_24h} split${acc.splits_24h === 1 ? "" : "s"}`
+                  : "Stable"}
+              </span>
+              <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                {nextRetry ? `in ${nextRetry}` : ""}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1 text-[10px]">
+              {acc.backlog_count > 0 ? (
+                <>
+                  <Inbox className="h-2.5 w-2.5 text-amber-500" />
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">Backlog draining</span>
+                </>
+              ) : acc.self_healed ? (
+                <>
+                  <Sparkles className="h-2.5 w-2.5 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Auto-healed</span>
+                </>
+              ) : heavy ? (
+                <>
+                  <Scissors className="h-2.5 w-2.5 text-primary" />
+                  <span className="text-primary font-medium">Small chunks</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                  <span className="text-muted-foreground">{chunkLabel} windows</span>
+                </>
+              )}
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          Engine collapses chunk windows when a job times out. Heavy accounts settle at 1–3 day windows; failed single days move to backlog with exponential backoff.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefresh: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [retrying, setRetrying] = useState<"fast" | "deep" | null>(null);
+  const [retrying, setRetrying] = useState<"fast" | "deep" | "backlog" | null>(null);
 
   const handleRetry = async (lane: "fast" | "deep") => {
     setRetrying(lane);
@@ -149,13 +224,23 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
     else { toast({ title: `${lane === "fast" ? "Fast-Lane" : "Deep-Dive"} queued`, description: acc.account_name }); setTimeout(onRefresh, 1500); }
   };
 
+  const handleDrainBacklog = async () => {
+    setRetrying("backlog");
+    const { error } = await supabase.functions.invoke("sync-orchestrator", { body: { function: "sync-deep-dive", drainBacklog: true } });
+    setRetrying(null);
+    if (error) toast({ title: "Drain failed", description: error.message, variant: "destructive" });
+    else { toast({ title: "Backlog draining", description: acc.account_name }); setTimeout(onRefresh, 1500); }
+  };
+
   const isCritical = acc.fast.tier === "critical" || acc.deep.tier === "critical";
   const isSkipped = !acc.activity.deep_dive_will_run;
+  const isAutoSplitting = acc.splits_24h > 0 && (acc.deep.tier === "degraded" || acc.deep.tier === "critical");
 
   return (
     <div className={cn(
       "rounded-xl border bg-card/40 transition-all animate-fade-in overflow-hidden",
-      isCritical && "border-destructive/30 shadow-[0_0_0_1px_hsl(var(--destructive)/0.15)]",
+      isCritical && !acc.self_healed && "border-destructive/30 shadow-[0_0_0_1px_hsl(var(--destructive)/0.15)]",
+      acc.self_healed && "border-emerald-500/25",
     )}>
       <button
         onClick={() => setOpen(!open)}
@@ -170,18 +255,28 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
             {acc.platform && <span className="text-[10px] text-muted-foreground capitalize ml-5">{acc.platform}</span>}
           </div>
           <div className="col-span-6 md:col-span-2"><LanePill lane={acc.fast} label="Fast-Lane" icon={Zap} /></div>
-          <div className="col-span-6 md:col-span-3">
+          <div className="col-span-6 md:col-span-2">
             <div className={cn(isSkipped && "opacity-60")}>
               <LanePill lane={acc.deep} label="Deep-Dive" icon={Layers} />
             </div>
           </div>
-          <div className="col-span-6 md:col-span-3"><ActivityPill activity={acc.activity} /></div>
+          <div className="col-span-6 md:col-span-2"><EnginePill acc={acc} /></div>
+          <div className="col-span-6 md:col-span-2"><ActivityPill activity={acc.activity} /></div>
           <div className="col-span-6 md:col-span-2 min-w-0">
-            {acc.issue ? (
+            {isAutoSplitting ? (
+              <Badge variant="outline" className="gap-1 max-w-full border-primary/30 text-primary bg-primary/5">
+                <Scissors className="h-3 w-3 shrink-0" />
+                <span className="truncate text-[10px]">Auto-splitting</span>
+              </Badge>
+            ) : acc.issue ? (
               <Badge variant={isCritical ? "destructive" : "outline"} className="gap-1 max-w-full">
                 <AlertTriangle className="h-3 w-3 shrink-0" />
                 <span className="truncate text-[10px]">{acc.issue}</span>
               </Badge>
+            ) : acc.self_healed ? (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> Self-healed
+              </span>
             ) : isSkipped ? (
               <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
                 <SkipForward className="h-3 w-3" /> Saving quota
