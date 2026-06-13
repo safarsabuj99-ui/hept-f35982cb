@@ -841,8 +841,8 @@ Deno.serve(async (req) => {
           let allTiktokRows: any[] = [];
           let tiktokFailed = false;
 
+          const MAX_PAGES = 8;
           for (const chunk of dateChunks) {
-            // Pagination loop for each chunk
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
@@ -900,7 +900,20 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
 
                 cJson = directRes;
                 if (cJson.code !== 0) {
+                  // Negative codes from tiktokFetchWithRetry indicate proxy/transport failures (retryable)
+                  const isProxyErr = typeof cJson.code === "number" && cJson.code < 0;
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
+                  if (isProxyErr) {
+                    // Bubble up as a structured failure so the worker classifies as proxy_upstream
+                    return new Response(
+                      JSON.stringify({
+                        ok: false,
+                        error: `TikTok proxy_upstream ${cJson.message}`,
+                        error_code: "proxy_upstream",
+                      }),
+                      { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                    );
+                  }
                   errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
                   tiktokFailed = true;
                   break;
@@ -912,11 +925,23 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
               chunkRows += pageRows.length;
               totalPages = cJson.data?.page_info?.total_page || 1;
               page++;
-            } while (page <= totalPages);
+            } while (page <= totalPages && page <= MAX_PAGES);
 
             if (tiktokFailed) break;
+            if (page > MAX_PAGES && totalPages > MAX_PAGES) {
+              console.warn(`TikTok chunk ${chunk.start}-${chunk.end}: hit MAX_PAGES cap (${MAX_PAGES}/${totalPages}). Worker will auto-split.`);
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: `TikTok chunk too large: ${totalPages} pages > ${MAX_PAGES} cap`,
+                  error_code: "cpu_timeout",
+                }),
+                { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
             console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
           }
+
 
           if (tiktokFailed) continue;
           json = { data: { list: allTiktokRows } };
