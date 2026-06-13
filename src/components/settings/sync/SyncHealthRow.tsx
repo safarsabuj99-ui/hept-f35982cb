@@ -8,6 +8,13 @@ import { cn } from "@/lib/utils";
 import { Loader2, RotateCw, ChevronDown, AlertTriangle, Zap, Layers, Activity, SkipForward, CheckCircle2 } from "lucide-react";
 import { LaneHealth, TIER_META, ActivitySignal, ACTIVITY_META, formatAgoCompact } from "./healthScore";
 
+export interface BacklogEntry {
+  data_date: string;
+  attempts: number;
+  next_retry_at: string;
+  last_error: string | null;
+}
+
 export interface AccountHealth {
   ad_account_id: string;
   account_name: string;
@@ -17,7 +24,12 @@ export interface AccountHealth {
   activity: ActivitySignal;
   issue: string | null;
   token_expiring_in_days: number | null;
-  backlog_days?: number;
+  backlog_count: number;
+  backlog_next_retry_at: string | null;
+  backlog_entries: BacklogEntry[];
+  current_chunk_days: number | null;
+  splits_24h: number;
+  self_healed: boolean;
 }
 
 
