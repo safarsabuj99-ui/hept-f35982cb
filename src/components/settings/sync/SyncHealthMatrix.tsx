@@ -6,7 +6,7 @@ import { Activity, RotateCw, ServerOff, SkipForward, Loader2 } from "lucide-reac
 import { SyncHealthRow, AccountHealth } from "./SyncHealthRow";
 import { HealthTier } from "./healthScore";
 
-type FilterKey = "all" | HealthTier | "silent";
+type FilterKey = "all" | HealthTier | "silent" | "backlog";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -14,6 +14,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "degraded", label: "Degraded" },
   { key: "healthy", label: "Healthy" },
   { key: "excellent", label: "Excellent" },
+  { key: "backlog", label: "Backlog" },
   { key: "silent", label: "Silent / Skipped" },
   { key: "idle", label: "Idle" },
 ];
