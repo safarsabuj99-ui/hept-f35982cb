@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Loader2, RotateCw, Activity, CheckCircle2, AlertTriangle, Zap, Trash2 } from "lucide-react";
+import { Loader2, RotateCw, Activity, CheckCircle2, AlertTriangle, Zap, Trash2, Layers, Sparkles, Inbox } from "lucide-react";
 
 interface PulseStats {
   pending: number;
@@ -11,6 +11,9 @@ interface PulseStats {
   done_24h: number;
   failed_24h: number;
   avg_ms: number;
+  chunks_in_flight: number;
+  backlog_total: number;
+  auto_shrunk_24h: number;
 }
 
 interface Props {
