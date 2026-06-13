@@ -27,7 +27,7 @@ function blankStats(): LaneJobStats {
 }
 
 export function SyncTab() {
-  const [stats, setStats] = useState<QueueStats>({ pending: 0, processing: 0, failed_24h: 0, done_24h: 0, avg_ms: 0 });
+  const [stats, setStats] = useState<QueueStats>({ pending: 0, processing: 0, failed_24h: 0, done_24h: 0, avg_ms: 0, chunks_in_flight: 0, backlog_total: 0, auto_shrunk_24h: 0 });
   const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
   const [accountProgress, setAccountProgress] = useState<AccountProgress[]>([]);
   const [accountHealth, setAccountHealth] = useState<AccountHealth[]>([]);
