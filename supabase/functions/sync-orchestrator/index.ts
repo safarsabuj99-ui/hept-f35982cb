@@ -196,19 +196,19 @@ Deno.serve(async (req) => {
       }
 
       // ===== Pick chunk size =====
-      // Fast-lane stays single-shot (1-day-ish window).
+      // Fast-lane stays single-shot (covers a unified 10-day rolling window).
       // Deep-dive is ALWAYS chunked. TikTok is capped to 3-day windows because
       // its proxy + report API regularly time out on wider windows.
       const isTikTok = (acc.platform_name || "").toLowerCase() === "tiktok";
       const failures = stat?.consecutive_failures ?? 0;
       let chunkDays: number;
       if (isFastLane) {
-        chunkDays = 25; // unchanged
+        chunkDays = 10; // unused for single-shot fast-lane
       } else if (isTikTok) {
         chunkDays = failures >= 2 ? 1 : failures >= 1 ? 2 : 3;
       } else {
-        // Meta / Google
-        chunkDays = failures >= 2 ? 1 : failures >= 1 ? 3 : (stat?.recommended_chunk_days ?? 7);
+        // Meta / Google — cap to TOTAL_WINDOW_DAYS so a single chunk covers the 10-day window
+        chunkDays = failures >= 2 ? 1 : failures >= 1 ? 3 : Math.min(stat?.recommended_chunk_days ?? 5, TOTAL_WINDOW_DAYS);
       }
 
       const useChunking = !isFastLane; // deep-dive always chunked
