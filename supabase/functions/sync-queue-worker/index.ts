@@ -296,31 +296,75 @@ Deno.serve(async (req) => {
         failed++;
         console.error(`❌ Job ${job.id}${chunkLabel}: ${jobErrorCode} - ${jobError} (attempt ${job.attempts}/${job.max_attempts}, status: ${finalStatus})`);
 
-        // SELF-HEAL: when a non-chunked ("full") job times out OR exhausts
-        // retries, demote the account so the next orchestrator run chunks it.
-        // This prevents heavy accounts from being stuck on "full" forever.
-        const shouldDemote =
+        // SELF-HEAL: when a non-chunked ("full") deep-dive job fails transiently,
+        // auto-spawn a chunked retry plan (today-9 → today) instead of leaving the
+        // account stuck on a red "api_error". TikTok → 1d slices; others → 5d.
+        const isTransientFull =
           !isChunked &&
-          (jobErrorCode === "cpu_timeout" || finalStatus === "failed");
-        if (shouldDemote) {
-          const { data: curStat } = await supabase
-            .from("sync_account_stats")
-            .select("consecutive_failures")
-            .eq("ad_account_id", job.ad_account_id)
+          job.function_name === "sync-deep-dive" &&
+          (jobErrorCode === "cpu_timeout" || jobErrorCode === "proxy_upstream" || jobErrorCode === "api_error");
+
+        if (isTransientFull) {
+          const { data: accRow } = await supabase
+            .from("ad_accounts")
+            .select("api_integrations(platform)")
+            .eq("id", job.ad_account_id)
             .maybeSingle();
-          const nextFailures = (curStat?.consecutive_failures ?? 0) + 1;
+          const platform = ((accRow as any)?.api_integrations?.platform || "").toLowerCase();
+          const chunkDays = platform === "tiktok" ? 1 : 5;
+          const TOTAL = 10;
+
+          const today = new Date();
+          const chunks: Array<{ from: string; to: string }> = [];
+          const start = new Date(today);
+          start.setUTCDate(start.getUTCDate() - (TOTAL - 1));
+          let cursor = new Date(start);
+          while (cursor <= today) {
+            const end = new Date(cursor);
+            end.setUTCDate(end.getUTCDate() + chunkDays - 1);
+            if (end > today) end.setTime(today.getTime());
+            chunks.push({
+              from: cursor.toISOString().split("T")[0],
+              to: end.toISOString().split("T")[0],
+            });
+            cursor = new Date(end);
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+          }
+
+          const parentId = crypto.randomUUID();
+          const rows = chunks.map((c, idx) => ({
+            ad_account_id: job.ad_account_id,
+            function_name: job.function_name,
+            status: "pending",
+            org_id: job.org_id,
+            parent_job_id: parentId,
+            chunk_index: idx,
+            chunk_total: chunks.length,
+            date_from: c.from,
+            date_to: c.to,
+            chunk_strategy: "chunked",
+          }));
+          await supabase.from("sync_jobs").insert(rows);
+
+          await supabase.from("sync_jobs").update({
+            status: "done",
+            last_error: `Auto-split into ${chunks.length}×${chunkDays}d chunks (${jobErrorCode})`,
+            error_code: "auto_split",
+            completed_at: new Date().toISOString(),
+          }).eq("id", job.id);
+
           await supabase.from("sync_account_stats").upsert(
             {
               ad_account_id: job.ad_account_id,
               org_id: job.org_id,
-              recommended_chunk_days: 5,
-              consecutive_failures: nextFailures,
-              last_error: jobError.substring(0, 500),
+              recommended_chunk_days: chunkDays,
+              last_error: null,
+              last_error_code: null,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "ad_account_id" }
           );
-          console.log(`⬇️  Demoted ${job.ad_account_id}: chunk_days=5, failures=${nextFailures}`);
+          console.log(`🔪 Auto-split full deep-dive for ${job.ad_account_id} into ${chunks.length}×${chunkDays}d`);
         }
 
         // If chunk permanently failed, trigger parent completion check
