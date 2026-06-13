@@ -170,6 +170,17 @@ Deno.serve(async (req) => {
 
         // Check parent completion (also updates account stats)
         await supabase.rpc("mark_parent_complete", { p_job_id: job.id });
+
+        // Clear any backlog days now covered by this successful deep-dive chunk
+        if (job.function_name === "sync-deep-dive" && job.date_from && job.date_to) {
+          await supabase
+            .from("deep_dive_backlog")
+            .delete()
+            .eq("ad_account_id", job.ad_account_id)
+            .gte("data_date", job.date_from)
+            .lte("data_date", job.date_to);
+        }
+
       } else {
         const isPermanent = isPermanentError(jobErrorCode);
         const exhausted = job.attempts >= job.max_attempts;
