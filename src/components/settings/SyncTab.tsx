@@ -5,7 +5,7 @@ import { SyncAccountsRail, AccountProgress } from "./sync/SyncAccountsRail";
 import { SyncControlsAccordion } from "./sync/SyncControlsAccordion";
 import { FailedJob } from "./sync/SyncErrorPanel";
 import { SyncHealthMatrix } from "./sync/SyncHealthMatrix";
-import { AccountHealth } from "./sync/SyncHealthRow";
+import { AccountHealth, BacklogEntry } from "./sync/SyncHealthRow";
 import { computeLaneHealth, summarizeIssue, computeActivitySignal, LaneJobStats } from "./sync/healthScore";
 
 interface QueueStats {
@@ -14,6 +14,9 @@ interface QueueStats {
   failed_24h: number;
   done_24h: number;
   avg_ms: number;
+  chunks_in_flight: number;
+  backlog_total: number;
+  auto_shrunk_24h: number;
 }
 
 const FAST_LANE_FNS = new Set(["sync-fast-lane"]);
@@ -24,7 +27,7 @@ function blankStats(): LaneJobStats {
 }
 
 export function SyncTab() {
-  const [stats, setStats] = useState<QueueStats>({ pending: 0, processing: 0, failed_24h: 0, done_24h: 0, avg_ms: 0 });
+  const [stats, setStats] = useState<QueueStats>({ pending: 0, processing: 0, failed_24h: 0, done_24h: 0, avg_ms: 0, chunks_in_flight: 0, backlog_total: 0, auto_shrunk_24h: 0 });
   const [failedJobs, setFailedJobs] = useState<FailedJob[]>([]);
   const [accountProgress, setAccountProgress] = useState<AccountProgress[]>([]);
   const [accountHealth, setAccountHealth] = useState<AccountHealth[]>([]);
@@ -36,7 +39,7 @@ export function SyncTab() {
     setLoading(true);
     try {
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [pendingRes, processingRes, failedRes, doneRes, jobsRes, activeJobsRes, statsRes, alertsRes, allJobs24hRes, integrationsRes, accountsRes] = await Promise.all([
+      const [pendingRes, processingRes, failedRes, doneRes, jobsRes, activeJobsRes, statsRes, alertsRes, allJobs24hRes, integrationsRes, accountsRes, backlogRes] = await Promise.all([
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "processing"),
         supabase.from("sync_jobs" as any).select("id", { count: "exact", head: true }).eq("status", "failed").gte("completed_at", since24h),
@@ -45,9 +48,10 @@ export function SyncTab() {
         supabase.from("sync_jobs" as any).select("ad_account_id, status, parent_job_id").in("status", ["pending", "processing", "done", "failed"]).gte("scheduled_at", since24h),
         supabase.from("sync_account_stats" as any).select("ad_account_id, avg_rows_per_day, recommended_chunk_days, last_full_sync_at, consecutive_failures, last_error, last_fast_lane_at, last_fast_lane_rows, consecutive_zero_runs"),
         supabase.from("sync_integrity_alerts" as any).select("ad_account_id").eq("resolved", false),
-        supabase.from("sync_jobs" as any).select("ad_account_id, function_name, status, completed_at, last_error, error_code").gte("scheduled_at", since24h),
+        supabase.from("sync_jobs" as any).select("ad_account_id, function_name, status, completed_at, last_error, error_code, date_from, date_to, parent_job_id").gte("scheduled_at", since24h),
         supabase.from("api_integrations").select("id, platform, token_expiry_date, connection_status"),
         supabase.from("ad_accounts").select("id, account_name, platform_name, api_integration_id, is_active"),
+        supabase.from("deep_dive_backlog" as any).select("ad_account_id, data_date, attempts, next_retry_at, last_error").order("next_retry_at", { ascending: true }),
       ]);
 
       const doneRows = (doneRes.data ?? []) as any[];
@@ -58,12 +62,42 @@ export function SyncTab() {
         avgMs = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
       }
 
+      // Backlog aggregation
+      const backlogRows = (backlogRes.data ?? []) as any[];
+      const backlogByAccount = new Map<string, BacklogEntry[]>();
+      for (const b of backlogRows) {
+        if (!backlogByAccount.has(b.ad_account_id)) backlogByAccount.set(b.ad_account_id, []);
+        backlogByAccount.get(b.ad_account_id)!.push({
+          data_date: b.data_date, attempts: b.attempts, next_retry_at: b.next_retry_at, last_error: b.last_error,
+        });
+      }
+
+      // Auto-shrunk + chunks-in-flight + splits per account from all jobs 24h
+      const allJobsRaw = (allJobs24hRes.data ?? []) as any[];
+      const splitsByAccount = new Map<string, number>();
+      let chunksInFlight = 0;
+      let autoShrunk24h = 0;
+      for (const j of allJobsRaw) {
+        if (j.parent_job_id && (j.status === "pending" || j.status === "processing")) chunksInFlight++;
+        // a 1-day chunk child = parent_job_id set AND date_from == date_to
+        if (j.parent_job_id && j.date_from && j.date_to && j.function_name?.includes("deep-dive")) {
+          const oneDay = j.date_from === j.date_to;
+          if (oneDay) {
+            splitsByAccount.set(j.ad_account_id, (splitsByAccount.get(j.ad_account_id) ?? 0) + 1);
+            if (j.status === "done") autoShrunk24h++;
+          }
+        }
+      }
+
       setStats({
         pending: pendingRes.count ?? 0,
         processing: processingRes.count ?? 0,
         failed_24h: failedRes.count ?? 0,
         done_24h: doneRes.count ?? 0,
         avg_ms: avgMs,
+        chunks_in_flight: chunksInFlight,
+        backlog_total: backlogRows.length,
+        auto_shrunk_24h: autoShrunk24h,
       });
 
       const activeJobs = (activeJobsRes.data ?? []) as any[];
@@ -140,6 +174,9 @@ export function SyncTab() {
             last_fast_lane_rows: st?.last_fast_lane_rows ?? 0,
             consecutive_zero_runs: st?.consecutive_zero_runs ?? 0,
           });
+          const backlog = backlogByAccount.get(a.id) ?? [];
+          const splits = splitsByAccount.get(a.id) ?? 0;
+          const selfHealed = splits > 0 && (deep.tier === "healthy" || deep.tier === "excellent");
           return {
             ad_account_id: a.id,
             account_name: a.account_name || a.id,
@@ -147,6 +184,12 @@ export function SyncTab() {
             fast, deep, activity,
             issue: summarizeIssue(fast, deep, tokenExpiringInDays),
             token_expiring_in_days: tokenExpiringInDays,
+            backlog_count: backlog.length,
+            backlog_next_retry_at: backlog[0]?.next_retry_at ?? null,
+            backlog_entries: backlog.slice(0, 5),
+            current_chunk_days: st?.recommended_chunk_days ?? null,
+            splits_24h: splits,
+            self_healed: selfHealed,
           };
         });
       setAccountHealth(healthList);

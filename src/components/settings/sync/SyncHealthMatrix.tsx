@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Activity, RotateCw, ServerOff, SkipForward, Loader2 } from "lucide-react";
+import { Activity, RotateCw, ServerOff, SkipForward, Loader2, Inbox } from "lucide-react";
 import { SyncHealthRow, AccountHealth } from "./SyncHealthRow";
 import { HealthTier } from "./healthScore";
 
-type FilterKey = "all" | HealthTier | "silent";
+type FilterKey = "all" | HealthTier | "silent" | "backlog";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -14,6 +14,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "degraded", label: "Degraded" },
   { key: "healthy", label: "Healthy" },
   { key: "excellent", label: "Excellent" },
+  { key: "backlog", label: "Backlog" },
   { key: "silent", label: "Silent / Skipped" },
   { key: "idle", label: "Idle" },
 ];
@@ -31,21 +32,24 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: accounts.length, critical: 0, degraded: 0, healthy: 0, excellent: 0, idle: 0, silent: 0 };
+    const c: Record<string, number> = { all: accounts.length, critical: 0, degraded: 0, healthy: 0, excellent: 0, idle: 0, silent: 0, backlog: 0 };
     for (const a of accounts) {
       const worst = TIER_RANK[a.fast.tier] < TIER_RANK[a.deep.tier] ? a.fast.tier : a.deep.tier;
       c[worst] = (c[worst] ?? 0) + 1;
       if (!a.activity.deep_dive_will_run) c.silent++;
+      if (a.backlog_count > 0) c.backlog++;
     }
     return c;
   }, [accounts]);
 
   const skippedCount = counts.silent ?? 0;
+  const backlogCount = counts.backlog ?? 0;
 
   const filtered = useMemo(() => {
     let list: AccountHealth[];
     if (filter === "all") list = accounts;
     else if (filter === "silent") list = accounts.filter(a => !a.activity.deep_dive_will_run);
+    else if (filter === "backlog") list = accounts.filter(a => a.backlog_count > 0);
     else list = accounts.filter(a => a.fast.tier === filter || a.deep.tier === filter);
 
     return [...list].sort((a, b) => {
@@ -96,6 +100,11 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
               <SkipForward className="h-2.5 w-2.5" /> {skippedCount} Deep-Dive skipped (saving quota)
             </Badge>
           )}
+          {backlogCount > 0 && (
+            <Badge variant="outline" className="text-[10px] h-5 gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400">
+              <Inbox className="h-2.5 w-2.5" /> {backlogCount} account{backlogCount === 1 ? "" : "s"} with backlog
+            </Badge>
+          )}
         </div>
         <Button
           variant="ghost"
@@ -135,8 +144,9 @@ export function SyncHealthMatrix({ accounts, initialLoading, loading = false, on
       <div className="hidden md:grid grid-cols-12 gap-3 px-3.5 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
         <div className="col-span-2">Account</div>
         <div className="col-span-2">Fast-Lane</div>
-        <div className="col-span-3">Deep-Dive</div>
-        <div className="col-span-3">Activity</div>
+        <div className="col-span-2">Deep-Dive</div>
+        <div className="col-span-2">Engine</div>
+        <div className="col-span-2">Activity</div>
         <div className="col-span-2">Status</div>
       </div>
 

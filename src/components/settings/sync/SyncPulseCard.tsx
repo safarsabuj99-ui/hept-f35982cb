@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Loader2, RotateCw, Activity, CheckCircle2, AlertTriangle, Zap, Trash2 } from "lucide-react";
+import { Loader2, RotateCw, Activity, CheckCircle2, AlertTriangle, Zap, Trash2, Layers, Sparkles, Inbox } from "lucide-react";
 
 interface PulseStats {
   pending: number;
@@ -11,6 +11,9 @@ interface PulseStats {
   done_24h: number;
   failed_24h: number;
   avg_ms: number;
+  chunks_in_flight: number;
+  backlog_total: number;
+  auto_shrunk_24h: number;
 }
 
 interface Props {
@@ -99,12 +102,40 @@ export function SyncPulseCard({ stats, loading, initialLoading, onRefresh, faile
             </span>
             <div>
               <h2 className={cn("text-lg font-semibold tracking-tight", m.text)}>{m.label}</h2>
-              <p className="text-xs text-muted-foreground">Live chunk-aware sync engine · auto-refresh 5s</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-primary" />
+                Self-Healing Deep-Dive engine · auto-refresh 5s
+              </p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onRefresh} disabled={loading} className="h-8">
             <RotateCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </Button>
+        </div>
+
+        {/* Engine status strip */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-1.5 px-2.5 h-7 rounded-full border border-primary/20 bg-primary/5">
+            <Layers className="h-3 w-3 text-primary" />
+            <span className="text-muted-foreground">Chunks in flight</span>
+            <span className="font-semibold tabular-nums text-foreground">{stats.chunks_in_flight}</span>
+          </div>
+          <div className={cn(
+            "flex items-center gap-1.5 px-2.5 h-7 rounded-full border",
+            stats.backlog_total > 0
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+              : "border-emerald-500/20 bg-emerald-500/5"
+          )}>
+            <Inbox className="h-3 w-3" />
+            <span className={cn(stats.backlog_total > 0 ? "" : "text-muted-foreground")}>Backlog</span>
+            <span className="font-semibold tabular-nums">{stats.backlog_total}</span>
+            <span className={cn(stats.backlog_total > 0 ? "" : "text-muted-foreground")}>day{stats.backlog_total === 1 ? "" : "s"}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 h-7 rounded-full border border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400">
+            <Sparkles className="h-3 w-3" />
+            <span className="text-muted-foreground">Auto-shrunk 24h</span>
+            <span className="font-semibold tabular-nums">{stats.auto_shrunk_24h}</span>
+          </div>
         </div>
 
         {/* KPI tiles */}

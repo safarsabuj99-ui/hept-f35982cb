@@ -78,6 +78,11 @@ export function SyncErrorPanel({ jobs, onRefresh }: Props) {
                 <span className="font-medium text-sm truncate">{job.account_name}</span>
                 <Badge variant="outline" className="text-[10px] h-5">{job.function_name.replace("sync-", "")}</Badge>
                 {job.error_code && <Badge variant="destructive" className="text-[10px] h-5">{job.error_code}</Badge>}
+                {job.error_code && (job.error_code === "cpu_timeout" || job.error_code === "proxy_upstream") && (
+                  <Badge variant="outline" className="text-[10px] h-5 gap-1 border-primary/30 text-primary bg-primary/5">
+                    ↻ auto-split
+                  </Badge>
+                )}
                 {job.date_from && job.date_to && (
                   <Badge variant="outline" className="text-[10px] h-5 font-mono bg-background/40">
                     {job.date_from} → {job.date_to}
