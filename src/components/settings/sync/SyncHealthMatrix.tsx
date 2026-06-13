@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Activity, RotateCw, ServerOff, SkipForward, Loader2 } from "lucide-react";
+import { Activity, RotateCw, ServerOff, SkipForward, Loader2, Inbox } from "lucide-react";
 import { SyncHealthRow, AccountHealth } from "./SyncHealthRow";
 import { HealthTier } from "./healthScore";
 
