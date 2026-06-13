@@ -128,19 +128,21 @@ Deno.serve(async (req) => {
     const HEARTBEAT_HOURS = 6;
     const nowMs = Date.now();
 
-    // ===== BACKLOG DRAIN: re-enqueue ready 1-day chunks first =====
+    // ===== BACKLOG DRAIN: re-enqueue ready day-jobs for the current lane =====
     let backlogEnqueued = 0;
-    if (isDeepDive) {
+    {
+      const currentLane = isFastLane ? "fast" : "deep";
       const accountIdSet = new Set(accounts.map(a => a.id));
-      const { data: backlogRows } = await supabase
-        .from("deep_dive_backlog")
+      const { data: backlogRows } = await (supabase
+        .from("deep_dive_backlog") as any)
         .select("ad_account_id, org_id, data_date")
+        .eq("lane", currentLane)
         .lte("next_retry_at", new Date().toISOString())
         .limit(200);
 
       // Group by account so each account gets its own parent job
       const byAccount = new Map<string, { org_id: string; dates: string[] }>();
-      for (const row of backlogRows ?? []) {
+      for (const row of (backlogRows ?? []) as any[]) {
         if (!accountIdSet.has(row.ad_account_id)) continue;
         if (!byAccount.has(row.ad_account_id)) {
           byAccount.set(row.ad_account_id, { org_id: row.org_id, dates: [] });
@@ -155,7 +157,7 @@ Deno.serve(async (req) => {
           .filter(d => !existing.has(`${d}_${d}`))
           .map((d, idx, arr) => ({
             ad_account_id: accId,
-            function_name: "sync-deep-dive",
+            function_name: targetFunction,
             status: "pending",
             org_id: info.org_id,
             parent_job_id: parentId,
@@ -169,7 +171,7 @@ Deno.serve(async (req) => {
         const { data: ins } = await supabase.from("sync_jobs").insert(fresh).select("id");
         backlogEnqueued += ins?.length ?? 0;
       }
-      if (backlogEnqueued > 0) console.log(`📤 Backlog drained: enqueued ${backlogEnqueued} day-jobs`);
+      if (backlogEnqueued > 0) console.log(`📤 ${currentLane}-lane backlog drained: enqueued ${backlogEnqueued} day-jobs`);
     }
 
     for (const acc of accounts) {
