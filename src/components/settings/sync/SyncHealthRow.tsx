@@ -234,7 +234,7 @@ export function SyncHealthRow({ acc, onRefresh }: { acc: AccountHealth; onRefres
 
   const isCritical = acc.fast.tier === "critical" || acc.deep.tier === "critical";
   const isSkipped = !acc.activity.deep_dive_will_run;
-  const isAutoSplitting = acc.splits_24h > 0 && (acc.deep.tier === "degraded" || acc.deep.tier === "critical");
+  const isAutoSplitting = (acc.splits_24h > 0 || acc.backlog_count > 0) && (acc.deep.tier === "degraded" || acc.deep.tier === "critical" || acc.fast.tier === "degraded" || acc.fast.tier === "critical");
 
   return (
     <div className={cn(
