@@ -109,9 +109,11 @@ Deno.serve(async (req) => {
       const isChunked = job.chunk_strategy === "chunked" && job.date_from && job.date_to;
       const chunkLabel = isChunked ? ` [${job.date_from}→${job.date_to} #${job.chunk_index! + 1}/${job.chunk_total}]` : "";
 
+      const perJobTimeoutMs = job.function_name === "sync-deep-dive" ? PER_JOB_TIMEOUT_DEEP_MS : PER_JOB_TIMEOUT_FAST_MS;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), PER_JOB_TIMEOUT_MS);
+        const timeout = setTimeout(() => controller.abort(), perJobTimeoutMs);
+
 
         const requestBody: any = { ad_account_ids: [job.ad_account_id] };
         if (isChunked) {
