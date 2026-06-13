@@ -359,7 +359,6 @@ Deno.serve(async (req) => {
               org_id: job.org_id,
               recommended_chunk_days: chunkDays,
               last_error: null,
-              last_error_code: null,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "ad_account_id" }
