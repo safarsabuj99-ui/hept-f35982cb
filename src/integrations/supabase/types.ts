@@ -2079,6 +2079,53 @@ export type Database = {
           },
         ]
       }
+      deep_dive_backlog: {
+        Row: {
+          ad_account_id: string
+          attempts: number
+          created_at: string
+          data_date: string
+          id: string
+          last_error: string | null
+          last_error_code: string | null
+          next_retry_at: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          attempts?: number
+          created_at?: string
+          data_date: string
+          id?: string
+          last_error?: string | null
+          last_error_code?: string | null
+          next_retry_at?: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          attempts?: number
+          created_at?: string
+          data_date?: string
+          id?: string
+          last_error?: string | null
+          last_error_code?: string | null
+          next_retry_at?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deep_dive_backlog_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_acceptances: {
         Row: {
           accepted_at: string
