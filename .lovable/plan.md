@@ -1,71 +1,82 @@
-# Sync UI: Self-Healing Deep-Dive Visuals
+# Fast-Lane Hardening + 10-Day Backfill (Both Lanes)
 
-The backend now has: always-chunked deep dives, `deep_dive_backlog` queue, auto-shrink on `cpu_timeout`/`proxy_upstream`, transient 546 retry, and learning chunk sizes. The UI still shows the old "Critical / never" model and doesn't expose backlog or self-healing. This plan upgrades the Sync tab so the new behavior is visible and trustworthy.
+The screenshot shows two leftover issues:
+1. **Fast-Lane throws `api_error`** on heavy TikTok accounts (HEPT 15, HEPT AGENCY) — the self-healing engine only covers Deep-Dive today.
+2. **Backfill is still 25 days** (`TOTAL_WINDOW_DAYS = 25`, UI shows `25d windows`). User wants **10 days for both Fast-Lane and Deep-Dive**.
+
+This plan narrows both windows to 10 days and extends the self-healing model to Fast-Lane so heavy accounts stop producing red `api_error` pills.
 
 ## What the user will see
 
-1. **New top banner — "Self-Healing Deep Dive engine"** (replaces the static "Live chunk-aware sync engine" subtitle in `SyncPulseCard`). Subtle gradient pill with three live mini-stats:
-   - `Chunks in flight: N`
-   - `Backlog: N days pending` (links to filter)
-   - `Auto-shrunk in 24h: N` (count of jobs that hit `cpu_timeout`/`proxy_upstream` and got split)
+- Account Health Matrix: `Engine: 10d` instead of `25d windows`. Heavy accounts auto-shrink to `3d` / `1d` under load — same self-healing badges that exist for Deep-Dive.
+- HEPT 15 / HEPT AGENCY: Fast-Lane status changes from `Error api_error` to `Auto-recovering (api_error)` while the engine retries with smaller chunks, then clears to `Live` once a child chunk succeeds.
+- Self-Heal Timeline lists **both Fast-Lane and Deep-Dive** backlog days.
+- Top banner copy: `Backlog: N days pending` covers both lanes.
 
-2. **Account Health Matrix — new "Engine" column** (between Deep-Dive and Activity):
-   - Current chunk size for the account (e.g. `Chunks: 1d`, `3d`, `7d`)
-   - Backlog count badge if `backlog_days > 0` (amber, "N day(s) queued")
-   - `Self-healing` green badge when the account auto-recovered (had ≥1 split in 24h AND last parent succeeded)
-   - Tooltip explains: "TikTok heavy account — collapsed to 1-day windows. 4 days in backlog, next retry in 12m."
+## Technical changes
 
-3. **Row expand panel — new "Self-Heal Timeline" section** under Deep-Dive stats:
-   - `Window size: 1d` (with arrow showing previous → current if shrunk)
-   - `Splits (24h): 3` · `Backlog days: 4` · `Next backlog retry: 12m`
-   - List of last 3 backlog entries: `2026-06-10 · attempt 2/5 · next in 12m`
-   - `Drain backlog now` button → invokes orchestrator with `drainBacklog: true`
+### 1. Backfill window: 25 → 10 days (both lanes)
 
-4. **New filter chip** in matrix: `Backlog (N)` between "Silent / Skipped" and "Idle". Shows only accounts with `backlog_days > 0`.
+- `supabase/functions/sync-orchestrator/index.ts`:
+  - `TOTAL_WINDOW_DAYS = 10` — used for **Deep-Dive** chunk planning.
+  - Default `recommended_chunk_days` for Meta/Google deep-dive: `5` (so one or two chunks cover the 10-day window). TikTok deep-dive cap stays at `3 → 2 → 1` based on `consecutive_failures`.
+- `supabase/functions/sync-fast-lane/index.ts`:
+  - Replace the per-platform start dates (TikTok/Google use `globalStartDate → today`; Meta uses last 3 days) with **a unified 10-day rolling window** (`today - 9 → today`) across Meta, TikTok, Google. Historical pre-10-day backfill is Deep-Dive's job.
+- `supabase/migrations/<new>.sql`:
+  - Update `mark_parent_complete` constants from `25.0` / `25` to `10.0` / `10` so `avg_rows_per_day` and `recommended_chunk_days` reflect the new window.
+- UI: remove the hardcoded `25` fallback in `SyncHealthRow.tsx` (line 387) and update the "25+ fields" copy in `SyncControlsAccordion.tsx`. Display the actual `current_chunk_days` or `—` when null.
 
-5. **Errors & Retry panel updates**:
-   - `cpu_timeout` and `proxy_upstream` badges get a small "↻ auto-split" suffix when the worker successfully created child chunks. Communicates "this error was handled" instead of looking like pure failure.
-   - New collapsible sub-section: **Backlog (N)** listing single-day backlog rows with `account · date · attempts · next_retry_at` and a per-row "Retry now" button.
+### 2. Fast-Lane self-healing (mirrors Deep-Dive engine)
 
-6. **Status pill rewording**: `Error cpu_timeout` → `Auto-splitting (cpu_timeout)` when the row also has a successful child within the last hour. Removes the false-alarm red on HEPT 15.
+TikTok Fast-Lane is the main offender. Apply the same auto-shrink + backlog pipeline:
 
-## Technical details
+- `sync-fast-lane/index.ts`:
+  - **Per-chunk failure isolation**: today's `tiktokFailed = true; break` aborts the whole account. Change to per-chunk: failed chunks get pushed into `deep_dive_backlog` with `lane = 'fast'` so the orchestrator can drain them.
+  - **Hardened retry**: reuse Deep-Dive's `tiktokFetchWithRetry` (handles 5xx/546/empty body/JSON parse) for the report calls.
+  - **Page cap**: cap TikTok pagination at 8 pages per chunk; on overflow, split the chunk and spill the remainder to backlog.
+  - **Error code propagation**: when a chunk was auto-split successfully, return `error_code: 'auto_split'` instead of `api_error`.
 
-**Data layer (`SyncTab.tsx`)**
-- Add parallel query: `supabase.from("deep_dive_backlog").select("ad_account_id, date, attempts, next_retry_at, last_error").order("next_retry_at")`.
-- Aggregate into `backlogByAccount: Map<string, { count, nextRetryAt, entries[] }>`.
-- Add 24h aggregate query for auto-split count: `sync_jobs` where `error_code in ('cpu_timeout','proxy_upstream')` AND has child jobs (parent_job_id IS NOT NULL on a sibling) — compute client-side from existing `allJobs24hRes`.
-- Extend `AccountHealth` with: `backlog_count`, `backlog_next_retry_at`, `backlog_entries`, `current_chunk_days`, `splits_24h`, `self_healed`.
+- **Migration**: add `lane text not null default 'deep' check (lane in ('fast','deep'))` column to `deep_dive_backlog`. Orchestrator's drain block filters by `lane` matching the current run.
 
-**Components**
-- `SyncPulseCard.tsx`: new `EngineBanner` sub-component receiving `{ chunksInFlight, backlogTotal, autoShrunk24h }`.
-- `SyncHealthRow.tsx`: 
-  - Add `EnginePill` between Deep-Dive and Activity (chunk size + backlog badge + self-healing badge).
-  - Expanded panel: new `SelfHealTimeline` section.
-  - Status pill: derive `Auto-splitting` label when `splits_24h > 0 && deep.tier !== 'critical'`.
-- `SyncHealthMatrix.tsx`: add `backlog` filter, update grid template `col-span-2/2/3/2/3/...` to fit Engine column (collapse Activity to col-span-2, Engine col-span-2).
-- `SyncErrorPanel.tsx`: add Backlog sub-section + `auto-split` suffix badge.
+- `sync-orchestrator/index.ts`:
+  - Add the same backlog-drain block at the top of the `isFastLane` branch (currently only `isDeepDive` drains).
+  - When enqueueing fresh fast-lane jobs after a failure, set `chunk_strategy = 'chunked'` so the worker uses `shrinkWindow` on the next failure.
 
-**Backend wiring (no schema change)**
-- `deep_dive_backlog` table already exists from the prior migration. Add SELECT GRANT for `authenticated` if missing (check first; add migration only if missing).
-- `sync-orchestrator` already accepts a drain path; expose a small "Retry now" action by invoking with `{ function: 'sync-deep-dive', ad_account_id, date }`.
+- `sync-queue-worker/index.ts`:
+  - Extend the `cpu_timeout`/`proxy_upstream` auto-split path to also fire for `api_error` on Fast-Lane when the failure window is > 1 day. Successful split → don't mark parent as failed; queue child days into backlog with `lane = 'fast'`.
+
+### 3. Status pill rewording for Fast-Lane
+
+- `SyncHealthRow.tsx`: extend the existing `Auto-splitting` relabel to Fast-Lane:
+  - `fast.tier === 'critical' && splits_24h > 0` → `Auto-recovering (Fast-Lane)` (amber, not red).
+  - `fast.tier === 'critical' && backlog_count > 0` → `Backlog draining (Fast-Lane)`.
+- `SyncErrorPanel.tsx`: add the `↻ auto-split` suffix for Fast-Lane jobs with `error_code in ('cpu_timeout','proxy_upstream','api_error')` when a child sibling exists.
+
+### 4. Data layer
+
+- `SyncTab.tsx`: split `backlog_entries` by `lane` and surface both counts (`fast_backlog`, `deep_backlog`) on `AccountHealth`. Engine pill shows the worst of the two.
 
 ## Out of scope
-- No edge function logic changes (engine already implemented).
-- No schema redesign.
-- No Fast-Lane visual changes.
-- No Manual Sync / Sync Schedule changes.
 
-## Files to edit
-- `src/components/settings/SyncTab.tsx` (queries + aggregation)
-- `src/components/settings/sync/SyncPulseCard.tsx` (engine banner)
-- `src/components/settings/sync/SyncHealthRow.tsx` (Engine pill + Self-Heal Timeline)
-- `src/components/settings/sync/SyncHealthMatrix.tsx` (column + filter)
-- `src/components/settings/sync/SyncErrorPanel.tsx` (backlog section + auto-split suffix)
-- Possibly one tiny migration to GRANT SELECT on `deep_dive_backlog` to `authenticated` (only if the prior migration omitted it).
+- No changes to Meta / Google attribution logic.
+- No new edge functions.
+- No changes to Manual Sync or Sync Schedule UI.
+
+## Files
+
+- `supabase/migrations/<new>.sql` — add `lane` column to `deep_dive_backlog`; rewrite `mark_parent_complete` window constants 25 → 10.
+- `supabase/functions/sync-orchestrator/index.ts` — `TOTAL_WINDOW_DAYS = 10`, Fast-Lane backlog drain.
+- `supabase/functions/sync-fast-lane/index.ts` — unified 10-day window, per-chunk isolation, retry helper, page cap, backlog spill.
+- `supabase/functions/sync-queue-worker/index.ts` — auto-split for Fast-Lane api_error.
+- `src/components/settings/SyncTab.tsx` — split backlog by lane.
+- `src/components/settings/sync/SyncHealthRow.tsx` — drop `?? 25` fallback, Fast-Lane Auto-recovering pill.
+- `src/components/settings/sync/SyncErrorPanel.tsx` — Fast-Lane auto-split suffix.
+- `src/components/settings/sync/SyncControlsAccordion.tsx` — copy update.
 
 ## Validation
-- HEPT 15 row should show `Engine: 1d · Backlog 4 · Self-healing` instead of `Critical / never`.
-- Top banner should show non-zero `Auto-shrunk` and `Backlog` numbers.
-- Errors panel `cpu_timeout` rows for HEPT 15 should carry the `↻ auto-split` suffix.
-- Light accounts (FARISH, HEPT 8) keep `Engine: 7d · No backlog` and stay green.
+
+- HEPT 15 Fast-Lane: previous `Critical 35% · api_error` → `Auto-recovering · 3d windows · Backlog 2 days`, clears to `Live` after backlog drains.
+- Engine column reads `10d` for healthy accounts, `3d`/`1d` for heavy ones.
+- No row shows the literal string `25d` anywhere.
+- Deep-Dive only fetches a 10-day rolling window; older days only re-enter via explicit backlog or manual sync.
+- Errors panel `api_error` rows on TikTok carry `↻ auto-split` suffix and are no longer red.
