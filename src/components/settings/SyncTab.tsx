@@ -174,6 +174,9 @@ export function SyncTab() {
             last_fast_lane_rows: st?.last_fast_lane_rows ?? 0,
             consecutive_zero_runs: st?.consecutive_zero_runs ?? 0,
           });
+          const backlog = backlogByAccount.get(a.id) ?? [];
+          const splits = splitsByAccount.get(a.id) ?? 0;
+          const selfHealed = splits > 0 && (deep.tier === "healthy" || deep.tier === "excellent");
           return {
             ad_account_id: a.id,
             account_name: a.account_name || a.id,
@@ -181,6 +184,12 @@ export function SyncTab() {
             fast, deep, activity,
             issue: summarizeIssue(fast, deep, tokenExpiringInDays),
             token_expiring_in_days: tokenExpiringInDays,
+            backlog_count: backlog.length,
+            backlog_next_retry_at: backlog[0]?.next_retry_at ?? null,
+            backlog_entries: backlog.slice(0, 5),
+            current_chunk_days: st?.recommended_chunk_days ?? null,
+            splits_24h: splits,
+            self_healed: selfHealed,
           };
         });
       setAccountHealth(healthList);
