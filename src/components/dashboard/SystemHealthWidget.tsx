@@ -36,23 +36,14 @@ export function SystemHealthWidget() {
   const fetchHealth = async () => {
     const today = getDhakaDateString();
 
-    // First get mapped accounts with keywords
-    const { data: mappedAssignments } = await supabase
-      .from("ad_account_clients")
-      .select("ad_account_id, mapping_keyword")
-      .neq("mapping_keyword", "");
-    
-    const mappedAccountIds = [...new Set((mappedAssignments ?? []).map((r: any) => r.ad_account_id))];
-    const keywordsByAccount: Record<string, string[]> = {};
-    for (const m of mappedAssignments ?? []) {
-      if (!keywordsByAccount[m.ad_account_id]) keywordsByAccount[m.ad_account_id] = [];
-      keywordsByAccount[m.ad_account_id].push((m.mapping_keyword || "").toLowerCase());
-    }
-
     const [intRes, accRes, spendRes] = await Promise.all([
       supabase.from("api_integrations" as any).select("id, instance_name, platform, token_expiry_date, connection_status, is_active") as any,
       supabase.from("ad_accounts" as any).select("id, ad_account_id, platform_name, account_spending_limit, is_active").eq("is_active", true) as any,
-      supabase.from("daily_ad_spend").select("ad_account_id, final_billable_usd, campaign_name").eq("date", today),
+      // Raw per-campaign spend for today, joined to campaigns so we can group by ad_account_id.
+      supabase
+        .from("daily_metrics")
+        .select("spend, campaigns!inner(ad_account_id)")
+        .eq("data_date", today),
     ]);
 
     // Token health
@@ -72,21 +63,16 @@ export function SystemHealthWidget() {
         return { id: i.id, instance_name: i.instance_name || i.platform, platform: i.platform, daysRemaining, status };
       });
 
-    // Spending limits - filter by mapped accounts and keyword match
+    // Spending limits — raw spend per account from daily_metrics
     const spendByAccount: Record<string, number> = {};
     for (const r of (spendRes.data ?? []) as any[]) {
-      // Only count spend if account is mapped and campaign name matches a keyword
-      const keywords = keywordsByAccount[r.ad_account_id];
-      if (!keywords || keywords.length === 0) continue;
-      const nameLower = (r.campaign_name || "").toLowerCase();
-      const matches = keywords.some((kw: string) => nameLower.includes(kw));
-      if (matches) {
-        spendByAccount[r.ad_account_id] = (spendByAccount[r.ad_account_id] || 0) + Number(r.final_billable_usd);
-      }
+      const accId = r.campaigns?.ad_account_id;
+      if (!accId) continue;
+      spendByAccount[accId] = (spendByAccount[accId] || 0) + Number(r.spend);
     }
 
     const limitList: AccountLimit[] = ((accRes.data ?? []) as any[])
-      .filter((a: any) => a.account_spending_limit && a.account_spending_limit > 0 && mappedAccountIds.includes(a.id))
+      .filter((a: any) => a.account_spending_limit && a.account_spending_limit > 0)
       .map((a: any) => {
         const todaySpend = spendByAccount[a.id] || 0;
         const usagePercent = Math.min(Math.round((todaySpend / a.account_spending_limit) * 100), 100);
