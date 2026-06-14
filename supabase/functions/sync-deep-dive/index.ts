@@ -857,69 +857,80 @@ Deno.serve(async (req) => {
           let tiktokFailed = false;
 
           const MAX_PAGES = 8;
+          // Metric groups — split to keep each upstream TikTok report query small enough
+          // to finish inside the Cloudflare worker's subrequest timeout (HTTP 546 fix).
+          const BC_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
+          const BC_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"];
+          const DIRECT_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
+          const DIRECT_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"];
+
+          const fetchPage = async (metrics: string[], chunkStart: string, chunkEnd: string, page: number) => {
+            let cJson: any = null;
+            if (bcId) {
+              const bcParams = new URLSearchParams({
+                bc_id: bcId,
+                advertiser_ids: JSON.stringify([account.ad_account_id]),
+                service_type: "AUCTION",
+                report_type: "BASIC",
+                data_level: "AUCTION_CAMPAIGN",
+                dimensions: '["campaign_id","stat_time_day"]',
+                metrics: JSON.stringify(metrics),
+                start_date: chunkStart,
+                end_date: chunkEnd,
+                page_size: "500",
+                page: String(page),
+              });
+              const bcRes = await tiktokFetchWithRetry(
+                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
+                { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+              );
+              cJson = bcRes;
+              if (cJson.code !== 0) {
+                console.warn(`TikTok BC chunk ${chunkStart}-${chunkEnd} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                cJson = null;
+              }
+            }
+            if (!cJson) {
+              const directMetrics = metrics === BC_METRICS_A ? DIRECT_METRICS_A
+                : metrics === BC_METRICS_B ? DIRECT_METRICS_B
+                : metrics;
+              const params = new URLSearchParams({
+                advertiser_id: account.ad_account_id,
+                report_type: "BASIC",
+                data_level: "AUCTION_CAMPAIGN",
+                dimensions: '["campaign_id","stat_time_day"]',
+                metrics: JSON.stringify(directMetrics),
+                start_date: chunkStart,
+                end_date: chunkEnd,
+                page_size: "500",
+                page: String(page),
+              });
+              const directRes = await tiktokFetchWithRetry(
+                `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
+                { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+              );
+              cJson = directRes;
+            }
+            return cJson;
+          };
+
           for (const chunk of dateChunks) {
             let page = 1;
             let totalPages = 1;
             let chunkRows = 0;
 
             do {
-              let cJson: any = null;
-              let usedBc = false;
+              // Two parallel calls per page — split metrics to halve upstream load.
+              const [resA, resB] = await Promise.all([
+                fetchPage(BC_METRICS_A, chunk.start, chunk.end, page),
+                fetchPage(BC_METRICS_B, chunk.start, chunk.end, page),
+              ]);
 
-              if (bcId) {
-          const bcParams = new URLSearchParams({
-                  bc_id: bcId,
-                  advertiser_ids: JSON.stringify([account.ad_account_id]),
-                  service_type: "AUCTION",
-                  report_type: "BASIC",
-                  data_level: "AUCTION_CAMPAIGN",
-                  dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"]',
-                  start_date: chunk.start,
-                  end_date: chunk.end,
-                  page_size: "500",
-                  page: String(page),
-                });
-
-                const bcRes = await tiktokFetchWithRetry(
-                  `${tiktokBase}/open_api/v1.3/report/integrated/get/?${bcParams}`,
-                  { "Access-Token": integration.api_token, "Content-Type": "application/json" }
-                );
-
-                cJson = bcRes;
+              for (const cJson of [resA, resB]) {
                 if (cJson.code !== 0) {
-                  console.warn(`TikTok BC chunk ${chunk.start}-${chunk.end} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
-                  cJson = null;
-                } else {
-                  usedBc = true;
-                }
-              }
-
-              if (!cJson) {
-              const params = new URLSearchParams({
-                  advertiser_id: account.ad_account_id,
-                  report_type: "BASIC",
-                  data_level: "AUCTION_CAMPAIGN",
-                  dimensions: '["campaign_id","stat_time_day"]',
-metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversion","conversion_cost","complete_payment_roas","reach","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"]',
-                  start_date: chunk.start,
-                  end_date: chunk.end,
-                  page_size: "500",
-                  page: String(page),
-                });
-
-                const directRes = await tiktokFetchWithRetry(
-                  `${tiktokBase}/open_api/v1.3/report/integrated/get/?${params}`,
-                  { "Access-Token": integration.api_token, "Content-Type": "application/json" }
-                );
-
-                cJson = directRes;
-                if (cJson.code !== 0) {
-                  // Negative codes from tiktokFetchWithRetry indicate proxy/transport failures (retryable)
                   const isProxyErr = typeof cJson.code === "number" && cJson.code < 0;
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
                   if (isProxyErr) {
-                    // Bubble up as a structured failure so the worker classifies as proxy_upstream
                     return new Response(
                       JSON.stringify({
                         ok: false,
@@ -934,11 +945,27 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                   break;
                 }
               }
+              if (tiktokFailed) break;
 
-              const pageRows = cJson.data?.list || [];
+              const rowsA = resA.data?.list || [];
+              const rowsB = resB.data?.list || [];
+              // Merge by (campaign_id + stat_time_day): same dimensions across the two calls.
+              const keyOf = (r: any) => `${r.dimensions?.campaign_id || ""}|${r.dimensions?.stat_time_day || ""}`;
+              const mergedMap = new Map<string, any>();
+              for (const r of rowsA) mergedMap.set(keyOf(r), { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
+              for (const r of rowsB) {
+                const k = keyOf(r);
+                const existing = mergedMap.get(k);
+                if (existing) {
+                  existing.metrics = { ...existing.metrics, ...(r.metrics || {}) };
+                } else {
+                  mergedMap.set(k, { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
+                }
+              }
+              const pageRows = Array.from(mergedMap.values());
               allTiktokRows = allTiktokRows.concat(pageRows);
               chunkRows += pageRows.length;
-              totalPages = cJson.data?.page_info?.total_page || 1;
+              totalPages = Math.max(resA.data?.page_info?.total_page || 1, resB.data?.page_info?.total_page || 1);
               page++;
             } while (page <= totalPages && page <= MAX_PAGES);
 
@@ -954,8 +981,9 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                 { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
             }
-            console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s))`);
+            console.log(`TikTok chunk ${chunk.start}-${chunk.end}: ${chunkRows} rows (${totalPages} page(s), split-metric)`);
           }
+
 
 
           if (tiktokFailed) continue;
