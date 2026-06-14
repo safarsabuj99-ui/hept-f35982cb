@@ -302,6 +302,11 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     // Track per-account row counts for activity gating (drives deep-dive scheduling)
     const accountRowCounts: Record<string, number> = {};
+    // Track raw API insight rows returned per account (BEFORE keyword/spend filtering).
+    // Used as a wake-up signal: any insights returned = account has campaigns running,
+    // even if they don't match keyword mappings yet or haven't accrued spend.
+    const accountApiInsights: Record<string, number> = {};
+
 
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
