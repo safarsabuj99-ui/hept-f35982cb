@@ -1086,7 +1086,10 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
 
           for (const row of rows) {
             const rawCampaignId = row.dimensions?.campaign_id;
-            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
+            const campaignName =
+              (rawCampaignId && tiktokNameMap[rawCampaignId]) ||
+              row.metrics?.campaign_name ||
+              `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
 
             // ===== KEYWORD MATCHING: Skip if no match =====
