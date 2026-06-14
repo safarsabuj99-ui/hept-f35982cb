@@ -9,7 +9,6 @@ import { format } from "date-fns";
 interface DayData {
   date: string;
   rawCost: number;
-  billed: number;
 }
 
 interface RevenueVsCostChartProps {
@@ -26,43 +25,24 @@ export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
     const fetchData = async () => {
       setLoading(true);
 
-      // Step 1: Get mapped accounts WITH keywords
-      const { data: mappedAssignments } = await supabase
-        .from("ad_account_clients")
-        .select("ad_account_id")
-        .neq("mapping_keyword", "");
-
-      const mappedAccountIds = [...new Set(mappedAssignments?.map((r: any) => r.ad_account_id) || [])];
-
-      if (mappedAccountIds.length === 0) {
-        setData([]);
-        setLoading(false);
-        return;
-      }
-
+      // Raw per-campaign platform spend (same source as Campaign tab).
       let query = supabase
-        .from("daily_ad_spend")
-        .select("date, raw_spend_amount, raw_currency, exchange_rate_used, final_billable_usd, ad_account_id")
-        .in("ad_account_id", mappedAccountIds)
-        .order("date", { ascending: true });
+        .from("daily_metrics")
+        .select("data_date, spend")
+        .order("data_date", { ascending: true });
 
       if (dateRange) {
         query = query
-          .gte("date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("date", format(dateRange.to, "yyyy-MM-dd"));
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
       }
 
       const { data: spendData } = await query;
 
-      const grouped: Record<string, { rawCost: number; billed: number }> = {};
+      const grouped: Record<string, number> = {};
       for (const row of spendData ?? []) {
-        const d = row.date;
-        if (!grouped[d]) grouped[d] = { rawCost: 0, billed: 0 };
-        const rawUsd = row.raw_currency === "BDT"
-          ? Number(row.raw_spend_amount) / Number(row.exchange_rate_used)
-          : Number(row.raw_spend_amount);
-        grouped[d].rawCost += rawUsd;
-        grouped[d].billed += Number(row.final_billable_usd);
+        const d = (row as any).data_date as string;
+        grouped[d] = (grouped[d] || 0) + Number((row as any).spend);
       }
 
       setData(
@@ -70,8 +50,7 @@ export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, v]) => ({
             date,
-            rawCost: Math.round(v.rawCost * 100) / 100,
-            billed: Math.round(v.billed * 100) / 100,
+            rawCost: Math.round(v * 100) / 100,
           }))
       );
       setLoading(false);
@@ -104,12 +83,11 @@ export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
             <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
             <Tooltip
-              formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name === "rawCost" ? "Raw Cost" : "Billed"]}
+              formatter={(value: number) => [`$${value.toFixed(2)}`, "Spend"]}
               labelFormatter={(l) => new Date(l).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
               contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
             />
             <Area type="monotone" dataKey="rawCost" stroke="hsl(var(--destructive))" fill="url(#costGrad)" strokeWidth={2} />
-            <Area type="monotone" dataKey="billed" stroke="hsl(var(--success))" fill="url(#revenueGrad)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </CardContent>

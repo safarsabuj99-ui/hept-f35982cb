@@ -35,49 +35,38 @@ export function RunwayPrediction() {
     const clientIds = roles?.map((r) => r.user_id) ?? [];
     if (clientIds.length === 0) { setLoading(false); return; }
 
-    // Get mapped accounts with keywords
-    const { data: mappedAssignments } = await supabase
-      .from("ad_account_clients")
-      .select("ad_account_id, client_id, mapping_keyword")
-      .neq("mapping_keyword", "");
-    
-    const keywordsByAccount: Record<string, string[]> = {};
-    const accToClient: Record<string, string> = {};
-    for (const m of mappedAssignments ?? []) {
-      if (!keywordsByAccount[m.ad_account_id]) keywordsByAccount[m.ad_account_id] = [];
-      keywordsByAccount[m.ad_account_id].push((m.mapping_keyword || "").toLowerCase());
-      accToClient[m.ad_account_id] = m.client_id;
-    }
-    const mappedAccountIds = Object.keys(keywordsByAccount);
+    const threeDaysStr = getDhakaDateString(-3);
 
-    if (mappedAccountIds.length === 0) { setLoading(false); return; }
+    // Pull campaigns (with client_id) so we can attribute raw daily_metrics spend to a client.
+    const campaigns = await fetchAllRows<any>(() =>
+      supabase.from("campaigns").select("id, client_id").in("client_id", clientIds)
+    );
+    const campaignToClient: Record<string, string> = {};
+    for (const c of campaigns ?? []) {
+      if (c.client_id) campaignToClient[c.id] = c.client_id;
+    }
+    const campaignIds = Object.keys(campaignToClient);
+
+    if (campaignIds.length === 0) { setLoading(false); return; }
 
     const [profilesRes, txns, recentSpend] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, system_paused_campaigns, overdraft_limit_usd, auto_pause_balance_usd").in("user_id", clientIds),
       fetchAllRows<any>(() => supabase.from("transactions").select("client_id, type, amount, status")),
       fetchAllRows<any>(() =>
         supabase
-          .from("daily_ad_spend")
-          .select("ad_account_id, final_billable_usd, campaign_name")
-          .in("ad_account_id", mappedAccountIds)
-          .gte("date", getDhakaDateString(-3))
+          .from("daily_metrics")
+          .select("campaign_id, spend, data_date")
+          .in("campaign_id", campaignIds)
+          .gte("data_date", threeDaysStr)
       ),
     ]);
     const txnsRes = { data: txns };
 
-    const threeDaysStr = getDhakaDateString(-3);
-
-    // Client spend last 3 days - only count matching campaigns
+    // Client spend last 3 days from raw per-campaign metrics (same source as Campaign tab).
     const clientSpend3d: Record<string, number> = {};
     for (const s of recentSpend ?? []) {
-      const keywords = keywordsByAccount[s.ad_account_id];
-      if (!keywords || keywords.length === 0) continue;
-      const nameLower = (s.campaign_name || "").toLowerCase();
-      const matches = keywords.some((kw: string) => nameLower.includes(kw));
-      if (matches) {
-        const cid = accToClient[s.ad_account_id];
-        if (cid) clientSpend3d[cid] = (clientSpend3d[cid] || 0) + Number(s.final_billable_usd);
-      }
+      const cid = campaignToClient[s.campaign_id];
+      if (cid) clientSpend3d[cid] = (clientSpend3d[cid] || 0) + Number(s.spend);
     }
 
     const result: RunwayClient[] = [];
