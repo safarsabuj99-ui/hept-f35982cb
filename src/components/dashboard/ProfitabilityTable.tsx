@@ -81,31 +81,31 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     const mappedCampaigns = await fetchAllRows<any>(() =>
       supabase
         .from("campaigns")
-        .select("ad_account_id, platform")
+        .select("id, ad_account_id, platform, client_id")
         .in("ad_account_id", mappedAccountIds)
     );
 
-    const buildSpendQuery = () => {
-      let q = supabase
-        .from("daily_ad_spend")
-        .select("client_id, ad_account_id, final_billable_usd")
-        .in("ad_account_id", mappedAccountIds);
+    const campaignIds = mappedCampaigns.map((c: any) => c.id);
+
+    const buildMetricsQuery = () => {
+      let q = supabase.from("daily_metrics").select("campaign_id, spend");
+      if (campaignIds.length > 0) q = q.in("campaign_id", campaignIds);
       if (dateRange) {
         q = q
-          .gte("date", format(dateRange.from, "yyyy-MM-dd"))
-          .lte("date", format(dateRange.to, "yyyy-MM-dd"));
+          .gte("data_date", format(dateRange.from, "yyyy-MM-dd"))
+          .lte("data_date", format(dateRange.to, "yyyy-MM-dd"));
       }
       return q;
     };
 
-    const [purchases, spendRows, profiles, roles] = await Promise.all([
+    const [purchases, metrics, profiles, roles] = await Promise.all([
       fetchAllRows<any>(() => supabase.from("usd_purchases").select("bdt_amount_paid, usd_received")),
-      fetchAllRows<any>(buildSpendQuery),
+      fetchAllRows<any>(buildMetricsQuery),
       fetchAllRows<any>(() => supabase.from("profiles").select("user_id, full_name, pricing_config")),
       fetchAllRows<any>(() => supabase.from("user_roles").select("user_id").eq("role", "client")),
     ]);
     const purchasesRes = { data: purchases };
-    const spendRes = { data: spendRows };
+    const metricsRes = { data: metrics };
     const profilesRes = { data: profiles };
     const rolesRes = { data: roles };
 
@@ -141,11 +141,9 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     }
 
     // Mappings
-    const adAccountPlatformMap: Record<string, string> = {};
+    const campaignMap: Record<string, { ad_account_id: string; platform: string; client_id: string | null }> = {};
     for (const c of (mappedCampaigns ?? []) as any[]) {
-      if (!adAccountPlatformMap[c.ad_account_id]) {
-        adAccountPlatformMap[c.ad_account_id] = c.platform;
-      }
+      campaignMap[c.id] = { ad_account_id: c.ad_account_id, platform: c.platform, client_id: c.client_id };
     }
 
     const clientIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
@@ -154,14 +152,14 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
     }
 
-    // Aggregate Dhaka-aligned spend per client per platform so table matches dashboard KPIs
+    // Aggregate spend per client per platform using campaign's client_id (not ad-account-level)
     const clientPlatformSpend: Record<string, Record<string, number>> = {};
-    for (const row of (spendRes.data ?? []) as any[]) {
-      const clientId = row.client_id;
-      if (!clientId || !clientIds.has(clientId)) continue;
-      const platform = adAccountPlatformMap[row.ad_account_id] || "meta";
-      if (!clientPlatformSpend[clientId]) clientPlatformSpend[clientId] = {};
-      clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(row.final_billable_usd);
+    for (const m of (metricsRes.data ?? []) as any[]) {
+      const camp = campaignMap[m.campaign_id];
+      if (!camp || !camp.client_id) continue;
+      if (!clientIds.has(camp.client_id)) continue;
+      if (!clientPlatformSpend[camp.client_id]) clientPlatformSpend[camp.client_id] = {};
+      clientPlatformSpend[camp.client_id][camp.platform] = (clientPlatformSpend[camp.client_id][camp.platform] || 0) + Number(m.spend);
     }
 
     // Build rows

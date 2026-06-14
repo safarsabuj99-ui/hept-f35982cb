@@ -23,6 +23,7 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
     if (!authReady) return;
     const fetch = async () => {
       setLoading(true);
+      let campaignIds: string[] = [];
 
       // Step 1: Get mapped accounts WITH keywords
       const { data: mappedAssignments } = await supabase
@@ -38,32 +39,59 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
         return;
       }
 
+      if (clientId) {
+        const clientAccountIds = mappedAssignments
+          ?.filter((a: any) => a.client_id === clientId)
+          .map((a: any) => a.ad_account_id) ?? [];
+        
+        if (clientAccountIds.length > 0) {
+          const { data: camps } = await supabase
+            .from("campaigns")
+            .select("id")
+            .in("ad_account_id", clientAccountIds);
+          campaignIds = camps?.map((c: any) => c.id) ?? [];
+        }
+      } else {
+        // Get all campaigns from mapped accounts only
+        const { data: camps } = await supabase
+          .from("campaigns")
+          .select("id")
+          .in("ad_account_id", mappedAccountIds);
+        campaignIds = camps?.map((c: any) => c.id) ?? [];
+      }
+
+      if (campaignIds.length === 0) { setData([]); setLoading(false); return; }
+
       const fromDate = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
       const toDate = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
 
-      const spendData = await fetchAllRows<any>(() => {
-        let q = clientId
-          ? supabase
-              .from("daily_ad_spend")
-              .select("date, final_billable_usd")
-              .eq("client_id", clientId)
-              .order("date", { ascending: true })
-          : supabase
-              .from("daily_ad_spend")
-              .select("date, final_billable_usd")
-              .in("ad_account_id", mappedAccountIds)
-              .order("date", { ascending: true });
+      // Chunk + paginate to bypass 1000-row cap
+      const CHUNK = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < campaignIds.length; i += CHUNK) {
+        chunks.push(campaignIds.slice(i, i + CHUNK));
+      }
 
-        if (fromDate && toDate) {
-          q = q.gte("date", fromDate).lte("date", toDate);
-        }
-
-        return q;
-      });
+      const results = await Promise.all(
+        chunks.map((ids) =>
+          fetchAllRows<any>(() => {
+            let q = supabase
+              .from("daily_metrics")
+              .select("data_date, spend")
+              .in("campaign_id", ids)
+              .order("data_date", { ascending: true });
+            if (fromDate && toDate) {
+              q = q.gte("data_date", fromDate).lte("data_date", toDate);
+            }
+            return q;
+          })
+        )
+      );
+      const metricsData = results.flat();
 
       const grouped: Record<string, number> = {};
-      for (const row of spendData ?? []) {
-        grouped[row.date] = (grouped[row.date] || 0) + Number(row.final_billable_usd);
+      for (const row of metricsData ?? []) {
+        grouped[row.data_date] = (grouped[row.data_date] || 0) + Number(row.spend);
       }
 
       setData(

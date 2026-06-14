@@ -103,54 +103,41 @@ export function ProfitLossWidget({ dateRange }: ProfitLossWidgetProps) {
         if (clientIds.has(p.user_id)) profileMap[p.user_id] = p;
       }
 
-      const mappedAssignments = await fetchAllRows<{ ad_account_id: string }>(() =>
-        supabase.from("ad_account_clients").select("ad_account_id").neq("mapping_keyword", "")
+      // Step 4: Get campaigns with client_id — paginated
+      const allCampaigns = await fetchAllRows<{ id: string; platform: string; client_id: string | null }>(() =>
+        supabase.from("campaigns").select("id, platform, client_id")
       );
-      const mappedAccountIds = [...new Set(mappedAssignments.map((row) => row.ad_account_id))];
 
-      if (!mappedAccountIds.length) {
+      if (!allCampaigns.length) {
         setData({ totalRevenueBdt: 0, totalCogsBdt: 0, grossProfitBdt: 0, totalOpexBdt: Math.round(totalOpexBdt), netProfitBdt: -Math.round(totalOpexBdt), wac });
         setLoading(false);
         return;
       }
 
-      const mappedCampaigns = await fetchAllRows<{ ad_account_id: string; platform: string }>(() =>
-        supabase.from("campaigns").select("ad_account_id, platform").in("ad_account_id", mappedAccountIds)
-      );
-
-      if (!mappedCampaigns.length) {
-        setData({ totalRevenueBdt: 0, totalCogsBdt: 0, grossProfitBdt: 0, totalOpexBdt: Math.round(totalOpexBdt), netProfitBdt: -Math.round(totalOpexBdt), wac });
-        setLoading(false);
-        return;
+      const campaignToPlatform: Record<string, string> = {};
+      const campaignToClient: Record<string, string> = {};
+      for (const c of allCampaigns) {
+        campaignToPlatform[c.id] = c.platform;
+        if (c.client_id) campaignToClient[c.id] = c.client_id;
       }
 
-      const adAccountToPlatform: Record<string, string> = {};
-      for (const c of mappedCampaigns) {
-        if (!adAccountToPlatform[c.ad_account_id]) {
-          adAccountToPlatform[c.ad_account_id] = c.platform;
-        }
-      }
-
-      // Step 5: Fetch Dhaka-aligned spend rows so dashboard profit matches the top KPI/cards
-      const spendData = await fetchAllRows<{ client_id: string | null; ad_account_id: string; final_billable_usd: number }>(() => {
-        let q = supabase
-          .from("daily_ad_spend")
-          .select("client_id, ad_account_id, final_billable_usd")
-          .in("ad_account_id", mappedAccountIds);
+      // Step 5: Fetch daily_metrics with date range filter — paginated (fixes silent 1000-row truncation)
+      const metricsData = await fetchAllRows<{ campaign_id: string; spend: number }>(() => {
+        let q = supabase.from("daily_metrics").select("campaign_id, spend");
         if (dateRange) {
-          q = q.gte("date", toISODate(dateRange.from)).lte("date", toISODate(dateRange.to));
+          q = q.gte("data_date", toISODate(dateRange.from)).lte("data_date", toISODate(dateRange.to));
         }
         return q;
       });
 
       // Step 6: Aggregate spend per client per platform
       const clientPlatformSpend: Record<string, Record<string, number>> = {};
-      for (const row of spendData) {
-        const clientId = row.client_id;
+      for (const m of (metricsData ?? []) as any[]) {
+        const clientId = campaignToClient[m.campaign_id];
         if (!clientId) continue;
-        const platform = adAccountToPlatform[row.ad_account_id] || "meta";
+        const platform = campaignToPlatform[m.campaign_id] || "meta";
         if (!clientPlatformSpend[clientId]) clientPlatformSpend[clientId] = {};
-        clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(row.final_billable_usd);
+        clientPlatformSpend[clientId][platform] = (clientPlatformSpend[clientId][platform] || 0) + Number(m.spend);
       }
 
       // Step 7: Calculate revenue & COGS
