@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
       const stat = statsMap.get(acc.id) as any;
 
       // ===== ACTIVITY GATING for Deep-Dive =====
-      if (isDeepDive && stat?.last_fast_lane_at) {
+      if (isDeepDive && stat?.last_fast_lane_at && !recentCampaignAccountIds.has(acc.id)) {
         const zeroRuns = stat.consecutive_zero_runs ?? 0;
         const lastRows = stat.last_fast_lane_rows ?? 0;
         if (lastRows === 0 && zeroRuns >= ZERO_RUN_GRACE) {
@@ -211,7 +211,10 @@ Deno.serve(async (req) => {
             console.log(`Heartbeat Deep-Dive for ${acc.account_name} (silent ${zeroRuns} runs, last full sync ${hoursSinceFullSync.toFixed(1)}h ago)`);
           }
         }
+      } else if (isDeepDive && recentCampaignAccountIds.has(acc.id) && (stat?.consecutive_zero_runs ?? 0) >= ZERO_RUN_GRACE) {
+        console.log(`Wake-up Deep-Dive for ${acc.account_name} (recent campaign change detected)`);
       }
+
 
       // ===== Pick chunk size =====
       // Fast-lane stays single-shot (covers a unified 10-day rolling window).
