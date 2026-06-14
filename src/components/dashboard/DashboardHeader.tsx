@@ -2,6 +2,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Clock, MonitorSmartphone, ClipboardCheck } from "lucide-react";
 
+function getDhakaNow() {
+  const dhakaDateTime = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" });
+  return new Date(dhakaDateTime.replace(" ", "T"));
+}
+
 interface DashboardHeaderProps {
   lastSynced: string | null;
   activeAccounts: number;
@@ -12,11 +17,12 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
   const { user } = useAuth();
   const { profile } = useProfile();
   
-  const hour = new Date().getHours();
+  const dhakaNow = getDhakaNow();
+  const hour = dhakaNow.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "Admin";
   
-  const today = new Date().toLocaleDateString("en-US", {
+  const today = dhakaNow.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -35,7 +41,7 @@ export function DashboardHeader({ lastSynced, activeAccounts, pendingCount }: Da
           </h1>
           <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
             <span className="hidden sm:inline">{today}</span>
-            <span className="sm:hidden">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            <span className="sm:hidden">{dhakaNow.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
             {lastSynced && (
               <span className="inline-flex items-center gap-1.5 text-xs">
                 <span className="pulse-dot" />
