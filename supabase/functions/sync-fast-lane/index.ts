@@ -328,6 +328,8 @@ Deno.serve(async (req) => {
       const windowEndStr = bodyDateTo || endDateStr;
       const metaFastLaneStart = startDateStr;
       accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
+      accountApiInsights[account.id] = accountApiInsights[account.id] ?? 0;
+
 
       try {
         if (platform === "meta") {
