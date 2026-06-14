@@ -1,58 +1,70 @@
 ## Problem
 
-When an ad account has had **no active campaigns for 10+ days**, the orchestrator marks it as "silent" and stops running Deep-Dive on every cycle (only a 6-hour heartbeat). When the user then turns a campaign back ON, the system does **not** pick up new spend automatically — they must open the ad account and click **Sync** manually.
+In TikTok ad account **HEPT AGENCY 2**, two active campaigns exist:
 
-### Root cause
+- `Arafat/Nakshi/Lajbonti/S+` (TikTok campaign id `1867920555407570`)
+- `Arafat/Nakshi/Lajbonti/SS+` (TikTok campaign id `1867923067550866`)
 
-In `sync-orchestrator/index.ts` (lines 180–196):
+Only `/SS+` shows on the agency dashboard under client **Yasin Arafat**. The `/S+` campaign is stored in our DB with its **old name** ` Arman/Womenshop/Lajbonti/S+` and therefore mis-attributed to client **Arman** (keyword `Arman`), so it does not appear under Arafat.
 
-1. After 3 consecutive zero-row Fast-Lane runs, the account is flagged "silent".
-2. Deep-Dive is then skipped unless 6 h have passed since `last_full_sync_at`.
-3. The "activity backstop" in `sync-fast-lane` (line 852) only checks `daily_metrics` for `spend > 0` in the last 3 days — but a freshly reactivated campaign has **no metrics yet**, because Deep-Dive (the function that writes metrics) is the one being skipped. So it's a chicken-and-egg loop until the 6 h heartbeat finally fires.
-4. Manual sync works because `SyncControlsAccordion` calls `sync-deep-dive` directly with `manual: true`, bypassing the silent-skip gate entirely.
+## Root cause
 
-## Fix
+TikTok's `report/integrated/get/` endpoint returns the **historical** `campaign_name` (the name at the time of the stat row). When a campaign is renamed in the TikTok UI, the report API keeps emitting the old name until new days are recorded, while `/campaign/get/` returns the current name.
 
-Add two cheap "wake-up" signals so silent accounts re-activate automatically the moment a campaign turns ON — typically within one Fast-Lane cycle (≤ 15 min) instead of up to 6 h.
+Our sync pipeline currently:
 
-### 1. Fast-Lane: count campaign-level activity, not just metric rows
+- **`sync-deep-dive`** (TikTok branch, ~line 1083): takes `campaignName` from `row.metrics.campaign_name` (historical) and feeds it to both `resolveClientId(...)` and `upsertCampaign(...)`. So the DB row keeps the stale name and stale `client_id`.
+- **`sync-fast-lane`** (TikTok branch, ~line 714): same — uses `row.metrics.campaign_name` for keyword matching and inserts `daily_ad_spend` rows under the wrong `client_id`.
 
-In `sync-fast-lane/index.ts` (around line 892–905), expand the "should reset zero_runs" rule to ALSO trigger when:
+`/campaign/get/` is already called in `sync-deep-dive` (line 974) to fetch status, budget, and objective. We just don't capture `campaign_name` from it.
 
-- The platform API returned **any campaign** with status `ACTIVE`/`ENABLE` for this account in the current run, **or**
-- A new `campaigns` row was inserted/updated in the last 24 h for this account.
+## Fix (TikTok only — minimal scope)
 
-Currently `shouldReset` is `rows > 0 || isActiveByMetrics`. We add `|| hasActiveCampaign || hasRecentCampaignChange`. This means the first Fast-Lane cycle after reactivation immediately clears `consecutive_zero_runs`, so the next orchestrator tick queues a normal Deep-Dive.
+### 1. `supabase/functions/sync-deep-dive/index.ts`
+- Inside the `/campaign/get/` loop (~line 981), additionally build:
+  ```ts
+  const tiktokNameMap: Record<string, string> = {};
+  // for each c in statusJson.data.list:
+  if (c.campaign_name) tiktokNameMap[c.campaign_id] = c.campaign_name;
+  ```
+- In the row-processing loop (~line 1083), replace:
+  ```ts
+  const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
+  ```
+  with the live name preferred:
+  ```ts
+  const campaignName =
+    tiktokNameMap[rawCampaignId] ||
+    row.metrics?.campaign_name ||
+    `TikTok Campaign ${rawCampaignId}`;
+  ```
+  Then `resolveClientId(campaignName, platformId)` and `upsertCampaign(...)` automatically re-assign the correct `client_id` and overwrite the stale name on next deep-dive.
 
-### 2. Orchestrator: shorten the heartbeat for silent accounts
+### 2. `supabase/functions/sync-fast-lane/index.ts`
+Fast-lane runs more often than deep-dive and would keep writing wrong-client `daily_ad_spend` rows until deep-dive heals the name. Two-line guard so fast-lane trusts the corrected DB once deep-dive has run:
 
-In `sync-orchestrator/index.ts`:
+- Just before the keyword-matching block (~line 717), look up any existing campaign by `platform_id = tiktok_<rawCampaignId>` (we can hydrate a `Map<platformId, {name, client_id}>` once per account from a single `select platform_id, name, client_id from campaigns where ad_account_id = ...`).
+- If a row exists, override `campaignName` with `existing.name` and short-circuit `matchedClientId = existing.client_id` (skip keyword loop).
+- Else fall back to the current keyword-matching path (unchanged).
 
-- Lower `HEARTBEAT_HOURS` from **6** → **2** so even if signal #1 misses, a silent account still gets a Deep-Dive every 2 h.
-- Add a second escape hatch: if `campaigns` table has any row for this account with `updated_at` in the last 24 h, force a Deep-Dive on this tick regardless of zero-run state.
+This makes fast-lane immediately consistent with whatever deep-dive last wrote.
 
-### 3. UI copy
+### 3. One-time heal for the bad row already in DB
+After deploy, the next TikTok deep-dive for HEPT AGENCY 2 will:
+- read campaign `1867920555407570` → `tiktokNameMap` returns `Arafat/Nakshi/Lajbonti/S+`
+- `resolveClientId` matches `Arafat` keyword → reassigns `client_id` to `41881fc6-…` (Yasin Arafat)
+- `upsertCampaign` updates `name` and `client_id` on the existing row
 
-Update the Sync tab tooltip on the "silent" badge (in `SyncHealthRow`/`SyncAccountsRail`) to read:
-> "No active spend detected. We re-check this account every 2 hours and auto-resume the moment a campaign goes live."
+No SQL migration needed — the existing campaign row is updated in place by `upsertCampaign`. The historical `daily_ad_spend` rows (already wrongly under Arman) are out of scope for this fix; if the user wants them re-attributed too, that's a separate cleanup (we can re-run fast-lane backfill, but `daily_ad_spend` rows are keyed by `(ad_account_id, date, campaign_name)` and that name is what's wrong).
 
-## Files touched
+### Out of scope
+- No DB schema changes.
+- Meta and Google branches are not touched (they don't show this symptom right now).
+- Historical `daily_ad_spend` cleanup — call it out to the user separately if they want it.
 
-- `supabase/functions/sync-fast-lane/index.ts` — add `hasActiveCampaign` + `hasRecentCampaignChange` to the `shouldReset` calc.
-- `supabase/functions/sync-orchestrator/index.ts` — `HEARTBEAT_HOURS = 2`, add "recent campaign change" override before the skip-silent branch.
-- `src/components/settings/sync/SyncHealthRow.tsx` (or wherever the silent badge tooltip lives) — copy update only.
+### Files to edit
+- `supabase/functions/sync-deep-dive/index.ts` — capture `campaign_name` in `tiktokNameMap`, prefer it in row loop.
+- `supabase/functions/sync-fast-lane/index.ts` — hydrate per-account `existingCampaignByPlatformId` map, prefer DB name/client over report name.
 
-## Out of scope
-
-- No DB migration. No schema changes.
-- No change to the 7-day backfill window or the 30-day manual window agreed earlier.
-- No change to Fast-Lane / Deep-Dive frequency for already-active accounts.
-
-## Expected behavior after fix
-
-| Scenario | Before | After |
-|---|---|---|
-| Campaign reactivated on silent account | Up to 6 h wait, or manual click | Picked up on next Fast-Lane tick (≤ 15 min) |
-| Brand-new campaign added | Same as above | Same as above |
-| Account stays silent | Heartbeat every 6 h | Heartbeat every 2 h |
-| Manual sync | Works (unchanged) | Works (unchanged) |
+### Deploy
+Deploy both edge functions, then trigger one TikTok deep-dive for HEPT AGENCY 2 to heal the `/S+` row.

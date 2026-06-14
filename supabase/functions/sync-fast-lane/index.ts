@@ -706,20 +706,40 @@ Deno.serve(async (req) => {
           const rows = allTiktokRows;
           const spendRecords: any[] = [];
 
+          // Hydrate per-account map of campaigns we already know about so we can prefer
+          // the DB's authoritative name + client_id (set by deep-dive from /campaign/get/)
+          // over the report endpoint's stale historical campaign_name.
+          const existingByPlatformId = new Map<string, { name: string; client_id: string | null }>();
+          {
+            const { data: existingCamps } = await supabase
+              .from("campaigns")
+              .select("platform_id, name, client_id")
+              .eq("ad_account_id", account.id)
+              .eq("platform", "tiktok");
+            for (const c of (existingCamps ?? []) as any[]) {
+              if (c.platform_id) existingByPlatformId.set(c.platform_id, { name: c.name, client_id: c.client_id });
+            }
+          }
+
           for (const row of rows) {
             const spend = parseFloat(row.metrics?.spend || "0");
             if (spend <= 0) continue;
 
             const date = (row.dimensions?.stat_time_day || "").split(" ")[0];
-            const campaignName = row.metrics?.campaign_name || "TikTok Spend";
+            const rawCampaignId = row.dimensions?.campaign_id || "";
+            const platformIdLookup = `tiktok_${rawCampaignId}`;
+            const existing = existingByPlatformId.get(platformIdLookup);
+            const campaignName = existing?.name || row.metrics?.campaign_name || "TikTok Spend";
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
-            const nameLower = campaignName.toLowerCase();
-            let matchedClientId: string | null = null;
-            for (const { client_id, keyword } of accountAssignments) {
-              if (nameLower.includes(keyword)) { 
-                matchedClientId = client_id; 
-                break; 
+            // ===== Prefer DB attribution, fall back to keyword matching =====
+            let matchedClientId: string | null = existing?.client_id ?? null;
+            if (!matchedClientId) {
+              const nameLower = campaignName.toLowerCase();
+              for (const { client_id, keyword } of accountAssignments) {
+                if (nameLower.includes(keyword)) {
+                  matchedClientId = client_id;
+                  break;
+                }
               }
             }
 

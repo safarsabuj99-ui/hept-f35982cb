@@ -965,6 +965,7 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
           const tiktokStatusMap: Record<string, string> = {};
           const tiktokBudgetMap: Record<string, number> = {};
           const tiktokObjectiveMap: Record<string, string> = {};
+          const tiktokNameMap: Record<string, string> = {};
           let tiktokStatusFetchFailed = false;
           try {
             const statusParams = new URLSearchParams({
@@ -982,6 +983,11 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
                 console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
+                // Capture authoritative campaign name from /campaign/get/ — the report endpoint
+                // returns the historical name at stat-time, which is stale after a rename.
+                if (c.campaign_name) {
+                  tiktokNameMap[c.campaign_id] = String(c.campaign_name);
+                }
                 // Extract budget (TikTok returns budget in currency units)
                 if (c.budget !== undefined && c.budget !== null) {
                   tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
@@ -1080,7 +1086,10 @@ metrics: '["campaign_name","spend","impressions","clicks","ctr","cpc","conversio
 
           for (const row of rows) {
             const rawCampaignId = row.dimensions?.campaign_id;
-            const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
+            const campaignName =
+              (rawCampaignId && tiktokNameMap[rawCampaignId]) ||
+              row.metrics?.campaign_name ||
+              `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
 
             // ===== KEYWORD MATCHING: Skip if no match =====
