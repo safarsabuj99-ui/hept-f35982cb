@@ -543,7 +543,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += results.length;
           console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const googleMetricItems = results
