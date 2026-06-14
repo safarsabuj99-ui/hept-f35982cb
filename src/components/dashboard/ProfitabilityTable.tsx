@@ -81,11 +81,9 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
     const mappedCampaigns = await fetchAllRows<any>(() =>
       supabase
         .from("campaigns")
-        .select("id, ad_account_id, platform, client_id")
+        .select("ad_account_id, platform")
         .in("ad_account_id", mappedAccountIds)
     );
-
-    const campaignIds = mappedCampaigns.map((c: any) => c.id);
 
     const buildSpendQuery = () => {
       let q = supabase
