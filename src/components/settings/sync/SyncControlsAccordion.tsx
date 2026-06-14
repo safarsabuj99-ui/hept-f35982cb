@@ -28,7 +28,7 @@ const SCHEDULE_ROWS: ScheduleRow[] = [
   { key: "sync_interval_meta_fastlane", label: "Meta", platform: "meta", recommended: "30", recommendedLabel: "30 min", reason: "Real-time reporting API with generous rate limits" },
   { key: "sync_interval_tiktok_fastlane", label: "TikTok", platform: "tiktok", recommended: "60", recommendedLabel: "1 hour", reason: "15-30 min data lag, strict 10 req/sec limit" },
   { key: "sync_interval_google_fastlane", label: "Google", platform: "google", recommended: "30", recommendedLabel: "30 min", reason: "Near real-time data, high API quotas" },
-  { key: "sync_interval_deepdive", label: "Deep Dive", platform: "all", recommended: "60", recommendedLabel: "1-2 hours", reason: "Heavy payload (28 fields), TikTok bottleneck" },
+  { key: "sync_interval_deepdive", label: "Deep Dive", platform: "all", recommended: "60", recommendedLabel: "1-2 hours", reason: "7-day rolling backfill · manual sync covers 30 days" },
 ];
 
 interface Props {
@@ -63,27 +63,27 @@ export function SyncControlsAccordion({ failedJobs, onRefresh }: Props) {
   const handlePlatformSync = async (platform: string) => {
     const key = `sync-deep-dive:${platform}`;
     setSyncing(p => ({ ...p, [key]: true }));
-    const { error } = await supabase.functions.invoke("sync-deep-dive", { body: { platform } });
+    const { error } = await supabase.functions.invoke("sync-deep-dive", { body: { platform, manual: true, lookback_days: 30 } });
     setSyncing(p => ({ ...p, [key]: false }));
     if (error) toast({ title: "Sync failed", description: error.message, variant: "destructive" });
-    else { toast({ title: "Sync triggered", description: `${platform} deep dive started` }); onRefresh(); }
+    else { toast({ title: "Sync triggered", description: `${platform} deep dive started (last 30 days)` }); onRefresh(); }
   };
 
   const handleSyncAll = async () => {
     setSyncing(p => ({ ...p, all: true }));
-    const { error } = await supabase.functions.invoke("sync-orchestrator", { body: { function: "sync-deep-dive" } });
+    const { error } = await supabase.functions.invoke("sync-deep-dive", { body: { manual: true, lookback_days: 30 } });
     setSyncing(p => ({ ...p, all: false }));
     if (error) toast({ title: "Sync failed", description: error.message, variant: "destructive" });
-    else { toast({ title: "All platforms queued" }); onRefresh(); }
+    else { toast({ title: "All platforms queued", description: "Pulling last 30 days" }); onRefresh(); }
   };
 
   const handleAccountSync = async () => {
     if (!selectedAccountId) return;
     setSyncingAccount(true);
-    const { error } = await supabase.functions.invoke("sync-deep-dive", { body: { ad_account_ids: [selectedAccountId] } });
+    const { error } = await supabase.functions.invoke("sync-deep-dive", { body: { ad_account_ids: [selectedAccountId], manual: true, lookback_days: 30 } });
     setSyncingAccount(false);
     if (error) toast({ title: "Sync failed", description: error.message, variant: "destructive" });
-    else { toast({ title: "Account sync queued" }); onRefresh(); }
+    else { toast({ title: "Account sync queued", description: "Pulling last 30 days" }); onRefresh(); }
   };
 
   const handleSaveSchedule = async () => {
@@ -108,7 +108,7 @@ export function SyncControlsAccordion({ failedJobs, onRefresh }: Props) {
             </div>
             <div className="text-left">
               <p className="font-semibold text-sm">Manual Sync</p>
-              <p className="text-xs text-muted-foreground">Trigger sync for any platform or single account</p>
+              <p className="text-xs text-muted-foreground">Pulls last 30 days for any platform or single account</p>
             </div>
           </div>
         </AccordionTrigger>
