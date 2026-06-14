@@ -115,9 +115,15 @@ Deno.serve(async (req) => {
     // Adaptive chunking: optional date window override (per-chunk job)
     const dateFromOverride: string | null = body?.date_from || null;
     const dateToOverride: string | null = body?.date_to || null;
+    // Manual sync: user-triggered, expands the rolling window (default 30 days back)
+    const isManual: boolean = body?.manual === true;
+    const lookbackDays: number = Number.isFinite(body?.lookback_days)
+      ? Math.max(1, Math.min(90, Number(body.lookback_days)))
+      : (isManual ? 30 : 0); // 0 = use globalStartDate (chunk window from orchestrator covers the 7-day auto plan)
     if (platformFilter) console.log(`Platform filter active: ${platformFilter}`);
     if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
     if (dateFromOverride && dateToOverride) console.log(`Chunk window: ${dateFromOverride} → ${dateToOverride}`);
+    if (isManual) console.log(`Manual sync — lookback ${lookbackDays} days`);
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
@@ -171,9 +177,18 @@ Deno.serve(async (req) => {
     // Read global sync start date
     const { data: dateSetting } = await supabase
       .from("settings").select("value").eq("key", "sync_start_date").maybeSingle();
-    const globalStartDate = dateSetting?.value || "2025-01-01";
+    const configuredStartDate = dateSetting?.value || "2025-01-01";
     // Use Asia/Dhaka timezone for "today" — overridable by chunk window
     const endDateStr = dateToOverride || getDhakaToday();
+    // Manual sync narrows the global floor to a rolling lookback window
+    let globalStartDate = configuredStartDate;
+    if (lookbackDays > 0 && !dateFromOverride) {
+      const d = new Date(endDateStr + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - (lookbackDays - 1));
+      const manualFloor = d.toISOString().split("T")[0];
+      if (manualFloor > configuredStartDate) globalStartDate = manualFloor;
+      console.log(`Deep-Dive manual window: ${globalStartDate} → ${endDateStr}`);
+    }
 
     // Load client profiles for per-client start dates
     const allClientIds = [...new Set(mappedAssignments.map(r => r.client_id))];
