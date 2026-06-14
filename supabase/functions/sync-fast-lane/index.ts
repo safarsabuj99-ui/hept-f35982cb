@@ -776,7 +776,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += (allTiktokRows as any[]).length;
           console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const tiktokMetricItems = (allTiktokRows as any[])
