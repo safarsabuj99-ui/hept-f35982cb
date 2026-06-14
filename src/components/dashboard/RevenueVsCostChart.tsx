@@ -83,12 +83,11 @@ export function RevenueVsCostChart({ dateRange }: RevenueVsCostChartProps) {
             <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
             <Tooltip
-              formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name === "rawCost" ? "Raw Cost" : "Billed"]}
+              formatter={(value: number) => [`$${value.toFixed(2)}`, "Spend"]}
               labelFormatter={(l) => new Date(l).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
               contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
             />
             <Area type="monotone" dataKey="rawCost" stroke="hsl(var(--destructive))" fill="url(#costGrad)" strokeWidth={2} />
-            <Area type="monotone" dataKey="billed" stroke="hsl(var(--success))" fill="url(#revenueGrad)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </CardContent>
