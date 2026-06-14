@@ -422,7 +422,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += allInsights.length;
           console.log(`Meta fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const metaMetricItems = allInsights
