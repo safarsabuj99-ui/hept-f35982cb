@@ -41,23 +41,25 @@ export function SpendTrendChart({ clientId, dateRange }: SpendTrendChartProps) {
       const fromDate = dateRange ? format(dateRange.from, "yyyy-MM-dd") : null;
       const toDate = dateRange ? format(dateRange.to, "yyyy-MM-dd") : null;
 
-      let spendQuery = clientId
-        ? supabase
-            .from("daily_ad_spend")
-            .select("date, final_billable_usd")
-            .eq("client_id", clientId)
-            .order("date", { ascending: true })
-        : supabase
-            .from("daily_ad_spend")
-            .select("date, final_billable_usd")
-            .in("ad_account_id", mappedAccountIds)
-            .order("date", { ascending: true });
+      const spendData = await fetchAllRows<any>(() => {
+        let q = clientId
+          ? supabase
+              .from("daily_ad_spend")
+              .select("date, final_billable_usd")
+              .eq("client_id", clientId)
+              .order("date", { ascending: true })
+          : supabase
+              .from("daily_ad_spend")
+              .select("date, final_billable_usd")
+              .in("ad_account_id", mappedAccountIds)
+              .order("date", { ascending: true });
 
-      if (fromDate && toDate) {
-        spendQuery = spendQuery.gte("date", fromDate).lte("date", toDate);
-      }
+        if (fromDate && toDate) {
+          q = q.gte("date", fromDate).lte("date", toDate);
+        }
 
-      const spendData = await fetchAllRows<any>(() => spendQuery);
+        return q;
+      });
 
       const grouped: Record<string, number> = {};
       for (const row of spendData ?? []) {
