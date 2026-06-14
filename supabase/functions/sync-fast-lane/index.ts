@@ -140,19 +140,43 @@ async function writeFastLaneMetrics(
     return { written: 0, skipped };
   }
 
-  for (let i = 0; i < metricRows.length; i += 100) {
-    const batch = metricRows.slice(i, i + 100);
+  // UPDATE-only: never insert spend-only rows into daily_metrics. Deep-dive owns row creation
+  // (it writes the full KPI payload: impressions, clicks, reach, results, etc.). If we inserted
+  // here, the row would show spend>0 with all other KPI columns defaulting to 0 until deep-dive
+  // catches up — which is exactly the "Spent populated but Impressions=0" bug. Defer instead.
+  const campaignIds = [...new Set(metricRows.map(r => r.campaign_id))];
+  const dataDates = [...new Set(metricRows.map(r => r.data_date))];
+  const { data: existingRows, error: exErr } = await supabase
+    .from("daily_metrics")
+    .select("campaign_id, data_date")
+    .in("campaign_id", campaignIds)
+    .in("data_date", dataDates);
+  if (exErr) {
+    console.warn(`${logPrefix} daily_metrics existence lookup failed: ${exErr.message}`);
+    return { written: 0, skipped: metricRows.length + skipped };
+  }
+  const existsKey = new Set((existingRows ?? []).map(r => `${r.campaign_id}|${r.data_date}`));
+  const toUpdate = metricRows.filter(r => existsKey.has(`${r.campaign_id}|${r.data_date}`));
+  const deferred = metricRows.length - toUpdate.length;
+
+  if (toUpdate.length === 0) {
+    console.log(`${logPrefix} fast-lane metrics: 0 written, ${deferred} deferred (awaiting deep-dive), ${skipped} unmapped`);
+    return { written: 0, skipped: skipped + deferred };
+  }
+
+  for (let i = 0; i < toUpdate.length; i += 100) {
+    const batch = toUpdate.slice(i, i + 100);
     const { error } = await supabase
       .from("daily_metrics")
       .upsert(batch, { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
     if (error) {
       console.warn(`${logPrefix} daily_metrics upsert failed: ${error.message}`);
-      return { written: i, skipped };
+      return { written: i, skipped: skipped + deferred };
     }
   }
 
-  console.log(`${logPrefix} fast-lane metrics: ${metricRows.length} written, ${skipped} deferred`);
-  return { written: metricRows.length, skipped };
+  console.log(`${logPrefix} fast-lane metrics: ${toUpdate.length} updated, ${deferred} deferred (awaiting deep-dive), ${skipped} unmapped`);
+  return { written: toUpdate.length, skipped: skipped + deferred };
 }
 
 // Force redeploy v2 - proxy + 30-day chunking fix

@@ -1,70 +1,62 @@
 ## Problem
 
-In TikTok ad account **HEPT AGENCY 2**, two active campaigns exist:
-
-- `Arafat/Nakshi/Lajbonti/S+` (TikTok campaign id `1867920555407570`)
-- `Arafat/Nakshi/Lajbonti/SS+` (TikTok campaign id `1867923067550866`)
-
-Only `/SS+` shows on the agency dashboard under client **Yasin Arafat**. The `/S+` campaign is stored in our DB with its **old name** ` Arman/Womenshop/Lajbonti/S+` and therefore mis-attributed to client **Arman** (keyword `Arman`), so it does not appear under Arafat.
+HEPT AGENCY 2 dashboard shows **Spent** populated for every campaign but **Reach, Impressions, CPM, Clicks, CTR, CPC, Results, Cost/Result and ROAS all = 0**. Other ad accounts look correct.
 
 ## Root cause
 
-TikTok's `report/integrated/get/` endpoint returns the **historical** `campaign_name` (the name at the time of the stat row). When a campaign is renamed in the TikTok UI, the report API keeps emitting the old name until new days are recorded, while `/campaign/get/` returns the current name.
+The shared helper `writeFastLaneMetrics` in `supabase/functions/sync-fast-lane/index.ts` (line 90) **inserts new rows into `daily_metrics`** with this payload:
 
-Our sync pipeline currently:
+```ts
+{ campaign_id, data_date, spend, org_id, synced_at }
+```
 
-- **`sync-deep-dive`** (TikTok branch, ~line 1083): takes `campaignName` from `row.metrics.campaign_name` (historical) and feeds it to both `resolveClientId(...)` and `upsertCampaign(...)`. So the DB row keeps the stale name and stale `client_id`.
-- **`sync-fast-lane`** (TikTok branch, ~line 714): same — uses `row.metrics.campaign_name` for keyword matching and inserts `daily_ad_spend` rows under the wrong `client_id`.
+All other KPI columns (impressions, clicks, reach, results, roas, cpm, conversions, …) get their column DEFAULTs (0) on the INSERT side of the upsert. They only become real numbers later, when `sync-deep-dive` runs for that account and overwrites the row with the full payload.
 
-`/campaign/get/` is already called in `sync-deep-dive` (line 974) to fetch status, budget, and objective. We just don't capture `campaign_name` from it.
+HEPT AGENCY 2's `sync_account_stats` shows `avg_rows_per_day = 0.14` and `last_full_sync_at` was only set when I forced a manual deep-dive at 10:30 today. That means deep-dive had been skipped on this account for a long time (silent-account gate + the old 6 h heartbeat). Result:
 
-## Fix (TikTok only — minimal scope)
+- Fast-lane wrote a `daily_metrics` row for each campaign with `spend > 0`.
+- Deep-dive never came along the same day to fill in the rest.
+- The dashboard (`/admin/campaigns` → `CampaignMapping.tsx`) reads everything from `daily_metrics`, so it correctly shows `Spent = $3.09` etc. but `Impressions = 0`, `Clicks = 0`, etc.
 
-### 1. `supabase/functions/sync-deep-dive/index.ts`
-- Inside the `/campaign/get/` loop (~line 981), additionally build:
+DB confirms: after this morning's forced deep-dive, today's row for `Arafat/Nakshi/Lajbonti/SS+` now has `spend = 3.17, impressions = 9426, clicks = 138`. The screenshot was captured in the gap between fast-lane and deep-dive.
+
+So this is **not** a "data not collected" bug — it's a "fast-lane creates spend-only rows that look like partial KPIs" bug, made very visible whenever deep-dive lags.
+
+## Fix
+
+### 1. `supabase/functions/sync-fast-lane/index.ts` — make `writeFastLaneMetrics` UPDATE-only
+
+Currently (line 143-152) it upserts into `daily_metrics`. Change it so fast-lane **never inserts** rows it can't fully populate:
+
+- After building `metricRows`, query `daily_metrics` for the `(campaign_id, data_date)` pairs that already exist:
   ```ts
-  const tiktokNameMap: Record<string, string> = {};
-  // for each c in statusJson.data.list:
-  if (c.campaign_name) tiktokNameMap[c.campaign_id] = c.campaign_name;
+  const { data: existingRows } = await supabase
+    .from("daily_metrics")
+    .select("campaign_id, data_date")
+    .in("campaign_id", metricRows.map(r => r.campaign_id))
+    .in("data_date", [...new Set(metricRows.map(r => r.data_date))]);
+  const existsKey = new Set((existingRows ?? []).map(r => `${r.campaign_id}|${r.data_date}`));
   ```
-- In the row-processing loop (~line 1083), replace:
-  ```ts
-  const campaignName = row.metrics?.campaign_name || `TikTok Campaign ${rawCampaignId}`;
-  ```
-  with the live name preferred:
-  ```ts
-  const campaignName =
-    tiktokNameMap[rawCampaignId] ||
-    row.metrics?.campaign_name ||
-    `TikTok Campaign ${rawCampaignId}`;
-  ```
-  Then `resolveClientId(campaignName, platformId)` and `upsertCampaign(...)` automatically re-assign the correct `client_id` and overwrite the stale name on next deep-dive.
+- Split `metricRows`:
+  - `toUpdate` → key exists → keep current upsert (only `spend`/`synced_at` get updated).
+  - `toDefer` → no row yet → skip; log `deferred=${toDefer.length} (awaiting deep-dive)`.
+- Only batch-upsert `toUpdate`.
 
-### 2. `supabase/functions/sync-fast-lane/index.ts`
-Fast-lane runs more often than deep-dive and would keep writing wrong-client `daily_ad_spend` rows until deep-dive heals the name. Two-line guard so fast-lane trusts the corrected DB once deep-dive has run:
+Effect: dashboards no longer show "spend without KPIs". On a fresh day the row appears exactly once — when deep-dive writes it with the complete payload — and fast-lane keeps that row's `spend` fresh between deep-dives.
 
-- Just before the keyword-matching block (~line 717), look up any existing campaign by `platform_id = tiktok_<rawCampaignId>` (we can hydrate a `Map<platformId, {name, client_id}>` once per account from a single `select platform_id, name, client_id from campaigns where ad_account_id = ...`).
-- If a row exists, override `campaignName` with `existing.name` and short-circuit `matchedClientId = existing.client_id` (skip keyword loop).
-- Else fall back to the current keyword-matching path (unchanged).
+`daily_ad_spend` continues to receive fast-lane writes unchanged, so wallet debits, finance totals and cash-flow are not affected.
 
-This makes fast-lane immediately consistent with whatever deep-dive last wrote.
+### 2. One-shot backfill for HEPT AGENCY 2
 
-### 3. One-time heal for the bad row already in DB
-After deploy, the next TikTok deep-dive for HEPT AGENCY 2 will:
-- read campaign `1867920555407570` → `tiktokNameMap` returns `Arafat/Nakshi/Lajbonti/S+`
-- `resolveClientId` matches `Arafat` keyword → reassigns `client_id` to `41881fc6-…` (Yasin Arafat)
-- `upsertCampaign` updates `name` and `client_id` on the existing row
+Queue a 7-day deep-dive for ad account `947a3bb4-b647-48f2-84d1-bd8c5c0fc564` so any spend-only `daily_metrics` rows from the past 7 days get their full KPI columns populated. The orchestrator's existing 2 h heartbeat + recent-campaign override (already shipped) will keep it healed going forward.
 
-No SQL migration needed — the existing campaign row is updated in place by `upsertCampaign`. The historical `daily_ad_spend` rows (already wrongly under Arman) are out of scope for this fix; if the user wants them re-attributed too, that's a separate cleanup (we can re-run fast-lane backfill, but `daily_ad_spend` rows are keyed by `(ad_account_id, date, campaign_name)` and that name is what's wrong).
+### Files
+- `supabase/functions/sync-fast-lane/index.ts` — update-only behaviour inside `writeFastLaneMetrics`.
 
 ### Out of scope
 - No DB schema changes.
-- Meta and Google branches are not touched (they don't show this symptom right now).
-- Historical `daily_ad_spend` cleanup — call it out to the user separately if they want it.
-
-### Files to edit
-- `supabase/functions/sync-deep-dive/index.ts` — capture `campaign_name` in `tiktokNameMap`, prefer it in row loop.
-- `supabase/functions/sync-fast-lane/index.ts` — hydrate per-account `existingCampaignByPlatformId` map, prefer DB name/client over report name.
+- No edits to Meta/Google/TikTok report-fetch branches (they share the same helper, which is the right place to fix this).
+- No UI changes — once the helper is fixed, the dashboard naturally stops showing partial-KPI rows.
 
 ### Deploy
-Deploy both edge functions, then trigger one TikTok deep-dive for HEPT AGENCY 2 to heal the `/S+` row.
+Deploy `sync-fast-lane`, then trigger one 7-day deep-dive for HEPT AGENCY 2 to backfill.
