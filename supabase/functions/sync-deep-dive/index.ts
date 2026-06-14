@@ -17,7 +17,7 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
 }
 
 /** Fetch TikTok API with retry on transient errors (41000 geo, 546 proxy upstream, empty body) */
-async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 5): Promise<any> {
   let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
