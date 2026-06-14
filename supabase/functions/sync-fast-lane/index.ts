@@ -172,6 +172,8 @@ Deno.serve(async (req) => {
     let adAccountIdsFilter: string[] | null = null;
     let bodyDateFrom: string | null = null;
     let bodyDateTo: string | null = null;
+    let isManual = false;
+    let lookbackDays = 7; // default auto rolling window
     if (req.method === "POST") {
       try {
         const body = await req.json();
@@ -179,10 +181,18 @@ Deno.serve(async (req) => {
         adAccountIdsFilter = body.ad_account_ids || null;
         bodyDateFrom = body.date_from || null;
         bodyDateTo = body.date_to || null;
+        isManual = body.manual === true;
+        if (Number.isFinite(body.lookback_days)) {
+          lookbackDays = Math.max(1, Math.min(90, Number(body.lookback_days)));
+        } else if (isManual) {
+          lookbackDays = 30;
+        }
       } catch { /* no body is fine for cron */ }
     }
     if (adAccountIdsFilter) console.log(`Ad account IDs filter active: ${adAccountIdsFilter.join(", ")}`);
     if (bodyDateFrom && bodyDateTo) console.log(`Date override active: ${bodyDateFrom} → ${bodyDateTo}`);
+    if (isManual) console.log(`Manual sync — lookback ${lookbackDays} days`);
+
 
     // ===== MAPPING-FIRST: Only get accounts with client mappings AND keywords =====
     const { data: mappedAssignments } = await supabase
