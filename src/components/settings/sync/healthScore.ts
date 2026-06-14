@@ -49,7 +49,7 @@ export const TIER_META: Record<HealthTier, { label: string; tone: string; dot: s
 export const ACTIVITY_META: Record<ActivityTier, { label: string; tone: string; dot: string; description: string }> = {
   live:    { label: "Live",    tone: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500",          description: "Fast-Lane returned data — Deep-Dive scheduled" },
   quiet:   { label: "Quiet",   tone: "text-sky-600 dark:text-sky-400",         dot: "bg-sky-500",              description: "Briefly silent — Deep-Dive still scheduled (grace period)" },
-  silent:  { label: "Silent",  tone: "text-amber-600 dark:text-amber-400",     dot: "bg-amber-500",            description: "No data in recent runs — Deep-Dive skipped to save quota" },
+  silent:  { label: "Silent",  tone: "text-amber-600 dark:text-amber-400",     dot: "bg-amber-500",            description: "No active spend detected. We re-check every 2 hours and auto-resume the moment a campaign goes live." },
   dormant: { label: "Dormant", tone: "text-muted-foreground",                  dot: "bg-muted-foreground/60",  description: "No data for 24h+ — only heartbeat Deep-Dive runs" },
   unknown: { label: "New",     tone: "text-primary",                            dot: "bg-primary",              description: "Not yet measured — Deep-Dive runs normally" },
 };

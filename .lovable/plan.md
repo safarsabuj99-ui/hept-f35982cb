@@ -1,69 +1,58 @@
-## Goal
+## Problem
 
-Shrink all automatic backfill windows to **7 days** for both Fast-Lane and Deep-Dive, keep Manual Sync at **30 days** for on-demand recovery, and preserve all existing self-healing safety nets so heavy TikTok accounts (HEPT 15, HEPT AGENCY 2) stop returning `api_error`.
+When an ad account has had **no active campaigns for 10+ days**, the orchestrator marks it as "silent" and stops running Deep-Dive on every cycle (only a 6-hour heartbeat). When the user then turns a campaign back ON, the system does **not** pick up new spend automatically — they must open the ad account and click **Sync** manually.
 
-## What you will see
+### Root cause
 
-- **Account Health Matrix** Engine pill reads `7d` (was `10d` / `25d`).
-- **HEPT 15 / HEPT AGENCY 2** Deep-Dive completes without `api_error` — smaller window = lighter TikTok payload.
-- **Manual Sync** button pulls the **last 30 days** for the chosen account so you can recover historical gaps on demand.
-- **Fast-Lane** runs frequently and now refreshes the last 7 days each cycle (was 10).
-- Auto-split, backlog drain, retry helpers, and stale-error reset all stay in place — just operating on a 7-day budget.
+In `sync-orchestrator/index.ts` (lines 180–196):
 
-## Technical changes
+1. After 3 consecutive zero-row Fast-Lane runs, the account is flagged "silent".
+2. Deep-Dive is then skipped unless 6 h have passed since `last_full_sync_at`.
+3. The "activity backstop" in `sync-fast-lane` (line 852) only checks `daily_metrics` for `spend > 0` in the last 3 days — but a freshly reactivated campaign has **no metrics yet**, because Deep-Dive (the function that writes metrics) is the one being skipped. So it's a chicken-and-egg loop until the 6 h heartbeat finally fires.
+4. Manual sync works because `SyncControlsAccordion` calls `sync-deep-dive` directly with `manual: true`, bypassing the silent-skip gate entirely.
 
-### 1. Window constant: 10 → 7 (both lanes)
+## Fix
 
-- `supabase/functions/sync-orchestrator/index.ts`
-  - `TOTAL_WINDOW_DAYS = 7`.
-  - Deep-Dive Meta/Google chunk cap: `Math.min(stat?.recommended_chunk_days ?? 5, 7)` (a single chunk usually covers the full window).
-  - TikTok adaptive chunking stays `3 → 2 → 1` based on `consecutive_failures` (a 7-day window splits into 3 chunks at worst).
-- `supabase/functions/sync-fast-lane/index.ts`
-  - Replace the unified 10-day window (`today - 9 → today`) with a **7-day rolling window** (`today - 6 → today`) across Meta, TikTok, Google.
-- `supabase/migrations/<new>.sql`
-  - Update `mark_parent_complete` constants `10.0` / `10` → `7.0` / `7` so `avg_rows_per_day` and recommended chunk size align with the new window.
+Add two cheap "wake-up" signals so silent accounts re-activate automatically the moment a campaign turns ON — typically within one Fast-Lane cycle (≤ 15 min) instead of up to 6 h.
 
-### 2. Manual Sync = 30 days (independent of auto window)
+### 1. Fast-Lane: count campaign-level activity, not just metric rows
 
-- `supabase/functions/sync-deep-dive/index.ts` and `sync-fast-lane/index.ts`
-  - Accept optional `{ manual: true, lookback_days?: number }` in the request body. When present, override the 7-day rolling window with the requested range (default 30).
-- `src/components/settings/SyncTab.tsx` (and any per-account "Manual Sync" trigger)
-  - Pass `{ manual: true, lookback_days: 30 }` when the user clicks Manual Sync.
-  - Tooltip / helper text: "Pulls last 30 days for this account".
+In `sync-fast-lane/index.ts` (around line 892–905), expand the "should reset zero_runs" rule to ALSO trigger when:
 
-### 3. UI label updates
+- The platform API returned **any campaign** with status `ACTIVE`/`ENABLE` for this account in the current run, **or**
+- A new `campaigns` row was inserted/updated in the last 24 h for this account.
 
-- `src/components/settings/sync/SyncHealthRow.tsx` — Engine pill displays `7d` (drop any `?? 10` / `?? 25` fallback, source from a shared constant).
-- `src/components/settings/sync/SyncControlsAccordion.tsx` — copy: "7-day rolling backfill · Manual sync covers 30 days".
-- `.lovable/plan.md` — historical note updated from 10 → 7.
+Currently `shouldReset` is `rows > 0 || isActiveByMetrics`. We add `|| hasActiveCampaign || hasRecentCampaignChange`. This means the first Fast-Lane cycle after reactivation immediately clears `consecutive_zero_runs`, so the next orchestrator tick queues a normal Deep-Dive.
 
-### 4. Safety nets (unchanged, just verified)
+### 2. Orchestrator: shorten the heartbeat for silent accounts
 
-- `deep_dive_backlog.lane` column drives Fast-Lane vs Deep-Dive backlog separation.
-- Fast-Lane per-chunk isolation, `tiktokFetchWithRetry`, 8-page pagination cap, backlog spill.
-- `sync-queue-worker` auto-split on `cpu_timeout` / `proxy_upstream` / `api_error` (down to 1-day chunks).
-- Stale `sync_account_stats.last_error` reset on next successful Fast-Lane.
+In `sync-orchestrator/index.ts`:
+
+- Lower `HEARTBEAT_HOURS` from **6** → **2** so even if signal #1 misses, a silent account still gets a Deep-Dive every 2 h.
+- Add a second escape hatch: if `campaigns` table has any row for this account with `updated_at` in the last 24 h, force a Deep-Dive on this tick regardless of zero-run state.
+
+### 3. UI copy
+
+Update the Sync tab tooltip on the "silent" badge (in `SyncHealthRow`/`SyncAccountsRail`) to read:
+> "No active spend detected. We re-check this account every 2 hours and auto-resume the moment a campaign goes live."
+
+## Files touched
+
+- `supabase/functions/sync-fast-lane/index.ts` — add `hasActiveCampaign` + `hasRecentCampaignChange` to the `shouldReset` calc.
+- `supabase/functions/sync-orchestrator/index.ts` — `HEARTBEAT_HOURS = 2`, add "recent campaign change" override before the skip-silent branch.
+- `src/components/settings/sync/SyncHealthRow.tsx` (or wherever the silent badge tooltip lives) — copy update only.
 
 ## Out of scope
 
-- No changes to Meta/Google attribution, mapping, finance, or RLS logic.
-- No new tables or cron changes.
-- No changes to worker concurrency.
+- No DB migration. No schema changes.
+- No change to the 7-day backfill window or the 30-day manual window agreed earlier.
+- No change to Fast-Lane / Deep-Dive frequency for already-active accounts.
 
-## Files
+## Expected behavior after fix
 
-- `supabase/migrations/<new>.sql` — `mark_parent_complete` constants 10 → 7.
-- `supabase/functions/sync-orchestrator/index.ts` — `TOTAL_WINDOW_DAYS = 7`, chunk cap adjustments.
-- `supabase/functions/sync-fast-lane/index.ts` — 7-day window, accept `manual` + `lookback_days` override.
-- `supabase/functions/sync-deep-dive/index.ts` — accept `manual` + `lookback_days` override.
-- `src/components/settings/SyncTab.tsx` — Manual Sync invocation passes 30-day flag.
-- `src/components/settings/sync/SyncHealthRow.tsx` — Engine pill `7d`.
-- `src/components/settings/sync/SyncControlsAccordion.tsx` — copy update.
-
-## Validation
-
-- Engine pill reads `7d` everywhere; no `10d` / `25d` strings remain.
-- HEPT 15 next Deep-Dive cycle: succeeds without `api_error`; if any chunk fails, auto-split shrinks to 1-day and backlog drains within 1–2 cycles.
-- Clicking Manual Sync on any account triggers a 30-day pull (verify in `sync_jobs.date_from` / `date_to`).
-- `daily_metrics` has rows for every day in the last 7 days for all active mapped accounts.
-- Fast-Lane payload size drops ~30% vs current 10-day window.
+| Scenario | Before | After |
+|---|---|---|
+| Campaign reactivated on silent account | Up to 6 h wait, or manual click | Picked up on next Fast-Lane tick (≤ 15 min) |
+| Brand-new campaign added | Same as above | Same as above |
+| Account stays silent | Heartbeat every 6 h | Heartbeat every 2 h |
+| Manual sync | Works (unchanged) | Works (unchanged) |

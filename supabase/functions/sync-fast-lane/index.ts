@@ -302,6 +302,11 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     // Track per-account row counts for activity gating (drives deep-dive scheduling)
     const accountRowCounts: Record<string, number> = {};
+    // Track raw API insight rows returned per account (BEFORE keyword/spend filtering).
+    // Used as a wake-up signal: any insights returned = account has campaigns running,
+    // even if they don't match keyword mappings yet or haven't accrued spend.
+    const accountApiInsights: Record<string, number> = {};
+
 
     for (const account of accounts) {
       const integration = (account as any).api_integrations;
@@ -323,6 +328,8 @@ Deno.serve(async (req) => {
       const windowEndStr = bodyDateTo || endDateStr;
       const metaFastLaneStart = startDateStr;
       accountRowCounts[account.id] = accountRowCounts[account.id] ?? 0;
+      accountApiInsights[account.id] = accountApiInsights[account.id] ?? 0;
+
 
       try {
         if (platform === "meta") {
@@ -415,7 +422,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += allInsights.length;
           console.log(`Meta fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const metaMetricItems = allInsights
@@ -534,7 +543,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += results.length;
           console.log(`Google fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const googleMetricItems = results
@@ -765,7 +776,9 @@ Deno.serve(async (req) => {
           }
 
           accountRowCounts[account.id] += spendRecords.length;
+          accountApiInsights[account.id] += (allTiktokRows as any[]).length;
           console.log(`TikTok fast-lane: ${spendRecords.length} rows for ${account.ad_account_id}`);
+
 
           // ===== Fast-Lane → daily_metrics (immediate wallet debit) =====
           const tiktokMetricItems = (allTiktokRows as any[])
@@ -889,14 +902,34 @@ Deno.serve(async (req) => {
         console.error("Activity backstop check failed:", e?.message);
       }
 
+      // ===== Wake-up signal: any campaigns row touched in last 24h for this account =====
+      // Catches the "campaign just turned ON" case where insights are still empty.
+      const recentCampaignAccountIds = new Set<string>();
+      try {
+        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: recent } = await supabase
+          .from("campaigns")
+          .select("ad_account_id")
+          .in("ad_account_id", accountIds)
+          .gte("updated_at", dayAgo);
+        for (const r of recent ?? []) recentCampaignAccountIds.add(r.ad_account_id);
+      } catch (e: any) {
+        console.error("Recent campaign check failed:", e?.message);
+      }
+
       const upserts = accountIds.map((accId) => {
         const rows = accountRowCounts[accId];
+        const apiRows = accountApiInsights[accId] ?? 0;
         const prev = existingMap.get(accId) as any;
         const prevZero = prev?.consecutive_zero_runs ?? 0;
         const orgId = accounts.find((a) => a.id === accId)?.org_id ?? prev?.org_id ?? null;
         const isActiveByMetrics = activeAccountIds.has(accId);
-        // Reset counter if Fast-Lane saw rows OR daily_metrics shows real recent spend
-        const shouldReset = rows > 0 || isActiveByMetrics;
+        const hasApiActivity = apiRows > 0;
+        const hasRecentCampaign = recentCampaignAccountIds.has(accId);
+        // Reset counter if Fast-Lane saw rows, daily_metrics shows real recent spend,
+        // the platform API returned ANY insight row (campaigns exist & running),
+        // or a campaign row was added/updated in the last 24h.
+        const shouldReset = rows > 0 || isActiveByMetrics || hasApiActivity || hasRecentCampaign;
         return {
           ad_account_id: accId,
           org_id: orgId,
@@ -904,13 +937,13 @@ Deno.serve(async (req) => {
           last_fast_lane_rows: rows,
           consecutive_zero_runs: shouldReset ? 0 : prevZero + 1,
           // Clear stale failure state once the lane succeeds for this account.
-          // Stops the UI from showing "api_error" after the engine has recovered.
           ...(shouldReset
             ? { consecutive_failures: 0, last_error: null }
             : {}),
           updated_at: nowIso,
         };
       });
+
 
       const { error: actErr } = await supabase
         .from("sync_account_stats")
