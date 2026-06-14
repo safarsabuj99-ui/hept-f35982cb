@@ -299,12 +299,12 @@ Deno.serve(async (req) => {
       const platform = account.platform_name;
       const accountAssignments = accountKeywordMap[account.id] ?? [];
 
-      // Unified 10-day rolling fast-lane window (catches fresh + late-arriving spend).
-      // Historical backfill beyond 10 days is the Deep-Dive's job.
+      // Unified rolling fast-lane window (7-day auto, 30-day on manual sync).
+      // Historical backfill beyond the window is the Deep-Dive's job.
       // When a worker retries a single backlog day it passes date_from/date_to in the body — honor it.
       const defaultFastLaneStart = (() => {
         const d = new Date(endDateStr + "T00:00:00Z");
-        d.setUTCDate(d.getUTCDate() - 9);
+        d.setUTCDate(d.getUTCDate() - (lookbackDays - 1));
         const accountFloor = getAccountStartDate(account.id);
         const computed = d.toISOString().split("T")[0];
         return computed >= accountFloor ? computed : accountFloor;
