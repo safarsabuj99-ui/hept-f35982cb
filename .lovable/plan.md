@@ -1,64 +1,44 @@
-# Fix: Dashboard ↔ Campaign Spend Mismatch
+# Fix TikTok auto-sync (fast-lane + deep-dive)
 
-## Root cause
+## What's actually happening
 
-The Admin Dashboard KPIs read from `daily_ad_spend.final_billable_usd` (post-markup, currency-converted, Dhaka-dated, mapped-accounts-only). The Campaign tabs / P&L / Client reports read from `daily_metrics.spend` (raw platform USD per campaign per `data_date`). These two pipelines diverge on currency conversion, markup, mapping filter and date timezone — so the numbers never match.
+The cron + queue ARE working. Both fast-lane and deep-dive ran every 15 min today and all jobs are `status: done`. The reasons you see no new TikTok data:
 
-## Decision (from you)
+1. **Deep-dive: 40002 invalid metric error.** TikTok now rejects `total_add_to_cart`, `total_initiate_checkout`, `total_complete_payment` in the BC reporting endpoint. Our `BC_METRICS_B` list in `sync-deep-dive/index.ts:863` still requests them, so the primary call fails and the split-metric fallback returns 0 rows for the whole window.
+2. **Orchestrator silently skips "quiet" accounts.** `sync-orchestrator/index.ts:127` uses `ZERO_RUN_GRACE = 3`. After 3 consecutive zero-row fast-lane runs an account is downgraded to a ~2-hour heartbeat. HEPT 18 (38 zero runs) and HEPT Agency 5 (137 zero runs) are stuck in that mode, so deep-dive barely fires for them.
+3. **HEPT Agency 5 has 0 campaign mappings.** Ingestion policy filters out everything without an active mapping → "campaigns found: 0" forever, no matter how many syncs we run.
+4. **HEPT 18 has 17 active mappings** but TikTok status fetch still returns 0 campaigns — the `original_name_tag` keywords no longer match live TikTok campaign names.
 
-- **Single source of truth:** `daily_metrics.spend` (raw platform spend in USD).
-- **Mapping filter:** removed — dashboard counts spend from **all** ad accounts in the org, mapped or not.
+Tokens are valid (both expire 2027, `connection_status=active`). No auth problem.
 
-## What changes
+## Changes
 
-### 1. Database — rewrite `get_admin_dashboard_summary(p_date_from, p_date_to, p_org_id)`
+### 1. `supabase/functions/sync-deep-dive/index.ts`
+- Remove the 3 rejected metrics from `BC_METRICS_B` (line 863). Keep them in the row-parser fallback (lines 1142-1144) so old payloads still parse if TikTok ever re-enables them.
+- Replace with TikTok's currently-supported equivalents from the **Advertiser** reporting endpoint: `complete_payment`, `add_to_cart`, `initiate_checkout`, `complete_payment_roas` (these still work; the `total_*` variants are BC-only and were deprecated).
+- Add a one-time log line when a 40002 is still hit, including the exact field list returned by TikTok, so we can react quickly next time TikTok deprecates fields.
 
-Replace every read of `daily_ad_spend` with `daily_metrics`, joined to `campaigns` for org scoping. No filter on `ad_account_clients.mapping_keyword`.
+### 2. `supabase/functions/sync-orchestrator/index.ts`
+- Raise `ZERO_RUN_GRACE` from `3` → `12` (≈3 hours of cycles before downgrading).
+- Add a hard override: if `platform = tiktok` AND the account has any active `campaign_mappings`, never apply the skip gate to deep-dive — always queue it on the normal cadence. This guarantees TikTok deep-dive keeps trying even after a streak of zero rows.
+- Keep fast-lane gating untouched (cheap enough to always run anyway).
 
-```text
-todaySpend / yesterdaySpend / spendHistory
-  ── SUM(daily_metrics.spend)
-  ── JOIN campaigns ON campaigns.id = daily_metrics.campaign_id
-  ── WHERE campaigns.org_id = p_org_id
-  ── AND data_date BETWEEN p_date_from AND p_date_to
-```
+### 3. Empty/stale mapping visibility (no schema change)
+- In the orchestrator, when an account is skipped because it has 0 active mappings, write a row into `sync_logs` with `error_code='no_mappings'` and a clear message naming the account. This makes the real reason show up in the Sync ops UI instead of looking like a silent failure.
+- No code change to the mapping UI — you'll see the row appear in the existing logs panel and can fix the mapping there.
 
-Client-level `platform_balances` and `balance` logic in the RPC stays unchanged (those come from `transactions`, not spend).
+### 4. Manual one-time backfill after deploy
+After the deploy, trigger one targeted deep-dive run for HEPT Agency 2 + the other 5 accounts that already have mappings, lookback 7 days, to repopulate the window that returned 0 rows today. (Curl loop, same shape as before, no code change.)
 
-Sparkline (`spendHistory`) regenerated over `generate_series(today-6 … today)` against `daily_metrics.data_date`.
+## Out of scope
 
-### 2. Frontend reads that need switching to `daily_metrics`
-
-These already use `daily_ad_spend` and will be migrated to `daily_metrics` for consistency:
-
-- `src/components/RunwayPrediction.tsx` — burn-rate calc
-- `src/components/dashboard/RevenueVsCostChart.tsx` — cost series
-- `src/components/dashboard/SystemHealthWidget.tsx` — today's spend tile
-
-Each query becomes: `daily_metrics` joined to `campaigns` (for `org_id` / `client_id` scoping when needed), summed by `data_date`.
-
-### 3. Things that stay on `daily_ad_spend`
-
-- The table itself is **not** dropped — it still drives Ad-Guard's per-account billable/markup math and USD inventory burn.
-- Wallet debit attribution (`transactions`) continues to use the existing atomic helpers; no change to balance logic.
-
-### 4. Timezone caveat (documented, not coded around)
-
-`daily_metrics.data_date` comes from the platform API in the account's reporting timezone. Between Dhaka midnight and ~3 AM, "Today" may briefly show $0 while the platform still reports yesterday. This is the trade-off of using raw spend and matches what the Campaign tab already shows — so the two screens stay in sync.
+- Adding mappings for HEPT Agency 5 — that's a manual data step in the mapping UI; I'll surface the missing-mapping log so you can act.
+- Re-tagging HEPT 18 keywords — same; needs human review against current TikTok campaign names.
+- Cloudflare proxy or token rotation — both are healthy.
 
 ## Verification
 
-After deploy:
-1. Open `/admin` with date = Today → note `Today's Spend`.
-2. Open Client → Campaigns / DeepDive for same date → sum the spend column.
-3. Numbers must match to the cent (modulo the timezone caveat above).
-4. Repeat for Yesterday and a 7-day range.
-
-## Technical files touched
-
-- migration: replace `public.get_admin_dashboard_summary(date, date, uuid)` body
-- `src/components/RunwayPrediction.tsx`
-- `src/components/dashboard/RevenueVsCostChart.tsx`
-- `src/components/dashboard/SystemHealthWidget.tsx`
-
-No schema changes, no RLS changes, no edge function changes.
+1. Re-deploy `sync-deep-dive` + `sync-orchestrator`.
+2. Trigger one manual deep-dive on HEPT Agency 2; expect non-zero rows and **no** "Invalid metric fields" warning in the function logs.
+3. Wait one orchestrator cycle (≤15 min); confirm `sync_jobs` rows for `sync-deep-dive` exist for all 7 mapped TikTok accounts.
+4. Confirm `sync_logs` shows a `no_mappings` row for HEPT Agency 5.
