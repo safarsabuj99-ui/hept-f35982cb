@@ -860,7 +860,11 @@ Deno.serve(async (req) => {
           // Metric groups — split to keep each upstream TikTok report query small enough
           // to finish inside the Cloudflare worker's subrequest timeout (HTTP 546 fix).
           const BC_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
-          const BC_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","total_view_content","total_add_to_cart","total_initiate_checkout","total_complete_payment","cost_per_complete_payment"];
+          // NOTE: total_add_to_cart / total_initiate_checkout / total_complete_payment were
+          // removed from the BC request after TikTok started returning 40002 "Invalid metric
+          // fields" for them in mid-2026. The row parser below still reads the total_* keys
+          // if TikTok ever re-enables them, but we no longer request them upstream.
+          const BC_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","total_view_content","cost_per_complete_payment"];
           const DIRECT_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
           const DIRECT_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"];
 
@@ -887,6 +891,9 @@ Deno.serve(async (req) => {
               cJson = bcRes;
               if (cJson.code !== 0) {
                 console.warn(`TikTok BC chunk ${chunkStart}-${chunkEnd} p${page} failed: [${cJson.code}] ${cJson.message}. Falling back.`);
+                if (cJson.code === 40002) {
+                  console.warn(`TikTok 40002 INVALID METRICS for ${account.ad_account_id} — requested=${JSON.stringify(metrics)} response=${JSON.stringify(cJson)}`);
+                }
                 cJson = null;
               }
             }

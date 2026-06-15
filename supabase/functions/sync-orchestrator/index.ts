@@ -124,7 +124,10 @@ Deno.serve(async (req) => {
     // For sync-fast-lane (today-only), we still single-shot since it's a 1-day window
     const isFastLane = targetFunction === "sync-fast-lane";
     const isDeepDive = targetFunction === "sync-deep-dive";
-    const ZERO_RUN_GRACE = 3;
+    // Raised from 3 → 12 so Deep-Dive keeps running on the normal cadence for ~3 hours
+    // even after consecutive zero-row fast-lane runs (TikTok BC reporting can return 0 rows
+    // transiently for several cycles before recovering).
+    const ZERO_RUN_GRACE = 12;
     const HEARTBEAT_HOURS = 2;
     const nowMs = Date.now();
 
@@ -196,7 +199,12 @@ Deno.serve(async (req) => {
       const stat = statsMap.get(acc.id) as any;
 
       // ===== ACTIVITY GATING for Deep-Dive =====
-      if (isDeepDive && stat?.last_fast_lane_at && !recentCampaignAccountIds.has(acc.id)) {
+      // Hard override: TikTok accounts that reached this loop already have an active
+      // mapping (the orchestrator filtered on ad_account_clients.mapping_keyword above),
+      // so we never apply the silent-skip gate to them — TikTok BC reporting returns
+      // 0 rows transiently and we don't want to downgrade the cadence for that.
+      const isTikTokAcct = (acc.platform_name || "").toLowerCase() === "tiktok";
+      if (isDeepDive && !isTikTokAcct && stat?.last_fast_lane_at && !recentCampaignAccountIds.has(acc.id)) {
         const zeroRuns = stat.consecutive_zero_runs ?? 0;
         const lastRows = stat.last_fast_lane_rows ?? 0;
         if (lastRows === 0 && zeroRuns >= ZERO_RUN_GRACE) {
@@ -213,6 +221,8 @@ Deno.serve(async (req) => {
         }
       } else if (isDeepDive && recentCampaignAccountIds.has(acc.id) && (stat?.consecutive_zero_runs ?? 0) >= ZERO_RUN_GRACE) {
         console.log(`Wake-up Deep-Dive for ${acc.account_name} (recent campaign change detected)`);
+      } else if (isDeepDive && isTikTokAcct && (stat?.consecutive_zero_runs ?? 0) >= ZERO_RUN_GRACE) {
+        console.log(`TikTok override: forcing Deep-Dive for ${acc.account_name} despite ${stat?.consecutive_zero_runs} zero-runs (active mappings present)`);
       }
 
 
