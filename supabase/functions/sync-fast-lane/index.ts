@@ -983,7 +983,47 @@ Deno.serve(async (req) => {
         for (const r of recent ?? []) recentCampaignAccountIds.add(r.ad_account_id);
       } catch (e: any) {
         console.error("Recent campaign check failed:", e?.message);
+    }
+
+    // ===== Auto-schedule a deep-dive for TODAY (Asia/Dhaka) on accounts with fresh spend =====
+    // This ensures KPI columns (impressions, clicks, results) fill in within minutes after
+    // fast-lane seeds today's spend row, instead of waiting for the next scheduled deep-dive.
+    try {
+      const todayStr = endDateStr; // already Dhaka today
+      const accountsWithSpend = Object.entries(accountRowCounts)
+        .filter(([, c]) => c > 0)
+        .map(([id]) => id);
+      if (accountsWithSpend.length > 0) {
+        // Skip accounts that already have a pending/processing deep-dive for today
+        const { data: existing } = await supabase
+          .from("sync_jobs")
+          .select("ad_account_id")
+          .eq("function_name", "sync-deep-dive")
+          .eq("date_from", todayStr)
+          .eq("date_to", todayStr)
+          .in("status", ["pending", "processing"])
+          .in("ad_account_id", accountsWithSpend);
+        const existingSet = new Set((existing ?? []).map((r: any) => r.ad_account_id));
+        const toQueue = accountsWithSpend
+          .filter((id) => !existingSet.has(id))
+          .map((id) => ({
+            ad_account_id: id,
+            org_id: accounts.find((a) => a.id === id)?.org_id ?? null,
+            function_name: "sync-deep-dive",
+            status: "pending",
+            date_from: todayStr,
+            date_to: todayStr,
+            scheduled_at: new Date().toISOString(),
+          }));
+        if (toQueue.length > 0) {
+          const { error: qErr } = await supabase.from("sync_jobs").insert(toQueue);
+          if (qErr) console.warn(`Today deep-dive enqueue failed: ${qErr.message}`);
+          else console.log(`Queued ${toQueue.length} sync-deep-dive jobs for ${todayStr}`);
+        }
       }
+    } catch (e: any) {
+      console.warn(`Today deep-dive scheduling error: ${e?.message}`);
+    }
 
       const upserts = accountIds.map((accId) => {
         const rows = accountRowCounts[accId];
