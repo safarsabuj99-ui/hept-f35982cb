@@ -140,43 +140,67 @@ async function writeFastLaneMetrics(
     return { written: 0, skipped };
   }
 
-  // UPDATE-only: never insert spend-only rows into daily_metrics. Deep-dive owns row creation
-  // (it writes the full KPI payload: impressions, clicks, reach, results, etc.). If we inserted
-  // here, the row would show spend>0 with all other KPI columns defaulting to 0 until deep-dive
-  // catches up — which is exactly the "Spent populated but Impressions=0" bug. Defer instead.
-  const campaignIds = [...new Set(metricRows.map(r => r.campaign_id))];
-  const dataDates = [...new Set(metricRows.map(r => r.data_date))];
-  const { data: existingRows, error: exErr } = await supabase
-    .from("daily_metrics")
-    .select("campaign_id, data_date")
-    .in("campaign_id", campaignIds)
-    .in("data_date", dataDates);
-  if (exErr) {
-    console.warn(`${logPrefix} daily_metrics existence lookup failed: ${exErr.message}`);
-    return { written: 0, skipped: metricRows.length + skipped };
-  }
-  const existsKey = new Set((existingRows ?? []).map(r => `${r.campaign_id}|${r.data_date}`));
-  const toUpdate = metricRows.filter(r => existsKey.has(`${r.campaign_id}|${r.data_date}`));
-  const deferred = metricRows.length - toUpdate.length;
+  // SPLIT: recent days (today + yesterday in Asia/Dhaka) are UPSERTED so the dashboard
+  // sees today's spend immediately. Historical days remain UPDATE-only — deep-dive owns
+  // backfill so we never create a row with spend>0 and impressions=0 forever.
+  const dhakaToday = getDhakaToday();
+  const dhakaYesterday = (() => {
+    const d = new Date(dhakaToday + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().split("T")[0];
+  })();
+  const isRecent = (d: string) => d === dhakaToday || d === dhakaYesterday;
 
-  if (toUpdate.length === 0) {
-    console.log(`${logPrefix} fast-lane metrics: 0 written, ${deferred} deferred (awaiting deep-dive), ${skipped} unmapped`);
-    return { written: 0, skipped: skipped + deferred };
-  }
+  const recentRows = metricRows.filter(r => isRecent(r.data_date));
+  const historicalRows = metricRows.filter(r => !isRecent(r.data_date));
 
-  for (let i = 0; i < toUpdate.length; i += 100) {
-    const batch = toUpdate.slice(i, i + 100);
+  let writtenTotal = 0;
+
+  // 1) Recent days — full UPSERT (insert when missing). Deep-dive will overwrite with full KPIs.
+  for (let i = 0; i < recentRows.length; i += 100) {
+    const batch = recentRows.slice(i, i + 100);
     const { error } = await supabase
       .from("daily_metrics")
       .upsert(batch, { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
     if (error) {
-      console.warn(`${logPrefix} daily_metrics upsert failed: ${error.message}`);
-      return { written: i, skipped: skipped + deferred };
+      console.warn(`${logPrefix} daily_metrics recent upsert failed: ${error.message}`);
+      break;
+    }
+    writtenTotal += batch.length;
+  }
+
+  // 2) Historical days — UPDATE-only (defer row creation to deep-dive).
+  let deferred = 0;
+  if (historicalRows.length > 0) {
+    const campaignIds = [...new Set(historicalRows.map(r => r.campaign_id))];
+    const dataDates = [...new Set(historicalRows.map(r => r.data_date))];
+    const { data: existingRows, error: exErr } = await supabase
+      .from("daily_metrics")
+      .select("campaign_id, data_date")
+      .in("campaign_id", campaignIds)
+      .in("data_date", dataDates);
+    if (exErr) {
+      console.warn(`${logPrefix} historical existence lookup failed: ${exErr.message}`);
+      return { written: writtenTotal, skipped: skipped + historicalRows.length };
+    }
+    const existsKey = new Set((existingRows ?? []).map(r => `${r.campaign_id}|${r.data_date}`));
+    const toUpdate = historicalRows.filter(r => existsKey.has(`${r.campaign_id}|${r.data_date}`));
+    deferred = historicalRows.length - toUpdate.length;
+    for (let i = 0; i < toUpdate.length; i += 100) {
+      const batch = toUpdate.slice(i, i + 100);
+      const { error } = await supabase
+        .from("daily_metrics")
+        .upsert(batch, { onConflict: "campaign_id,data_date", ignoreDuplicates: false });
+      if (error) {
+        console.warn(`${logPrefix} historical upsert failed: ${error.message}`);
+        return { written: writtenTotal + i, skipped: skipped + deferred };
+      }
+      writtenTotal += batch.length;
     }
   }
 
-  console.log(`${logPrefix} fast-lane metrics: ${toUpdate.length} updated, ${deferred} deferred (awaiting deep-dive), ${skipped} unmapped`);
-  return { written: toUpdate.length, skipped: skipped + deferred };
+  console.log(`${logPrefix} fast-lane metrics: ${writtenTotal} written (${recentRows.length} recent upsert, ${historicalRows.length - deferred} historical updates), ${deferred} deferred, ${skipped} unmapped`);
+  return { written: writtenTotal, skipped: skipped + deferred };
 }
 
 // Force redeploy v2 - proxy + 30-day chunking fix
