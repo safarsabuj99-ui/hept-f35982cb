@@ -1275,6 +1275,24 @@ Deno.serve(async (req) => {
           }
 
 
+          apiRowsFetched += rows.length;
+          metricRowsWritten += prepared.length;
+
+          // Visibility: API returned rows but mapping skipped all of them.
+          if (rows.length > 0 && prepared.length === 0) {
+            try {
+              await supabase.from("sync_logs").insert({
+                ad_account_id: account.id,
+                function_name: "sync-deep-dive",
+                status: "failed",
+                error_code: "mapping_miss",
+                error_message: `TikTok returned ${rows.length} row(s) for ${account.account_name} (${startDateStr}→${endDateStr}) but no campaign name matched any mapping keyword. Update keywords in Campaign Mapping.`,
+                rows_synced: 0,
+                completed_at: new Date().toISOString(),
+              });
+            } catch (_) { /* non-fatal */ }
+          }
+
           console.log(`TikTok deep-dive: ${rows.length} rows (${prepared.length} matched) for ${account.ad_account_id}`);
         }
 
