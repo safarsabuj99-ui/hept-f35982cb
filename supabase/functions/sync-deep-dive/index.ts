@@ -227,6 +227,8 @@ Deno.serve(async (req) => {
     let totalSynced = 0;
     let skippedCampaigns = 0;
     let skippedForTimeBudget = 0;
+    let apiRowsFetched = 0;
+    let metricRowsWritten = 0;
     const errors: string[] = [];
 
     // Get TikTok proxy URL setting
