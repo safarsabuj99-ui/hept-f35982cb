@@ -1,44 +1,63 @@
-# Fix TikTok auto-sync (fast-lane + deep-dive)
+## Diagnosis
 
-## What's actually happening
+TikTok auth and proxy are not the main problem right now. Tokens are active and using the US proxy.
 
-The cron + queue ARE working. Both fast-lane and deep-dive ran every 15 min today and all jobs are `status: done`. The reasons you see no new TikTok data:
+The current issues are:
 
-1. **Deep-dive: 40002 invalid metric error.** TikTok now rejects `total_add_to_cart`, `total_initiate_checkout`, `total_complete_payment` in the BC reporting endpoint. Our `BC_METRICS_B` list in `sync-deep-dive/index.ts:863` still requests them, so the primary call fails and the split-metric fallback returns 0 rows for the whole window.
-2. **Orchestrator silently skips "quiet" accounts.** `sync-orchestrator/index.ts:127` uses `ZERO_RUN_GRACE = 3`. After 3 consecutive zero-row fast-lane runs an account is downgraded to a ~2-hour heartbeat. HEPT 18 (38 zero runs) and HEPT Agency 5 (137 zero runs) are stuck in that mode, so deep-dive barely fires for them.
-3. **HEPT Agency 5 has 0 campaign mappings.** Ingestion policy filters out everything without an active mapping → "campaigns found: 0" forever, no matter how many syncs we run.
-4. **HEPT 18 has 17 active mappings** but TikTok status fetch still returns 0 campaigns — the `original_name_tag` keywords no longer match live TikTok campaign names.
+1. **Automatic deep-dive is blocked by queue uniqueness**
+   - The orchestrator builds multiple date chunks for TikTok deep-dive.
+   - But the database has an active-job unique index on only `(ad_account_id, function_name)`, so only one active deep-dive job per account can exist.
+   - Result: automatic TikTok chunked jobs are not actually inserted/processed correctly, especially when pending jobs already exist.
 
-Tokens are valid (both expire 2027, `connection_status=active`). No auth problem.
+2. **Sync success count is misleading**
+   - `sync-deep-dive` returns `rows_synced: totalSynced`, where `totalSynced` means accounts processed, not TikTok API rows or metric rows written.
+   - So jobs show `rows_synced = 1` even if TikTok returned 0 rows, 100 rows, or rows were skipped by keyword matching.
 
-## Changes
+3. **TikTok data can be fetched but skipped by mapping**
+   - Deep-dive only writes rows when campaign name matches an `ad_account_clients.mapping_keyword` or an existing campaign mapping.
+   - Accounts with stale/too narrow keywords can show successful API calls but no usable metrics.
 
-### 1. `supabase/functions/sync-deep-dive/index.ts`
-- Remove the 3 rejected metrics from `BC_METRICS_B` (line 863). Keep them in the row-parser fallback (lines 1142-1144) so old payloads still parse if TikTok ever re-enables them.
-- Replace with TikTok's currently-supported equivalents from the **Advertiser** reporting endpoint: `complete_payment`, `add_to_cart`, `initiate_checkout`, `complete_payment_roas` (these still work; the `total_*` variants are BC-only and were deprecated).
-- Add a one-time log line when a 40002 is still hit, including the exact field list returned by TikTok, so we can react quickly next time TikTok deprecates fields.
+4. **Future API field changes are not guarded enough**
+   - TikTok has already rejected deprecated metrics before.
+   - The code logs some 40002 invalid-metric data, but it still needs stronger per-metric fallback and clearer sync logs.
 
-### 2. `supabase/functions/sync-orchestrator/index.ts`
-- Raise `ZERO_RUN_GRACE` from `3` → `12` (≈3 hours of cycles before downgrading).
-- Add a hard override: if `platform = tiktok` AND the account has any active `campaign_mappings`, never apply the skip gate to deep-dive — always queue it on the normal cadence. This guarantees TikTok deep-dive keeps trying even after a streak of zero rows.
-- Keep fast-lane gating untouched (cheap enough to always run anyway).
+## Fix plan
 
-### 3. Empty/stale mapping visibility (no schema change)
-- In the orchestrator, when an account is skipped because it has 0 active mappings, write a row into `sync_logs` with `error_code='no_mappings'` and a clear message naming the account. This makes the real reason show up in the Sync ops UI instead of looking like a silent failure.
-- No code change to the mapping UI — you'll see the row appear in the existing logs panel and can fix the mapping there.
+### 1. Fix the queue uniqueness rule
+- Add a database migration that replaces the bad active-job unique index.
+- Remove/replace `idx_sync_jobs_unique_active` so chunked jobs are allowed per account/date.
+- Keep uniqueness on `(ad_account_id, function_name, date_from/date_to)` for chunked windows to prevent duplicates.
+- Keep a separate safe uniqueness rule for non-chunked/full jobs.
 
-### 4. Manual one-time backfill after deploy
-After the deploy, trigger one targeted deep-dive run for HEPT Agency 2 + the other 5 accounts that already have mappings, lookback 7 days, to repopulate the window that returned 0 rows today. (Curl loop, same shape as before, no code change.)
+### 2. Make orchestrator inserts reliable
+- In `sync-orchestrator`, insert chunk jobs with conflict-safe behavior.
+- Count and log insert errors instead of silently reporting jobs that the database rejected.
+- Ensure TikTok deep-dive queues all 7-day chunks for all active mapped TikTok accounts.
 
-## Out of scope
+### 3. Return real sync numbers
+- In `sync-deep-dive`, track:
+  - API rows fetched
+  - rows matched to clients
+  - `daily_metrics` rows attempted/written
+  - skipped rows due to missing keyword/mapping
+- Return `rows_synced` as actual metrics rows written, not account count.
+- Return separate fields like `accounts_synced`, `api_rows_fetched`, and `skipped_no_keyword_match`.
 
-- Adding mappings for HEPT Agency 5 — that's a manual data step in the mapping UI; I'll surface the missing-mapping log so you can act.
-- Re-tagging HEPT 18 keywords — same; needs human review against current TikTok campaign names.
-- Cloudflare proxy or token rotation — both are healthy.
+### 4. Improve TikTok failure visibility
+- If TikTok API returns rows but all are skipped by mapping, write a clear `sync_logs` warning/error such as `mapping_miss`.
+- Include account name/date window and count of skipped campaigns.
+- Keep invalid metric `40002` logs, but make the function fail the job only when no fallback path succeeds.
 
-## Verification
+### 5. Validate with a 7-day TikTok backfill
+- Deploy changed edge functions.
+- Trigger the orchestrator for `sync-deep-dive`.
+- Verify active TikTok accounts receive chunked jobs.
+- Verify `daily_metrics` has fresh TikTok rows for the last 7 days.
+- Verify jobs show real row counts, not always `1`.
 
-1. Re-deploy `sync-deep-dive` + `sync-orchestrator`.
-2. Trigger one manual deep-dive on HEPT Agency 2; expect non-zero rows and **no** "Invalid metric fields" warning in the function logs.
-3. Wait one orchestrator cycle (≤15 min); confirm `sync_jobs` rows for `sync-deep-dive` exist for all 7 mapped TikTok accounts.
-4. Confirm `sync_logs` shows a `no_mappings` row for HEPT Agency 5.
+## Prevention
+
+- Add queue constraints that match chunked-sync behavior, so future chunking changes cannot be blocked by a broad unique index.
+- Log “API returned rows but mapping skipped them” as a first-class sync condition.
+- Track real API rows vs written rows separately so the Sync UI does not hide problems behind `success: 1`.
+- Keep TikTok metric groups isolated so one deprecated metric cannot break the whole sync window.

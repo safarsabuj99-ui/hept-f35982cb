@@ -227,6 +227,8 @@ Deno.serve(async (req) => {
     let totalSynced = 0;
     let skippedCampaigns = 0;
     let skippedForTimeBudget = 0;
+    let apiRowsFetched = 0;
+    let metricRowsWritten = 0;
     const errors: string[] = [];
 
     // Get TikTok proxy URL setting
@@ -1273,6 +1275,24 @@ Deno.serve(async (req) => {
           }
 
 
+          apiRowsFetched += rows.length;
+          metricRowsWritten += prepared.length;
+
+          // Visibility: API returned rows but mapping skipped all of them.
+          if (rows.length > 0 && prepared.length === 0) {
+            try {
+              await supabase.from("sync_logs").insert({
+                ad_account_id: account.id,
+                function_name: "sync-deep-dive",
+                status: "failed",
+                error_code: "mapping_miss",
+                error_message: `TikTok returned ${rows.length} row(s) for ${account.account_name} (${startDateStr}→${endDateStr}) but no campaign name matched any mapping keyword. Update keywords in Campaign Mapping.`,
+                rows_synced: 0,
+                completed_at: new Date().toISOString(),
+              });
+            } catch (_) { /* non-fatal */ }
+          }
+
           console.log(`TikTok deep-dive: ${rows.length} rows (${prepared.length} matched) for ${account.ad_account_id}`);
         }
 
@@ -1298,12 +1318,17 @@ Deno.serve(async (req) => {
         ok: true,
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
+        api_rows_fetched: apiRowsFetched,
+        rows_written: metricRowsWritten,
         skipped_no_keyword_match: skippedCampaigns,
         skipped_for_time_budget: skippedForTimeBudget,
         elapsed_ms: Date.now() - startTime,
         errors: errors.length > 0 ? errors : undefined,
         error_code: errors.length > 0 ? "partial_errors" : undefined,
-        rows_synced: totalSynced,
+        // rows_synced now reflects real metric rows written (not account count).
+        // The queue worker reads this field for its per-job summary.
+        rows_synced: metricRowsWritten,
+        synced: metricRowsWritten,
         date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),

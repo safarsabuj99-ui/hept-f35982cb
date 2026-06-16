@@ -274,7 +274,10 @@ Deno.serve(async (req) => {
         const fresh = rows.filter(r => !existingByAccount.get(acc.id)?.has(`${r.date_from}_${r.date_to}`));
         if (fresh.length === 0) continue;
 
-        const { data: inserted } = await supabase.from("sync_jobs").insert(fresh).select("id");
+        const { data: inserted, error: insErr } = await supabase.from("sync_jobs").insert(fresh).select("id");
+        if (insErr) {
+          console.error(`Chunked insert failed for ${acc.account_name} (${acc.platform_name}): ${insErr.message} — fresh=${fresh.length}`);
+        }
         const cnt = inserted?.length ?? 0;
         if (cnt > 0) { totalEnqueued += cnt; chunkedAccounts++; }
       }
