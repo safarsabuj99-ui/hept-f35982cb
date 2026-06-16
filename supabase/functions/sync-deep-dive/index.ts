@@ -1318,12 +1318,17 @@ Deno.serve(async (req) => {
         ok: true,
         message: "Deep dive sync complete",
         accounts_synced: totalSynced,
+        api_rows_fetched: apiRowsFetched,
+        rows_written: metricRowsWritten,
         skipped_no_keyword_match: skippedCampaigns,
         skipped_for_time_budget: skippedForTimeBudget,
         elapsed_ms: Date.now() - startTime,
         errors: errors.length > 0 ? errors : undefined,
         error_code: errors.length > 0 ? "partial_errors" : undefined,
-        rows_synced: totalSynced,
+        // rows_synced now reflects real metric rows written (not account count).
+        // The queue worker reads this field for its per-job summary.
+        rows_synced: metricRowsWritten,
+        synced: metricRowsWritten,
         date_range: { from: globalStartDate, to: endDateStr },
         timestamp: new Date().toISOString(),
       }),
