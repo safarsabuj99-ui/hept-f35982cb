@@ -617,18 +617,37 @@ Deno.serve(async (req) => {
               + get("onsite_conversion.messaging_order_created")
               + get("onsite_conversion.messaging_block_create_order");
 
-            // "Results" = whatever the campaign optimised for. omni_purchase already
-            // dedupes across channels, so we can safely sum the major optimisation goals.
-            results = preferOmni("omni_purchase", [
-              "onsite_web_purchase", "onsite_app_purchase", "onsite_web_app_purchase",
-              "onsite_conversion.purchase", "offsite_conversion.fb_pixel_purchase",
-            ])
-              + get("lead")
+            // "Results" = the SINGLE counter Meta Ads Manager shows, picked from the
+            // campaign's optimisation goal. Never sum across goals (that would double-count
+            // the same user across pixel / onsite / omni attribution buckets).
+            const objectiveRaw = (metaObjectiveMap[rawCampaignId] || "").toUpperCase();
+            const leadTotal = get("lead")
               + get("onsite_conversion.lead_grouped")
               + get("onsite_web_lead")
-              + get("complete_registration")
               + get("offsite_complete_registration_add_meta_leads")
-              + messagingConversations;
+              + get("complete_registration");
+            const appInstallTotal = get("app_install") + get("mobile_app_install") + get("omni_app_install");
+            const linkClickTotal = get("link_click") || clicks;
+            const videoViewTotal = get("video_view");
+
+            if (/SALES|CONVERSION|CATALOG/.test(objectiveRaw)) {
+              results = purchaseCount;
+            } else if (/LEAD/.test(objectiveRaw)) {
+              results = leadTotal;
+            } else if (/MESSAG|ENGAGEMENT/.test(objectiveRaw)) {
+              results = messagingConversations;
+            } else if (/APP/.test(objectiveRaw)) {
+              results = appInstallTotal;
+            } else if (/AWARENESS|REACH/.test(objectiveRaw)) {
+              results = reach;
+            } else if (/TRAFFIC|LINK_CLICK/.test(objectiveRaw)) {
+              results = linkClickTotal;
+            } else if (/VIDEO/.test(objectiveRaw)) {
+              results = videoViewTotal;
+            } else {
+              // Unknown / missing objective — pick the LARGEST single signal (never sum).
+              results = Math.max(purchaseCount, leadTotal, messagingConversations, appInstallTotal);
+            }
 
             // Conversion value: prefer pixel purchase value, fall back to omni_purchase value
             conversionValue = valueMap.get("offsite_conversion.fb_pixel_purchase")
