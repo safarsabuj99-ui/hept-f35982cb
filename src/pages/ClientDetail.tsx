@@ -484,9 +484,33 @@ export default function ClientDetail() {
   };
 
   const [deepDiveSyncing, setDeepDiveSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    active: boolean;
+    total: number;
+    done: number;
+    failed: number;
+    processing: number;
+    pending: number;
+    completed: boolean;
+    timedOut: boolean;
+  }>({ active: false, total: 0, done: 0, failed: 0, processing: 0, pending: 0, completed: false, timedOut: false });
+
+  // Refs to manage poll/timeout lifecycle without re-renders
+  const syncPollRef = useState<{ interval: any; timeout: any; hide: any }>({ interval: null, timeout: null, hide: null })[0];
+
+  const cleanupSyncTrackers = () => {
+    if (syncPollRef.interval) { clearInterval(syncPollRef.interval); syncPollRef.interval = null; }
+    if (syncPollRef.timeout) { clearTimeout(syncPollRef.timeout); syncPollRef.timeout = null; }
+    if (syncPollRef.hide) { clearTimeout(syncPollRef.hide); syncPollRef.hide = null; }
+  };
+
+  useEffect(() => () => cleanupSyncTrackers(), []);
+
   const handleClientDeepDiveSync = async () => {
     if (!userId || deepDiveSyncing) return;
     setDeepDiveSyncing(true);
+    cleanupSyncTrackers();
+    setSyncProgress({ active: true, total: 0, done: 0, failed: 0, processing: 0, pending: 0, completed: false, timedOut: false });
     try {
       const { data: accounts } = await supabase
         .from("ad_account_clients")
@@ -496,8 +520,10 @@ export default function ClientDetail() {
       if (accountIds.length === 0) {
         toast({ title: "No ad accounts", description: "This client has no linked ad accounts.", variant: "destructive" });
         setDeepDiveSyncing(false);
+        setSyncProgress((p) => ({ ...p, active: false }));
         return;
       }
+      const startedAtIso = new Date(Date.now() - 2000).toISOString(); // small back-buffer
       const { data, error } = await supabase.functions.invoke("sync-orchestrator", {
         body: { function: "sync-deep-dive", client_id: userId, ad_account_ids: accountIds },
       });
@@ -505,13 +531,60 @@ export default function ClientDetail() {
       const enq = (data as any)?.enqueued ?? 0;
       toast({
         title: "Deep Dive Sync Queued",
-        description: `Queued ${enq} job(s) across ${accountIds.length} ad account(s). New data will appear shortly.`,
+        description: `Queued ${enq} job(s) across ${accountIds.length} ad account(s).`,
       });
-      setTimeout(() => { reloadSpendData(); }, 2500);
+      setSyncProgress((p) => ({ ...p, total: enq }));
+
+      // Poll sync_jobs to compute real progress
+      const pollOnce = async () => {
+        const { data: jobs } = await supabase
+          .from("sync_jobs")
+          .select("status")
+          .eq("function_name", "sync-deep-dive")
+          .in("ad_account_id", accountIds)
+          .gte("created_at", startedAtIso);
+        const rows = (jobs ?? []) as Array<{ status: string }>;
+        const total = rows.length;
+        let done = 0, failed = 0, processing = 0, pending = 0;
+        for (const r of rows) {
+          if (r.status === "done") done++;
+          else if (r.status === "failed") failed++;
+          else if (r.status === "processing") processing++;
+          else pending++;
+        }
+        const allFinished = total > 0 && pending === 0 && processing === 0;
+        setSyncProgress((prev) => ({
+          ...prev,
+          total: Math.max(prev.total, total),
+          done, failed, processing, pending,
+          completed: allFinished,
+        }));
+        if (allFinished) {
+          cleanupSyncTrackers();
+          reloadSpendData();
+          syncPollRef.hide = setTimeout(() => {
+            setSyncProgress((p) => ({ ...p, active: false }));
+          }, 4000);
+          setDeepDiveSyncing(false);
+        }
+      };
+      // initial fetch + interval
+      pollOnce();
+      syncPollRef.interval = setInterval(pollOnce, 2500);
+      // 5-minute hard timeout
+      syncPollRef.timeout = setTimeout(() => {
+        cleanupSyncTrackers();
+        setSyncProgress((p) => ({ ...p, timedOut: true, completed: true }));
+        reloadSpendData();
+        setDeepDiveSyncing(false);
+        syncPollRef.hide = setTimeout(() => setSyncProgress((p) => ({ ...p, active: false })), 6000);
+      }, 5 * 60 * 1000);
     } catch (err: any) {
       toast({ title: "Sync failed", description: err.message || "Could not queue deep dive sync.", variant: "destructive" });
+      cleanupSyncTrackers();
+      setSyncProgress((p) => ({ ...p, active: false }));
+      setDeepDiveSyncing(false);
     }
-    setDeepDiveSyncing(false);
   };
 
 
