@@ -1,56 +1,53 @@
 ## Problem
 
-Meta deep-dive jobs actually fetch and write data successfully (verified in DB: today's `daily_metrics` for Meta accounts is up-to-date as of 10 minutes ago). But every Meta deep-dive job reports `rows_synced = 1` — making the UI (progress bar / "Sync complete" toast) and stats appear as if Meta returned **no data**.
+Meta deep-dive **is** writing rows (verified in `daily_metrics`), but several metric columns stay at `0` even when the underlying actions exist in the API response. Live sample from this client (last 3 days):
 
-### Root cause
+- `purchase` = 0 across **every** Meta row, even though the edge-function log shows `omni_purchase=2`, `onsite_web_purchase=2`, `onsite_app_purchase=2`, `onsite_conversion.purchase=2` on the same campaign/day.
+- `new_messaging_contacts` is actually being populated with **messaging replies**, not new contacts.
+- `results` only counts 4 hard-coded action types, so messaging-objective and Advantage+ campaigns under-report.
+- `create_order` works for messaging orders, but misses the non-`_v2` variant and `onsite_web_lead`-style order events.
 
-In `supabase/functions/sync-deep-dive/index.ts`, the counters `apiRowsFetched` and `metricRowsWritten` are **only incremented inside the TikTok branch** (lines 1278-1279):
+Root cause: in `supabase/functions/sync-deep-dive/index.ts` (lines 571-598) the action-type matchers are too narrow. Meta returns the **same conversion** under several attribution buckets (`offsite_conversion.fb_pixel_*`, `onsite_conversion.*`, `onsite_web_*`, `onsite_app_*`, `omni_*`). We only read the `offsite_conversion.fb_pixel_*` variants — perfect for classic Pixel campaigns, but wrong for messaging / Advantage+ / app campaigns which the client mostly runs.
 
-```ts
-apiRowsFetched += rows.length;
-metricRowsWritten += prepared.length;
-```
+## Fix (Meta branch only, `sync-deep-dive/index.ts` ~lines 566-598)
 
-The Meta branch (ends ~line 704) and Google branch never touch these counters. The function then returns:
+Replace the matcher block with a unified mapper that picks the **best available signal per metric**, preferring the unified `omni_*` counter when present, falling back to `onsite_* + offsite_*` otherwise — and never double-counting on the same row.
 
-```ts
-synced: metricRowsWritten,       // always 0 for Meta/Google
-rows_written: metricRowsWritten, // always 0 for Meta/Google
-```
+Per-metric mapping:
 
-`sync-queue-worker` reads `data.synced || data.accounts_synced || 0`, so it falls back to `accounts_synced = 1` and stores `rows_synced = 1` on every Meta job. That misreports progress AND feeds the wrong `total_rows_last_sync` into `mark_parent_complete`, which then sets a too-aggressive `recommended_chunk_days` (treats account as low-volume).
+| Column | Matched action_type (in priority order) |
+|---|---|
+| `purchase` | `omni_purchase` → else sum of `onsite_web_purchase` + `onsite_app_purchase` + `onsite_conversion.purchase` + `offsite_conversion.fb_pixel_purchase` |
+| `view_content` | `omni_view_content` → else `offsite_conversion.fb_pixel_view_content` + `onsite_web_view_content` |
+| `add_to_cart` | `omni_add_to_cart` → else `offsite_conversion.fb_pixel_add_to_cart` + `onsite_web_add_to_cart` |
+| `initiate_checkout` | `omni_initiated_checkout` → else `offsite_conversion.fb_pixel_initiate_checkout` + `onsite_web_initiate_checkout` |
+| `messaging_conversations` | `onsite_conversion.messaging_conversation_started_7d` (unchanged) |
+| `new_messaging_contacts` | `onsite_conversion.total_messaging_connection` (fix — current code uses replies) |
+| `create_order` | `onsite_conversion.messaging_order_created_v2` + `onsite_conversion.messaging_order_created` + `onsite_conversion.messaging_block_create_order` |
+| `results` | `omni_purchase` + `lead` + `onsite_conversion.lead_grouped` + `onsite_conversion.purchase` + `complete_registration` + `onsite_conversion.messaging_conversation_started_7d` (whichever the campaign optimises for; sum is fine because Meta already de-duplicates inside `omni_*`) |
+| `conversion_value` | already correct; extend to also read `omni_purchase` value when `offsite_conversion.fb_pixel_purchase` value is absent |
 
-## Fix
-
-In `supabase/functions/sync-deep-dive/index.ts`:
-
-1. **Meta branch** — after the `daily_metrics` bulk upsert succeeds (around line 682), add:
-   ```ts
-   apiRowsFetched += allInsights.length;
-   metricRowsWritten += metaPrepared.length;
-   ```
-   And track skipped-but-fetched campaigns (rows returned by Meta whose campaign name didn't match any keyword) into the existing `skippedCampaigns` — already handled by `resolveClientId` returning null.
-
-2. **Google branch** — same treatment: after writing metrics, increment `apiRowsFetched += <raw row count>` and `metricRowsWritten += <prepared.length>`.
-
-3. **Meta "mapping miss" visibility** — mirror TikTok's behavior (lines 1281-1294): when `allInsights.length > 0` but `metaPrepared.length === 0`, insert a `sync_logs` row with `error_code: "mapping_miss"` and a clear message naming the account + date range so admins know why nothing was written.
-
-No changes to Meta API URLs, field lists, or the orchestrator. No DB migration.
+Implementation notes:
+- Build a `Map<string, number>` from `row.actions` once per row, then read by key — cleaner and avoids the current cascading `if` chain.
+- Same for `row.action_values`.
+- Keep the existing `metaRowIndex < 3` debug log so we can verify mapping in production.
+- No URL / field-list change — all these action types are already returned by the existing `actions` field.
 
 ## Verification
 
-1. Trigger a Deep Dive Sync on a client whose accounts are Meta-only.
-2. Check `sync_jobs.rows_synced` for the resulting rows → should equal the real Meta `daily_metrics` count for that chunk, not `1`.
-3. Confirm the client Spend page progress bar shows the correct "Sync complete" totals.
-4. Verify `daily_metrics` for that client still updates (regression check).
-5. If a Meta account has 0 keyword matches, confirm a `mapping_miss` row appears in `sync_logs`.
+1. Trigger Deep Dive Sync on this client (Meta-heavy) for last 3 days.
+2. Re-run the same `daily_metrics` query — `purchase` should match the `omni_purchase` / `onsite_*_purchase` values seen in the function log (e.g. `Hijbullah/Mejoo/KK/CBO/A+` 2026-06-12 should show `purchase ≥ 2`).
+3. `new_messaging_contacts` should now equal `total_messaging_connection`, not `messaging_first_reply`.
+4. `results` for messaging-objective campaigns should be non-zero (was 0 before for many).
+5. Regression: messaging-conversation, spend, impressions, clicks, create_order values must not decrease.
 
 ## Files to change
 
-- `supabase/functions/sync-deep-dive/index.ts` — Meta + Google branches only.
+- `supabase/functions/sync-deep-dive/index.ts` — Meta `actions` / `action_values` loop only (~lines 566-598 + line 595 for `action_values`).
 
 ## Out of scope
 
-- No changes to fast-lane, orchestrator, worker, or DB schema.
-- No changes to Meta API field selection or attribution logic.
-- TikTok HTTP 546 failures on `HEPT AGENCY 2` are a separate, pre-existing CPU-limit issue — not part of this fix.
+- TikTok / Google branches.
+- Meta fast-lane (it only fetches spend).
+- DB schema, orchestrator, worker, attribution logic.
+- TikTok HTTP 546 CPU-limit failures (pre-existing, separate issue).
