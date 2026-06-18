@@ -1,53 +1,56 @@
-## Goal
-Replace the spinner-only "Deep Dive Sync" button on the client Spend tab with a real progress bar driven by actual `sync_jobs` rows in the database — no fake/demo animation.
+## Problem
 
-## How it works
+Meta deep-dive jobs actually fetch and write data successfully (verified in DB: today's `daily_metrics` for Meta accounts is up-to-date as of 10 minutes ago). But every Meta deep-dive job reports `rows_synced = 1` — making the UI (progress bar / "Sync complete" toast) and stats appear as if Meta returned **no data**.
 
-1. **Capture sync scope on click**
-   - When the user clicks Deep Dive Sync in `src/pages/ClientDetail.tsx`, record:
-     - `syncStartedAt` (ISO timestamp, just before invoking orchestrator)
-     - `syncAccountIds` (the client's mapped `ad_account_id`s)
-   - Invoke `sync-orchestrator` as today. Read `enqueued` from the response as the initial `total`.
+### Root cause
 
-2. **Track real progress from `sync_jobs`**
-   - Open a Supabase Realtime channel on the `sync_jobs` table filtered to `function_name = 'sync-deep-dive'` and rows belonging to `syncAccountIds` created at/after `syncStartedAt`.
-   - On every INSERT/UPDATE, recompute counts from a local map keyed by job id: `total`, `done`, `failed`, `processing`, `pending`.
-   - Also run a single initial `SELECT` to seed the map (covers jobs already inserted before the channel subscribed).
-   - As a safety net, poll the same query every 4s while syncing (in case realtime is delayed).
+In `supabase/functions/sync-deep-dive/index.ts`, the counters `apiRowsFetched` and `metricRowsWritten` are **only incremented inside the TikTok branch** (lines 1278-1279):
 
-3. **UI**
-   - Below the button (or inline next to it), show a `Progress` bar (`@/components/ui/progress`) with:
-     - Value = `done / total * 100` (0 if total = 0)
-     - Label: `Syncing {done}/{total} jobs · {processing} running` (and `{failed} failed` if any)
-     - Once complete (`done + failed === total` and `total > 0`), show "Sync complete" briefly then hide.
-   - Button stays disabled while `syncing === true`.
-   - On completion, call `reloadSpendData()` automatically.
+```ts
+apiRowsFetched += rows.length;
+metricRowsWritten += prepared.length;
+```
 
-4. **State & cleanup**
-   - New state: `syncProgress` = `{ active, total, done, failed, processing, pending, jobsById }`
-   - Cleanup: unsubscribe channel + clear poll interval when complete, on unmount, or after a 5-minute hard timeout (mark as "Sync timed out — partial data may have loaded" and stop tracking).
+The Meta branch (ends ~line 704) and Google branch never touch these counters. The function then returns:
 
-5. **No backend changes required**
-   - `sync-orchestrator` already returns `enqueued` and writes parent/child jobs to `sync_jobs`.
-   - `sync_jobs` RLS already allows admin/org reads (the user opening Client Detail is an admin/manager).
-   - No edge function edits, no migrations.
+```ts
+synced: metricRowsWritten,       // always 0 for Meta/Google
+rows_written: metricRowsWritten, // always 0 for Meta/Google
+```
+
+`sync-queue-worker` reads `data.synced || data.accounts_synced || 0`, so it falls back to `accounts_synced = 1` and stores `rows_synced = 1` on every Meta job. That misreports progress AND feeds the wrong `total_rows_last_sync` into `mark_parent_complete`, which then sets a too-aggressive `recommended_chunk_days` (treats account as low-volume).
+
+## Fix
+
+In `supabase/functions/sync-deep-dive/index.ts`:
+
+1. **Meta branch** — after the `daily_metrics` bulk upsert succeeds (around line 682), add:
+   ```ts
+   apiRowsFetched += allInsights.length;
+   metricRowsWritten += metaPrepared.length;
+   ```
+   And track skipped-but-fetched campaigns (rows returned by Meta whose campaign name didn't match any keyword) into the existing `skippedCampaigns` — already handled by `resolveClientId` returning null.
+
+2. **Google branch** — same treatment: after writing metrics, increment `apiRowsFetched += <raw row count>` and `metricRowsWritten += <prepared.length>`.
+
+3. **Meta "mapping miss" visibility** — mirror TikTok's behavior (lines 1281-1294): when `allInsights.length > 0` but `metaPrepared.length === 0`, insert a `sync_logs` row with `error_code: "mapping_miss"` and a clear message naming the account + date range so admins know why nothing was written.
+
+No changes to Meta API URLs, field lists, or the orchestrator. No DB migration.
+
+## Verification
+
+1. Trigger a Deep Dive Sync on a client whose accounts are Meta-only.
+2. Check `sync_jobs.rows_synced` for the resulting rows → should equal the real Meta `daily_metrics` count for that chunk, not `1`.
+3. Confirm the client Spend page progress bar shows the correct "Sync complete" totals.
+4. Verify `daily_metrics` for that client still updates (regression check).
+5. If a Meta account has 0 keyword matches, confirm a `mapping_miss` row appears in `sync_logs`.
 
 ## Files to change
 
-- `src/pages/ClientDetail.tsx`
-  - Add `syncProgress` state and helpers (init, refresh-from-rows, subscribe, cleanup).
-  - Update `handleClientDeepDiveSync` to set scope, subscribe to realtime + start polling, and remove the fixed 2.5s `setTimeout` reload.
-  - Render a `<Progress>` row beneath the Deep Dive Sync button in the Spend tab when `syncProgress.active`.
+- `supabase/functions/sync-deep-dive/index.ts` — Meta + Google branches only.
 
 ## Out of scope
-- No changes to `sync-orchestrator`, `sync-deep-dive`, `sync-queue-worker`, or `sync_jobs` schema.
-- No change to fast-lane or global admin syncs.
-- No change to the rest of the Spend tab layout.
 
-## Verification
-1. Open a client → Spend tab → click Deep Dive Sync.
-2. Progress bar appears with `0/{N}` and increments as workers finish each chunk (visible within seconds via realtime).
-3. `failed` count appears if a chunk errors.
-4. On completion, bar shows "Sync complete", then disappears; spend table reloads with fresh rows.
-5. Navigate away mid-sync → no console errors (channel/interval cleaned up).
-6. If realtime is disabled, the 4s poll still drives the bar forward.
+- No changes to fast-lane, orchestrator, worker, or DB schema.
+- No changes to Meta API field selection or attribution logic.
+- TikTok HTTP 546 failures on `HEPT AGENCY 2` are a separate, pre-existing CPU-limit issue — not part of this fix.
