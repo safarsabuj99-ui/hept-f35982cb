@@ -1,50 +1,51 @@
-# Why today shows $0 on the dashboard
+## Goal
 
-Root cause confirmed against the database:
+Make the **Spend** tab on the Client Detail page (`/admin/clients/:id` → Spend) look and behave exactly like the admin **Campaigns** page (`/admin/campaigns`), and add a **Deep Dive Sync** button that backfills data for **only this client's** ad accounts.
 
-- `daily_ad_spend` **has** today's (2026-06-17) Meta rows — Meta API returned them and fast-lane wrote them there.
-- `daily_metrics` **does not** have any 06-17 row — the dashboard's `todaySpend`, sparkline, and Profit/Loss all read from `daily_metrics`, so they show ৳0 / $0.
-- The dashboard "Today" filter uses Asia/Dhaka, so it asks for 06-17, which doesn't exist yet → ৳0.
+## Why
 
-The bug lives in `supabase/functions/sync-fast-lane/index.ts → writeFastLaneMetrics()`:
+The current Spend tab uses a custom layout (4 KPI cards + Live/Overview sub-tabs + per-platform sub-tabs around a bare `DeepDiveTable`). The admin Campaigns page uses the much richer `CampaignAnalyticsPanel`, which already includes: search, status filter, platform tabs, bulk pause/resume, sorting, column customization, refresh state, and proper KPI summary — everything the user wants here, in one component.
 
-```ts
-// UPDATE-only: never insert spend-only rows into daily_metrics.
-// Deep-dive owns row creation...
-const toUpdate = metricRows.filter(r => existsKey.has(`${r.campaign_id}|${r.data_date}`));
-```
+A per-client deep-dive button is also needed so admins can force-refresh one client's data without re-syncing the entire org.
 
-Fast-lane intentionally **refuses to insert** new `(campaign_id, data_date)` rows and defers to deep-dive. Deep-dive only chunks **past** windows, so today's row never gets created until tomorrow. Result: every new day starts with the admin dashboard stuck at $0 until deep-dive catches up. This was added to avoid a "spend populated but impressions=0" cosmetic bug, but it broke the primary dashboard KPI.
+## Changes
 
-# Fix plan (smart + future-proof)
+### 1. `src/pages/ClientDetail.tsx` — rebuild the Spend tab
 
-### 1. Let fast-lane INSERT today/yesterday in `daily_metrics`
-`writeFastLaneMetrics` will UPSERT (insert-on-missing) only for the **last 2 days in Asia/Dhaka** (today + yesterday). Older missing days keep deferring to deep-dive, so the original "impressions=0 forever on old rows" concern stays solved. Newly-inserted rows are marked as fast-lane-seeded so deep-dive will fully overwrite them on its next pass with full KPIs.
+Replace the entire `<TabsContent value="spend">` block (the KPI grid, the nested Live/Overview tabs, the per-platform tabs, and the four `<DeepDiveTable>` instances) with the same structure used by `CampaignMapping.tsx`:
 
-### 2. Auto-schedule a deep-dive for today after every fast-lane run
-At the end of `sync-fast-lane`, enqueue a `sync-deep-dive` job for `date_from = date_to = Dhaka today` for any account that wrote new spend. This way KPIs (impressions, clicks, results) get filled in within minutes instead of waiting for the next scheduled deep-dive.
+- Header row: `ClientDateFilter` + small **Deep Dive Sync** button + refreshing spinner.
+- Single `<CampaignAnalyticsPanel campaignRows={spendCampaignRows} onRefresh={reloadSpendData} isAdmin={true} />`.
+- Remove `SalesFunnel` / `PlatformComparison` from this tab (the analytics panel already gives that). Their imports stay only if used elsewhere.
+- Keep all existing state (`spendData`, `spendCampaigns`, `spendAdAccountMap`, `spendDateRange`, etc.) and `loadSpendData` exactly as-is — only the JSX changes. The existing `spendCampaignRows` memo already produces `CampaignRow[]`, so it plugs straight into the panel.
 
-### 3. Safety net inside `get_admin_dashboard_summary`
-If `daily_metrics` returns 0 for the requested range AND `daily_ad_spend` has rows for that range on the mapped accounts, the RPC will fall back to `SUM(daily_ad_spend.final_billable_usd)` for `todaySpend` and the sparkline. This guarantees the dashboard can never silently show $0 while billing data already exists — even if fast-lane regressed again.
+Add the **Deep Dive Sync** button (lucide `Zap` or `RefreshCw` icon):
+- Disabled while a request is in flight.
+- On click: gather this client's ad account IDs (already loaded into `adAccounts` / via `ad_account_clients` for `client.user_id`) and POST to `sync-orchestrator` with `{ function: "sync-deep-dive", ad_account_ids: [...] }`.
+- Toast on success ("Deep dive sync queued for N accounts") / error.
+- After ~2s call `reloadSpendData()` so realtime + manual refresh both show the incoming rows.
 
-### 4. Detection so this never goes unnoticed
-Add a small daily check (extend existing `sync_integrity_alerts`): for each mapped account, if `daily_ad_spend` for a date has rows but `daily_metrics` for the same date/account has none, write a `metrics_gap` alert. Surfaces silently broken syncs in the Sync Health page.
+### 2. `supabase/functions/sync-orchestrator/index.ts` — accept a client/account scope
 
-### 5. Backfill today right now
-After deploy, trigger `sync-fast-lane` once (which will INSERT today's rows) and one targeted `sync-deep-dive` for 06-17 so the dashboard repopulates immediately.
+Currently the orchestrator loads **all** mapped ad accounts. Add an optional filter:
 
-# Technical detail
+- Read `ad_account_ids?: string[]` (and optionally `client_id?: string`) from the request body.
+- If `client_id` is provided, resolve it to ad account IDs via `ad_account_clients` (still respecting `mapping_keyword != ''`).
+- If `ad_account_ids` is provided, intersect it with the mapped-accounts list so we never sync unmapped accounts.
+- Everything downstream (chunk building, `sync_jobs` inserts, fan-out to `sync-deep-dive` / `sync-fast-lane`) is unchanged — it just operates on the filtered subset.
+- Logging line updated to include the scope (`scope=client:<id>` or `scope=accounts:N`) so we can confirm in logs that the per-client trigger really only touched that client.
 
-Files changed:
-- `supabase/functions/sync-fast-lane/index.ts`
-  - In `writeFastLaneMetrics`: compute `dhakaToday` and `dhakaYesterday`; split `metricRows` into `recentRows` (data_date ∈ {today, yesterday}) and `historicalRows`. UPSERT `recentRows` directly with `onConflict: campaign_id,data_date`. Keep UPDATE-only behavior for `historicalRows`. Log counts per bucket.
-  - After the per-account loop, if any account wrote recent rows, insert a `sync_jobs` row for `sync-deep-dive` with `date_from = date_to = dhakaToday` (deduped against existing pending/processing jobs).
-- `supabase/migrations/<new>.sql`
-  - Update `get_admin_dashboard_summary(p_date_from, p_date_to[, p_org_id])` so `v_range_spend` and `v_spend_history` fall back to `daily_ad_spend.final_billable_usd` scoped to `v_mapped_account_ids` when the `daily_metrics` sum is 0 for a given day. Keep `v_yesterday_spend` consistent.
-  - Add a nightly check (or extend existing trigger) that writes a `sync_integrity_alerts` row of type `metrics_gap` when `daily_ad_spend` has a date covered for an account but `daily_metrics` has zero rows for that account/date.
-- After deploy: call `sync-fast-lane` once, then enqueue one `sync-deep-dive` job for today, verify `daily_metrics` has 06-17 rows, then confirm the dashboard "Today" KPI is non-zero.
+No DB migration needed — this is purely a request-shape change on the orchestrator. Existing callers (cron, global Sync Now button) continue to work because both new fields are optional.
 
-# Prevention recap
-- Today's spend can no longer be "invisible": fast-lane writes the row instead of deferring.
-- Even if fast-lane regresses, the RPC falls back to `daily_ad_spend`, so the dashboard always reflects real billing.
-- Any account with billing rows but no metric rows fires a `metrics_gap` alert, so silent drift is caught the same day.
+### 3. Out of scope (not changed)
+
+- `sync-deep-dive` itself — already operates per-account based on the job row.
+- `daily_metrics` schema, RLS, `CampaignAnalyticsPanel`, `DeepDiveTable`.
+- Other tabs on Client Detail (Profile, Pricing, Ad Guard, Accounts, Profit, Payments, Transactions).
+
+## Verification
+
+1. Open a client → Spend tab → confirm the layout now matches `/admin/campaigns` (search bar, status dropdown, platform tabs with counts, bulk action toolbar, sortable headers, column customization).
+2. Date presets (Today / Yesterday / This Week / …) still filter the rows.
+3. Click **Deep Dive Sync** → toast appears, `sync_jobs` table gets new rows only for this client's ad account IDs (verify with `supabase--read_query`), edge function logs show the new scope line, and within ~30s realtime updates land in the table.
+4. Trigger a global sync from elsewhere → confirm it still enqueues all mapped accounts (no regression).
