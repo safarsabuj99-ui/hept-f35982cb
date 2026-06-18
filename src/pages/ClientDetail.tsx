@@ -14,10 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock } from "lucide-react";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock, Loader2, Zap } from "lucide-react";
+import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { TablePagination } from "@/components/TablePagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -483,6 +482,38 @@ export default function ClientDetail() {
       await loadSpendData(accounts.map((a: any) => a.ad_account_id), spendDateRange);
     }
   };
+
+  const [deepDiveSyncing, setDeepDiveSyncing] = useState(false);
+  const handleClientDeepDiveSync = async () => {
+    if (!userId || deepDiveSyncing) return;
+    setDeepDiveSyncing(true);
+    try {
+      const { data: accounts } = await supabase
+        .from("ad_account_clients")
+        .select("ad_account_id")
+        .eq("client_id", userId);
+      const accountIds = (accounts ?? []).map((a: any) => a.ad_account_id);
+      if (accountIds.length === 0) {
+        toast({ title: "No ad accounts", description: "This client has no linked ad accounts.", variant: "destructive" });
+        setDeepDiveSyncing(false);
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("sync-orchestrator", {
+        body: { function: "sync-deep-dive", client_id: userId, ad_account_ids: accountIds },
+      });
+      if (error) throw error;
+      const enq = (data as any)?.enqueued ?? 0;
+      toast({
+        title: "Deep Dive Sync Queued",
+        description: `Queued ${enq} job(s) across ${accountIds.length} ad account(s). New data will appear shortly.`,
+      });
+      setTimeout(() => { reloadSpendData(); }, 2500);
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message || "Could not queue deep dive sync.", variant: "destructive" });
+    }
+    setDeepDiveSyncing(false);
+  };
+
 
   if (loading) {
     return (
@@ -965,7 +996,21 @@ export default function ClientDetail() {
 
         {/* SPEND TAB */}
         <TabsContent value="spend" className="space-y-4">
-          <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendDatePreset} />
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1 min-w-0">
+              <ClientDateFilter onRangeChange={handleSpendDateChange} activePreset={spendDatePreset} />
+            </div>
+            <Button
+              onClick={handleClientDeepDiveSync}
+              disabled={deepDiveSyncing}
+              variant="outline"
+              size="sm"
+              className="gap-2 shrink-0"
+            >
+              {deepDiveSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              Deep Dive Sync
+            </Button>
+          </div>
 
           {/* KPI Summary Cards */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -1015,61 +1060,14 @@ export default function ClientDetail() {
             </Card>
           </div>
 
-          {/* Tabbed Content: Live Campaigns + Overview */}
-          <Tabs defaultValue="live" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="live" className="gap-1.5">
-                <Radio className="h-4 w-4" /> Live Campaigns
-                {spendActiveCampaigns > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{spendActiveCampaigns}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="live">
-              <Tabs defaultValue="all" className="space-y-4">
-                <TabsList>
-                  <TabsTrigger value="all">
-                    All
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendCampaignRows.length}</Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="meta">
-                    Meta
-                    {spendMetaRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendMetaRows.length}</Badge>}
-                  </TabsTrigger>
-                  <TabsTrigger value="tiktok">
-                    TikTok
-                    {spendTiktokRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendTiktokRows.length}</Badge>}
-                  </TabsTrigger>
-                  <TabsTrigger value="google">
-                    Google
-                    {spendGoogleRows.length > 0 && <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">{spendGoogleRows.length}</Badge>}
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="all">
-                  <DeepDiveTable data={spendCampaignRows} onCampaignPaused={reloadSpendData} />
-                </TabsContent>
-                <TabsContent value="meta">
-                  <DeepDiveTable data={spendMetaRows} onCampaignPaused={reloadSpendData} />
-                </TabsContent>
-                <TabsContent value="tiktok">
-                  <DeepDiveTable data={spendTiktokRows} onCampaignPaused={reloadSpendData} />
-                </TabsContent>
-                <TabsContent value="google">
-                  <DeepDiveTable data={spendGoogleRows} onCampaignPaused={reloadSpendData} />
-                </TabsContent>
-              </Tabs>
-            </TabsContent>
-
-            <TabsContent value="overview">
-              <div className="space-y-6">
-                <SalesFunnel impressions={spendTotals.impressions} clicks={spendTotals.clicks} results={spendTotals.results} />
-                <PlatformComparison data={spendPlatformStats} />
-              </div>
-            </TabsContent>
-          </Tabs>
+          {/* Full analytics panel — mirrors /admin/campaigns */}
+          <CampaignAnalyticsPanel
+            campaignRows={spendCampaignRows}
+            onRefresh={reloadSpendData}
+            isAdmin={true}
+          />
         </TabsContent>
+
 
         {/* PAYMENTS TAB */}
         <TabsContent value="payments">
