@@ -14,10 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock } from "lucide-react";
-import { DeepDiveTable, CampaignRow } from "@/components/client-analytics/DeepDiveTable";
-import { SalesFunnel } from "@/components/client-analytics/SalesFunnel";
-import { PlatformComparison } from "@/components/client-analytics/PlatformComparison";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock, Loader2, Zap } from "lucide-react";
+import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
+import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { TablePagination } from "@/components/TablePagination";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
