@@ -1088,6 +1088,36 @@ export default function ClientDetail() {
             </Button>
           </div>
 
+          {/* Real-time Deep Dive sync progress */}
+          {syncProgress.active && (
+            <Card>
+              <CardContent className="py-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Loader2 className={cn("h-3.5 w-3.5", !syncProgress.completed && "animate-spin")} />
+                    {syncProgress.timedOut
+                      ? "Sync taking longer than expected — partial data may be available"
+                      : syncProgress.completed
+                        ? "Sync complete"
+                        : syncProgress.total === 0
+                          ? "Queuing jobs…"
+                          : `Syncing ${syncProgress.done}/${syncProgress.total} jobs${syncProgress.processing > 0 ? ` · ${syncProgress.processing} running` : ""}`}
+                  </div>
+                  {syncProgress.failed > 0 && (
+                    <span className="text-destructive font-medium">{syncProgress.failed} failed</span>
+                  )}
+                </div>
+                <Progress
+                  value={syncProgress.total > 0
+                    ? Math.min(100, Math.round(((syncProgress.done + syncProgress.failed) / syncProgress.total) * 100))
+                    : 0}
+                  className="h-2"
+                />
+              </CardContent>
+            </Card>
+          )}
+
+
           {/* KPI Summary Cards */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             <Card>
