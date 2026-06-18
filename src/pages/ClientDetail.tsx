@@ -483,6 +483,38 @@ export default function ClientDetail() {
     }
   };
 
+  const [deepDiveSyncing, setDeepDiveSyncing] = useState(false);
+  const handleClientDeepDiveSync = async () => {
+    if (!userId || deepDiveSyncing) return;
+    setDeepDiveSyncing(true);
+    try {
+      const { data: accounts } = await supabase
+        .from("ad_account_clients")
+        .select("ad_account_id")
+        .eq("client_id", userId);
+      const accountIds = (accounts ?? []).map((a: any) => a.ad_account_id);
+      if (accountIds.length === 0) {
+        toast({ title: "No ad accounts", description: "This client has no linked ad accounts.", variant: "destructive" });
+        setDeepDiveSyncing(false);
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("sync-orchestrator", {
+        body: { function: "sync-deep-dive", client_id: userId, ad_account_ids: accountIds },
+      });
+      if (error) throw error;
+      const enq = (data as any)?.enqueued ?? 0;
+      toast({
+        title: "Deep Dive Sync Queued",
+        description: `Queued ${enq} job(s) across ${accountIds.length} ad account(s). New data will appear shortly.`,
+      });
+      setTimeout(() => { reloadSpendData(); }, 2500);
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message || "Could not queue deep dive sync.", variant: "destructive" });
+    }
+    setDeepDiveSyncing(false);
+  };
+
+
   if (loading) {
     return (
       <div className="space-y-6">
