@@ -62,22 +62,47 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Orchestrator enqueueing for: ${targetFunction}`);
+    // Optional scoping: limit to a specific client's mapped accounts and/or an explicit account list.
+    const scopeClientId: string | undefined = typeof body?.client_id === "string" ? body.client_id : undefined;
+    const scopeAccountIds: string[] | undefined = Array.isArray(body?.ad_account_ids)
+      ? body.ad_account_ids.filter((x: any) => typeof x === "string")
+      : undefined;
 
-    // Get all mapped ad accounts
-    const { data: mappedAssignments } = await supabase
+    const scopeLabel = scopeClientId
+      ? `client:${scopeClientId}`
+      : scopeAccountIds
+        ? `accounts:${scopeAccountIds.length}`
+        : "all";
+    console.log(`Orchestrator enqueueing for: ${targetFunction} scope=${scopeLabel}`);
+
+    // Get mapped ad accounts (optionally filtered to the requested client)
+    let mappedQuery = supabase
       .from("ad_account_clients")
-      .select("ad_account_id")
+      .select("ad_account_id, client_id")
       .neq("mapping_keyword", "");
+    if (scopeClientId) mappedQuery = mappedQuery.eq("client_id", scopeClientId);
+    const { data: mappedAssignments } = await mappedQuery;
 
     if (!mappedAssignments || mappedAssignments.length === 0) {
       return new Response(
-        JSON.stringify({ ok: true, message: "No mapped accounts", enqueued: 0, queue_depth: 0 }),
+        JSON.stringify({ ok: true, message: "No mapped accounts", enqueued: 0, queue_depth: 0, scope: scopeLabel }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const mappedAccountIds = [...new Set(mappedAssignments.map(r => r.ad_account_id))];
+    let mappedAccountIds = [...new Set(mappedAssignments.map(r => r.ad_account_id))];
+    // Intersect with explicit ad_account_ids if provided (never sync unmapped accounts)
+    if (scopeAccountIds && scopeAccountIds.length > 0) {
+      const allow = new Set(scopeAccountIds);
+      mappedAccountIds = mappedAccountIds.filter((id) => allow.has(id));
+      if (mappedAccountIds.length === 0) {
+        return new Response(
+          JSON.stringify({ ok: true, message: "No mapped accounts in requested scope", enqueued: 0, queue_depth: 0, scope: scopeLabel }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
 
     // Get active accounts
     const { data: accounts } = await supabase
