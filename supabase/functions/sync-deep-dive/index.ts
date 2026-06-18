@@ -701,6 +701,24 @@ Deno.serve(async (req) => {
             }
           }
 
+          apiRowsFetched += allInsights.length;
+          metricRowsWritten += metaPrepared.length;
+
+          // Visibility: Meta returned rows but mapping skipped all of them.
+          if (allInsights.length > 0 && metaPrepared.length === 0) {
+            try {
+              await supabase.from("sync_logs").insert({
+                ad_account_id: account.id,
+                function_name: "sync-deep-dive",
+                status: "failed",
+                error_code: "mapping_miss",
+                error_message: `Meta returned ${allInsights.length} row(s) for ${account.account_name} (${startDateStr}→${endDateStr}) but no campaign name matched any mapping keyword. Update keywords in Campaign Mapping.`,
+                rows_synced: 0,
+                completed_at: new Date().toISOString(),
+              });
+            } catch (_) { /* non-fatal */ }
+          }
+
           console.log(`Meta deep-dive: ${allInsights.length} rows (${metaPrepared.length} matched) for ${account.ad_account_id}`);
 
 
