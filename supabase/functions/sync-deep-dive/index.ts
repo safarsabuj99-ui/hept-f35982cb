@@ -568,34 +568,72 @@ Deno.serve(async (req) => {
             let viewContent = 0, addToCart = 0, initiateCheckout = 0, purchaseCount = 0;
             let messagingConversations = 0, newMessagingContacts = 0, createOrder = 0;
 
+            // Build flat lookup maps so we can pick the best signal per metric
+            // (Meta returns the same conversion under several attribution buckets:
+            // omni_*, onsite_*, offsite_conversion.fb_pixel_*). Prefer omni when
+            // present; otherwise sum the channel-specific buckets.
+            const actionMap = new Map<string, number>();
             if (row.actions) {
               if (metaRowIndex < 3) {
                 const allTypes = row.actions.map((a: any) => `${a.action_type}=${a.value}`);
                 console.log(`Meta actions [${account.ad_account_id}] campaign="${campaignName}" date=${row.date_start}: ${allTypes.join(', ')}`);
               }
               for (const action of row.actions) {
-                const at = action.action_type;
-                const val = parseInt(action.value || "0", 10);
-                if (["offsite_conversion", "lead", "purchase", "complete_registration"].includes(at)) results += val;
-                if (at === "offsite_conversion.fb_pixel_view_content") viewContent += val;
-                if (at === "offsite_conversion.fb_pixel_add_to_cart") addToCart += val;
-                if (at === "offsite_conversion.fb_pixel_initiate_checkout") initiateCheckout += val;
-                if (at === "offsite_conversion.fb_pixel_purchase") purchaseCount += val;
-                if (at === "onsite_conversion.messaging_conversation_started_7d") messagingConversations += val;
-                if (at === "onsite_conversion.messaging_first_reply") newMessagingContacts += val;
-                if (at === "onsite_conversion.messaging_order_created_v2" || at === "onsite_conversion.messaging_block_create_order" || at.includes("create_order") || at.includes("order_created")) {
-                  createOrder += val;
-                }
+                actionMap.set(action.action_type, (actionMap.get(action.action_type) || 0) + parseInt(action.value || "0", 10));
               }
             }
             metaRowIndex++;
+            const valueMap = new Map<string, number>();
             if (row.action_values) {
               for (const av of row.action_values) {
-                if (av.action_type === "offsite_conversion.fb_pixel_purchase") {
-                  conversionValue += parseFloat(av.value || "0");
-                }
+                valueMap.set(av.action_type, (valueMap.get(av.action_type) || 0) + parseFloat(av.value || "0"));
               }
             }
+            const get = (k: string) => actionMap.get(k) || 0;
+            const preferOmni = (omniKey: string, fallbackKeys: string[]) => {
+              const omni = get(omniKey);
+              if (omni > 0) return omni;
+              return fallbackKeys.reduce((s, k) => s + get(k), 0);
+            };
+
+            purchaseCount = preferOmni("omni_purchase", [
+              "onsite_web_purchase", "onsite_app_purchase",
+              "onsite_web_app_purchase", "onsite_conversion.purchase",
+              "offsite_conversion.fb_pixel_purchase",
+            ]);
+            viewContent = preferOmni("omni_view_content", [
+              "offsite_conversion.fb_pixel_view_content", "onsite_web_view_content",
+            ]);
+            addToCart = preferOmni("omni_add_to_cart", [
+              "offsite_conversion.fb_pixel_add_to_cart", "onsite_web_add_to_cart",
+            ]);
+            initiateCheckout = preferOmni("omni_initiated_checkout", [
+              "offsite_conversion.fb_pixel_initiate_checkout", "onsite_web_initiate_checkout",
+            ]);
+            messagingConversations = get("onsite_conversion.messaging_conversation_started_7d");
+            // Fixed: total_messaging_connection (was incorrectly using messaging_first_reply)
+            newMessagingContacts = get("onsite_conversion.total_messaging_connection");
+            createOrder = get("onsite_conversion.messaging_order_created_v2")
+              + get("onsite_conversion.messaging_order_created")
+              + get("onsite_conversion.messaging_block_create_order");
+
+            // "Results" = whatever the campaign optimised for. omni_purchase already
+            // dedupes across channels, so we can safely sum the major optimisation goals.
+            results = preferOmni("omni_purchase", [
+              "onsite_web_purchase", "onsite_app_purchase", "onsite_web_app_purchase",
+              "onsite_conversion.purchase", "offsite_conversion.fb_pixel_purchase",
+            ])
+              + get("lead")
+              + get("onsite_conversion.lead_grouped")
+              + get("onsite_web_lead")
+              + get("complete_registration")
+              + get("offsite_complete_registration_add_meta_leads")
+              + messagingConversations;
+
+            // Conversion value: prefer pixel purchase value, fall back to omni_purchase value
+            conversionValue = valueMap.get("offsite_conversion.fb_pixel_purchase")
+              || valueMap.get("omni_purchase")
+              || 0;
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
