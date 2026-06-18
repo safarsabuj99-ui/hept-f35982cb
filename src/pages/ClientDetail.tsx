@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { AutomationConfigTab } from "@/components/AutomationConfigTab";
 import { ClientProfitTab } from "@/components/ClientProfitTab";
