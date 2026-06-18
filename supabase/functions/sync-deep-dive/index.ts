@@ -857,6 +857,23 @@ Deno.serve(async (req) => {
             }
           }
 
+          apiRowsFetched += gResults.length;
+          metricRowsWritten += gPrepared.length;
+
+          if (gResults.length > 0 && gPrepared.length === 0) {
+            try {
+              await supabase.from("sync_logs").insert({
+                ad_account_id: account.id,
+                function_name: "sync-deep-dive",
+                status: "failed",
+                error_code: "mapping_miss",
+                error_message: `Google returned ${gResults.length} row(s) for ${account.account_name} (${startDateStr}→${endDateStr}) but no campaign name matched any mapping keyword. Update keywords in Campaign Mapping.`,
+                rows_synced: 0,
+                completed_at: new Date().toISOString(),
+              });
+            } catch (_) { /* non-fatal */ }
+          }
+
           console.log(`Google deep-dive: ${gResults.length} rows (${gPrepared.length} matched) for ${account.ad_account_id}`);
 
 
