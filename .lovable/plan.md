@@ -1,60 +1,52 @@
 ## Goal
 
-Make every metric column in the Spend deep-dive table show **exactly the same number Meta Ads Manager / TikTok / Google show** for that campaign — no sums, no double counting, no inflated "Results".
+When an agency sets an Overdraft Limit (USD) on a client, and that client's deposit (payment request) is later approved, automatically reset `profiles.overdraft_limit_usd` to `0`.
 
-The current bug (after the last fix): Results = 115 for a messaging campaign whose Ads Manager "Results" is 87. Same row also has create_order = 13, purchase = 0 — that is correct, but Results is summing messages + create_order + leads + registrations, which Meta itself never does.
+## Where it lives today
 
-## Rule
+- Agency sets the value in **Client Detail → Automation Config** (`src/components/AutomationConfigTab.tsx`), which writes to `profiles.overdraft_limit_usd`.
+- Deposits are approved via the `payment_requests` table — status flips to `'approved'` (already triggers `notify_on_payment_status_change`).
 
-For each row, **Results = the single counter for that campaign's optimisation goal**, picked from `campaigns.objective`:
+## Change
 
-| Meta objective (from `effective_status`/`objective` field) | Result counter |
-|---|---|
-| `OUTCOME_SALES`, `CONVERSIONS`, `PRODUCT_CATALOG_SALES` | `omni_purchase` → else sum of `*_purchase` variants |
-| `OUTCOME_LEADS`, `LEAD_GENERATION` | `lead` + `onsite_conversion.lead_grouped` + `onsite_web_lead` + `offsite_complete_registration_add_meta_leads` |
-| `OUTCOME_ENGAGEMENT`, `MESSAGES`, `OUTCOME_MESSAGES`, `MESSAGING_CONVERSATIONS_STARTED` | `onsite_conversion.messaging_conversation_started_7d` |
-| `OUTCOME_APP_PROMOTION`, `APP_INSTALLS` | `app_install` + `mobile_app_install` |
-| `OUTCOME_AWARENESS`, `REACH`, `BRAND_AWARENESS` | `reach` (already a top-level field) |
-| `OUTCOME_TRAFFIC`, `LINK_CLICKS` | `link_click` (or top-level `clicks`) |
-| `VIDEO_VIEWS` | `video_view` |
-| Unknown / missing objective | pick the **largest single counter** among purchase / lead / messaging — never sum |
+Add a DB trigger on `payment_requests` that, when status transitions to `'approved'` and `profiles.overdraft_limit_usd > 0` for that client, sets it back to `0`.
 
-Same idea for TikTok and Google: keep using whatever single counter their API returns as the optimisation result (TikTok already does this via `result` field — verify, don't change unless broken).
+```text
+payment_requests UPDATE (status → 'approved')
+        │
+        ▼
+reset_overdraft_on_payment_approval()
+        │
+        ▼
+UPDATE profiles SET overdraft_limit_usd = 0
+WHERE user_id = NEW.client_id AND overdraft_limit_usd > 0
+```
 
-Other columns stay independent (no change):
+### Trigger function (SECURITY DEFINER, search_path = public)
 
-- `messaging_conversations` = `onsite_conversion.messaging_conversation_started_7d`
-- `new_messaging_contacts` = `onsite_conversion.total_messaging_connection`
-- `create_order` = `messaging_order_created_v2` + `messaging_order_created` + `messaging_block_create_order`
-- `purchase` = `omni_purchase` → fallback to `*_purchase` variants
-- `view_content`, `add_to_cart`, `initiate_checkout` = matching `omni_*` → `offsite_conversion.fb_pixel_*` fallback
-- `conversion_value` = pixel purchase value → `omni_purchase` value fallback
+- Fires `AFTER UPDATE OF status ON public.payment_requests`.
+- Guard: only when `OLD.status IS DISTINCT FROM NEW.status` AND `NEW.status = 'approved'`.
+- Runs the UPDATE above. Conditional (`> 0`) so it's a no-op when nothing is set, avoiding noise.
+- Also logs an `audit_logs` entry (`action_type = 'overdraft_reset'`, description includes client + approved amount) so the agency can see why it changed.
 
-## Implementation
+### Why a trigger (not edge function / client code)
 
-File: `supabase/functions/sync-deep-dive/index.ts` (Meta branch only, ~lines 620-635)
-
-1. Make sure `objective` is captured per row. It already is — `metaObjectiveMap[rawCampaignId]` exists (line 607). Pass it into the result picker.
-2. Replace the current `results = preferOmni(...)` block with a `switch` on the normalised objective string that selects exactly **one** counter from `actionMap`.
-3. Keep the same `actionMap` / `valueMap` setup from the previous fix — only the `results` assignment changes.
-4. Leave TikTok branch alone for now (it already writes the platform's own `result` field). If user reports TikTok Results is wrong, address separately.
-
-## Verification
-
-1. Trigger Deep Dive Sync on this client for 2026-06-17 → 2026-06-18.
-2. Query a few rows and compare to Meta Ads Manager:
-   - Messaging campaign (`Lajbonti2/DC2`, 2026-06-18) → `results` should equal `messaging_conversations` (87), not 115.
-   - Any sales/conversion campaign → `results` should equal `purchase`.
-   - Any lead campaign → `results` should equal the lead counter sum.
-3. KPI cards "Total Results" / "Total Messages" / "Create Order" on the client Spend page should match what the agency sees in each platform's native dashboard.
-4. Regression: `spend`, `impressions`, `clicks`, `purchase`, `messaging_conversations`, `create_order`, `conversion_value` unchanged.
-
-## Files to change
-
-- `supabase/functions/sync-deep-dive/index.ts` — Meta `results` mapping only.
+- Approval already happens in multiple places (admin UI, dunning processor, etc.). A trigger guarantees the rule applies regardless of the entry point.
+- Atomic with the approval.
 
 ## Out of scope
 
-- TikTok / Google branches (no reported issue).
-- Historical rows — will self-heal when the user runs a Deep Dive on the affected date range.
-- Frontend display logic / KPI cards (they already read the DB column directly).
+- Loan overdue (cash withdrawals), platform invoice overdue, and client debt badge — unchanged.
+- UI: no changes; the existing Automation Config form will simply show `0` after the next page load following an approval.
+
+## Verification
+
+1. Set `overdraft_limit_usd` for a test client to e.g. `50`.
+2. Approve any pending payment request for that client.
+3. Re-open Client Detail → Automation Config → field shows `0`.
+4. `audit_logs` shows an `overdraft_reset` entry.
+
+## Files
+
+- New migration: trigger + function on `public.payment_requests`.
+- No frontend changes.
