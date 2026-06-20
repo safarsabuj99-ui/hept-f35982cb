@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Bell, Volume2, Moon, Mail, Sparkles, Shield, CreditCard, Megaphone, Settings2 } from "lucide-react";
+import { Loader2, Bell, Volume2, Moon, Mail, Sparkles, Shield, CreditCard, Megaphone, Settings2, Send, RefreshCw, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setNotifSoundEnabled } from "@/hooks/useNotifications";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const NOTIF_TYPES = ["payment", "guard", "campaign", "system"] as const;
 const TYPE_LABELS: Record<string, string> = { payment: "Payment", guard: "Ad Guard", campaign: "Campaign", system: "System" };
