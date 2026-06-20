@@ -19,10 +19,17 @@ export function isInIframe(): boolean {
 export function isLovablePreviewHost(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname;
+  // Real Lovable preview / sandbox hosts only. The published *.lovable.app
+  // host (e.g. hept.lovable.app) is PRODUCTION and must NOT be treated as
+  // preview — doing so tears down the service worker that delivers push
+  // notifications when the app is closed.
   return (
-    host.includes("lovableproject.com") ||
-    host.includes("id-preview--") ||
-    host.endsWith(".lovable.app")
+    host.endsWith(".lovableproject.com") ||
+    host.endsWith(".lovableproject-dev.com") ||
+    host.startsWith("id-preview--") ||
+    host.startsWith("preview--") ||
+    host === "beta.lovable.dev" ||
+    host.endsWith(".beta.lovable.dev")
   );
 }
 

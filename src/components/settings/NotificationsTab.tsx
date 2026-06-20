@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Bell, Volume2, Moon, Mail, Sparkles, Shield, CreditCard, Megaphone, Settings2 } from "lucide-react";
+import { Loader2, Bell, Volume2, Moon, Mail, Sparkles, Shield, CreditCard, Megaphone, Settings2, Send, RefreshCw, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setNotifSoundEnabled } from "@/hooks/useNotifications";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const NOTIF_TYPES = ["payment", "guard", "campaign", "system"] as const;
 const TYPE_LABELS: Record<string, string> = { payment: "Payment", guard: "Ad Guard", campaign: "Campaign", system: "System" };
@@ -38,6 +39,52 @@ export function NotificationsTab() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem("notif_sound_enabled") !== "false");
+  const { isSupported, permission, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
+  const [testing, setTesting] = useState(false);
+  const [resubbing, setResubbing] = useState(false);
+
+  const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as any).standalone);
+
+  const sendTestPush = async () => {
+    if (!user?.id) return;
+    setTesting(true);
+    try {
+      if (permission !== "granted" || !isSubscribed) {
+        const ok = await subscribe();
+        if (!ok) {
+          toast({ title: "Enable notifications first", description: "Please allow notifications in your browser, then try again.", variant: "destructive" });
+          return;
+        }
+      }
+      const { data, error } = await supabase.functions.invoke("send-push", {
+        body: { user_id: user.id, title: "Test from HEPT", body: "If you see this, push notifications are working.", type: "system", priority: "high", link: "/" },
+      });
+      if (error) throw error;
+      const sent = (data as any)?.sent ?? 0;
+      if (sent > 0) {
+        toast({ title: `Sent to ${sent} device${sent > 1 ? "s" : ""}`, description: "Check your notifications. Try closing the app and sending again." });
+      } else {
+        toast({ title: "No devices subscribed", description: "Tap 'Re-subscribe this device' and try again.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Test push failed", description: err?.message || String(err), variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const resubscribe = async () => {
+    setResubbing(true);
+    try {
+      await unsubscribe();
+      const ok = await subscribe();
+      toast({ title: ok ? "Re-subscribed" : "Could not re-subscribe", variant: ok ? "default" : "destructive" });
+    } finally {
+      setResubbing(false);
+    }
+  };
+
 
   useEffect(() => {
     if (!user?.id) return;
@@ -110,6 +157,66 @@ export function NotificationsTab() {
 
   return (
     <div className="space-y-6">
+      {/* === Device Push Status === */}
+      <div className="glass-card glow-border rounded-xl overflow-hidden">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Smartphone className="h-5 w-5 text-primary" /> This Device
+          </CardTitle>
+          <CardDescription>
+            Push delivery to this browser / installed app — works even when HEPT is closed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!isSupported ? (
+            <div className="p-3 rounded-lg bg-amber-500/10 text-amber-200 text-sm">
+              Push isn't supported in this browser{isIOS && !isStandalone ? " — on iPhone you must first add HEPT to your Home Screen (Share → Add to Home Screen), then open it from the icon." : "."}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="text-sm">
+                  <p className="font-medium">
+                    Status:{" "}
+                    <span className={cn(
+                      isSubscribed && permission === "granted" ? "text-emerald-400" : "text-amber-400"
+                    )}>
+                      {permission === "denied"
+                        ? "Blocked"
+                        : isSubscribed && permission === "granted"
+                          ? "Active"
+                          : "Not enabled"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {permission === "denied"
+                      ? "You blocked notifications. Enable them in your browser site settings, then reload."
+                      : isSubscribed && permission === "granted"
+                        ? "You'll get push alerts even when the app is closed."
+                        : "Tap 'Send test push' to enable and verify."}
+                  </p>
+                </div>
+              </div>
+              {isIOS && !isStandalone && (
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-200 text-xs">
+                  On iPhone, push only works after you install HEPT: Safari → Share → <strong>Add to Home Screen</strong>, then open it from the icon and tap Allow.
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={sendTestPush} disabled={testing || pushLoading}>
+                  {testing ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-2" />}
+                  Send test push
+                </Button>
+                <Button size="sm" variant="outline" onClick={resubscribe} disabled={resubbing || pushLoading || permission === "denied"}>
+                  {resubbing ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
+                  Re-subscribe this device
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </div>
+
       {/* === Smart Controls === */}
       <div className="glass-card glow-border rounded-xl overflow-hidden">
         <CardHeader>
