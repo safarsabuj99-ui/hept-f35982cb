@@ -39,6 +39,52 @@ export function NotificationsTab() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem("notif_sound_enabled") !== "false");
+  const { isSupported, permission, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
+  const [testing, setTesting] = useState(false);
+  const [resubbing, setResubbing] = useState(false);
+
+  const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as any).standalone);
+
+  const sendTestPush = async () => {
+    if (!user?.id) return;
+    setTesting(true);
+    try {
+      if (permission !== "granted" || !isSubscribed) {
+        const ok = await subscribe();
+        if (!ok) {
+          toast({ title: "Enable notifications first", description: "Please allow notifications in your browser, then try again.", variant: "destructive" });
+          return;
+        }
+      }
+      const { data, error } = await supabase.functions.invoke("send-push", {
+        body: { user_id: user.id, title: "Test from HEPT", body: "If you see this, push notifications are working.", type: "system", priority: "high", link: "/" },
+      });
+      if (error) throw error;
+      const sent = (data as any)?.sent ?? 0;
+      if (sent > 0) {
+        toast({ title: `Sent to ${sent} device${sent > 1 ? "s" : ""}`, description: "Check your notifications. Try closing the app and sending again." });
+      } else {
+        toast({ title: "No devices subscribed", description: "Tap 'Re-subscribe this device' and try again.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Test push failed", description: err?.message || String(err), variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const resubscribe = async () => {
+    setResubbing(true);
+    try {
+      await unsubscribe();
+      const ok = await subscribe();
+      toast({ title: ok ? "Re-subscribed" : "Could not re-subscribe", variant: ok ? "default" : "destructive" });
+    } finally {
+      setResubbing(false);
+    }
+  };
+
 
   useEffect(() => {
     if (!user?.id) return;
