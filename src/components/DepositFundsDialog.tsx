@@ -160,7 +160,9 @@ export function DepositFundsDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasValidPlatform || !method || !resolvedClientId) return;
+    const selectedAccount = agencyAccounts.find((a) => a.id === selectedAccountId);
+    const derivedMethod = deriveMethod(selectedAccount);
+    if (!hasValidPlatform || !derivedMethod || !resolvedClientId) return;
     setSubmitting(true);
 
     let proofUrl: string | null = null;
