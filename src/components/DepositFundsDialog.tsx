@@ -203,7 +203,7 @@ export function DepositFundsDialog({
     const insertPayload: any = {
       client_id: resolvedClientId,
       amount_bdt: totalAmount,
-      payment_method: method,
+      payment_method: derivedMethod,
       transaction_id: trxId || null,
       platform: platformValue,
       platform_amounts: platformAmountsObj,
