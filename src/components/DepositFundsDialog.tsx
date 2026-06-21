@@ -406,7 +406,7 @@ export function DepositFundsDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !method || !hasValidPlatform || !resolvedClientId}>
+            <Button type="submit" disabled={submitting || !selectedAccountId || !hasValidPlatform || !resolvedClientId}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit Request
             </Button>
