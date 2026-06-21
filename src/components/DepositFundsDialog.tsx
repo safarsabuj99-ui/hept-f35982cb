@@ -121,7 +121,6 @@ export function DepositFundsDialog({
   // Reset on close
   useEffect(() => {
     if (!open) {
-      setMethod("");
       setTrxId("");
       setSubmitting(false);
       setPaymentDate(new Date());
