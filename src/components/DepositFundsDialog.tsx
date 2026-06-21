@@ -289,35 +289,43 @@ export function DepositFundsDialog({
             </div>
           </div>
 
+          {/* Paid To Account (also determines payment method) */}
           <div className="space-y-2">
-            <Label>Payment Method</Label>
-            <Select value={method} onValueChange={setMethod} required>
-              <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Bank">Bank Transfer</SelectItem>
-                <SelectItem value="bKash">bKash</SelectItem>
-                <SelectItem value="Nagad">Nagad</SelectItem>
-                <SelectItem value="Cash">Cash</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Account Selector */}
-          {agencyAccounts.length > 0 && (
-            <div className="space-y-2">
-              <Label>Paid To Account</Label>
-              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+            <Label>Paid To Account</Label>
+            {agencyAccounts.length === 0 ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                No active accounts found. Add an agency account in Finance → Wallet first.
+              </p>
+            ) : (
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId} required>
                 <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
                 <SelectContent>
-                  {agencyAccounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name} ({a.type})
-                    </SelectItem>
-                  ))}
+                  {(["Cash", "Bank", "MFS"] as const).map((groupType) => {
+                    const accs = agencyAccounts.filter((a) => a.type === groupType);
+                    if (accs.length === 0) return null;
+                    return (
+                      <div key={groupType}>
+                        <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {groupType}
+                        </div>
+                        {accs.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            )}
+            {selectedAccountId && (
+              <p className="text-xs text-muted-foreground">
+                Method: {deriveMethod(agencyAccounts.find((a) => a.id === selectedAccountId))}
+              </p>
+            )}
+          </div>
+
 
           <div className="space-y-2">
             <Label>Payment Date</Label>
