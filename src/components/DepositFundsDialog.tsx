@@ -30,6 +30,22 @@ interface AgencyAccount {
   type: string;
 }
 
+function deriveMethod(acc: AgencyAccount | undefined): string {
+  if (!acc) return "";
+  if (acc.type === "Bank") return "Bank";
+  if (acc.type === "Cash") return "Cash";
+  if (acc.type === "MFS") {
+    const n = acc.name.toLowerCase();
+    if (n.includes("bkash")) return "bKash";
+    if (n.includes("nagad")) return "Nagad";
+    if (n.includes("rocket")) return "Rocket";
+    if (n.includes("upay")) return "Upay";
+    return acc.name;
+  }
+  return acc.type;
+}
+
+
 const PLATFORMS = [
   { key: "meta", label: "Meta" },
   { key: "tiktok", label: "TikTok" },
