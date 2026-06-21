@@ -62,7 +62,6 @@ export function DepositFundsDialog({
 }: DepositFundsDialogProps) {
   const { profile } = useProfile();
   const { toast } = useToast();
-  const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedClient, setSelectedClient] = useState(clientId || "");
