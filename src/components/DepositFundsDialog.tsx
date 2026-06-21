@@ -30,6 +30,22 @@ interface AgencyAccount {
   type: string;
 }
 
+function deriveMethod(acc: AgencyAccount | undefined): string {
+  if (!acc) return "";
+  if (acc.type === "Bank") return "Bank";
+  if (acc.type === "Cash") return "Cash";
+  if (acc.type === "MFS") {
+    const n = acc.name.toLowerCase();
+    if (n.includes("bkash")) return "bKash";
+    if (n.includes("nagad")) return "Nagad";
+    if (n.includes("rocket")) return "Rocket";
+    if (n.includes("upay")) return "Upay";
+    return acc.name;
+  }
+  return acc.type;
+}
+
+
 const PLATFORMS = [
   { key: "meta", label: "Meta" },
   { key: "tiktok", label: "TikTok" },
@@ -46,7 +62,6 @@ export function DepositFundsDialog({
 }: DepositFundsDialogProps) {
   const { profile } = useProfile();
   const { toast } = useToast();
-  const [method, setMethod] = useState("");
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedClient, setSelectedClient] = useState(clientId || "");
@@ -106,7 +121,6 @@ export function DepositFundsDialog({
   // Reset on close
   useEffect(() => {
     if (!open) {
-      setMethod("");
       setTrxId("");
       setSubmitting(false);
       setPaymentDate(new Date());
@@ -146,7 +160,9 @@ export function DepositFundsDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasValidPlatform || !method || !resolvedClientId) return;
+    const selectedAccount = agencyAccounts.find((a) => a.id === selectedAccountId);
+    const derivedMethod = deriveMethod(selectedAccount);
+    if (!hasValidPlatform || !derivedMethod || !resolvedClientId) return;
     setSubmitting(true);
 
     let proofUrl: string | null = null;
@@ -187,7 +203,7 @@ export function DepositFundsDialog({
     const insertPayload: any = {
       client_id: resolvedClientId,
       amount_bdt: totalAmount,
-      payment_method: method,
+      payment_method: derivedMethod,
       transaction_id: trxId || null,
       platform: platformValue,
       platform_amounts: platformAmountsObj,
@@ -275,35 +291,43 @@ export function DepositFundsDialog({
             </div>
           </div>
 
+          {/* Paid To Account (also determines payment method) */}
           <div className="space-y-2">
-            <Label>Payment Method</Label>
-            <Select value={method} onValueChange={setMethod} required>
-              <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Bank">Bank Transfer</SelectItem>
-                <SelectItem value="bKash">bKash</SelectItem>
-                <SelectItem value="Nagad">Nagad</SelectItem>
-                <SelectItem value="Cash">Cash</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Account Selector */}
-          {agencyAccounts.length > 0 && (
-            <div className="space-y-2">
-              <Label>Paid To Account</Label>
-              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+            <Label>Paid To Account</Label>
+            {agencyAccounts.length === 0 ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                No active accounts found. Add an agency account in Finance → Wallet first.
+              </p>
+            ) : (
+              <Select value={selectedAccountId} onValueChange={setSelectedAccountId} required>
                 <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
                 <SelectContent>
-                  {agencyAccounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name} ({a.type})
-                    </SelectItem>
-                  ))}
+                  {(["Cash", "Bank", "MFS"] as const).map((groupType) => {
+                    const accs = agencyAccounts.filter((a) => a.type === groupType);
+                    if (accs.length === 0) return null;
+                    return (
+                      <div key={groupType}>
+                        <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {groupType}
+                        </div>
+                        {accs.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            )}
+            {selectedAccountId && (
+              <p className="text-xs text-muted-foreground">
+                Method: {deriveMethod(agencyAccounts.find((a) => a.id === selectedAccountId))}
+              </p>
+            )}
+          </div>
+
 
           <div className="space-y-2">
             <Label>Payment Date</Label>
@@ -382,7 +406,7 @@ export function DepositFundsDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !method || !hasValidPlatform || !resolvedClientId}>
+            <Button type="submit" disabled={submitting || !selectedAccountId || !hasValidPlatform || !resolvedClientId}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit Request
             </Button>
