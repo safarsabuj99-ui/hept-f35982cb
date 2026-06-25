@@ -169,6 +169,147 @@ export type Database = {
           },
         ]
       }
+      ad_sets: {
+        Row: {
+          ad_account_id: string
+          budget: number
+          campaign_id: string
+          client_id: string | null
+          created_at: string
+          id: string
+          name: string
+          optimization_goal: string
+          org_id: string | null
+          platform_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          budget?: number
+          campaign_id: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          optimization_goal?: string
+          org_id?: string | null
+          platform_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          budget?: number
+          campaign_id?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          optimization_goal?: string
+          org_id?: string | null
+          platform_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_sets_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_sets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_sets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          ad_account_id: string
+          ad_set_id: string
+          campaign_id: string
+          client_id: string | null
+          created_at: string
+          creative_thumb_url: string | null
+          id: string
+          name: string
+          org_id: string | null
+          platform_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          ad_set_id: string
+          campaign_id: string
+          client_id?: string | null
+          created_at?: string
+          creative_thumb_url?: string | null
+          id?: string
+          name?: string
+          org_id?: string | null
+          platform_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          ad_set_id?: string
+          campaign_id?: string
+          client_id?: string | null
+          created_at?: string
+          creative_thumb_url?: string | null
+          id?: string
+          name?: string
+          org_id?: string | null
+          platform_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_conversions: {
         Row: {
           affiliate_id: string
@@ -2034,6 +2175,252 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_metrics_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_metrics_ad: {
+        Row: {
+          ad_id: string
+          ad_set_id: string
+          add_to_cart: number
+          budget: number
+          campaign_id: string
+          clicks: number
+          conversations_instant_msg: number
+          conversations_tiktok_dm: number
+          conversion_value: number
+          cost_per_message: number
+          cost_per_purchase: number
+          cpc: number
+          cpm: number
+          create_order: number
+          ctr: number
+          data_date: string
+          id: string
+          impressions: number
+          initiate_checkout: number
+          leads_tiktok_dm: number
+          messaging_conversations: number
+          new_messaging_contacts: number
+          org_id: string | null
+          purchase: number
+          reach: number
+          results: number
+          roas: number
+          spend: number
+          synced_at: string
+          view_content: number
+        }
+        Insert: {
+          ad_id: string
+          ad_set_id: string
+          add_to_cart?: number
+          budget?: number
+          campaign_id: string
+          clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
+          conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
+          cpc?: number
+          cpm?: number
+          create_order?: number
+          ctr?: number
+          data_date: string
+          id?: string
+          impressions?: number
+          initiate_checkout?: number
+          leads_tiktok_dm?: number
+          messaging_conversations?: number
+          new_messaging_contacts?: number
+          org_id?: string | null
+          purchase?: number
+          reach?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+          view_content?: number
+        }
+        Update: {
+          ad_id?: string
+          ad_set_id?: string
+          add_to_cart?: number
+          budget?: number
+          campaign_id?: string
+          clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
+          conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
+          cpc?: number
+          cpm?: number
+          create_order?: number
+          ctr?: number
+          data_date?: string
+          id?: string
+          impressions?: number
+          initiate_checkout?: number
+          leads_tiktok_dm?: number
+          messaging_conversations?: number
+          new_messaging_contacts?: number
+          org_id?: string | null
+          purchase?: number
+          reach?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+          view_content?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_ad_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_ad_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_ad_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_ad_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_metrics_adset: {
+        Row: {
+          ad_set_id: string
+          add_to_cart: number
+          budget: number
+          campaign_id: string
+          clicks: number
+          conversations_instant_msg: number
+          conversations_tiktok_dm: number
+          conversion_value: number
+          cost_per_message: number
+          cost_per_purchase: number
+          cpc: number
+          cpm: number
+          create_order: number
+          ctr: number
+          data_date: string
+          id: string
+          impressions: number
+          initiate_checkout: number
+          leads_tiktok_dm: number
+          messaging_conversations: number
+          new_messaging_contacts: number
+          org_id: string | null
+          purchase: number
+          reach: number
+          results: number
+          roas: number
+          spend: number
+          synced_at: string
+          view_content: number
+        }
+        Insert: {
+          ad_set_id: string
+          add_to_cart?: number
+          budget?: number
+          campaign_id: string
+          clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
+          conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
+          cpc?: number
+          cpm?: number
+          create_order?: number
+          ctr?: number
+          data_date: string
+          id?: string
+          impressions?: number
+          initiate_checkout?: number
+          leads_tiktok_dm?: number
+          messaging_conversations?: number
+          new_messaging_contacts?: number
+          org_id?: string | null
+          purchase?: number
+          reach?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+          view_content?: number
+        }
+        Update: {
+          ad_set_id?: string
+          add_to_cart?: number
+          budget?: number
+          campaign_id?: string
+          clicks?: number
+          conversations_instant_msg?: number
+          conversations_tiktok_dm?: number
+          conversion_value?: number
+          cost_per_message?: number
+          cost_per_purchase?: number
+          cpc?: number
+          cpm?: number
+          create_order?: number
+          ctr?: number
+          data_date?: string
+          id?: string
+          impressions?: number
+          initiate_checkout?: number
+          leads_tiktok_dm?: number
+          messaging_conversations?: number
+          new_messaging_contacts?: number
+          org_id?: string | null
+          purchase?: number
+          reach?: number
+          results?: number
+          roas?: number
+          spend?: number
+          synced_at?: string
+          view_content?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_metrics_adset_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_adset_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_metrics_adset_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
