@@ -348,10 +348,26 @@ Deno.serve(async (req) => {
     }
 
     if (!apiSuccess && !alreadyInState) {
-      return new Response(JSON.stringify({ error: `Failed to ${action} on platform: ${apiMessage}` }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Log to audit so admins can see a history of platform-side rejections
+      await supabase.from("audit_logs").insert({
+        user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+        action_type: "platform_validation_error",
+        description: `${platform} ${action} rejected for "${campaign.name}": ${apiMessage}`,
       });
+      // Return 200 with success:false so supabase.functions.invoke surfaces the real reason
+      // (non-2xx responses get replaced by a generic "Edge Function returned a non-2xx status code")
+      return new Response(
+        JSON.stringify({
+          success: false,
+          platform_error: true,
+          platform,
+          error: `Cannot ${action} on ${platform}: ${apiMessage}`,
+          message: apiMessage,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
 
     // Update local DB + clear pause queue state
     const newStatus = isEnableAction ? "active" : "paused";
