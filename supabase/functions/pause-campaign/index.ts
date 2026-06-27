@@ -254,8 +254,19 @@ Deno.serve(async (req) => {
         if (isEnableAction ? isOnStatus("meta", currentStatus) : isOffStatus("meta", currentStatus)) {
           alreadyInState = true;
         } else {
-          apiMessage = json.error?.message || "Meta API error";
+          const err = json.error || {};
+          const userTitle = err.error_user_title;
+          const userMsg = err.error_user_msg;
+          const subcode = err.error_subcode;
+          let hint = "";
+          if (subcode === 2490392) hint = " Fix the ad set's Instagram placements in Meta Ads Manager (select Instagram Explore alongside Explore Home), then retry.";
+          else if (subcode === 1487749 || subcode === 1885183) hint = " Update the campaign budget or spend cap in Meta Ads Manager, then retry.";
+          else if (subcode === 1885041) hint = " The ad account is restricted. Resolve in Meta Business Manager, then retry.";
+          apiMessage = userTitle
+            ? `${userTitle} — ${userMsg || err.message || ""}${hint}`
+            : (err.message || "Meta API error");
         }
+
       }
     } else if (platform === "google") {
       const customerId = adAccount.ad_account_id.replace(/-/g, "");
@@ -337,10 +348,26 @@ Deno.serve(async (req) => {
     }
 
     if (!apiSuccess && !alreadyInState) {
-      return new Response(JSON.stringify({ error: `Failed to ${action} on platform: ${apiMessage}` }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Log to audit so admins can see a history of platform-side rejections
+      await supabase.from("audit_logs").insert({
+        user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+        action_type: "platform_validation_error",
+        description: `${platform} ${action} rejected for "${campaign.name}": ${apiMessage}`,
       });
+      // Return 200 with success:false so supabase.functions.invoke surfaces the real reason
+      // (non-2xx responses get replaced by a generic "Edge Function returned a non-2xx status code")
+      return new Response(
+        JSON.stringify({
+          success: false,
+          platform_error: true,
+          platform,
+          error: `Cannot ${action} on ${platform}: ${apiMessage}`,
+          message: apiMessage,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
 
     // Update local DB + clear pause queue state
     const newStatus = isEnableAction ? "active" : "paused";
