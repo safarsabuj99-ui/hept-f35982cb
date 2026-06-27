@@ -254,8 +254,19 @@ Deno.serve(async (req) => {
         if (isEnableAction ? isOnStatus("meta", currentStatus) : isOffStatus("meta", currentStatus)) {
           alreadyInState = true;
         } else {
-          apiMessage = json.error?.message || "Meta API error";
+          const err = json.error || {};
+          const userTitle = err.error_user_title;
+          const userMsg = err.error_user_msg;
+          const subcode = err.error_subcode;
+          let hint = "";
+          if (subcode === 2490392) hint = " Fix the ad set's Instagram placements in Meta Ads Manager (select Instagram Explore alongside Explore Home), then retry.";
+          else if (subcode === 1487749 || subcode === 1885183) hint = " Update the campaign budget or spend cap in Meta Ads Manager, then retry.";
+          else if (subcode === 1885041) hint = " The ad account is restricted. Resolve in Meta Business Manager, then retry.";
+          apiMessage = userTitle
+            ? `${userTitle} — ${userMsg || err.message || ""}${hint}`
+            : (err.message || "Meta API error");
         }
+
       }
     } else if (platform === "google") {
       const customerId = adAccount.ad_account_id.replace(/-/g, "");
