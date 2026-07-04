@@ -9,6 +9,16 @@ export const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Reusable strict email validator — requires a TLD of 2+ chars.
+// Catches typos like "foo@gmail" (missing .com) that browser type=email accepts.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export function isValidEmail(raw: unknown): raw is string {
+  return typeof raw === "string" && EMAIL_REGEX.test(raw.trim());
+}
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
 export class AuthError extends Error {
   status: number;
   code?: string;

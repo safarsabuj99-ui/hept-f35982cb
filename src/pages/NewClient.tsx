@@ -60,9 +60,19 @@ export default function NewClient() {
     fetchOrgId();
   }, []);
 
+  const trimmedEmail = email.trim();
+  const emailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmedEmail);
+  const emailError = email && !emailFormatValid
+    ? "Enter a complete email address, e.g. name@example.com"
+    : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email || !password) return;
+    if (!fullName || !trimmedEmail || !password) return;
+    if (!emailFormatValid) {
+      toast({ title: "Invalid email", description: "Enter a complete email address, e.g. name@example.com", variant: "destructive" });
+      return;
+    }
     if (password.length < 6) {
       toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
       return;
@@ -83,7 +93,7 @@ export default function NewClient() {
 
     const res = await supabase.functions.invoke("create-client", {
       body: {
-        email, password, full_name: fullName, phone, business_name: businessName,
+        email: trimmedEmail.toLowerCase(), password, full_name: fullName, phone, business_name: businessName,
         role,
         manager_id: role === "client" && managerId ? managerId : null,
         mapping_keyword: role === "client" && mappingKeyword ? mappingKeyword : null,
@@ -137,8 +147,21 @@ export default function NewClient() {
               <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
             </div>
             <div className="space-y-2">
-              <Label>Email *</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@company.com" required />
+              <Label htmlFor="new-client-email">Email *</Label>
+              <Input
+                id="new-client-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={(e) => setEmail(e.target.value.trim())}
+                placeholder="john@company.com"
+                required
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "new-client-email-error" : undefined}
+              />
+              {emailError && (
+                <p id="new-client-email-error" className="text-xs text-destructive">{emailError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Password *</Label>

@@ -96,6 +96,12 @@ export default function ClientDetail() {
     [newPassword]
   );
 
+  // Email correction (for typos made at creation time)
+  const [currentEmail, setCurrentEmail] = useState<string>("");
+  const [newEmail, setNewEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const emailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail.trim());
+
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
   const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
@@ -363,6 +369,34 @@ export default function ClientDetail() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
     setResettingPassword(false);
+  }
+
+  async function handleCorrectEmail() {
+    if (!userId || !newEmail.trim() || !emailFormatValid) return;
+    setSavingEmail(true);
+    try {
+      const response = await supabase.functions.invoke("update-client-email", {
+        body: { user_id: userId, new_email: newEmail.trim().toLowerCase() },
+      });
+      if (response.error || response.data?.error) {
+        let detail = response.data?.error || response.error?.message || "Failed to update email.";
+        try {
+          const ctx: any = (response.error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) detail = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
+          }
+        } catch { /* keep generic */ }
+        toast({ title: "Update failed", description: detail, variant: "destructive" });
+      } else {
+        setCurrentEmail(response.data?.email ?? newEmail.trim().toLowerCase());
+        setNewEmail("");
+        toast({ title: "Email updated", description: "The client can now sign in with the new email." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSavingEmail(false);
   }
 
   async function handleAssignAdAccount() {
@@ -718,6 +752,50 @@ export default function ClientDetail() {
                 <Button onClick={handlePasswordReset} disabled={resettingPassword || !newPassword || !!passwordValidationError} variant="secondary" className="gap-2">
                   <KeyRound className="h-3.5 w-3.5" />
                   {resettingPassword ? "Resetting…" : "Reset"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Email Correction */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Login Email</CardTitle>
+              </div>
+              <CardDescription>
+                Fix typos in the client's sign-in email. The client will use the new address to log in immediately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 max-w-md">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="correctEmail" className="text-muted-foreground text-xs uppercase tracking-wide">New Email</Label>
+                  <Input
+                    id="correctEmail"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onBlur={(e) => setNewEmail(e.target.value.trim())}
+                    placeholder="name@example.com"
+                    aria-invalid={newEmail.length > 0 && !emailFormatValid}
+                    aria-describedby={newEmail.length > 0 && !emailFormatValid ? "correctEmail-error" : undefined}
+                  />
+                  {newEmail.length > 0 && !emailFormatValid && (
+                    <p id="correctEmail-error" className="text-xs text-destructive">
+                      Enter a complete email address, e.g. name@example.com
+                    </p>
+                  )}
+                </div>
+                <Button
+                  onClick={handleCorrectEmail}
+                  disabled={savingEmail || !newEmail.trim() || !emailFormatValid}
+                  variant="secondary"
+                  className="gap-2"
+                >
+                  {savingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {savingEmail ? "Saving…" : "Update"}
                 </Button>
               </div>
             </CardContent>

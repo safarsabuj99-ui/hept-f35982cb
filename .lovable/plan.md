@@ -1,75 +1,50 @@
-# Why the "Failed to enable" error appears
+# Fix: Ebrahim can't log in + harden against future email typos
 
-The toast says *"Edge Function returned a non-2xx status code"* — that's a generic message because the frontend never reads the real error body from the edge function.
+## Root cause
+When the HEPT agency created client **Ebrahim (IBR THEARDS)**, the email was saved as `siddiksiddik6823@gmail` — the `.com` is missing. Supabase Auth matches emails exactly, so:
 
-Looking at the actual edge function logs for `pause-campaign`, the underlying Meta API response is:
+- Login with the real `…@gmail.com` → "invalid credentials" (no such user).
+- Password reset from admin succeeded but attached the new password to the broken `…@gmail` record — so login still fails.
+- The profile, role (`client`), org link, and `is_active` flag are all fine. The only broken field is the email itself.
 
-```
-HTTP 400 — OAuthException 100 / subcode 2490392
-"You must also select Instagram Explore"
-"To place ads in Instagram Explore home, please also select Instagram Explore."
-```
+Neither the `create-client` edge function nor the `NewClient` form validates the email format beyond the browser's default `type="email"` (which accepts `foo@bar` with no TLD).
 
-**This is NOT a bug in our SaaS.** Meta is rejecting the resume request because the campaign's ad set has `instagram_positions = ["explore_home"]` but is missing `"explore"`. Meta now requires both placements together. Until that placement is fixed inside Meta Ads Manager, **any** attempt (from our app, from Ads Manager itself, or via API) to set the campaign back to ACTIVE will fail.
+## Fix — two parts
 
-The problem on our side is only that we hide this useful message behind a generic toast, so you can't tell whether it's our app or the platform that needs fixing.
+### 1. Repair Ebrahim's account (one-off)
+- Update the email on `auth.users` for user `2790db53-807b-45bc-916b-07d87f98a980` from `siddiksiddik6823@gmail` → `siddiksiddik6823@gmail.com` using the Supabase admin API (via a short server-side call — not a raw `auth` schema write).
+- Re-issue the password the agency already tried to set (or ask the agency to reset once more from the client detail page). Login will then work.
+- Write an `audit_logs` entry: `client_email_corrected`.
 
-## Smart, future-proof fix
+### 2. Prevent recurrence (root-cause fix)
+**Backend — `supabase/functions/create-client/index.ts`**
+- Add strict email validation before calling `auth.admin.createUser`:
+  - Must match `/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/` (requires a real TLD).
+  - Trim + lowercase before saving.
+  - Return `400 { error: "Invalid email format", code: "invalid_email" }` on failure.
+- Same guard added to `reset-client-password` is not needed (it uses `user_id`), but we'll add a helper `isValidEmail()` in `_shared/auth.ts` so any future function can reuse it.
 
-### 1. Edge function — return platform error details with 200 status
+**Frontend — `src/pages/NewClient.tsx`**
+- Add the same regex check on submit; show an inline field error ("Enter a complete email address, e.g. name@example.com") instead of relying on the browser.
+- Trim whitespace on blur so a trailing space doesn't survive.
+- Small accessibility touch: bind the error message with `aria-describedby` + `aria-invalid` on the email input so screen readers announce it.
 
-In `pause-campaign/index.ts`, when the platform API rejects the change, return:
+**Admin tool — client detail page**
+- Add a small "Correct email" action (admin/platform_owner only) that calls a new tiny edge function `update-client-email` (reuses `requireCaller` + `requireOrgAccess` from `_shared/auth.ts`, calls `auth.admin.updateUserById({ email })`, logs to `audit_logs`). This means the next time a typo slips through, the agency can fix it themselves in 5 seconds without waiting on support.
 
-```json
-{
-  "success": false,
-  "platform_error": true,
-  "platform": "meta",
-  "error_code": 2490392,
-  "error_title": "You must also select Instagram Explore",
-  "error_message": "To place ads in Instagram Explore home, please also select Instagram Explore.",
-  "action_hint": "Fix the ad set placements in Meta Ads Manager, then try again."
-}
-```
+## Files touched
+- `supabase/functions/_shared/auth.ts` — add `isValidEmail()` helper.
+- `supabase/functions/create-client/index.ts` — validate + normalize email.
+- `supabase/functions/update-client-email/index.ts` — **new**, admin-only email correction.
+- `src/pages/NewClient.tsx` — inline validation + a11y attributes.
+- `src/pages/ClientDetail.tsx` — "Correct email" button wired to the new function.
+- One-off repair call for Ebrahim's account + audit log entry.
 
-with HTTP **200** (not 502). Reason: when an edge function returns non-2xx, `supabase.functions.invoke` strips the body and only gives the generic "non-2xx" string — that's why you see the unhelpful toast. Returning 200 + a structured `success: false` payload lets us show the real reason.
+## Not touched
+- `reset-client-password` — works correctly, no change needed.
+- Auth flow, RLS, existing sessions — untouched.
 
-Add a small **known-error mapper** so platform-specific subcodes (Meta 2490392 placements, 1487749 budget, 1885183 spend-cap, TikTok 40105 balance, Google policy errors, etc.) get a friendly explanation + a "Fix in Ads Manager" link.
-
-### 2. Frontend — show the real reason
-
-In `DeepDiveTable.tsx` (3 invoke sites) and `AutomationConfigTab.tsx`, replace:
-
-```ts
-if (error) toast.error("Failed to enable");
-```
-
-with:
-
-```ts
-if (error || result?.success === false) {
-  toast.error(result?.error_title || "Cannot enable campaign", {
-    description: result?.error_message || error?.message,
-    duration: 8000,
-  });
-}
-```
-
-### 3. Prevent this class of bug from recurring
-
-- **Shared error helper** `supabase/functions/_shared/platformError.ts` — every sync / pause / enable function uses one mapper so new platform errors automatically get readable messages.
-- **Pre-flight read** before enable on Meta: call `effective_status` + `issues_info` first; if `issues_info` is non-empty, show the issue *before* sending the write, so the user never sees a confusing failure.
-- **Audit log entry** `platform_validation_error` so admins can see a history of campaigns Meta rejected (and why), making patterns easy to spot.
-
-## Files to change
-
-- `supabase/functions/pause-campaign/index.ts` — return structured error, add Meta `issues_info` pre-check.
-- `supabase/functions/_shared/platformError.ts` — new shared mapper.
-- `src/components/client-analytics/DeepDiveTable.tsx` — read `result.error_title` / `error_message` in all 3 invoke handlers.
-- `src/components/AutomationConfigTab.tsx` — same toast upgrade.
-
-## What you should do for this specific campaign
-
-Open Meta Ads Manager → edit the ad set under **Kowsik/Royal/Sahara/CBO/A+** (or whichever one you tried to enable) → **Placements** → tick **Instagram Explore** in addition to **Instagram Explore home** → Save → then retry "Enable" in HEPT.
-
-Used the accessibility skill (toasts will now include descriptions + longer dwell time so screen-reader users actually catch the reason).
+## Verification
+1. Re-run login as Ebrahim with `…@gmail.com` → success.
+2. Try to create a new client with `foo@bar` → blocked in UI and in edge function.
+3. Correct-email button on client detail changes the auth email and audits it.
