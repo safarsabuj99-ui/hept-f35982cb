@@ -371,6 +371,34 @@ export default function ClientDetail() {
     setResettingPassword(false);
   }
 
+  async function handleCorrectEmail() {
+    if (!userId || !newEmail.trim() || !emailFormatValid) return;
+    setSavingEmail(true);
+    try {
+      const response = await supabase.functions.invoke("update-client-email", {
+        body: { user_id: userId, new_email: newEmail.trim().toLowerCase() },
+      });
+      if (response.error || response.data?.error) {
+        let detail = response.data?.error || response.error?.message || "Failed to update email.";
+        try {
+          const ctx: any = (response.error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) detail = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
+          }
+        } catch { /* keep generic */ }
+        toast({ title: "Update failed", description: detail, variant: "destructive" });
+      } else {
+        setCurrentEmail(response.data?.email ?? newEmail.trim().toLowerCase());
+        setNewEmail("");
+        toast({ title: "Email updated", description: "The client can now sign in with the new email." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSavingEmail(false);
+  }
+
   async function handleAssignAdAccount() {
     if (!selectedAdAccountIds.length || !userId) return;
     setAssigningSaving(true);
