@@ -1,7 +1,9 @@
 import {
   corsHeaders,
   errorResponse,
+  isValidEmail,
   jsonResponse,
+  normalizeEmail,
   requireCaller,
   requireOrgAccess,
   requireRole,
@@ -16,14 +18,21 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = ctx.supabaseAdmin;
     const {
-      email, password, full_name, phone, business_name,
+      email: rawEmail, password, full_name, phone, business_name,
       role = "client", manager_id, mapping_keyword, pricing_config,
       data_fetch_start_date, org_id,
     } = await req.json();
 
-    if (!email || !password || !full_name) {
+    if (!rawEmail || !password || !full_name) {
       return jsonResponse({ error: "Missing required fields" }, 400);
     }
+    if (!isValidEmail(rawEmail)) {
+      return jsonResponse(
+        { error: "Invalid email format. Please enter a complete address like name@example.com.", code: "invalid_email" },
+        400,
+      );
+    }
+    const email = normalizeEmail(rawEmail);
 
     // Resolve target org: use body org_id or caller's own org. Then enforce access.
     const targetOrgId: string | null = org_id ?? ctx.orgId;
