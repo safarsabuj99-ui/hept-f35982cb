@@ -96,6 +96,12 @@ export default function ClientDetail() {
     [newPassword]
   );
 
+  // Email correction (for typos made at creation time)
+  const [currentEmail, setCurrentEmail] = useState<string>("");
+  const [newEmail, setNewEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const emailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail.trim());
+
   // Data
   const [spendData, setSpendData] = useState<any[]>([]);
   const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
