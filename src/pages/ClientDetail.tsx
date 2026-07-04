@@ -757,6 +757,50 @@ export default function ClientDetail() {
             </CardContent>
           </Card>
 
+          {/* Email Correction */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Login Email</CardTitle>
+              </div>
+              <CardDescription>
+                Fix typos in the client's sign-in email. The client will use the new address to log in immediately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 max-w-md">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="correctEmail" className="text-muted-foreground text-xs uppercase tracking-wide">New Email</Label>
+                  <Input
+                    id="correctEmail"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onBlur={(e) => setNewEmail(e.target.value.trim())}
+                    placeholder="name@example.com"
+                    aria-invalid={newEmail.length > 0 && !emailFormatValid}
+                    aria-describedby={newEmail.length > 0 && !emailFormatValid ? "correctEmail-error" : undefined}
+                  />
+                  {newEmail.length > 0 && !emailFormatValid && (
+                    <p id="correctEmail-error" className="text-xs text-destructive">
+                      Enter a complete email address, e.g. name@example.com
+                    </p>
+                  )}
+                </div>
+                <Button
+                  onClick={handleCorrectEmail}
+                  disabled={savingEmail || !newEmail.trim() || !emailFormatValid}
+                  variant="secondary"
+                  className="gap-2"
+                >
+                  {savingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {savingEmail ? "Saving…" : "Update"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Mapping & Assignment */}
           <Card>
             <CardHeader className="pb-4">
