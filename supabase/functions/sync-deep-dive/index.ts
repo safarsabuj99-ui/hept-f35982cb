@@ -984,7 +984,7 @@ Deno.serve(async (req) => {
           }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.average_cpm, metrics.conversions, metrics.conversions_value, metrics.all_conversions, metrics.all_conversions_value, metrics.cost_per_conversion, metrics.view_through_conversions, metrics.video_views, metrics.engagements FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
@@ -1008,27 +1008,57 @@ Deno.serve(async (req) => {
           const gResults = json[0]?.results || [];
           type GPrepared = {
             platformId: string; campaignDbId: string; campaignName: string; clientId: string;
-            dataDate: string; spendUsd: number; cpcUsd: number; impressions: number; clicks: number;
-            ctr: number; conversions: number; conversionValue: number; roas: number; finalStatus: string;
+            dataDate: string; spendUsd: number; cpcUsd: number; cpmUsd: number;
+            impressions: number; clicks: number; ctr: number;
+            results: number; resultType: string; costPerResultUsd: number;
+            conversions: number; conversionValue: number;
+            allConversions: number; allConversionsValue: number;
+            viewThroughConversions: number; videoViews: number;
+            roas: number; finalStatus: string;
           };
           const gPrepared: GPrepared[] = [];
           const syncedAtIsoG = new Date().toISOString();
 
           for (const row of gResults) {
-            const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
+            const gm = row.metrics || {};
+            const costMicros = parseInt(gm.costMicros || "0", 10);
             const spend = costMicros / 1_000_000;
-            const impressions = parseInt(row.metrics?.impressions || "0", 10);
-            const clicks = parseInt(row.metrics?.clicks || "0", 10);
-            const ctr = parseFloat(row.metrics?.ctr || "0") * 100;
-            const cpc = parseInt(row.metrics?.averageCpc || "0", 10) / 1_000_000;
-            const conversions = parseFloat(row.metrics?.conversions || "0");
-            const conversionValue = parseFloat(row.metrics?.conversionsValue || "0");
+            const impressions = parseInt(gm.impressions || "0", 10);
+            const clicks = parseInt(gm.clicks || "0", 10);
+            const ctr = parseFloat(gm.ctr || "0") * 100;
+            const cpc = parseInt(gm.averageCpc || "0", 10) / 1_000_000;
+            const cpm = parseInt(gm.averageCpm || "0", 10) / 1_000_000;
+            const conversions = parseFloat(gm.conversions || "0");
+            const conversionValue = parseFloat(gm.conversionsValue || "0");
+            const allConversions = parseFloat(gm.allConversions || "0");
+            const allConversionsValue = parseFloat(gm.allConversionsValue || "0");
+            const costPerConversion = parseInt(gm.costPerConversion || "0", 10) / 1_000_000;
+            const viewThroughConversions = parseFloat(gm.viewThroughConversions || "0");
+            const videoViews = parseFloat(gm.videoViews || "0");
             const rawCampaignId = row.campaign?.id;
             const campaignName = row.campaign?.name || "Google Campaign";
+            const channelType = String(row.campaign?.advertisingChannelType || "").toUpperCase();
             const dataDate = row.segments?.date;
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const cpmUsd = convertSpend(cpm);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
+
+            // Ads-Manager-parity Results: for VIDEO campaigns Google's UI shows "Views";
+            // for everything else the "Conversions" column drives Results. When a
+            // conversion-tracked account also has view-through, we still use `conversions`
+            // (matches the default UI column).
+            let gResultValue = 0;
+            let gResultType = "Conversions";
+            if (channelType === "VIDEO") {
+              gResultValue = videoViews;
+              gResultType = "Views";
+            } else {
+              gResultValue = conversions;
+              gResultType = "Conversions";
+            }
+            const gCostPerResultUsd = convertSpend(costPerConversion) ||
+              (gResultValue > 0 ? spendUsd / gResultValue : 0);
 
             const platformId = `google_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
@@ -1043,8 +1073,12 @@ Deno.serve(async (req) => {
 
             gPrepared.push({
               platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate,
-              spendUsd, cpcUsd, impressions, clicks, ctr, conversions: Math.round(conversions),
-              conversionValue, roas, finalStatus: campaignResult.status,
+              spendUsd, cpcUsd, cpmUsd, impressions, clicks, ctr,
+              results: Math.round(gResultValue), resultType: gResultType,
+              costPerResultUsd: gCostPerResultUsd,
+              conversions: Math.round(conversions), conversionValue,
+              allConversions, allConversionsValue, viewThroughConversions, videoViews,
+              roas, finalStatus: campaignResult.status,
             });
           }
 
@@ -1077,15 +1111,23 @@ Deno.serve(async (req) => {
               mDedup.set(`${p.campaignDbId}|${p.dataDate}`, {
                 campaign_id: p.campaignDbId, data_date: p.dataDate,
                 spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
-                results: p.conversions, conversion_value: p.conversionValue,
+                results: p.results, conversion_value: p.conversionValue,
                 ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
                 view_content: 0, add_to_cart: 0, initiate_checkout: 0, purchase: 0,
                 messaging_conversations: 0, new_messaging_contacts: 0, create_order: 0,
-                reach: 0, cost_per_purchase: 0, cost_per_message: 0, cpm: 0, budget: 0,
+                reach: 0, cost_per_purchase: 0, cost_per_message: 0, cpm: Math.round(p.cpmUsd * 100) / 100,
+                budget: 0,
                 conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+                cost_per_result: Math.round(p.costPerResultUsd * 100) / 100,
+                result_type: p.resultType,
+                video_views: p.videoViews,
+                all_conversions: p.allConversions,
+                all_conversions_value: p.allConversionsValue,
+                view_through_conversions: p.viewThroughConversions,
                 synced_at: syncedAtIsoG, org_id: account.org_id,
               });
             }
+
             const finalMetrics = Array.from(mDedup.values());
             for (let i = 0; i < finalMetrics.length; i += 100) {
               const { error: dErr } = await supabase.from("daily_metrics")
