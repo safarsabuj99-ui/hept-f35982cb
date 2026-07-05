@@ -1691,7 +1691,8 @@ Deno.serve(async (req) => {
                 ctr: p.ctr,
                 cpc: p.cpcUsd,
                 spend: p.spendUsd,
-                results: p.conversions,
+                results: Math.round(p.tiktokResult),
+
                 conversion_value: 0,
                 roas: p.roas,
                 status: p.finalTiktokStatus,
