@@ -167,6 +167,12 @@ export default function ClientReports() {
           conversations_tiktok_dm: 0,
           leads_tiktok_dm: 0,
           conversations_instant_msg: 0,
+          frequency: 0,
+          cost_per_result: 0,
+          result_type: null,
+          video_views: 0,
+          all_conversions: 0,
+          view_through_conversions: 0,
         };
       }
       map[key].impressions += Number(row.impressions);
@@ -185,6 +191,12 @@ export default function ClientReports() {
       map[key].conversations_tiktok_dm = (map[key].conversations_tiktok_dm ?? 0) + Number(row.conversations_tiktok_dm ?? 0);
       map[key].leads_tiktok_dm = (map[key].leads_tiktok_dm ?? 0) + Number(row.leads_tiktok_dm ?? 0);
       map[key].conversations_instant_msg = (map[key].conversations_instant_msg ?? 0) + Number(row.conversations_instant_msg ?? 0);
+      map[key].video_views = (map[key].video_views ?? 0) + Number(row.video_views ?? 0);
+      map[key].all_conversions = (map[key].all_conversions ?? 0) + Number(row.all_conversions ?? 0);
+      map[key].view_through_conversions = (map[key].view_through_conversions ?? 0) + Number(row.view_through_conversions ?? 0);
+      // Latest row wins for result_type (should be stable per campaign); frequency
+      // gets a weighted average by impressions later.
+      if (row.result_type && !map[key].result_type) map[key].result_type = row.result_type;
       if (row.budget) map[key].budget = (map[key].budget ?? 0) + Number(row.budget);
     }
     // Recompute derived ratios from aggregated totals (mirrors agency view).
@@ -192,7 +204,10 @@ export default function ClientReports() {
       if ((r.purchase ?? 0) > 0) r.cost_per_purchase = r.spend / r.purchase!;
       if ((r.messaging_conversations ?? 0) > 0) r.cost_per_message = r.spend / r.messaging_conversations!;
       if (r.impressions > 0) r.cpm = (r.spend / r.impressions) * 1000;
+      if ((r.results ?? 0) > 0) r.cost_per_result = r.spend / r.results;
+      if ((r.reach ?? 0) > 0) r.frequency = r.impressions / r.reach;
     }
+
     // Match agency view: only inject active campaigns with no metrics.
     for (const c of campaigns) {
       if (isActiveStatus(c.status) && !map[c.id]) {
