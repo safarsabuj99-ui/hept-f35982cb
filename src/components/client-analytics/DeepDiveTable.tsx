@@ -65,7 +65,15 @@ export interface CampaignRow {
   conversations_tiktok_dm?: number;
   leads_tiktok_dm?: number;
   conversations_instant_msg?: number;
+  // Native-parity fields (Meta / TikTok / Google Ads Manager)
+  frequency?: number;
+  cost_per_result?: number;
+  result_type?: string | null;
+  video_views?: number;
+  all_conversions?: number;
+  view_through_conversions?: number;
 }
+
 
 export type PresetType = "auto" | "messages" | "sales" | "performance" | "tiktok_messages";
 
