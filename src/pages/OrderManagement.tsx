@@ -78,7 +78,7 @@ export default function OrderManagement() {
 
   const fetchAll = useCallback(async () => {
     const [{ data: reqs }, { data: profs }, { data: allTasks }] = await Promise.all([
-      supabase.from("campaign_requests" as any).select("*").order("created_at", { ascending: false }) as any,
+      supabase.from("campaign_requests" as any).select("*").order("created_at", { ascending: true }) as any,
       supabase.from("profiles").select("user_id, full_name, business_name, email"),
       supabase.from("campaign_tasks" as any).select("*").order("created_at", { ascending: true }) as any,
     ]);

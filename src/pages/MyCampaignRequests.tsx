@@ -42,7 +42,7 @@ export default function MyCampaignRequests() {
   const fetchRequests = useCallback(async () => {
     if (!effectiveClientId) return;
     const [{ data: reqs }, { data: allTasks }] = await Promise.all([
-      supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: false }) as any,
+      supabase.from("campaign_requests" as any).select("*").eq("client_id", effectiveClientId).order("created_at", { ascending: true }) as any,
       supabase.from("campaign_tasks" as any).select("*").order("created_at", { ascending: true }) as any,
     ]);
     setRequests(reqs ?? []);
