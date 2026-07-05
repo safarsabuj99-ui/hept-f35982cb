@@ -409,6 +409,20 @@ Deno.serve(async (req) => {
             conversations_tiktok_dm?: number;
             leads_tiktok_dm?: number;
             conversations_instant_msg?: number;
+            // Native-parity fields (Meta / TikTok / Google Ads Manager)
+            frequency?: number;
+            cost_per_result?: number;
+            result_type?: string | null;
+            video_views?: number;
+            video_p25?: number;
+            video_p50?: number;
+            video_p75?: number;
+            video_p100?: number;
+            all_conversions?: number;
+            all_conversions_value?: number;
+            view_through_conversions?: number;
+            engagement_rate?: number;
+            unique_clicks?: number;
           }
         ) => {
           const { error } = await supabase
@@ -440,6 +454,19 @@ Deno.serve(async (req) => {
                 conversations_tiktok_dm: metrics.conversations_tiktok_dm ?? 0,
                 leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
                 conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
+                frequency: metrics.frequency ?? 0,
+                cost_per_result: metrics.cost_per_result ?? 0,
+                result_type: metrics.result_type ?? null,
+                video_views: metrics.video_views ?? 0,
+                video_p25: metrics.video_p25 ?? 0,
+                video_p50: metrics.video_p50 ?? 0,
+                video_p75: metrics.video_p75 ?? 0,
+                video_p100: metrics.video_p100 ?? 0,
+                all_conversions: metrics.all_conversions ?? 0,
+                all_conversions_value: metrics.all_conversions_value ?? 0,
+                view_through_conversions: metrics.view_through_conversions ?? 0,
+                engagement_rate: metrics.engagement_rate ?? 0,
+                unique_clicks: metrics.unique_clicks ?? 0,
                 synced_at: new Date().toISOString(),
                 org_id: account.org_id,
               },
@@ -447,6 +474,7 @@ Deno.serve(async (req) => {
             );
           if (error) errors.push(`Metrics upsert: ${error.message}`);
         };
+
 
         if (platform === "meta") {
           if (!integration?.api_token) {
