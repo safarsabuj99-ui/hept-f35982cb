@@ -913,9 +913,17 @@ Deno.serve(async (req) => {
               cpm: Math.round(p.cpmValue * 100) / 100,
               budget: 0,
               conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+              frequency: Math.round(p.frequency * 100) / 100,
+              cost_per_result: Math.round(p.costPerResult * 100) / 100,
+              result_type: p.resultType || null,
+              video_views: p.videoPlays,
+              video_p25: p.videoP25, video_p50: p.videoP50,
+              video_p75: p.videoP75, video_p100: p.videoP100,
+              unique_clicks: p.uniqueClicks,
               synced_at: syncedAtIsoMeta,
               org_id: account.org_id,
             }));
+
 
             // Dedupe by (campaign_id, data_date) — same composite conflict key
             const mDedup = new Map<string, any>();
