@@ -1481,60 +1481,99 @@ export type Database = {
       campaign_performance: {
         Row: {
           ad_account_id: string
+          all_conversions: number | null
+          all_conversions_value: number | null
           campaign_id: string
           campaign_name: string
           clicks: number
           client_id: string | null
           conversion_value: number
+          cost_per_result: number | null
           cpc: number
           ctr: number
           date: string
+          engagement_rate: number | null
+          frequency: number | null
           id: string
           impressions: number
           org_id: string | null
+          result_type: string | null
           results: number
           roas: number
           spend: number
           status: string
           synced_at: string
+          unique_clicks: number | null
+          video_p100: number | null
+          video_p25: number | null
+          video_p50: number | null
+          video_p75: number | null
+          video_views: number | null
+          view_through_conversions: number | null
         }
         Insert: {
           ad_account_id: string
+          all_conversions?: number | null
+          all_conversions_value?: number | null
           campaign_id: string
           campaign_name?: string
           clicks?: number
           client_id?: string | null
           conversion_value?: number
+          cost_per_result?: number | null
           cpc?: number
           ctr?: number
           date?: string
+          engagement_rate?: number | null
+          frequency?: number | null
           id?: string
           impressions?: number
           org_id?: string | null
+          result_type?: string | null
           results?: number
           roas?: number
           spend?: number
           status?: string
           synced_at?: string
+          unique_clicks?: number | null
+          video_p100?: number | null
+          video_p25?: number | null
+          video_p50?: number | null
+          video_p75?: number | null
+          video_views?: number | null
+          view_through_conversions?: number | null
         }
         Update: {
           ad_account_id?: string
+          all_conversions?: number | null
+          all_conversions_value?: number | null
           campaign_id?: string
           campaign_name?: string
           clicks?: number
           client_id?: string | null
           conversion_value?: number
+          cost_per_result?: number | null
           cpc?: number
           ctr?: number
           date?: string
+          engagement_rate?: number | null
+          frequency?: number | null
           id?: string
           impressions?: number
           org_id?: string | null
+          result_type?: string | null
           results?: number
           roas?: number
           spend?: number
           status?: string
           synced_at?: string
+          unique_clicks?: number | null
+          video_p100?: number | null
+          video_p25?: number | null
+          video_p50?: number | null
+          video_p75?: number | null
+          video_views?: number | null
+          view_through_conversions?: number | null
         }
         Relationships: [
           {
@@ -2077,6 +2116,8 @@ export type Database = {
       daily_metrics: {
         Row: {
           add_to_cart: number
+          all_conversions: number | null
+          all_conversions_value: number | null
           budget: number
           campaign_id: string
           clicks: number
@@ -2085,11 +2126,14 @@ export type Database = {
           conversion_value: number
           cost_per_message: number
           cost_per_purchase: number
+          cost_per_result: number | null
           cpc: number
           cpm: number
           create_order: number
           ctr: number
           data_date: string
+          engagement_rate: number | null
+          frequency: number | null
           id: string
           impressions: number
           initiate_checkout: number
@@ -2099,14 +2143,24 @@ export type Database = {
           org_id: string | null
           purchase: number
           reach: number
+          result_type: string | null
           results: number
           roas: number
           spend: number
           synced_at: string
+          unique_clicks: number | null
+          video_p100: number | null
+          video_p25: number | null
+          video_p50: number | null
+          video_p75: number | null
+          video_views: number | null
           view_content: number
+          view_through_conversions: number | null
         }
         Insert: {
           add_to_cart?: number
+          all_conversions?: number | null
+          all_conversions_value?: number | null
           budget?: number
           campaign_id: string
           clicks?: number
@@ -2115,11 +2169,14 @@ export type Database = {
           conversion_value?: number
           cost_per_message?: number
           cost_per_purchase?: number
+          cost_per_result?: number | null
           cpc?: number
           cpm?: number
           create_order?: number
           ctr?: number
           data_date: string
+          engagement_rate?: number | null
+          frequency?: number | null
           id?: string
           impressions?: number
           initiate_checkout?: number
@@ -2129,14 +2186,24 @@ export type Database = {
           org_id?: string | null
           purchase?: number
           reach?: number
+          result_type?: string | null
           results?: number
           roas?: number
           spend?: number
           synced_at?: string
+          unique_clicks?: number | null
+          video_p100?: number | null
+          video_p25?: number | null
+          video_p50?: number | null
+          video_p75?: number | null
+          video_views?: number | null
           view_content?: number
+          view_through_conversions?: number | null
         }
         Update: {
           add_to_cart?: number
+          all_conversions?: number | null
+          all_conversions_value?: number | null
           budget?: number
           campaign_id?: string
           clicks?: number
@@ -2145,11 +2212,14 @@ export type Database = {
           conversion_value?: number
           cost_per_message?: number
           cost_per_purchase?: number
+          cost_per_result?: number | null
           cpc?: number
           cpm?: number
           create_order?: number
           ctr?: number
           data_date?: string
+          engagement_rate?: number | null
+          frequency?: number | null
           id?: string
           impressions?: number
           initiate_checkout?: number
@@ -2159,11 +2229,19 @@ export type Database = {
           org_id?: string | null
           purchase?: number
           reach?: number
+          result_type?: string | null
           results?: number
           roas?: number
           spend?: number
           synced_at?: string
+          unique_clicks?: number | null
+          video_p100?: number | null
+          video_p25?: number | null
+          video_p50?: number | null
+          video_p75?: number | null
+          video_views?: number | null
           view_content?: number
+          view_through_conversions?: number | null
         }
         Relationships: [
           {

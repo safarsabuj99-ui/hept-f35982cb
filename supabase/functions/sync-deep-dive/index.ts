@@ -409,6 +409,20 @@ Deno.serve(async (req) => {
             conversations_tiktok_dm?: number;
             leads_tiktok_dm?: number;
             conversations_instant_msg?: number;
+            // Native-parity fields (Meta / TikTok / Google Ads Manager)
+            frequency?: number;
+            cost_per_result?: number;
+            result_type?: string | null;
+            video_views?: number;
+            video_p25?: number;
+            video_p50?: number;
+            video_p75?: number;
+            video_p100?: number;
+            all_conversions?: number;
+            all_conversions_value?: number;
+            view_through_conversions?: number;
+            engagement_rate?: number;
+            unique_clicks?: number;
           }
         ) => {
           const { error } = await supabase
@@ -440,6 +454,19 @@ Deno.serve(async (req) => {
                 conversations_tiktok_dm: metrics.conversations_tiktok_dm ?? 0,
                 leads_tiktok_dm: metrics.leads_tiktok_dm ?? 0,
                 conversations_instant_msg: metrics.conversations_instant_msg ?? 0,
+                frequency: metrics.frequency ?? 0,
+                cost_per_result: metrics.cost_per_result ?? 0,
+                result_type: metrics.result_type ?? null,
+                video_views: metrics.video_views ?? 0,
+                video_p25: metrics.video_p25 ?? 0,
+                video_p50: metrics.video_p50 ?? 0,
+                video_p75: metrics.video_p75 ?? 0,
+                video_p100: metrics.video_p100 ?? 0,
+                all_conversions: metrics.all_conversions ?? 0,
+                all_conversions_value: metrics.all_conversions_value ?? 0,
+                view_through_conversions: metrics.view_through_conversions ?? 0,
+                engagement_rate: metrics.engagement_rate ?? 0,
+                unique_clicks: metrics.unique_clicks ?? 0,
                 synced_at: new Date().toISOString(),
                 org_id: account.org_id,
               },
@@ -447,6 +474,7 @@ Deno.serve(async (req) => {
             );
           if (error) errors.push(`Metrics upsert: ${error.message}`);
         };
+
 
         if (platform === "meta") {
           if (!integration?.api_token) {
@@ -457,6 +485,12 @@ Deno.serve(async (req) => {
           // Fetch real campaign statuses AND objectives from Meta
           const metaStatusMap: Record<string, string> = {};
           const metaObjectiveMap: Record<string, string> = {};
+          // Per-campaign optimization goal & promoted-object custom_event_type (from adsets).
+          // Meta's native "Results" column is computed per ad set from optimization_goal +
+          // promoted_object — not from the campaign objective — so we must fetch this to
+          // match Ads Manager 1:1.
+          const metaOptGoalMap: Record<string, string> = {};
+          const metaCustomEventMap: Record<string, string> = {};
           try {
             let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status,objective&limit=500&access_token=${integration.api_token}`;
             while (statusNextUrl) {
@@ -476,7 +510,6 @@ Deno.serve(async (req) => {
                   else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
                   else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
 
-                  // Map Meta objective to simplified label
                   const rawObj = (c.objective || "").toUpperCase();
                   if (rawObj === "OUTCOME_SALES" || rawObj === "PRODUCT_CATALOG_SALES" || rawObj === "CONVERSIONS") {
                     metaObjectiveMap[c.id] = "sales";
@@ -503,7 +536,52 @@ Deno.serve(async (req) => {
             errors.push(`Meta status fetch: ${e.message}`);
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,reach,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
+          // Fetch adset optimization_goal + promoted_object.custom_event_type per campaign.
+          // We keep the FIRST adset's values as representative (matches how Ads Manager
+          // labels the campaign row when adsets share a goal). If adsets disagree we
+          // still use the first — same behavior as Ads Manager's campaign-level "Results".
+          try {
+            let adsetNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/adsets?fields=id,campaign_id,optimization_goal,promoted_object&limit=500&access_token=${integration.api_token}`;
+            while (adsetNextUrl) {
+              const asRes = await fetch(adsetNextUrl);
+              const asJson = await asRes.json();
+              if (asJson.data) {
+                for (const a of asJson.data) {
+                  const cid = a.campaign_id;
+                  if (!cid) continue;
+                  if (!metaOptGoalMap[cid] && a.optimization_goal) {
+                    metaOptGoalMap[cid] = String(a.optimization_goal).toUpperCase();
+                  }
+                  const cet = a.promoted_object?.custom_event_type;
+                  if (!metaCustomEventMap[cid] && cet) {
+                    metaCustomEventMap[cid] = String(cet).toUpperCase();
+                  }
+                }
+              }
+              adsetNextUrl = asJson.paging?.next || null;
+            }
+          } catch (e: any) {
+            // Non-fatal — fall back to objective-based mapping.
+            console.warn(`Meta adset fetch failed: ${e.message}`);
+          }
+
+          // Ads-Manager-parity insights request:
+          //   • use_account_attribution_setting=true — uses the account's default window,
+          //     which is exactly what the Ads Manager UI shows by default.
+          //   • use_unified_attribution_setting=true — required for the setting above to
+          //     be honored on accounts on the new unified reporting.
+          //   • Extra fields for frequency, per-action cost, video milestones, unique clicks
+          //     — all shown natively by Ads Manager, previously missing.
+          const insightsFields = [
+            "campaign_id", "campaign_name", "spend", "impressions", "clicks", "ctr", "cpc",
+            "cpm", "reach", "frequency", "actions", "action_values", "cost_per_action_type",
+            "cost_per_unique_action_type", "cost_per_conversion", "purchase_roas",
+            "website_purchase_roas", "video_p25_watched_actions", "video_p50_watched_actions",
+            "video_p75_watched_actions", "video_p100_watched_actions", "video_play_actions",
+            "inline_link_clicks", "unique_clicks", "objective", "date_start",
+          ].join(",");
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=${insightsFields}&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&use_account_attribution_setting=true&use_unified_attribution_setting=true&limit=500&access_token=${integration.api_token}`;
+
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
@@ -528,9 +606,13 @@ Deno.serve(async (req) => {
             cpcUsd: number;
             impressions: number;
             reach: number;
+            frequency: number;
             clicks: number;
+            uniqueClicks: number;
             ctr: number;
             results: number;
+            resultType: string;
+            costPerResult: number;
             conversionValue: number;
             roas: number;
             cpmValue: number;
@@ -543,17 +625,74 @@ Deno.serve(async (req) => {
             messagingConversations: number;
             newMessagingContacts: number;
             createOrder: number;
+            videoPlays: number;
+            videoP25: number;
+            videoP50: number;
+            videoP75: number;
+            videoP100: number;
             finalStatus: string;
           };
           const metaPrepared: MetaPrepared[] = [];
           const syncedAtIsoMeta = new Date().toISOString();
+
+          // Deterministic map: Meta optimization_goal → the SINGLE action_type Ads Manager
+          // displays as "Results". Values here mirror the field IDs Meta emits under
+          // `actions[]` / `cost_per_action_type[]`. `CONVERSIONS` / `OFFSITE_CONVERSIONS`
+          // resolve dynamically via promoted_object.custom_event_type below.
+          const OPT_GOAL_TO_ACTION: Record<string, string> = {
+            LINK_CLICKS: "link_click",
+            POST_ENGAGEMENT: "post_engagement",
+            PAGE_LIKES: "like",
+            THRUPLAY: "video_thruplay_watched_actions",
+            TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: "video_view",
+            APP_INSTALLS: "mobile_app_install",
+            LEAD_GENERATION: "onsite_conversion.lead_grouped",
+            QUALITY_LEAD: "onsite_conversion.lead_grouped",
+            CONVERSATIONS: "onsite_conversion.messaging_conversation_started_7d",
+            REPLIES: "onsite_conversion.total_messaging_connection",
+            MESSAGING_PURCHASE_CONVERSION: "onsite_conversion.messaging_conversation_started_7d",
+            MESSAGING_APPOINTMENT_CONVERSION: "onsite_conversion.messaging_conversation_started_7d",
+          };
+          const CUSTOM_EVENT_TO_ACTION: Record<string, string> = {
+            PURCHASE: "offsite_conversion.fb_pixel_purchase",
+            LEAD: "offsite_conversion.fb_pixel_lead",
+            COMPLETE_REGISTRATION: "offsite_conversion.fb_pixel_complete_registration",
+            ADD_TO_CART: "offsite_conversion.fb_pixel_add_to_cart",
+            INITIATE_CHECKOUT: "offsite_conversion.fb_pixel_initiate_checkout",
+            ADD_PAYMENT_INFO: "offsite_conversion.fb_pixel_add_payment_info",
+            SEARCH: "offsite_conversion.fb_pixel_search",
+            VIEW_CONTENT: "offsite_conversion.fb_pixel_view_content",
+            CONTACT: "offsite_conversion.fb_pixel_contact",
+            SUBSCRIBE: "offsite_conversion.fb_pixel_subscribe",
+            SCHEDULE: "offsite_conversion.fb_pixel_schedule",
+          };
+          // Human-friendly label for UI (mirrors the "Result Indicator" column Meta shows).
+          const ACTION_TO_LABEL: Record<string, string> = {
+            "offsite_conversion.fb_pixel_purchase": "Purchases",
+            "offsite_conversion.fb_pixel_lead": "Leads",
+            "offsite_conversion.fb_pixel_complete_registration": "Registrations",
+            "offsite_conversion.fb_pixel_add_to_cart": "Adds to cart",
+            "offsite_conversion.fb_pixel_initiate_checkout": "Checkouts initiated",
+            "offsite_conversion.fb_pixel_view_content": "Content views",
+            "onsite_conversion.messaging_conversation_started_7d": "Messaging conversations",
+            "onsite_conversion.total_messaging_connection": "New messaging contacts",
+            "onsite_conversion.lead_grouped": "Leads",
+            link_click: "Link clicks",
+            post_engagement: "Post engagement",
+            like: "Page likes",
+            video_thruplay_watched_actions: "ThruPlays",
+            video_view: "2-second video views",
+            mobile_app_install: "App installs",
+          };
 
           let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
             const reach = parseInt(row.reach || "0", 10);
+            const frequency = parseFloat(row.frequency || "0");
             const clicks = parseInt(row.clicks || "0", 10);
+            const uniqueClicks = parseInt(row.unique_clicks || "0", 10);
             const ctr = parseFloat(row.ctr || "0");
             const cpc = parseFloat(row.cpc || "0");
             const rawCampaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
@@ -563,15 +702,11 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, rawCampaignId);
             if (!clientId) { skippedCampaigns++; continue; }
 
-            let results = 0;
             let conversionValue = 0;
             let viewContent = 0, addToCart = 0, initiateCheckout = 0, purchaseCount = 0;
             let messagingConversations = 0, newMessagingContacts = 0, createOrder = 0;
 
-            // Build flat lookup maps so we can pick the best signal per metric
-            // (Meta returns the same conversion under several attribution buckets:
-            // omni_*, onsite_*, offsite_conversion.fb_pixel_*). Prefer omni when
-            // present; otherwise sum the channel-specific buckets.
+            // Flat lookup maps: action_type → count / value / cost.
             const actionMap = new Map<string, number>();
             if (row.actions) {
               if (metaRowIndex < 3) {
@@ -589,6 +724,12 @@ Deno.serve(async (req) => {
                 valueMap.set(av.action_type, (valueMap.get(av.action_type) || 0) + parseFloat(av.value || "0"));
               }
             }
+            const costMap = new Map<string, number>();
+            if (row.cost_per_action_type) {
+              for (const cp of row.cost_per_action_type) {
+                costMap.set(cp.action_type, parseFloat(cp.value || "0"));
+              }
+            }
             const get = (k: string) => actionMap.get(k) || 0;
             const preferOmni = (omniKey: string, fallbackKeys: string[]) => {
               const omni = get(omniKey);
@@ -596,6 +737,7 @@ Deno.serve(async (req) => {
               return fallbackKeys.reduce((s, k) => s + get(k), 0);
             };
 
+            // Additional per-funnel counters (kept for existing dashboard columns).
             purchaseCount = preferOmni("omni_purchase", [
               "onsite_web_purchase", "onsite_app_purchase",
               "onsite_web_app_purchase", "onsite_conversion.purchase",
@@ -611,42 +753,85 @@ Deno.serve(async (req) => {
               "offsite_conversion.fb_pixel_initiate_checkout", "onsite_web_initiate_checkout",
             ]);
             messagingConversations = get("onsite_conversion.messaging_conversation_started_7d");
-            // Fixed: total_messaging_connection (was incorrectly using messaging_first_reply)
             newMessagingContacts = get("onsite_conversion.total_messaging_connection");
             createOrder = get("onsite_conversion.messaging_order_created_v2")
               + get("onsite_conversion.messaging_order_created")
               + get("onsite_conversion.messaging_block_create_order");
 
-            // "Results" = the SINGLE counter Meta Ads Manager shows, picked from the
-            // campaign's optimisation goal. Never sum across goals (that would double-count
-            // the same user across pixel / onsite / omni attribution buckets).
-            const objectiveRaw = (metaObjectiveMap[rawCampaignId] || "").toUpperCase();
-            const leadTotal = get("lead")
-              + get("onsite_conversion.lead_grouped")
-              + get("onsite_web_lead")
-              + get("offsite_complete_registration_add_meta_leads")
-              + get("complete_registration");
-            const appInstallTotal = get("app_install") + get("mobile_app_install") + get("omni_app_install");
-            const linkClickTotal = get("link_click") || clicks;
-            const videoViewTotal = get("video_view");
+            // Video milestone actions (Meta returns them as [{value}] arrays).
+            const sumActionArray = (arr: any): number => {
+              if (!Array.isArray(arr)) return 0;
+              let s = 0;
+              for (const it of arr) s += parseFloat(it?.value || "0");
+              return s;
+            };
+            const videoPlays = sumActionArray(row.video_play_actions);
+            const videoP25   = sumActionArray(row.video_p25_watched_actions);
+            const videoP50   = sumActionArray(row.video_p50_watched_actions);
+            const videoP75   = sumActionArray(row.video_p75_watched_actions);
+            const videoP100  = sumActionArray(row.video_p100_watched_actions);
 
-            if (/SALES|CONVERSION|CATALOG/.test(objectiveRaw)) {
-              results = purchaseCount;
-            } else if (/LEAD/.test(objectiveRaw)) {
-              results = leadTotal;
-            } else if (/MESSAG|ENGAGEMENT/.test(objectiveRaw)) {
-              results = messagingConversations;
-            } else if (/APP/.test(objectiveRaw)) {
-              results = appInstallTotal;
-            } else if (/AWARENESS|REACH/.test(objectiveRaw)) {
-              results = reach;
-            } else if (/TRAFFIC|LINK_CLICK/.test(objectiveRaw)) {
-              results = linkClickTotal;
-            } else if (/VIDEO/.test(objectiveRaw)) {
-              results = videoViewTotal;
+            // ===== RESULTS = the single field Ads Manager shows =====
+            // Priority:
+            //   1. adset optimization_goal → mapped action_type (via CONVERSIONS /
+            //      OFFSITE_CONVERSIONS + promoted_object.custom_event_type).
+            //   2. campaign objective fallback (legacy mapping).
+            //   3. reach / impressions for awareness goals.
+            const optGoal = metaOptGoalMap[rawCampaignId] || "";
+            const customEvent = metaCustomEventMap[rawCampaignId] || "";
+            let chosenAction: string | null = null;
+            if (optGoal === "OFFSITE_CONVERSIONS" || optGoal === "CONVERSIONS") {
+              chosenAction = CUSTOM_EVENT_TO_ACTION[customEvent] || null;
+            } else if (optGoal === "REACH") {
+              chosenAction = "__reach__";
+            } else if (optGoal === "IMPRESSIONS") {
+              chosenAction = "__impressions__";
+            } else if (optGoal && OPT_GOAL_TO_ACTION[optGoal]) {
+              chosenAction = OPT_GOAL_TO_ACTION[optGoal];
+            }
+
+            let results = 0;
+            let resultType = "";
+            let costPerResult = 0;
+            if (chosenAction === "__reach__") {
+              results = reach; resultType = "Reach";
+            } else if (chosenAction === "__impressions__") {
+              results = impressions; resultType = "Impressions";
+            } else if (chosenAction) {
+              results = get(chosenAction);
+              resultType = ACTION_TO_LABEL[chosenAction] || chosenAction;
+              costPerResult = costMap.get(chosenAction) || 0;
             } else {
-              // Unknown / missing objective — pick the LARGEST single signal (never sum).
-              results = Math.max(purchaseCount, leadTotal, messagingConversations, appInstallTotal);
+              // Legacy objective fallback (unchanged behavior for accounts where
+              // adset fetch failed or the goal isn't in our map yet).
+              const objectiveRaw = (metaObjectiveMap[rawCampaignId] || "").toUpperCase();
+              const leadTotal = get("lead")
+                + get("onsite_conversion.lead_grouped")
+                + get("onsite_web_lead")
+                + get("offsite_complete_registration_add_meta_leads")
+                + get("complete_registration");
+              const appInstallTotal = get("app_install") + get("mobile_app_install") + get("omni_app_install");
+              const linkClickTotal = get("link_click") || clicks;
+              const videoViewTotal = get("video_view");
+
+              if (/SALES|CONVERSION|CATALOG/.test(objectiveRaw)) {
+                results = purchaseCount; resultType = "Purchases";
+              } else if (/LEAD/.test(objectiveRaw)) {
+                results = leadTotal; resultType = "Leads";
+              } else if (/MESSAG|ENGAGEMENT/.test(objectiveRaw)) {
+                results = messagingConversations; resultType = "Messaging conversations";
+              } else if (/APP/.test(objectiveRaw)) {
+                results = appInstallTotal; resultType = "App installs";
+              } else if (/AWARENESS|REACH/.test(objectiveRaw)) {
+                results = reach; resultType = "Reach";
+              } else if (/TRAFFIC|LINK_CLICK/.test(objectiveRaw)) {
+                results = linkClickTotal; resultType = "Link clicks";
+              } else if (/VIDEO/.test(objectiveRaw)) {
+                results = videoViewTotal; resultType = "Video views";
+              } else {
+                results = Math.max(purchaseCount, leadTotal, messagingConversations, appInstallTotal);
+                resultType = "";
+              }
             }
 
             // Conversion value: prefer pixel purchase value, fall back to omni_purchase value
@@ -656,6 +841,7 @@ Deno.serve(async (req) => {
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const costPerResultUsd = convertSpend(costPerResult) || (results > 0 ? spendUsd / results : 0);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
             const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
             const costPerPurchase = purchaseCount > 0 ? spendUsd / purchaseCount : 0;
@@ -670,13 +856,17 @@ Deno.serve(async (req) => {
 
             metaPrepared.push({
               platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate, rawCampaignId,
-              spendUsd, cpcUsd, impressions, reach, clicks, ctr, results, conversionValue, roas,
+              spendUsd, cpcUsd, impressions, reach, frequency, clicks, uniqueClicks, ctr,
+              results, resultType, costPerResult: costPerResultUsd,
+              conversionValue, roas,
               cpmValue, costPerPurchase, costPerMessage,
               viewContent, addToCart, initiateCheckout, purchaseCount,
               messagingConversations, newMessagingContacts, createOrder,
+              videoPlays, videoP25, videoP50, videoP75, videoP100,
               finalStatus: campaignResult.status,
             });
           }
+
 
           // ===== PHASE B: bulk + parallel writes =====
           // 1) campaign_mappings: select-then-insert (no unique index on campaign_id)
@@ -723,9 +913,17 @@ Deno.serve(async (req) => {
               cpm: Math.round(p.cpmValue * 100) / 100,
               budget: 0,
               conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+              frequency: Math.round(p.frequency * 100) / 100,
+              cost_per_result: Math.round(p.costPerResult * 100) / 100,
+              result_type: p.resultType || null,
+              video_views: p.videoPlays,
+              video_p25: p.videoP25, video_p50: p.videoP50,
+              video_p75: p.videoP75, video_p100: p.videoP100,
+              unique_clicks: p.uniqueClicks,
               synced_at: syncedAtIsoMeta,
               org_id: account.org_id,
             }));
+
 
             // Dedupe by (campaign_id, data_date) — same composite conflict key
             const mDedup = new Map<string, any>();
@@ -786,7 +984,7 @@ Deno.serve(async (req) => {
           }
 
           const customerId = account.ad_account_id.replace(/-/g, "");
-          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+          const gaqlQuery = `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.average_cpm, metrics.conversions, metrics.conversions_value, metrics.all_conversions, metrics.all_conversions_value, metrics.cost_per_conversion, metrics.view_through_conversions, metrics.video_views, metrics.engagements FROM campaign WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
 
           const res = await fetch(
             `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
@@ -810,27 +1008,57 @@ Deno.serve(async (req) => {
           const gResults = json[0]?.results || [];
           type GPrepared = {
             platformId: string; campaignDbId: string; campaignName: string; clientId: string;
-            dataDate: string; spendUsd: number; cpcUsd: number; impressions: number; clicks: number;
-            ctr: number; conversions: number; conversionValue: number; roas: number; finalStatus: string;
+            dataDate: string; spendUsd: number; cpcUsd: number; cpmUsd: number;
+            impressions: number; clicks: number; ctr: number;
+            results: number; resultType: string; costPerResultUsd: number;
+            conversions: number; conversionValue: number;
+            allConversions: number; allConversionsValue: number;
+            viewThroughConversions: number; videoViews: number;
+            roas: number; finalStatus: string;
           };
           const gPrepared: GPrepared[] = [];
           const syncedAtIsoG = new Date().toISOString();
 
           for (const row of gResults) {
-            const costMicros = parseInt(row.metrics?.costMicros || "0", 10);
+            const gm = row.metrics || {};
+            const costMicros = parseInt(gm.costMicros || "0", 10);
             const spend = costMicros / 1_000_000;
-            const impressions = parseInt(row.metrics?.impressions || "0", 10);
-            const clicks = parseInt(row.metrics?.clicks || "0", 10);
-            const ctr = parseFloat(row.metrics?.ctr || "0") * 100;
-            const cpc = parseInt(row.metrics?.averageCpc || "0", 10) / 1_000_000;
-            const conversions = parseFloat(row.metrics?.conversions || "0");
-            const conversionValue = parseFloat(row.metrics?.conversionsValue || "0");
+            const impressions = parseInt(gm.impressions || "0", 10);
+            const clicks = parseInt(gm.clicks || "0", 10);
+            const ctr = parseFloat(gm.ctr || "0") * 100;
+            const cpc = parseInt(gm.averageCpc || "0", 10) / 1_000_000;
+            const cpm = parseInt(gm.averageCpm || "0", 10) / 1_000_000;
+            const conversions = parseFloat(gm.conversions || "0");
+            const conversionValue = parseFloat(gm.conversionsValue || "0");
+            const allConversions = parseFloat(gm.allConversions || "0");
+            const allConversionsValue = parseFloat(gm.allConversionsValue || "0");
+            const costPerConversion = parseInt(gm.costPerConversion || "0", 10) / 1_000_000;
+            const viewThroughConversions = parseFloat(gm.viewThroughConversions || "0");
+            const videoViews = parseFloat(gm.videoViews || "0");
             const rawCampaignId = row.campaign?.id;
             const campaignName = row.campaign?.name || "Google Campaign";
+            const channelType = String(row.campaign?.advertisingChannelType || "").toUpperCase();
             const dataDate = row.segments?.date;
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const cpmUsd = convertSpend(cpm);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
+
+            // Ads-Manager-parity Results: for VIDEO campaigns Google's UI shows "Views";
+            // for everything else the "Conversions" column drives Results. When a
+            // conversion-tracked account also has view-through, we still use `conversions`
+            // (matches the default UI column).
+            let gResultValue = 0;
+            let gResultType = "Conversions";
+            if (channelType === "VIDEO") {
+              gResultValue = videoViews;
+              gResultType = "Views";
+            } else {
+              gResultValue = conversions;
+              gResultType = "Conversions";
+            }
+            const gCostPerResultUsd = convertSpend(costPerConversion) ||
+              (gResultValue > 0 ? spendUsd / gResultValue : 0);
 
             const platformId = `google_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
@@ -845,8 +1073,12 @@ Deno.serve(async (req) => {
 
             gPrepared.push({
               platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate,
-              spendUsd, cpcUsd, impressions, clicks, ctr, conversions: Math.round(conversions),
-              conversionValue, roas, finalStatus: campaignResult.status,
+              spendUsd, cpcUsd, cpmUsd, impressions, clicks, ctr,
+              results: Math.round(gResultValue), resultType: gResultType,
+              costPerResultUsd: gCostPerResultUsd,
+              conversions: Math.round(conversions), conversionValue,
+              allConversions, allConversionsValue, viewThroughConversions, videoViews,
+              roas, finalStatus: campaignResult.status,
             });
           }
 
@@ -879,15 +1111,23 @@ Deno.serve(async (req) => {
               mDedup.set(`${p.campaignDbId}|${p.dataDate}`, {
                 campaign_id: p.campaignDbId, data_date: p.dataDate,
                 spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
-                results: p.conversions, conversion_value: p.conversionValue,
+                results: p.results, conversion_value: p.conversionValue,
                 ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
                 view_content: 0, add_to_cart: 0, initiate_checkout: 0, purchase: 0,
                 messaging_conversations: 0, new_messaging_contacts: 0, create_order: 0,
-                reach: 0, cost_per_purchase: 0, cost_per_message: 0, cpm: 0, budget: 0,
+                reach: 0, cost_per_purchase: 0, cost_per_message: 0, cpm: Math.round(p.cpmUsd * 100) / 100,
+                budget: 0,
                 conversations_tiktok_dm: 0, leads_tiktok_dm: 0, conversations_instant_msg: 0,
+                cost_per_result: Math.round(p.costPerResultUsd * 100) / 100,
+                result_type: p.resultType,
+                video_views: p.videoViews,
+                all_conversions: p.allConversions,
+                all_conversions_value: p.allConversionsValue,
+                view_through_conversions: p.viewThroughConversions,
                 synced_at: syncedAtIsoG, org_id: account.org_id,
               });
             }
+
             const finalMetrics = Array.from(mDedup.values());
             for (let i = 0; i < finalMetrics.length; i += 100) {
               const { error: dErr } = await supabase.from("daily_metrics")
@@ -902,7 +1142,7 @@ Deno.serve(async (req) => {
                 campaign_id: p.platformId, campaign_name: p.campaignName,
                 ad_account_id: account.id, client_id: p.clientId, date: p.dataDate,
                 impressions: p.impressions, clicks: p.clicks, ctr: p.ctr, cpc: p.cpcUsd, spend: p.spendUsd,
-                results: p.conversions, conversion_value: p.conversionValue,
+                results: p.results, conversion_value: p.conversionValue,
                 roas: p.roas, status: p.finalStatus, synced_at: syncedAtIsoG, org_id: account.org_id,
               });
             }
@@ -953,14 +1193,16 @@ Deno.serve(async (req) => {
           const MAX_PAGES = 8;
           // Metric groups — split to keep each upstream TikTok report query small enough
           // to finish inside the Cloudflare worker's subrequest timeout (HTTP 546 fix).
+          // A = universal ad-manager columns. B = conversion columns. C = frequency +
+          // TikTok's native `result` / `cost_per_result` (what Ads Manager literally shows)
+          // + video milestones. Split into three to stay under the 10-metric per-call cap.
           const BC_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
-          // NOTE: total_add_to_cart / total_initiate_checkout / total_complete_payment were
-          // removed from the BC request after TikTok started returning 40002 "Invalid metric
-          // fields" for them in mid-2026. The row parser below still reads the total_* keys
-          // if TikTok ever re-enables them, but we no longer request them upstream.
           const BC_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","total_view_content","cost_per_complete_payment"];
+          const BC_METRICS_C = ["frequency","result","cost_per_result","real_time_result","real_time_cost_per_result","video_watched_2s","video_watched_6s","video_views_p100"];
           const DIRECT_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
           const DIRECT_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"];
+          const DIRECT_METRICS_C = ["frequency","result","cost_per_result","real_time_result","real_time_cost_per_result","video_watched_2s","video_watched_6s","video_views_p100"];
+
 
           const fetchPage = async (metrics: string[], chunkStart: string, chunkEnd: string, page: number) => {
             let cJson: any = null;
@@ -994,6 +1236,7 @@ Deno.serve(async (req) => {
             if (!cJson) {
               const directMetrics = metrics === BC_METRICS_A ? DIRECT_METRICS_A
                 : metrics === BC_METRICS_B ? DIRECT_METRICS_B
+                : metrics === BC_METRICS_C ? DIRECT_METRICS_C
                 : metrics;
               const params = new URLSearchParams({
                 advertiser_id: account.ad_account_id,
@@ -1021,13 +1264,16 @@ Deno.serve(async (req) => {
             let chunkRows = 0;
 
             do {
-              // Two parallel calls per page — split metrics to halve upstream load.
-              const [resA, resB] = await Promise.all([
+              // Three parallel calls per page — TikTok caps each report call at 10 metrics,
+              // and Ads-Manager-parity now needs 20+ (spend, impressions, ctr, conversions,
+              // result, cost_per_result, frequency, video milestones, etc.).
+              const [resA, resB, resC] = await Promise.all([
                 fetchPage(BC_METRICS_A, chunk.start, chunk.end, page),
                 fetchPage(BC_METRICS_B, chunk.start, chunk.end, page),
+                fetchPage(BC_METRICS_C, chunk.start, chunk.end, page),
               ]);
 
-              for (const cJson of [resA, resB]) {
+              for (const cJson of [resA, resB, resC]) {
                 if (cJson.code !== 0) {
                   const isProxyErr = typeof cJson.code === "number" && cJson.code < 0;
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
@@ -1041,6 +1287,13 @@ Deno.serve(async (req) => {
                       { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
                     );
                   }
+                  // 40002 on group C = account doesn't support `result` / `cost_per_result`
+                  // (some legacy advertisers). Log and continue — parser falls back to
+                  // per-optimization-event mapping when result is 0.
+                  if (cJson.code === 40002 && cJson === resC) {
+                    console.warn(`TikTok result/frequency metrics not supported for ${account.ad_account_id}; using fallback.`);
+                    continue;
+                  }
                   errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
                   tiktokFailed = true;
                   break;
@@ -1050,25 +1303,30 @@ Deno.serve(async (req) => {
 
               const rowsA = resA.data?.list || [];
               const rowsB = resB.data?.list || [];
-              // Merge by (campaign_id + stat_time_day): same dimensions across the two calls.
+              const rowsC = resC?.code === 0 ? (resC.data?.list || []) : [];
+              // Merge across all three by (campaign_id + stat_time_day).
               const keyOf = (r: any) => `${r.dimensions?.campaign_id || ""}|${r.dimensions?.stat_time_day || ""}`;
               const mergedMap = new Map<string, any>();
-              for (const r of rowsA) mergedMap.set(keyOf(r), { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
-              for (const r of rowsB) {
-                const k = keyOf(r);
-                const existing = mergedMap.get(k);
-                if (existing) {
-                  existing.metrics = { ...existing.metrics, ...(r.metrics || {}) };
-                } else {
-                  mergedMap.set(k, { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
+              const mergeIn = (rows: any[]) => {
+                for (const r of rows) {
+                  const k = keyOf(r);
+                  const existing = mergedMap.get(k);
+                  if (existing) existing.metrics = { ...existing.metrics, ...(r.metrics || {}) };
+                  else mergedMap.set(k, { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
                 }
-              }
+              };
+              mergeIn(rowsA); mergeIn(rowsB); mergeIn(rowsC);
               const pageRows = Array.from(mergedMap.values());
               allTiktokRows = allTiktokRows.concat(pageRows);
               chunkRows += pageRows.length;
-              totalPages = Math.max(resA.data?.page_info?.total_page || 1, resB.data?.page_info?.total_page || 1);
+              totalPages = Math.max(
+                resA.data?.page_info?.total_page || 1,
+                resB.data?.page_info?.total_page || 1,
+                resC?.data?.page_info?.total_page || 1,
+              );
               page++;
             } while (page <= totalPages && page <= MAX_PAGES);
+
 
             if (tiktokFailed) break;
             if (page > MAX_PAGES && totalPages > MAX_PAGES) {
@@ -1182,9 +1440,77 @@ Deno.serve(async (req) => {
           const rows = json.data?.list || [];
           const syncedAtIso = new Date().toISOString();
 
-          // ===== PHASE A: parse rows + sequential upsertCampaign (cheap, needs ID) =====
-          // We must keep upsertCampaign sequential because each call does a select-then-update
-          // that depends on existing-row state (status, original_name_tag, guard locking).
+          // Fetch each ad-group's optimization_event so we can derive Ads-Manager-parity
+          // Results when TikTok's `result` metric is 0 (older accounts). We collapse to a
+          // per-campaign map by taking the first ad-group's event; matches how Ads Manager
+          // labels the campaign row.
+          const tiktokOptEventMap: Record<string, string> = {};
+          try {
+            const agParams = new URLSearchParams({
+              advertiser_id: account.ad_account_id,
+              page_size: "500",
+              fields: JSON.stringify(["adgroup_id","campaign_id","optimization_event","promoted_object_type"]),
+            });
+            const agRes = await tiktokFetchWithRetry(
+              `${tiktokBase}/open_api/v1.3/adgroup/get/?${agParams}`,
+              { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+            );
+            if (agRes?.code === 0 && agRes.data?.list) {
+              for (const ag of agRes.data.list) {
+                const cid = ag.campaign_id;
+                if (!cid) continue;
+                const ev = String(ag.optimization_event || "").toUpperCase();
+                if (!tiktokOptEventMap[cid] && ev) tiktokOptEventMap[cid] = ev;
+              }
+            }
+          } catch (e: any) {
+            console.warn(`TikTok adgroup fetch failed: ${e.message}`);
+          }
+
+          // TikTok optimization_event → the metric name Ads Manager treats as "Results".
+          const TT_EVENT_TO_METRIC: Record<string, string> = {
+            COMPLETE_PAYMENT: "complete_payment",
+            SHOPPING: "complete_payment",
+            PLACE_AN_ORDER: "complete_payment",
+            INITIATE_CHECKOUT: "initiate_checkout",
+            ADD_TO_CART: "add_to_cart",
+            VIEW_CONTENT: "view_content",
+            FORM: "onsite_form",
+            ON_WEB_ORDER: "onsite_on_web_detail",
+            LEAD_GENERATION: "onsite_form",
+            CLICK: "clicks",
+            LANDING_PAGE_VIEW: "clicks",
+            REACH: "reach",
+            IMPRESSION: "impressions",
+            VIDEO_VIEW: "video_watched_6s",
+            FOLLOW: "conversion",
+            LIKE: "conversion",
+            MESSAGE: "conversion",
+            IN_APP_MESSAGE: "conversion",
+            INSTALL: "conversion",
+          };
+          const TT_EVENT_TO_LABEL: Record<string, string> = {
+            COMPLETE_PAYMENT: "Complete payments",
+            SHOPPING: "Complete payments",
+            PLACE_AN_ORDER: "Complete payments",
+            INITIATE_CHECKOUT: "Checkouts initiated",
+            ADD_TO_CART: "Adds to cart",
+            VIEW_CONTENT: "Content views",
+            FORM: "Form completions",
+            ON_WEB_ORDER: "Web orders",
+            LEAD_GENERATION: "Leads",
+            CLICK: "Clicks",
+            LANDING_PAGE_VIEW: "Landing page views",
+            REACH: "Reach",
+            IMPRESSION: "Impressions",
+            VIDEO_VIEW: "6-second video views",
+            FOLLOW: "Follows",
+            LIKE: "Likes",
+            MESSAGE: "Messages",
+            IN_APP_MESSAGE: "Messages",
+            INSTALL: "Installs",
+          };
+
           type PreparedRow = {
             platformId: string;
             campaignDbId: string;
@@ -1199,6 +1525,13 @@ Deno.serve(async (req) => {
             conversions: number;
             roas: number;
             tiktokReach: number;
+            tiktokFrequency: number;
+            tiktokResult: number;
+            tiktokResultType: string;
+            tiktokCostPerResultUsd: number;
+            tiktokVideo6s: number;
+            tiktokVideo2s: number;
+            tiktokVideoP100: number;
             tiktokConvDm: number;
             tiktokLeadsDm: number;
             tiktokViewContent: number;
@@ -1221,29 +1554,71 @@ Deno.serve(async (req) => {
               `TikTok Campaign ${rawCampaignId}`;
             const dataDate = (row.dimensions?.stat_time_day || "").split(" ")[0];
 
-            // ===== KEYWORD MATCHING: Skip if no match =====
             const platformId = `tiktok_${rawCampaignId}`;
             const clientId = resolveClientId(campaignName, platformId);
             if (!clientId) { skippedCampaigns++; continue; }
 
-            const spend = parseFloat(row.metrics?.spend || "0");
-            const impressions = parseInt(row.metrics?.impressions || "0", 10);
-            const clicks = parseInt(row.metrics?.clicks || "0", 10);
-            const ctr = parseFloat(row.metrics?.ctr || "0") * 100;
-            const cpc = parseFloat(row.metrics?.cpc || "0");
-            const conversions = parseInt(row.metrics?.conversion || "0", 10);
-            const roas = parseFloat(row.metrics?.complete_payment_roas || "0");
-            const tiktokReach = parseInt(row.metrics?.reach || "0", 10);
-            const tiktokConvDm = parseInt(row.metrics?.onsite_on_web_detail || "0", 10);
-            const tiktokLeadsDm = tiktokConvDm > 0 ? conversions : 0;
+            const m = row.metrics || {};
+            const spend = parseFloat(m.spend || "0");
+            const impressions = parseInt(m.impressions || "0", 10);
+            const clicks = parseInt(m.clicks || "0", 10);
+            const ctr = parseFloat(m.ctr || "0") * 100;
+            const cpc = parseFloat(m.cpc || "0");
+            const conversions = parseInt(m.conversion || "0", 10);
+            const roas = parseFloat(m.complete_payment_roas || "0");
+            const tiktokReach = parseInt(m.reach || "0", 10);
+            const tiktokFrequency = parseFloat(m.frequency || "0");
+            const tiktokVideo2s = parseFloat(m.video_watched_2s || "0");
+            const tiktokVideo6s = parseFloat(m.video_watched_6s || "0");
+            const tiktokVideoP100 = parseFloat(m.video_views_p100 || "0");
+            const tiktokConvDm = parseInt(m.onsite_on_web_detail || "0", 10);
 
-            // BC reports return `total_*` (web+app+offline pixel events). Direct/advertiser
-            // reports only support the non-`total_` variants. Read either source.
-            const tiktokViewContent      = parseFloat(row.metrics?.total_view_content       || row.metrics?.view_content       || "0");
-            const tiktokAddToCart        = parseFloat(row.metrics?.total_add_to_cart        || row.metrics?.add_to_cart        || "0");
-            const tiktokInitiateCheckout = parseFloat(row.metrics?.total_initiate_checkout  || row.metrics?.initiate_checkout  || "0");
-            const tiktokPurchase         = parseFloat(row.metrics?.total_complete_payment   || row.metrics?.complete_payment   || "0");
-            const tiktokCostPerPurchase  = parseFloat(row.metrics?.cost_per_complete_payment || "0");
+            const tiktokViewContent      = parseFloat(m.total_view_content       || m.view_content       || "0");
+            const tiktokAddToCart        = parseFloat(m.total_add_to_cart        || m.add_to_cart        || "0");
+            const tiktokInitiateCheckout = parseFloat(m.total_initiate_checkout  || m.initiate_checkout  || "0");
+            const tiktokPurchase         = parseFloat(m.total_complete_payment   || m.complete_payment   || "0");
+            const tiktokCostPerPurchase  = parseFloat(m.cost_per_complete_payment || "0");
+
+            // ===== RESULTS = what Ads Manager literally shows =====
+            //   1. TikTok's own `result` metric (server-computed from ad-group optimization).
+            //   2. real_time_result — same field, real-time snapshot for yesterday/today.
+            //   3. Per-optimization-event fallback using the map above.
+            const apiResult = parseFloat(m.result || "0");
+            const apiRealTimeResult = parseFloat(m.real_time_result || "0");
+            const apiCostPerResult = parseFloat(m.cost_per_result || m.real_time_cost_per_result || "0");
+            let tiktokResult = 0;
+            let tiktokResultType = "";
+            let tiktokCostPerResult = 0;
+            if (apiResult > 0 || apiCostPerResult > 0) {
+              tiktokResult = apiResult || apiRealTimeResult;
+              tiktokCostPerResult = apiCostPerResult;
+              const ev = tiktokOptEventMap[rawCampaignId] || "";
+              tiktokResultType = TT_EVENT_TO_LABEL[ev] || "Results";
+            } else {
+              const ev = tiktokOptEventMap[rawCampaignId] || "";
+              const key = TT_EVENT_TO_METRIC[ev];
+              if (key) {
+                if (key === "reach") tiktokResult = tiktokReach;
+                else if (key === "impressions") tiktokResult = impressions;
+                else if (key === "clicks") tiktokResult = clicks;
+                else if (key === "video_watched_6s") tiktokResult = tiktokVideo6s;
+                else if (key === "complete_payment") tiktokResult = tiktokPurchase;
+                else if (key === "add_to_cart") tiktokResult = tiktokAddToCart;
+                else if (key === "initiate_checkout") tiktokResult = tiktokInitiateCheckout;
+                else if (key === "view_content") tiktokResult = tiktokViewContent;
+                else if (key === "onsite_form") tiktokResult = parseFloat(m.onsite_form || "0");
+                else if (key === "onsite_on_web_detail") tiktokResult = tiktokConvDm;
+                else if (key === "conversion") tiktokResult = conversions;
+                tiktokResultType = TT_EVENT_TO_LABEL[ev] || "";
+                tiktokCostPerResult = tiktokResult > 0 ? spend / tiktokResult : 0;
+              } else {
+                // Absolute last resort: platform-generic conversion counter.
+                tiktokResult = conversions;
+                tiktokResultType = "Conversions";
+                tiktokCostPerResult = conversions > 0 ? spend / conversions : 0;
+              }
+            }
+            const tiktokLeadsDm = tiktokConvDm; // formerly hacky; now = raw web-detail views
 
             const tiktokStatusConfirmed = true;
             const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
@@ -1260,13 +1635,17 @@ Deno.serve(async (req) => {
             prepared.push({
               platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate,
               spendUsd, cpcUsd, ctr, impressions, clicks, conversions, roas,
-              tiktokReach, tiktokConvDm, tiktokLeadsDm,
+              tiktokReach, tiktokFrequency,
+              tiktokResult, tiktokResultType, tiktokCostPerResultUsd: convertSpend(tiktokCostPerResult),
+              tiktokVideo2s, tiktokVideo6s, tiktokVideoP100,
+              tiktokConvDm, tiktokLeadsDm,
               tiktokViewContent, tiktokAddToCart, tiktokInitiateCheckout, tiktokPurchase,
               tiktokCostPerPurchaseUsd: convertSpend(tiktokCostPerPurchase),
               tiktokBudgetUsd, cpmValue,
               finalTiktokStatus: campaignResult.status,
             });
           }
+
 
           // ===== PHASE B: bulk + parallel writes =====
           // 1) campaign_mappings — single bulk upsert (one row per unique campaign).
@@ -1310,7 +1689,9 @@ Deno.serve(async (req) => {
             const slice = prepared.slice(i, i + BATCH);
             const results = await Promise.allSettled(slice.map((p) =>
               upsertMetrics(p.campaignDbId, p.dataDate, {
-                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks, results: p.conversions,
+                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
+                // Ads-Manager-parity: `results` = TikTok's `result` (or fallback), not raw conversions.
+                results: Math.round(p.tiktokResult),
                 conversion_value: 0, ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
                 reach: p.tiktokReach,
                 cpm: Math.round(p.cpmValue * 100) / 100,
@@ -1323,7 +1704,13 @@ Deno.serve(async (req) => {
                 initiate_checkout: p.tiktokInitiateCheckout,
                 purchase: p.tiktokPurchase,
                 cost_per_purchase: p.tiktokCostPerPurchaseUsd,
+                frequency: Math.round(p.tiktokFrequency * 100) / 100,
+                cost_per_result: Math.round(p.tiktokCostPerResultUsd * 100) / 100,
+                result_type: p.tiktokResultType || null,
+                video_views: p.tiktokVideo6s,
+                video_p100: p.tiktokVideoP100,
               })
+
             ));
             for (const r of results) {
               if (r.status === "rejected") errors.push(`TikTok upsertMetrics: ${r.reason?.message || r.reason}`);
@@ -1346,7 +1733,8 @@ Deno.serve(async (req) => {
                 ctr: p.ctr,
                 cpc: p.cpcUsd,
                 spend: p.spendUsd,
-                results: p.conversions,
+                results: Math.round(p.tiktokResult),
+
                 conversion_value: 0,
                 roas: p.roas,
                 status: p.finalTiktokStatus,

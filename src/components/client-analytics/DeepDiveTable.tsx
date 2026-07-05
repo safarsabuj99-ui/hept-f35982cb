@@ -65,7 +65,15 @@ export interface CampaignRow {
   conversations_tiktok_dm?: number;
   leads_tiktok_dm?: number;
   conversations_instant_msg?: number;
+  // Native-parity fields (Meta / TikTok / Google Ads Manager)
+  frequency?: number;
+  cost_per_result?: number;
+  result_type?: string | null;
+  video_views?: number;
+  all_conversions?: number;
+  view_through_conversions?: number;
 }
+
 
 export type PresetType = "auto" | "messages" | "sales" | "performance" | "tiktok_messages";
 
@@ -973,21 +981,42 @@ export function DeepDiveTable({
       );
     }
 
-    // Generic results column (always show)
+    // Generic results column (always show). Header adopts the platform's own
+    // "Result Indicator" label (Purchases / Leads / Messaging conversations / etc.)
+    // so the value matches what advertisers see natively in Ads Manager.
+    const resultTypeSet = new Set(
+      data.map((r) => r.result_type).filter((t): t is string => !!t && t.length > 0)
+    );
+    const dynamicResultHeader =
+      resultTypeSet.size === 1 ? Array.from(resultTypeSet)[0] : "Results";
     cols.push(
       columnHelper.accessor("results", {
-        header: "Results",
-        cell: (info) => <span className="font-mono text-[13px] text-foreground font-semibold tabular-nums">{info.getValue().toLocaleString()}</span>,
+        header: dynamicResultHeader,
+        cell: (info) => {
+          const row = info.row.original;
+          const value = info.getValue().toLocaleString();
+          return (
+            <span
+              className="font-mono text-[13px] text-foreground font-semibold tabular-nums"
+              title={row.result_type ? `${row.result_type} (from ${row.platform} Ads Manager)` : undefined}
+            >
+              {value}
+            </span>
+          );
+        },
       }),
       columnHelper.display({
         id: "cpo",
         header: "Cost/Result",
         cell: (info) => {
           const row = info.row.original;
-          const cpo = safeDivide(row.spend, row.results);
+          const cpo = (row.cost_per_result && row.cost_per_result > 0)
+            ? row.cost_per_result
+            : safeDivide(row.spend, row.results);
           return <span className="font-mono text-[13px] text-foreground/80 tabular-nums">{fmt(cpo)}</span>;
         },
       }),
+
       columnHelper.accessor("spend", {
         header: "Spent",
         cell: (info) => <span className="font-mono text-[13px] text-foreground font-semibold tabular-nums">{fmt(info.getValue())}</span>,
