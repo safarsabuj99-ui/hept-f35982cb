@@ -606,9 +606,13 @@ Deno.serve(async (req) => {
             cpcUsd: number;
             impressions: number;
             reach: number;
+            frequency: number;
             clicks: number;
+            uniqueClicks: number;
             ctr: number;
             results: number;
+            resultType: string;
+            costPerResult: number;
             conversionValue: number;
             roas: number;
             cpmValue: number;
@@ -621,17 +625,74 @@ Deno.serve(async (req) => {
             messagingConversations: number;
             newMessagingContacts: number;
             createOrder: number;
+            videoPlays: number;
+            videoP25: number;
+            videoP50: number;
+            videoP75: number;
+            videoP100: number;
             finalStatus: string;
           };
           const metaPrepared: MetaPrepared[] = [];
           const syncedAtIsoMeta = new Date().toISOString();
+
+          // Deterministic map: Meta optimization_goal → the SINGLE action_type Ads Manager
+          // displays as "Results". Values here mirror the field IDs Meta emits under
+          // `actions[]` / `cost_per_action_type[]`. `CONVERSIONS` / `OFFSITE_CONVERSIONS`
+          // resolve dynamically via promoted_object.custom_event_type below.
+          const OPT_GOAL_TO_ACTION: Record<string, string> = {
+            LINK_CLICKS: "link_click",
+            POST_ENGAGEMENT: "post_engagement",
+            PAGE_LIKES: "like",
+            THRUPLAY: "video_thruplay_watched_actions",
+            TWO_SECOND_CONTINUOUS_VIDEO_VIEWS: "video_view",
+            APP_INSTALLS: "mobile_app_install",
+            LEAD_GENERATION: "onsite_conversion.lead_grouped",
+            QUALITY_LEAD: "onsite_conversion.lead_grouped",
+            CONVERSATIONS: "onsite_conversion.messaging_conversation_started_7d",
+            REPLIES: "onsite_conversion.total_messaging_connection",
+            MESSAGING_PURCHASE_CONVERSION: "onsite_conversion.messaging_conversation_started_7d",
+            MESSAGING_APPOINTMENT_CONVERSION: "onsite_conversion.messaging_conversation_started_7d",
+          };
+          const CUSTOM_EVENT_TO_ACTION: Record<string, string> = {
+            PURCHASE: "offsite_conversion.fb_pixel_purchase",
+            LEAD: "offsite_conversion.fb_pixel_lead",
+            COMPLETE_REGISTRATION: "offsite_conversion.fb_pixel_complete_registration",
+            ADD_TO_CART: "offsite_conversion.fb_pixel_add_to_cart",
+            INITIATE_CHECKOUT: "offsite_conversion.fb_pixel_initiate_checkout",
+            ADD_PAYMENT_INFO: "offsite_conversion.fb_pixel_add_payment_info",
+            SEARCH: "offsite_conversion.fb_pixel_search",
+            VIEW_CONTENT: "offsite_conversion.fb_pixel_view_content",
+            CONTACT: "offsite_conversion.fb_pixel_contact",
+            SUBSCRIBE: "offsite_conversion.fb_pixel_subscribe",
+            SCHEDULE: "offsite_conversion.fb_pixel_schedule",
+          };
+          // Human-friendly label for UI (mirrors the "Result Indicator" column Meta shows).
+          const ACTION_TO_LABEL: Record<string, string> = {
+            "offsite_conversion.fb_pixel_purchase": "Purchases",
+            "offsite_conversion.fb_pixel_lead": "Leads",
+            "offsite_conversion.fb_pixel_complete_registration": "Registrations",
+            "offsite_conversion.fb_pixel_add_to_cart": "Adds to cart",
+            "offsite_conversion.fb_pixel_initiate_checkout": "Checkouts initiated",
+            "offsite_conversion.fb_pixel_view_content": "Content views",
+            "onsite_conversion.messaging_conversation_started_7d": "Messaging conversations",
+            "onsite_conversion.total_messaging_connection": "New messaging contacts",
+            "onsite_conversion.lead_grouped": "Leads",
+            link_click: "Link clicks",
+            post_engagement: "Post engagement",
+            like: "Page likes",
+            video_thruplay_watched_actions: "ThruPlays",
+            video_view: "2-second video views",
+            mobile_app_install: "App installs",
+          };
 
           let metaRowIndex = 0;
           for (const row of allInsights) {
             const spend = parseFloat(row.spend || "0");
             const impressions = parseInt(row.impressions || "0", 10);
             const reach = parseInt(row.reach || "0", 10);
+            const frequency = parseFloat(row.frequency || "0");
             const clicks = parseInt(row.clicks || "0", 10);
+            const uniqueClicks = parseInt(row.unique_clicks || "0", 10);
             const ctr = parseFloat(row.ctr || "0");
             const cpc = parseFloat(row.cpc || "0");
             const rawCampaignId = row.campaign_id || `meta_unknown_${Date.now()}`;
@@ -641,15 +702,11 @@ Deno.serve(async (req) => {
             const clientId = resolveClientId(campaignName, rawCampaignId);
             if (!clientId) { skippedCampaigns++; continue; }
 
-            let results = 0;
             let conversionValue = 0;
             let viewContent = 0, addToCart = 0, initiateCheckout = 0, purchaseCount = 0;
             let messagingConversations = 0, newMessagingContacts = 0, createOrder = 0;
 
-            // Build flat lookup maps so we can pick the best signal per metric
-            // (Meta returns the same conversion under several attribution buckets:
-            // omni_*, onsite_*, offsite_conversion.fb_pixel_*). Prefer omni when
-            // present; otherwise sum the channel-specific buckets.
+            // Flat lookup maps: action_type → count / value / cost.
             const actionMap = new Map<string, number>();
             if (row.actions) {
               if (metaRowIndex < 3) {
@@ -667,6 +724,12 @@ Deno.serve(async (req) => {
                 valueMap.set(av.action_type, (valueMap.get(av.action_type) || 0) + parseFloat(av.value || "0"));
               }
             }
+            const costMap = new Map<string, number>();
+            if (row.cost_per_action_type) {
+              for (const cp of row.cost_per_action_type) {
+                costMap.set(cp.action_type, parseFloat(cp.value || "0"));
+              }
+            }
             const get = (k: string) => actionMap.get(k) || 0;
             const preferOmni = (omniKey: string, fallbackKeys: string[]) => {
               const omni = get(omniKey);
@@ -674,6 +737,7 @@ Deno.serve(async (req) => {
               return fallbackKeys.reduce((s, k) => s + get(k), 0);
             };
 
+            // Additional per-funnel counters (kept for existing dashboard columns).
             purchaseCount = preferOmni("omni_purchase", [
               "onsite_web_purchase", "onsite_app_purchase",
               "onsite_web_app_purchase", "onsite_conversion.purchase",
@@ -689,42 +753,85 @@ Deno.serve(async (req) => {
               "offsite_conversion.fb_pixel_initiate_checkout", "onsite_web_initiate_checkout",
             ]);
             messagingConversations = get("onsite_conversion.messaging_conversation_started_7d");
-            // Fixed: total_messaging_connection (was incorrectly using messaging_first_reply)
             newMessagingContacts = get("onsite_conversion.total_messaging_connection");
             createOrder = get("onsite_conversion.messaging_order_created_v2")
               + get("onsite_conversion.messaging_order_created")
               + get("onsite_conversion.messaging_block_create_order");
 
-            // "Results" = the SINGLE counter Meta Ads Manager shows, picked from the
-            // campaign's optimisation goal. Never sum across goals (that would double-count
-            // the same user across pixel / onsite / omni attribution buckets).
-            const objectiveRaw = (metaObjectiveMap[rawCampaignId] || "").toUpperCase();
-            const leadTotal = get("lead")
-              + get("onsite_conversion.lead_grouped")
-              + get("onsite_web_lead")
-              + get("offsite_complete_registration_add_meta_leads")
-              + get("complete_registration");
-            const appInstallTotal = get("app_install") + get("mobile_app_install") + get("omni_app_install");
-            const linkClickTotal = get("link_click") || clicks;
-            const videoViewTotal = get("video_view");
+            // Video milestone actions (Meta returns them as [{value}] arrays).
+            const sumActionArray = (arr: any): number => {
+              if (!Array.isArray(arr)) return 0;
+              let s = 0;
+              for (const it of arr) s += parseFloat(it?.value || "0");
+              return s;
+            };
+            const videoPlays = sumActionArray(row.video_play_actions);
+            const videoP25   = sumActionArray(row.video_p25_watched_actions);
+            const videoP50   = sumActionArray(row.video_p50_watched_actions);
+            const videoP75   = sumActionArray(row.video_p75_watched_actions);
+            const videoP100  = sumActionArray(row.video_p100_watched_actions);
 
-            if (/SALES|CONVERSION|CATALOG/.test(objectiveRaw)) {
-              results = purchaseCount;
-            } else if (/LEAD/.test(objectiveRaw)) {
-              results = leadTotal;
-            } else if (/MESSAG|ENGAGEMENT/.test(objectiveRaw)) {
-              results = messagingConversations;
-            } else if (/APP/.test(objectiveRaw)) {
-              results = appInstallTotal;
-            } else if (/AWARENESS|REACH/.test(objectiveRaw)) {
-              results = reach;
-            } else if (/TRAFFIC|LINK_CLICK/.test(objectiveRaw)) {
-              results = linkClickTotal;
-            } else if (/VIDEO/.test(objectiveRaw)) {
-              results = videoViewTotal;
+            // ===== RESULTS = the single field Ads Manager shows =====
+            // Priority:
+            //   1. adset optimization_goal → mapped action_type (via CONVERSIONS /
+            //      OFFSITE_CONVERSIONS + promoted_object.custom_event_type).
+            //   2. campaign objective fallback (legacy mapping).
+            //   3. reach / impressions for awareness goals.
+            const optGoal = metaOptGoalMap[rawCampaignId] || "";
+            const customEvent = metaCustomEventMap[rawCampaignId] || "";
+            let chosenAction: string | null = null;
+            if (optGoal === "OFFSITE_CONVERSIONS" || optGoal === "CONVERSIONS") {
+              chosenAction = CUSTOM_EVENT_TO_ACTION[customEvent] || null;
+            } else if (optGoal === "REACH") {
+              chosenAction = "__reach__";
+            } else if (optGoal === "IMPRESSIONS") {
+              chosenAction = "__impressions__";
+            } else if (optGoal && OPT_GOAL_TO_ACTION[optGoal]) {
+              chosenAction = OPT_GOAL_TO_ACTION[optGoal];
+            }
+
+            let results = 0;
+            let resultType = "";
+            let costPerResult = 0;
+            if (chosenAction === "__reach__") {
+              results = reach; resultType = "Reach";
+            } else if (chosenAction === "__impressions__") {
+              results = impressions; resultType = "Impressions";
+            } else if (chosenAction) {
+              results = get(chosenAction);
+              resultType = ACTION_TO_LABEL[chosenAction] || chosenAction;
+              costPerResult = costMap.get(chosenAction) || 0;
             } else {
-              // Unknown / missing objective — pick the LARGEST single signal (never sum).
-              results = Math.max(purchaseCount, leadTotal, messagingConversations, appInstallTotal);
+              // Legacy objective fallback (unchanged behavior for accounts where
+              // adset fetch failed or the goal isn't in our map yet).
+              const objectiveRaw = (metaObjectiveMap[rawCampaignId] || "").toUpperCase();
+              const leadTotal = get("lead")
+                + get("onsite_conversion.lead_grouped")
+                + get("onsite_web_lead")
+                + get("offsite_complete_registration_add_meta_leads")
+                + get("complete_registration");
+              const appInstallTotal = get("app_install") + get("mobile_app_install") + get("omni_app_install");
+              const linkClickTotal = get("link_click") || clicks;
+              const videoViewTotal = get("video_view");
+
+              if (/SALES|CONVERSION|CATALOG/.test(objectiveRaw)) {
+                results = purchaseCount; resultType = "Purchases";
+              } else if (/LEAD/.test(objectiveRaw)) {
+                results = leadTotal; resultType = "Leads";
+              } else if (/MESSAG|ENGAGEMENT/.test(objectiveRaw)) {
+                results = messagingConversations; resultType = "Messaging conversations";
+              } else if (/APP/.test(objectiveRaw)) {
+                results = appInstallTotal; resultType = "App installs";
+              } else if (/AWARENESS|REACH/.test(objectiveRaw)) {
+                results = reach; resultType = "Reach";
+              } else if (/TRAFFIC|LINK_CLICK/.test(objectiveRaw)) {
+                results = linkClickTotal; resultType = "Link clicks";
+              } else if (/VIDEO/.test(objectiveRaw)) {
+                results = videoViewTotal; resultType = "Video views";
+              } else {
+                results = Math.max(purchaseCount, leadTotal, messagingConversations, appInstallTotal);
+                resultType = "";
+              }
             }
 
             // Conversion value: prefer pixel purchase value, fall back to omni_purchase value
@@ -734,6 +841,7 @@ Deno.serve(async (req) => {
 
             const spendUsd = convertSpend(spend);
             const cpcUsd = convertSpend(cpc);
+            const costPerResultUsd = convertSpend(costPerResult) || (results > 0 ? spendUsd / results : 0);
             const roas = spendUsd > 0 ? Math.round((conversionValue / spendUsd) * 100) / 100 : 0;
             const cpmValue = impressions > 0 ? (spendUsd / impressions) * 1000 : 0;
             const costPerPurchase = purchaseCount > 0 ? spendUsd / purchaseCount : 0;
@@ -748,13 +856,17 @@ Deno.serve(async (req) => {
 
             metaPrepared.push({
               platformId, campaignDbId: campaignResult.id, campaignName, clientId, dataDate, rawCampaignId,
-              spendUsd, cpcUsd, impressions, reach, clicks, ctr, results, conversionValue, roas,
+              spendUsd, cpcUsd, impressions, reach, frequency, clicks, uniqueClicks, ctr,
+              results, resultType, costPerResult: costPerResultUsd,
+              conversionValue, roas,
               cpmValue, costPerPurchase, costPerMessage,
               viewContent, addToCart, initiateCheckout, purchaseCount,
               messagingConversations, newMessagingContacts, createOrder,
+              videoPlays, videoP25, videoP50, videoP75, videoP100,
               finalStatus: campaignResult.status,
             });
           }
+
 
           // ===== PHASE B: bulk + parallel writes =====
           // 1) campaign_mappings: select-then-insert (no unique index on campaign_id)
