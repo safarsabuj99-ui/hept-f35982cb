@@ -1142,7 +1142,7 @@ Deno.serve(async (req) => {
                 campaign_id: p.platformId, campaign_name: p.campaignName,
                 ad_account_id: account.id, client_id: p.clientId, date: p.dataDate,
                 impressions: p.impressions, clicks: p.clicks, ctr: p.ctr, cpc: p.cpcUsd, spend: p.spendUsd,
-                results: p.conversions, conversion_value: p.conversionValue,
+                results: p.results, conversion_value: p.conversionValue,
                 roas: p.roas, status: p.finalStatus, synced_at: syncedAtIsoG, org_id: account.org_id,
               });
             }
