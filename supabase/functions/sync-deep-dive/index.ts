@@ -485,6 +485,12 @@ Deno.serve(async (req) => {
           // Fetch real campaign statuses AND objectives from Meta
           const metaStatusMap: Record<string, string> = {};
           const metaObjectiveMap: Record<string, string> = {};
+          // Per-campaign optimization goal & promoted-object custom_event_type (from adsets).
+          // Meta's native "Results" column is computed per ad set from optimization_goal +
+          // promoted_object — not from the campaign objective — so we must fetch this to
+          // match Ads Manager 1:1.
+          const metaOptGoalMap: Record<string, string> = {};
+          const metaCustomEventMap: Record<string, string> = {};
           try {
             let statusNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status,objective&limit=500&access_token=${integration.api_token}`;
             while (statusNextUrl) {
@@ -504,7 +510,6 @@ Deno.serve(async (req) => {
                   else if (rawStatus === "DELETED") metaStatusMap[c.id] = "deleted";
                   else metaStatusMap[c.id] = rawStatus.toLowerCase().replace(/_/g, " ");
 
-                  // Map Meta objective to simplified label
                   const rawObj = (c.objective || "").toUpperCase();
                   if (rawObj === "OUTCOME_SALES" || rawObj === "PRODUCT_CATALOG_SALES" || rawObj === "CONVERSIONS") {
                     metaObjectiveMap[c.id] = "sales";
@@ -531,7 +536,52 @@ Deno.serve(async (req) => {
             errors.push(`Meta status fetch: ${e.message}`);
           }
 
-          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,reach,actions,action_values,date_start&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&limit=500&access_token=${integration.api_token}`;
+          // Fetch adset optimization_goal + promoted_object.custom_event_type per campaign.
+          // We keep the FIRST adset's values as representative (matches how Ads Manager
+          // labels the campaign row when adsets share a goal). If adsets disagree we
+          // still use the first — same behavior as Ads Manager's campaign-level "Results".
+          try {
+            let adsetNextUrl: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/adsets?fields=id,campaign_id,optimization_goal,promoted_object&limit=500&access_token=${integration.api_token}`;
+            while (adsetNextUrl) {
+              const asRes = await fetch(adsetNextUrl);
+              const asJson = await asRes.json();
+              if (asJson.data) {
+                for (const a of asJson.data) {
+                  const cid = a.campaign_id;
+                  if (!cid) continue;
+                  if (!metaOptGoalMap[cid] && a.optimization_goal) {
+                    metaOptGoalMap[cid] = String(a.optimization_goal).toUpperCase();
+                  }
+                  const cet = a.promoted_object?.custom_event_type;
+                  if (!metaCustomEventMap[cid] && cet) {
+                    metaCustomEventMap[cid] = String(cet).toUpperCase();
+                  }
+                }
+              }
+              adsetNextUrl = asJson.paging?.next || null;
+            }
+          } catch (e: any) {
+            // Non-fatal — fall back to objective-based mapping.
+            console.warn(`Meta adset fetch failed: ${e.message}`);
+          }
+
+          // Ads-Manager-parity insights request:
+          //   • use_account_attribution_setting=true — uses the account's default window,
+          //     which is exactly what the Ads Manager UI shows by default.
+          //   • use_unified_attribution_setting=true — required for the setting above to
+          //     be honored on accounts on the new unified reporting.
+          //   • Extra fields for frequency, per-action cost, video milestones, unique clicks
+          //     — all shown natively by Ads Manager, previously missing.
+          const insightsFields = [
+            "campaign_id", "campaign_name", "spend", "impressions", "clicks", "ctr", "cpc",
+            "cpm", "reach", "frequency", "actions", "action_values", "cost_per_action_type",
+            "cost_per_unique_action_type", "cost_per_conversion", "purchase_roas",
+            "website_purchase_roas", "video_p25_watched_actions", "video_p50_watched_actions",
+            "video_p75_watched_actions", "video_p100_watched_actions", "video_play_actions",
+            "inline_link_clicks", "unique_clicks", "objective", "date_start",
+          ].join(",");
+          const insightsUrl = `https://graph.facebook.com/v21.0/${account.ad_account_id}/insights?fields=${insightsFields}&time_range={"since":"${startDateStr}","until":"${endDateStr}"}&time_increment=1&level=campaign&use_account_attribution_setting=true&use_unified_attribution_setting=true&limit=500&access_token=${integration.api_token}`;
+
 
           let allInsights: any[] = [];
           let nextUrl: string | null = insightsUrl;
