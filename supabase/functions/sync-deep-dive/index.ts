@@ -1151,14 +1151,16 @@ Deno.serve(async (req) => {
           const MAX_PAGES = 8;
           // Metric groups — split to keep each upstream TikTok report query small enough
           // to finish inside the Cloudflare worker's subrequest timeout (HTTP 546 fix).
+          // A = universal ad-manager columns. B = conversion columns. C = frequency +
+          // TikTok's native `result` / `cost_per_result` (what Ads Manager literally shows)
+          // + video milestones. Split into three to stay under the 10-metric per-call cap.
           const BC_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
-          // NOTE: total_add_to_cart / total_initiate_checkout / total_complete_payment were
-          // removed from the BC request after TikTok started returning 40002 "Invalid metric
-          // fields" for them in mid-2026. The row parser below still reads the total_* keys
-          // if TikTok ever re-enables them, but we no longer request them upstream.
           const BC_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","total_view_content","cost_per_complete_payment"];
+          const BC_METRICS_C = ["frequency","result","cost_per_result","real_time_result","real_time_cost_per_result","video_watched_2s","video_watched_6s","video_views_p100"];
           const DIRECT_METRICS_A = ["campaign_name","spend","impressions","clicks","ctr","cpc","reach","complete_payment_roas"];
           const DIRECT_METRICS_B = ["conversion","conversion_cost","onsite_form","onsite_on_web_detail","complete_payment","cost_per_complete_payment"];
+          const DIRECT_METRICS_C = ["frequency","result","cost_per_result","real_time_result","real_time_cost_per_result","video_watched_2s","video_watched_6s","video_views_p100"];
+
 
           const fetchPage = async (metrics: string[], chunkStart: string, chunkEnd: string, page: number) => {
             let cJson: any = null;
