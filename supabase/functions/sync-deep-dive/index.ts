@@ -1194,6 +1194,7 @@ Deno.serve(async (req) => {
             if (!cJson) {
               const directMetrics = metrics === BC_METRICS_A ? DIRECT_METRICS_A
                 : metrics === BC_METRICS_B ? DIRECT_METRICS_B
+                : metrics === BC_METRICS_C ? DIRECT_METRICS_C
                 : metrics;
               const params = new URLSearchParams({
                 advertiser_id: account.ad_account_id,
@@ -1221,13 +1222,16 @@ Deno.serve(async (req) => {
             let chunkRows = 0;
 
             do {
-              // Two parallel calls per page — split metrics to halve upstream load.
-              const [resA, resB] = await Promise.all([
+              // Three parallel calls per page — TikTok caps each report call at 10 metrics,
+              // and Ads-Manager-parity now needs 20+ (spend, impressions, ctr, conversions,
+              // result, cost_per_result, frequency, video milestones, etc.).
+              const [resA, resB, resC] = await Promise.all([
                 fetchPage(BC_METRICS_A, chunk.start, chunk.end, page),
                 fetchPage(BC_METRICS_B, chunk.start, chunk.end, page),
+                fetchPage(BC_METRICS_C, chunk.start, chunk.end, page),
               ]);
 
-              for (const cJson of [resA, resB]) {
+              for (const cJson of [resA, resB, resC]) {
                 if (cJson.code !== 0) {
                   const isProxyErr = typeof cJson.code === "number" && cJson.code < 0;
                   console.error(`TikTok chunk ${chunk.start}-${chunk.end} p${page} error:`, JSON.stringify(cJson));
@@ -1241,6 +1245,13 @@ Deno.serve(async (req) => {
                       { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
                     );
                   }
+                  // 40002 on group C = account doesn't support `result` / `cost_per_result`
+                  // (some legacy advertisers). Log and continue — parser falls back to
+                  // per-optimization-event mapping when result is 0.
+                  if (cJson.code === 40002 && cJson === resC) {
+                    console.warn(`TikTok result/frequency metrics not supported for ${account.ad_account_id}; using fallback.`);
+                    continue;
+                  }
                   errors.push(`TikTok ${account.ad_account_id}: [code ${cJson.code}] ${cJson.message}`);
                   tiktokFailed = true;
                   break;
@@ -1250,25 +1261,30 @@ Deno.serve(async (req) => {
 
               const rowsA = resA.data?.list || [];
               const rowsB = resB.data?.list || [];
-              // Merge by (campaign_id + stat_time_day): same dimensions across the two calls.
+              const rowsC = resC?.code === 0 ? (resC.data?.list || []) : [];
+              // Merge across all three by (campaign_id + stat_time_day).
               const keyOf = (r: any) => `${r.dimensions?.campaign_id || ""}|${r.dimensions?.stat_time_day || ""}`;
               const mergedMap = new Map<string, any>();
-              for (const r of rowsA) mergedMap.set(keyOf(r), { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
-              for (const r of rowsB) {
-                const k = keyOf(r);
-                const existing = mergedMap.get(k);
-                if (existing) {
-                  existing.metrics = { ...existing.metrics, ...(r.metrics || {}) };
-                } else {
-                  mergedMap.set(k, { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
+              const mergeIn = (rows: any[]) => {
+                for (const r of rows) {
+                  const k = keyOf(r);
+                  const existing = mergedMap.get(k);
+                  if (existing) existing.metrics = { ...existing.metrics, ...(r.metrics || {}) };
+                  else mergedMap.set(k, { dimensions: r.dimensions, metrics: { ...(r.metrics || {}) } });
                 }
-              }
+              };
+              mergeIn(rowsA); mergeIn(rowsB); mergeIn(rowsC);
               const pageRows = Array.from(mergedMap.values());
               allTiktokRows = allTiktokRows.concat(pageRows);
               chunkRows += pageRows.length;
-              totalPages = Math.max(resA.data?.page_info?.total_page || 1, resB.data?.page_info?.total_page || 1);
+              totalPages = Math.max(
+                resA.data?.page_info?.total_page || 1,
+                resB.data?.page_info?.total_page || 1,
+                resC?.data?.page_info?.total_page || 1,
+              );
               page++;
             } while (page <= totalPages && page <= MAX_PAGES);
+
 
             if (tiktokFailed) break;
             if (page > MAX_PAGES && totalPages > MAX_PAGES) {
