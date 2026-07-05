@@ -1647,7 +1647,9 @@ Deno.serve(async (req) => {
             const slice = prepared.slice(i, i + BATCH);
             const results = await Promise.allSettled(slice.map((p) =>
               upsertMetrics(p.campaignDbId, p.dataDate, {
-                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks, results: p.conversions,
+                spend: p.spendUsd, impressions: p.impressions, clicks: p.clicks,
+                // Ads-Manager-parity: `results` = TikTok's `result` (or fallback), not raw conversions.
+                results: Math.round(p.tiktokResult),
                 conversion_value: 0, ctr: p.ctr, cpc: p.cpcUsd, roas: p.roas,
                 reach: p.tiktokReach,
                 cpm: Math.round(p.cpmValue * 100) / 100,
@@ -1660,7 +1662,13 @@ Deno.serve(async (req) => {
                 initiate_checkout: p.tiktokInitiateCheckout,
                 purchase: p.tiktokPurchase,
                 cost_per_purchase: p.tiktokCostPerPurchaseUsd,
+                frequency: Math.round(p.tiktokFrequency * 100) / 100,
+                cost_per_result: Math.round(p.tiktokCostPerResultUsd * 100) / 100,
+                result_type: p.tiktokResultType || null,
+                video_views: p.tiktokVideo6s,
+                video_p100: p.tiktokVideoP100,
               })
+
             ));
             for (const r of results) {
               if (r.status === "rejected") errors.push(`TikTok upsertMetrics: ${r.reason?.message || r.reason}`);
