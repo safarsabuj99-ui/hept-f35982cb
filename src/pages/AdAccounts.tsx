@@ -53,6 +53,11 @@ interface DiscoveredAccount {
   integration_id: string;
   integration_name: string;
   already_imported: boolean;
+  existing_id?: string | null;
+  existing_is_active?: boolean | null;
+  existing_api_integration_id?: string | null;
+  import_status?: "new" | "already_active" | "inactive" | "linked_elsewhere";
+  ownership?: "owned" | "partner" | "system_user";
 }
 interface OrgLimits {
   max_ad_accounts: number | null;
@@ -79,6 +84,7 @@ export default function AdAccounts() {
   const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(new Set());
   const [orgLimits, setOrgLimits] = useState<OrgLimits | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [discoverySummary, setDiscoverySummary] = useState<string[]>([]);
   const [form, setForm] = useState({
     platform_name: "", ad_account_id: "", account_currency: "USD",
     account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
@@ -184,11 +190,14 @@ export default function AdAccounts() {
       setDiscoveredAccounts(discovered);
       setOrgLimits(data.limits ?? null);
       setImportErrors(data.errors ?? []);
-      // Pre-select all non-imported accounts
-      const selectable = discovered.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+      setDiscoverySummary(data.discovery_summary ?? []);
+      // Pre-select new, inactive, and relinkable accounts
+      const selectable = discovered.filter(isSelectableDiscovered).map(getDiscoveredKey);
       // Cap at remaining limit
       const remaining = data.limits?.remaining;
-      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      const capped = remaining !== null && remaining !== undefined
+        ? capSelectionByNewAccountLimit(discovered, selectable, remaining)
+        : selectable;
       setSelectedDiscovered(new Set(capped));
       setImportPhase("review");
     } catch (err: any) {
@@ -209,7 +218,7 @@ export default function AdAccounts() {
     setImportStatus("Importing selected accounts...");
     try {
       const toImport = discoveredAccounts.filter(
-        (a) => selectedDiscovered.has(`${a.platform}:${a.ad_account_id}`) && !a.already_imported
+        (a) => selectedDiscovered.has(getDiscoveredKey(a)) && isSelectableDiscovered(a)
       );
       const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
         body: {
@@ -226,7 +235,7 @@ export default function AdAccounts() {
       const errMsg = data.errors?.length ? `\nWarnings: ${data.errors.join("; ")}` : "";
       toast({
         title: "Import Complete",
-        description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)${errMsg}`,
+        description: `Created ${data.created} account(s), updated/reactivated ${data.updated ?? 0}, skipped ${data.skipped} duplicate(s)${errMsg}`,
       });
       resetImportDialog();
       fetchData();
@@ -246,6 +255,7 @@ export default function AdAccounts() {
     setSelectedDiscovered(new Set());
     setOrgLimits(null);
     setImportErrors([]);
+    setDiscoverySummary([]);
   };
 
   const toggleDiscoveredAccount = (key: string) => {
@@ -256,7 +266,9 @@ export default function AdAccounts() {
       } else {
         // Enforce limit
         const remaining = orgLimits?.remaining;
-        if (remaining !== null && remaining !== undefined && next.size >= remaining) {
+        const account = discoveredAccounts.find((a) => getDiscoveredKey(a) === key);
+        const selectedNewCount = getSelectedNewCount(next);
+        if (account && isNewDiscovered(account) && remaining !== null && remaining !== undefined && selectedNewCount >= remaining) {
           toast({ title: "Limit reached", description: `Your plan allows ${remaining} more ad account(s)`, variant: "destructive" });
           return prev;
         }
@@ -267,12 +279,14 @@ export default function AdAccounts() {
   };
 
   const selectAllDiscovered = () => {
-    const selectable = discoveredAccounts.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+    const selectable = discoveredAccounts.filter(isSelectableDiscovered).map(getDiscoveredKey);
     if (selectedDiscovered.size === selectable.length) {
       setSelectedDiscovered(new Set());
     } else {
       const remaining = orgLimits?.remaining;
-      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      const capped = remaining !== null && remaining !== undefined
+        ? capSelectionByNewAccountLimit(discoveredAccounts, selectable, remaining)
+        : selectable;
       setSelectedDiscovered(new Set(capped));
     }
   };
@@ -291,6 +305,40 @@ export default function AdAccounts() {
     } else {
       setSelectedIntegrations(new Set(integrations.map((i) => i.id)));
     }
+  };
+
+  const getDiscoveredKey = (account: Pick<DiscoveredAccount, "platform" | "ad_account_id">) => {
+    const id = account.platform === "meta" ? account.ad_account_id.replace(/^act_/i, "") : account.ad_account_id;
+    return `${account.platform}:${id}`;
+  };
+
+  const isNewDiscovered = (account: DiscoveredAccount) => !account.already_imported || account.import_status === "new";
+
+  const isSelectableDiscovered = (account: DiscoveredAccount) =>
+    isNewDiscovered(account) || account.import_status === "inactive" || account.import_status === "linked_elsewhere";
+
+  const getSelectedNewCount = (selected: Set<string>) =>
+    discoveredAccounts.filter((account) => selected.has(getDiscoveredKey(account)) && isNewDiscovered(account)).length;
+
+  const capSelectionByNewAccountLimit = (accountsToCap: DiscoveredAccount[], keys: string[], remaining: number) => {
+    let newCount = 0;
+    const capped: string[] = [];
+    for (const key of keys) {
+      const account = accountsToCap.find((a) => getDiscoveredKey(a) === key);
+      if (!account) continue;
+      if (isNewDiscovered(account)) {
+        if (newCount >= remaining) continue;
+        newCount++;
+      }
+      capped.push(key);
+    }
+    return capped;
+  };
+
+  const getOwnershipLabel = (ownership?: DiscoveredAccount["ownership"]) => {
+    if (ownership === "partner") return "Partner";
+    if (ownership === "system_user") return "System User";
+    return "Owned";
   };
 
   const toggleActive = async (id: string, current: boolean) => {
@@ -491,6 +539,12 @@ export default function AdAccounts() {
                     </div>
                   )}
 
+                  {discoverySummary.length > 0 && (
+                    <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                      {discoverySummary.map((line, i) => <p key={i}>{line}</p>)}
+                    </div>
+                  )}
+
                   {discoveredAccounts.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <p className="font-medium">No accounts found</p>
@@ -502,11 +556,11 @@ export default function AdAccounts() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Checkbox
-                            checked={selectedDiscovered.size > 0 && selectedDiscovered.size === discoveredAccounts.filter(a => !a.already_imported).length}
+                            checked={selectedDiscovered.size > 0 && selectedDiscovered.size === discoveredAccounts.filter(isSelectableDiscovered).length}
                             onCheckedChange={selectAllDiscovered}
                           />
                           <span className="text-sm text-muted-foreground">
-                            {selectedDiscovered.size} of {discoveredAccounts.filter(a => !a.already_imported).length} new account(s) selected
+                            {selectedDiscovered.size} of {discoveredAccounts.filter(isSelectableDiscovered).length} importable account(s) selected
                           </span>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setImportPhase("select")} className="text-xs h-7">
@@ -530,19 +584,24 @@ export default function AdAccounts() {
                           </TableHeader>
                           <TableBody>
                             {discoveredAccounts.map((acc) => {
-                              const key = `${acc.platform}:${acc.ad_account_id}`;
+                              const key = getDiscoveredKey(acc);
                               const isSelected = selectedDiscovered.has(key);
+                              const selectable = isSelectableDiscovered(acc);
+                              const status = acc.import_status ?? (acc.already_imported ? "already_active" : "new");
                               return (
-                                <TableRow key={key} className={acc.already_imported ? "opacity-50" : isSelected ? "bg-primary/5" : ""}>
+                                <TableRow key={key} className={!selectable ? "opacity-50" : isSelected ? "bg-primary/5" : ""}>
                                   <TableCell>
                                     <Checkbox
                                       checked={isSelected}
-                                      disabled={acc.already_imported}
+                                      disabled={!selectable}
                                       onCheckedChange={() => toggleDiscoveredAccount(key)}
                                     />
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant="secondary" className="capitalize text-[10px]">{acc.platform}</Badge>
+                                    {acc.platform === "meta" && (
+                                      <p className="text-[10px] text-muted-foreground mt-1">{getOwnershipLabel(acc.ownership)}</p>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-sm font-medium max-w-[200px] truncate">{acc.account_name || "—"}</TableCell>
                                   <TableCell className="font-mono text-xs">{acc.ad_account_id}</TableCell>
@@ -553,10 +612,14 @@ export default function AdAccounts() {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
-                                    {acc.already_imported ? (
-                                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Already imported</Badge>
-                                    ) : (
+                                    {status === "new" ? (
                                       <Badge variant="default" className="text-[10px] bg-emerald-600">New</Badge>
+                                    ) : status === "inactive" ? (
+                                      <Badge variant="destructive" className="text-[10px]">Inactive — reactivate</Badge>
+                                    ) : status === "linked_elsewhere" ? (
+                                      <Badge variant="secondary" className="text-[10px]">Relink integration</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Already active</Badge>
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -567,9 +630,9 @@ export default function AdAccounts() {
                       </div>
 
                       {/* Selection vs limit warning */}
-                      {orgLimits?.remaining !== null && orgLimits?.remaining !== undefined && selectedDiscovered.size > orgLimits.remaining && (
+                      {orgLimits?.remaining !== null && orgLimits?.remaining !== undefined && getSelectedNewCount(selectedDiscovered) > orgLimits.remaining && (
                         <p className="text-xs text-destructive font-medium">
-                          ⚠ You selected {selectedDiscovered.size} accounts but only {orgLimits.remaining} more are allowed. Deselect some accounts.
+                          ⚠ You selected {getSelectedNewCount(selectedDiscovered)} new accounts but only {orgLimits.remaining} more are allowed. Existing inactive accounts can still be reactivated.
                         </p>
                       )}
                     </>
@@ -584,7 +647,7 @@ export default function AdAccounts() {
                   <DialogFooter>
                     <Button
                       onClick={handleImportSelected}
-                      disabled={importing || selectedDiscovered.size === 0 || (orgLimits?.remaining === 0)}
+                      disabled={importing || selectedDiscovered.size === 0 || (orgLimits?.remaining === 0 && getSelectedNewCount(selectedDiscovered) > 0)}
                       className="w-full"
                     >
                       {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

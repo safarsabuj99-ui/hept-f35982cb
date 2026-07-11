@@ -1,51 +1,38 @@
-## Problem
+## Findings
 
-Partner ad accounts (shared with HEPT's BM by another business) are completely missing from Fetch results. The current `fetchMetaAccounts()` in `supabase/functions/auto-import-accounts/index.ts` queries two edges (`owned_ad_accounts` + `client_ad_accounts`), but:
+- The backend is now discovering HEPT Digital partner access: latest function log shows `owned=3, partner=1, system_user=2, merged=4`.
+- So the current problem is likely after discovery: slow/blocking enrichment, inconsistent ID dedupe, or imported/existing accounts being skipped/hidden instead of updated/reactivated.
 
-1. **`client_ad_accounts` errors are swallowed** — a `console.warn` + `return []` means a 403 / token-scope / permission failure looks identical to "no partner accounts exist". The user sees nothing.
-2. **Not every "partner-shared" account lives under `client_ad_accounts`.** Depending on how the sharing was set up on Meta's side (BM-to-BM partner share vs. agency/client relationship), the account can instead surface via:
-   - `/{business_id}/agencies` → then `/{agency_business_id}/owned_ad_accounts`
-   - or only via the System User's direct `/me/adaccounts` edge.
-3. There's no way today to tell which case we're in, because the edge function returns `errors: []` even when a partner endpoint failed.
+## Plan
 
-## Fix
+1. **Make Meta discovery resilient and complete**
+   - Normalize every Meta account ID before dedupe (`123` and `act_123` become the same account).
+   - Keep the current three discovery paths:
+     - Business owned accounts
+     - Business partner/client accounts
+     - System User direct `/me/adaccounts`
+   - Add a safe fourth fallback for partner-shared business assets where available, without making it fatal if Meta rejects it.
 
-Scope: `supabase/functions/auto-import-accounts/index.ts` only. No schema, no frontend logic change (aside from optionally showing the new warnings that already flow through the existing `errors` array in the preview response).
+2. **Stop billing enrichment from hiding accounts**
+   - Move billing-cycle fetches behind short per-account timeouts.
+   - Run enrichment with `Promise.allSettled`, so account discovery returns even if Meta billing/payment-cycle APIs are slow or permission-denied.
+   - If billing enrichment fails, still show/import the ad account with default billing fields and add a warning.
 
-### 1. Stop swallowing partner-endpoint failures
+3. **Fix import behavior for existing/previously imported accounts**
+   - Replace the current simple “skip if existing” logic with smart upsert behavior:
+     - If the account is new: create it.
+     - If the same org already has the account but it is inactive: reactivate/update it.
+     - If the same account exists under a different integration: update `api_integration_id` to the selected HEPT Digital integration.
+     - Avoid duplicate rows.
+   - Return counts for `created`, `updated/reactivated`, and `skipped`.
 
-`fetchMetaAccountEdge(..., "client_ad_accounts", ...)` currently returns `[]` on any non-OK response. Change it to **throw a tagged error** (e.g. `throw new Error("client_ad_accounts: <status> <body-snippet>")`) so the outer `try/catch` in the preview loop pushes it into the `errors[]` array that the UI already renders. Owned-account fetch keeps its existing throw behaviour.
+4. **Make the preview UI explain what happened**
+   - Show ownership source in Fetch Accounts: `Owned`, `Partner`, or `System User`.
+   - Show imported status clearly: `New`, `Already active`, `Inactive — can reactivate`.
+   - Allow selecting inactive existing accounts so import can reactivate them instead of disabling them forever.
+   - Show discovery summary/counts and warnings so partner API failures are visible.
 
-To avoid one bad edge nuking the whole integration, wrap the two edge calls in `Promise.allSettled` inside `fetchMetaAccounts` and:
-- If `owned` rejects → rethrow (fatal, same as today).
-- If `client` rejects → attach the error message to a `partnerFetchError` field on the returned payload and continue with owned + whatever partner rows we got.
-
-Propagate `partnerFetchError` up to the preview response's `errors[]` so the operator sees the exact Meta API message.
-
-### 2. Add a third discovery path: System User's direct ad accounts
-
-Add `fetchMetaSystemUserAccounts(token)`:
-- `GET /v21.0/me/adaccounts?fields=account_id,name,currency,funding_source_details,account_status,business&limit=500` (paginated, 10-page cap).
-- Merge into the same dedup `Map` used today, with ownership `"system_user"` (lowest precedence: owned > partner > system_user).
-
-Rationale: BM-to-BM partner shares where the System User was granted account-level access frequently surface here even when they don't appear under the BM's `client_ad_accounts` edge. This is the reliable fallback that matches what the user sees in Ads Manager.
-
-### 3. Log discovery counts
-
-Extend the existing `console.log("Meta BM fetch: owned=X, partner=Y, merged=Z")` line to also include `system_user=N` and the raw counts before dedup, so edge-function logs make it obvious which edge produced results.
-
-### 4. No changes to
-
-- Insert / import flow (still keyed on `ad_account_id`).
-- Billing-cycle enrichment.
-- TikTok / Google fetchers.
-- UI — the existing preview error panel already renders `errors[]`.
-
-## Verification
-
-1. Deploy, then run **Fetch Ad Accounts** in Settings.
-2. Expected outcomes:
-   - Partner accounts now appear (via one of the three edges).
-   - If Meta rejects `client_ad_accounts`, the exact error text appears in the preview's error panel instead of a silent empty result.
-   - Edge-function logs show a line like `Meta BM fetch: owned=12, partner=0, system_user=8, merged=20`, telling us which edge produced the partner rows.
-3. If partner accounts still don't appear, the surfaced Meta error tells us exactly which permission/scope is missing on the System User token — a follow-up fix on the Meta side, not code.
+5. **Verify with HEPT Digital**
+   - Test the function for the HEPT Digital integration.
+   - Confirm the response includes all 4 discovered accounts from the latest log.
+   - Confirm import writes/reactivates them in `ad_accounts` and they appear in Active/Inactive tabs correctly.
