@@ -53,6 +53,11 @@ interface DiscoveredAccount {
   integration_id: string;
   integration_name: string;
   already_imported: boolean;
+  existing_id?: string | null;
+  existing_is_active?: boolean | null;
+  existing_api_integration_id?: string | null;
+  import_status?: "new" | "already_active" | "inactive" | "linked_elsewhere";
+  ownership?: "owned" | "partner" | "system_user";
 }
 interface OrgLimits {
   max_ad_accounts: number | null;
@@ -184,11 +189,13 @@ export default function AdAccounts() {
       setDiscoveredAccounts(discovered);
       setOrgLimits(data.limits ?? null);
       setImportErrors(data.errors ?? []);
-      // Pre-select all non-imported accounts
-      const selectable = discovered.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+      // Pre-select new, inactive, and relinkable accounts
+      const selectable = discovered.filter(isSelectableDiscovered).map(getDiscoveredKey);
       // Cap at remaining limit
       const remaining = data.limits?.remaining;
-      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      const capped = remaining !== null && remaining !== undefined
+        ? capSelectionByNewAccountLimit(discovered, selectable, remaining)
+        : selectable;
       setSelectedDiscovered(new Set(capped));
       setImportPhase("review");
     } catch (err: any) {
@@ -209,7 +216,7 @@ export default function AdAccounts() {
     setImportStatus("Importing selected accounts...");
     try {
       const toImport = discoveredAccounts.filter(
-        (a) => selectedDiscovered.has(`${a.platform}:${a.ad_account_id}`) && !a.already_imported
+        (a) => selectedDiscovered.has(getDiscoveredKey(a)) && isSelectableDiscovered(a)
       );
       const { data, error } = await supabase.functions.invoke("auto-import-accounts", {
         body: {
@@ -226,7 +233,7 @@ export default function AdAccounts() {
       const errMsg = data.errors?.length ? `\nWarnings: ${data.errors.join("; ")}` : "";
       toast({
         title: "Import Complete",
-        description: `Created ${data.created} account(s), skipped ${data.skipped} duplicate(s)${errMsg}`,
+        description: `Created ${data.created} account(s), updated/reactivated ${data.updated ?? 0}, skipped ${data.skipped} duplicate(s)${errMsg}`,
       });
       resetImportDialog();
       fetchData();
@@ -256,7 +263,9 @@ export default function AdAccounts() {
       } else {
         // Enforce limit
         const remaining = orgLimits?.remaining;
-        if (remaining !== null && remaining !== undefined && next.size >= remaining) {
+        const account = discoveredAccounts.find((a) => getDiscoveredKey(a) === key);
+        const selectedNewCount = getSelectedNewCount(next);
+        if (account && isNewDiscovered(account) && remaining !== null && remaining !== undefined && selectedNewCount >= remaining) {
           toast({ title: "Limit reached", description: `Your plan allows ${remaining} more ad account(s)`, variant: "destructive" });
           return prev;
         }
@@ -267,12 +276,14 @@ export default function AdAccounts() {
   };
 
   const selectAllDiscovered = () => {
-    const selectable = discoveredAccounts.filter((a) => !a.already_imported).map((a) => `${a.platform}:${a.ad_account_id}`);
+    const selectable = discoveredAccounts.filter(isSelectableDiscovered).map(getDiscoveredKey);
     if (selectedDiscovered.size === selectable.length) {
       setSelectedDiscovered(new Set());
     } else {
       const remaining = orgLimits?.remaining;
-      const capped = remaining !== null && remaining !== undefined ? selectable.slice(0, remaining) : selectable;
+      const capped = remaining !== null && remaining !== undefined
+        ? capSelectionByNewAccountLimit(discoveredAccounts, selectable, remaining)
+        : selectable;
       setSelectedDiscovered(new Set(capped));
     }
   };
@@ -291,6 +302,40 @@ export default function AdAccounts() {
     } else {
       setSelectedIntegrations(new Set(integrations.map((i) => i.id)));
     }
+  };
+
+  const getDiscoveredKey = (account: Pick<DiscoveredAccount, "platform" | "ad_account_id">) => {
+    const id = account.platform === "meta" ? account.ad_account_id.replace(/^act_/i, "") : account.ad_account_id;
+    return `${account.platform}:${id}`;
+  };
+
+  const isNewDiscovered = (account: DiscoveredAccount) => !account.already_imported || account.import_status === "new";
+
+  const isSelectableDiscovered = (account: DiscoveredAccount) =>
+    isNewDiscovered(account) || account.import_status === "inactive" || account.import_status === "linked_elsewhere";
+
+  const getSelectedNewCount = (selected: Set<string>) =>
+    discoveredAccounts.filter((account) => selected.has(getDiscoveredKey(account)) && isNewDiscovered(account)).length;
+
+  const capSelectionByNewAccountLimit = (accountsToCap: DiscoveredAccount[], keys: string[], remaining: number) => {
+    let newCount = 0;
+    const capped: string[] = [];
+    for (const key of keys) {
+      const account = accountsToCap.find((a) => getDiscoveredKey(a) === key);
+      if (!account) continue;
+      if (isNewDiscovered(account)) {
+        if (newCount >= remaining) continue;
+        newCount++;
+      }
+      capped.push(key);
+    }
+    return capped;
+  };
+
+  const getOwnershipLabel = (ownership?: DiscoveredAccount["ownership"]) => {
+    if (ownership === "partner") return "Partner";
+    if (ownership === "system_user") return "System User";
+    return "Owned";
   };
 
   const toggleActive = async (id: string, current: boolean) => {
