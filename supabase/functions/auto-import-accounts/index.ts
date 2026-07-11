@@ -613,6 +613,7 @@ Deno.serve(async (req) => {
     if (preview === true) {
       const discovered: any[] = [];
       const errors: string[] = [];
+      const discovery_summary: string[] = [];
 
       for (const integration of integrations) {
         try {
@@ -621,7 +622,7 @@ Deno.serve(async (req) => {
             case "meta": {
               const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
               platformAccounts = meta.accounts;
-              errors.push(
+              discovery_summary.push(
                 `meta (${integration.instance_name ?? integration.id}): discovered owned=${meta.counts.owned}, partner=${meta.counts.partner}, partner_business=${meta.counts.partner_business}, system_user=${meta.counts.system_user}, merged=${meta.counts.merged}`,
               );
               for (const w of meta.warnings) {
@@ -667,7 +668,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ preview: true, discovered, errors, limits }),
+        JSON.stringify({ preview: true, discovered, errors, discovery_summary, limits }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -783,9 +784,6 @@ Deno.serve(async (req) => {
             case "meta": {
               const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
               platformAccounts = meta.accounts;
-              errors.push(
-                `meta (${integration.instance_name ?? integration.id}): discovered owned=${meta.counts.owned}, partner=${meta.counts.partner}, partner_business=${meta.counts.partner_business}, system_user=${meta.counts.system_user}, merged=${meta.counts.merged}`,
-              );
               for (const w of meta.warnings) {
                 errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
               }
