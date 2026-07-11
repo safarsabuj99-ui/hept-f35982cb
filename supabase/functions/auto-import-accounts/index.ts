@@ -651,7 +651,14 @@ Deno.serve(async (req) => {
               already_imported: !!existing,
               existing_id: existing?.id ?? null,
               existing_is_active: existing?.is_active ?? null,
-              import_status: !existing ? "new" : existing.is_active ? "already_active" : "inactive",
+              existing_api_integration_id: existing?.api_integration_id ?? null,
+              import_status: !existing
+                ? "new"
+                : !existing.is_active
+                  ? "inactive"
+                  : existing.api_integration_id && existing.api_integration_id !== integration.id
+                    ? "linked_elsewhere"
+                    : "already_active",
             });
           }
         } catch (err: any) {
@@ -675,10 +682,14 @@ Deno.serve(async (req) => {
 
     if (selected_accounts && Array.isArray(selected_accounts) && selected_accounts.length > 0) {
       // Enforce limit check
-      if (limits.remaining !== null && selected_accounts.length > limits.remaining) {
+      const newSelectedCount = selected_accounts.filter((account: any) => {
+        const key = makeAccountKey(account.platform, account.ad_account_id);
+        return !existingAccountMap.has(key);
+      }).length;
+      if (limits.remaining !== null && newSelectedCount > limits.remaining) {
         return new Response(
           JSON.stringify({
-            error: `Cannot import ${selected_accounts.length} accounts. Only ${limits.remaining} more allowed by your plan (${limits.current_count}/${limits.max_ad_accounts} used).`,
+            error: `Cannot import ${newSelectedCount} new accounts. Only ${limits.remaining} more allowed by your plan (${limits.current_count}/${limits.max_ad_accounts} used). Existing accounts can still be updated/reactivated.`,
             limits,
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
