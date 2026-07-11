@@ -201,7 +201,7 @@ async function fetchMetaAccounts(
     });
   }
 
-  return accounts;
+  return { accounts, warnings };
 }
 
 
