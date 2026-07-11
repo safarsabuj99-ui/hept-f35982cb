@@ -495,9 +495,14 @@ Deno.serve(async (req) => {
         try {
           let platformAccounts: any[] = [];
           switch (integration.platform) {
-            case "meta":
-              platformAccounts = await fetchMetaAccounts(integration.app_id, integration.api_token);
+            case "meta": {
+              const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
+              platformAccounts = meta.accounts;
+              for (const w of meta.warnings) {
+                errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
+              }
               break;
+            }
             case "tiktok":
               platformAccounts = await fetchTikTokAccounts(integration.app_id, integration.api_token, tiktokBase);
               break;
