@@ -547,11 +547,11 @@ export default function AdAccounts() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Checkbox
-                            checked={selectedDiscovered.size > 0 && selectedDiscovered.size === discoveredAccounts.filter(a => !a.already_imported).length}
+                            checked={selectedDiscovered.size > 0 && selectedDiscovered.size === discoveredAccounts.filter(isSelectableDiscovered).length}
                             onCheckedChange={selectAllDiscovered}
                           />
                           <span className="text-sm text-muted-foreground">
-                            {selectedDiscovered.size} of {discoveredAccounts.filter(a => !a.already_imported).length} new account(s) selected
+                            {selectedDiscovered.size} of {discoveredAccounts.filter(isSelectableDiscovered).length} importable account(s) selected
                           </span>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setImportPhase("select")} className="text-xs h-7">
@@ -575,19 +575,24 @@ export default function AdAccounts() {
                           </TableHeader>
                           <TableBody>
                             {discoveredAccounts.map((acc) => {
-                              const key = `${acc.platform}:${acc.ad_account_id}`;
+                              const key = getDiscoveredKey(acc);
                               const isSelected = selectedDiscovered.has(key);
+                              const selectable = isSelectableDiscovered(acc);
+                              const status = acc.import_status ?? (acc.already_imported ? "already_active" : "new");
                               return (
-                                <TableRow key={key} className={acc.already_imported ? "opacity-50" : isSelected ? "bg-primary/5" : ""}>
+                                <TableRow key={key} className={!selectable ? "opacity-50" : isSelected ? "bg-primary/5" : ""}>
                                   <TableCell>
                                     <Checkbox
                                       checked={isSelected}
-                                      disabled={acc.already_imported}
+                                      disabled={!selectable}
                                       onCheckedChange={() => toggleDiscoveredAccount(key)}
                                     />
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant="secondary" className="capitalize text-[10px]">{acc.platform}</Badge>
+                                    {acc.platform === "meta" && (
+                                      <p className="text-[10px] text-muted-foreground mt-1">{getOwnershipLabel(acc.ownership)}</p>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-sm font-medium max-w-[200px] truncate">{acc.account_name || "—"}</TableCell>
                                   <TableCell className="font-mono text-xs">{acc.ad_account_id}</TableCell>
@@ -598,10 +603,14 @@ export default function AdAccounts() {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
-                                    {acc.already_imported ? (
-                                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Already imported</Badge>
-                                    ) : (
+                                    {status === "new" ? (
                                       <Badge variant="default" className="text-[10px] bg-emerald-600">New</Badge>
+                                    ) : status === "inactive" ? (
+                                      <Badge variant="destructive" className="text-[10px]">Inactive — reactivate</Badge>
+                                    ) : status === "linked_elsewhere" ? (
+                                      <Badge variant="secondary" className="text-[10px]">Relink integration</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Already active</Badge>
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -612,9 +621,9 @@ export default function AdAccounts() {
                       </div>
 
                       {/* Selection vs limit warning */}
-                      {orgLimits?.remaining !== null && orgLimits?.remaining !== undefined && selectedDiscovered.size > orgLimits.remaining && (
+                      {orgLimits?.remaining !== null && orgLimits?.remaining !== undefined && getSelectedNewCount(selectedDiscovered) > orgLimits.remaining && (
                         <p className="text-xs text-destructive font-medium">
-                          ⚠ You selected {selectedDiscovered.size} accounts but only {orgLimits.remaining} more are allowed. Deselect some accounts.
+                          ⚠ You selected {getSelectedNewCount(selectedDiscovered)} new accounts but only {orgLimits.remaining} more are allowed. Existing inactive accounts can still be reactivated.
                         </p>
                       )}
                     </>
