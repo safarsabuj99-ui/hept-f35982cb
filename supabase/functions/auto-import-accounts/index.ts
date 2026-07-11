@@ -284,8 +284,9 @@ async function fetchMetaAccounts(
         }
       }
     } catch (err) {
-      billingWarning = getErrorMessage(err);
-      console.warn(`Meta billing enrichment skipped: ${billingWarning}`);
+      // Billing/payment-cycle permissions vary by account. Discovery/import must not fail or
+      // show noisy operator errors when this optional enrichment is unavailable.
+      console.warn(`Meta billing enrichment skipped: ${getErrorMessage(err)}`);
     }
 
     return {
