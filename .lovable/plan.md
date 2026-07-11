@@ -1,61 +1,40 @@
-## Goal
+# Fix: Import Partner-Shared Meta Ad Accounts from BM
 
-Change auto-resume so it only fires when an **approved payment request** lands within a configurable **grace window** (default 2 hours) from the moment Ad Guard paused the client's campaigns. Beyond that window → no auto-resume, admin/client must resume manually. When it does fire, resume must hit the actual ad platform (Meta / TikTok / Google), not just flip DB status.
+## Root Cause
 
-## Behavior changes
+`supabase/functions/auto-import-accounts/index.ts` → `fetchMetaAccounts()` only calls Meta's `/{business_id}/owned_ad_accounts` endpoint. This returns **only ad accounts owned by the BM**. Ad accounts shared with the BM as a **partner/client** (added via "Request Access" or another BM sharing theirs) live under a different endpoint: `/{business_id}/client_ad_accounts`.
 
-**Today**
-- Any `credit` transaction that lifts balance above threshold auto-resumes all `system_paused_campaigns` (via `check_auto_resume` trigger).
-- Resume only flips `campaigns.status = active` in DB. No platform API call.
+Even after granting System User + App access to a partner ad account, it won't show up in the import because we never ask Meta for the partner list.
 
-**After**
-- Deposit-only balance recovery does **not** auto-resume anymore.
-- When a `payment_request` is **approved**, check `now() - profiles.guard_paused_at`:
-  - Within grace window → auto-resume DB + call new `resume-campaign` edge function per campaign.
-  - Beyond window → do nothing (client sees campaigns still paused, must resume manually).
-- Grace window is a per-agency setting on `organizations.auto_resume_window_minutes` (default 120), editable in **Settings → Automation**.
+## Fix
 
-## Technical breakdown
+Update `fetchMetaAccounts(appId, token)` to fetch **both** endpoints in parallel and merge:
 
-### 1. Schema (migration)
-- `ALTER TABLE public.organizations ADD COLUMN auto_resume_window_minutes integer NOT NULL DEFAULT 120;`
-- `ALTER TABLE public.guard_pause_jobs` — reuse table for resume jobs by adding `action text NOT NULL DEFAULT 'pause'` (values: `pause` | `resume`).
+1. `GET /v21.0/{business_id}/owned_ad_accounts?fields=...&limit=500`
+2. `GET /v21.0/{business_id}/client_ad_accounts?fields=...&limit=500`
 
-### 2. Database triggers (migration)
-- **Rewrite `check_auto_resume`**: keep the payment-approval path only (`description LIKE 'Payment:%'`), remove the balance-recovery path. Before resuming, read `organizations.auto_resume_window_minutes` and check `now() - profiles.guard_paused_at <= window`. If outside window, exit; log `ad_guard_resume_skipped_window` audit entry.
-- On resume path, after flipping campaign status, enqueue a `resume` job into `guard_pause_jobs` for each previously paused campaign so the edge function can hit the platform API.
-- Existing `reset_overdraft_on_payment_approval` stays as-is.
+Merge into a single list, dedupe by `account_id` (owned wins if duplicated), then continue with the existing per-account billing-cycle enrichment loop.
 
-### 3. New edge function `resume-campaign`
-- Mirror of `pause-campaign`: takes `{ campaign_id, action: "resume" }`, loads the campaign + ad account creds, calls the appropriate platform API to set status back to `ACTIVE` / `ENABLE`:
-  - Meta: `POST /{campaign_id}` `status=ACTIVE`
-  - TikTok: `/campaign/status/update/` `operation_status=ENABLE` (via US proxy)
-  - Google Ads: campaign mutate `status=ENABLED`
-- Same auth pattern (service-role or anon), same error handling / audit logging as `pause-campaign`.
+Add graceful handling:
+- If `client_ad_accounts` returns 403 / permission error (System User lacks BM-level partner-read scope), log a warning but still return owned accounts — do not fail the whole import.
+- Tag each imported account with its source (`ownership: 'owned' | 'partner'`) internally for logs; DB schema stays unchanged (no column added — out of scope unless requested).
 
-### 4. Update `ad-guard-check` edge function
-- Add a **Phase 4** that processes `guard_pause_jobs` where `action = 'resume'`: batch of 5, call `resume-campaign`, on success delete job + set `pause_confirmed_at = null`, on failure back off with retry (same pattern as pause).
-- Existing pause phases untouched.
+Also handle pagination for both endpoints (`json.paging.next`) with a max of ~10 pages, since a BM with many partner accounts can exceed 500. Keep the current 500-limit request but follow `paging.next` if present.
 
-### 5. Frontend
-- **`AutomationConfigTab.tsx`** (Settings → Automation): add a numeric input "Auto-resume grace window (minutes)" bound to `organizations.auto_resume_window_minutes` with helper text: *"After Ad Guard pauses campaigns, approved payments within this window auto-resume campaigns on the ad platform. Beyond it, resume must be done manually."*
-- **`LowBalanceAlerts.tsx` / guard notification body**: mention the window (e.g. "Pay within 2 hours to auto-resume").
-- No other UI churn.
+## Technical Details
 
-### 6. Audit + notifications
-- New audit `action_type`: `ad_guard_resume_skipped_window` when payment approved but window expired.
-- Existing `notify_on_guard_resume` keeps working; add a branch for the window-expired case: notify client "Payment approved ✅ — campaigns not auto-resumed (grace window expired). Resume manually from the campaign list."
+- File: `supabase/functions/auto-import-accounts/index.ts`
+- Function edited: `fetchMetaAccounts()`
+- New helper: `fetchMetaAccountList(businessId, edge, token)` that handles pagination + returns raw account objects; called twice (`owned_ad_accounts`, `client_ad_accounts`).
+- Existing enrichment (`fetchMetaBillingCycle`, funding source parsing, currency, ID normalization) is applied uniformly to the merged list — no behavior change there.
+- No schema changes. No frontend changes. No changes to TikTok / Google branches.
 
-## Files touched
+## Out of Scope
 
-- `supabase/migrations/<new>.sql` — column, trigger rewrite, `guard_pause_jobs.action`.
-- `supabase/functions/resume-campaign/index.ts` — new.
-- `supabase/functions/ad-guard-check/index.ts` — add Phase 4 (resume queue).
-- `src/components/AutomationConfigTab.tsx` — grace window input.
-- `src/components/LowBalanceAlerts.tsx` — copy tweak (optional).
+- Showing "owned vs partner" badge in the UI (can add later if you want).
+- Changing preview/quota logic in `AdAccounts.tsx`.
+- Fixing TikTok BC partner discovery (only asked about Meta partner accounts here — confirm if you also want TikTok/Google reviewed).
 
-## Out of scope
+## Verification
 
-- Changing pause behavior or thresholds.
-- Bulk manual resume UI (already exists via campaign management hub).
-- Notification wording overhaul beyond the one grace-window line.
+After deploy: run "Fetch Ad Accounts" in Ad Accounts settings for the Meta integration. Partner ad accounts (where your BM is listed as *Partner*, not *Owner*) should now appear in the preview list, provided the System User has access and the app is authorized on them.

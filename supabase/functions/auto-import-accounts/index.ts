@@ -55,18 +55,54 @@ async function fetchMetaBillingCycle(adAccountId: string, token: string) {
   }
 }
 
-// ── Meta: fetch owned ad accounts from Business Manager ──
-async function fetchMetaAccounts(appId: string, token: string) {
-  const url = `https://graph.facebook.com/v21.0/${appId}/owned_ad_accounts?fields=account_id,name,currency,funding_source_details,account_status&limit=500&access_token=${token}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Meta API error: ${err}`);
+// ── Meta: fetch a paginated ad-account edge (owned or client) from BM ──
+async function fetchMetaAccountEdge(
+  businessId: string,
+  edge: "owned_ad_accounts" | "client_ad_accounts",
+  token: string,
+): Promise<any[]> {
+  const fields = "account_id,name,currency,funding_source_details,account_status";
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/${businessId}/${edge}?fields=${fields}&limit=500&access_token=${token}`;
+  const out: any[] = [];
+  let pages = 0;
+  while (url && pages < 10) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.text();
+      if (edge === "client_ad_accounts") {
+        console.warn(`Meta ${edge} fetch failed (non-fatal): ${err}`);
+        return out;
+      }
+      throw new Error(`Meta API error (${edge}): ${err}`);
+    }
+    const json = await res.json();
+    for (const acc of json.data ?? []) out.push(acc);
+    url = json.paging?.next ?? null;
+    pages++;
   }
-  const json = await res.json();
-  const accounts: any[] = [];
+  return out;
+}
 
-  for (const acc of json.data ?? []) {
+// ── Meta: fetch owned + partner (client) ad accounts from Business Manager ──
+async function fetchMetaAccounts(appId: string, token: string) {
+  const [owned, partner] = await Promise.all([
+    fetchMetaAccountEdge(appId, "owned_ad_accounts", token),
+    fetchMetaAccountEdge(appId, "client_ad_accounts", token),
+  ]);
+
+  // Merge, dedupe by account_id (owned wins)
+  const map = new Map<string, { acc: any; ownership: "owned" | "partner" }>();
+  for (const acc of partner) {
+    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "partner" });
+  }
+  for (const acc of owned) {
+    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "owned" });
+  }
+  console.log(`Meta BM fetch: owned=${owned.length}, partner=${partner.length}, merged=${map.size}`);
+
+  const accounts: any[] = [];
+  for (const { acc, ownership } of map.values()) {
     let billingType = "prepaid";
     let thresholdLimit: number | null = null;
     let nextBillingDate: string | null = null;
@@ -108,11 +144,13 @@ async function fetchMetaAccounts(appId: string, token: string) {
       threshold_limit: thresholdLimit,
       next_billing_date: nextBillingDate,
       current_threshold_spend: currentThresholdSpend ?? 0,
+      ownership,
     });
   }
 
   return accounts;
 }
+
 
 // ── TikTok: discover advertisers from Business Center, then fetch details ──
 async function fetchTikTokAccounts(appId: string, token: string, tiktokBase: string) {
