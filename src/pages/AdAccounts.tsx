@@ -638,7 +638,7 @@ export default function AdAccounts() {
                   <DialogFooter>
                     <Button
                       onClick={handleImportSelected}
-                      disabled={importing || selectedDiscovered.size === 0 || (orgLimits?.remaining === 0)}
+                      disabled={importing || selectedDiscovered.size === 0 || (orgLimits?.remaining === 0 && getSelectedNewCount(selectedDiscovered) > 0)}
                       className="w-full"
                     >
                       {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
