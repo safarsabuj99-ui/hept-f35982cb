@@ -378,22 +378,17 @@ export function AutomationConfigTab({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
-                <Timer className="h-3.5 w-3.5" /> Resume Window (Hours)
+                <Timer className="h-3.5 w-3.5" /> Auto-Resume Grace Window (Hours)
               </Label>
-              <Input type="number" placeholder="24" value={resumeWindowHours} onChange={(e) => setResumeWindowHours(e.target.value)} min="1" step="1" />
+              <Input type="number" placeholder="2" value={resumeWindowHours} onChange={(e) => setResumeWindowHours(e.target.value)} min="1" step="1" />
               <p className="text-xs text-muted-foreground">
-                After this many hours, the resume option expires. Campaigns stay paused permanently unless the client deposits.
+                After Ad Guard pauses campaigns, an <strong>approved payment</strong> within this window auto-resumes campaigns on the ad platform (Meta / TikTok / Google). Beyond the window, resume must be done manually. Deposits alone no longer auto-resume.
               </p>
             </div>
             {isSystemPaused && guardPausedAt && (
               <div className="rounded-lg border p-3 space-y-1">
                 <p className="text-xs text-muted-foreground">Resume Window Status</p>
-                {balance !== null && balance > effectiveThreshold ? (
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-green-500" />
-                    <span className="text-sm font-medium text-green-600">Balance recovered — status will clear on next deposit</span>
-                  </div>
-                ) : isWithinResumeWindow ? (
+                {isWithinResumeWindow ? (
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-amber-500" />
                     <span className="text-sm font-medium text-amber-600">{remainingText}</span>
@@ -401,12 +396,13 @@ export function AutomationConfigTab({
                 ) : (
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Window expired — deposit funds to auto-resume</span>
+                    <span className="text-sm text-muted-foreground">Window expired — manual resume required</span>
                   </div>
                 )}
               </div>
             )}
           </div>
+
 
           <div className="flex gap-3">
             <Button onClick={handleSave} disabled={saving} className="gap-2" size="sm">
