@@ -716,7 +716,12 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        newAccounts.push({
+        if (existingSet.has(key)) {
+          skipped++;
+          continue;
+        }
+
+        const newAccount = {
           ad_account_id: account.ad_account_id,
           account_name: account.account_name,
           platform_name: account.platform,
@@ -729,8 +734,10 @@ Deno.serve(async (req) => {
           is_active: true,
           account_currency: account.account_currency,
           org_id: orgId ?? integration.org_id ?? null,
-        });
+        };
+        newAccounts.push(newAccount);
         existingSet.add(key);
+        existingAccountMap.set(key, newAccount);
       }
 
       for (const { existing, account, integration } of accountsToUpdate) {
