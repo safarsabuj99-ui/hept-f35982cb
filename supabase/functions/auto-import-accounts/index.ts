@@ -70,11 +70,7 @@ async function fetchMetaAccountEdge(
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.text();
-      if (edge === "client_ad_accounts") {
-        console.warn(`Meta ${edge} fetch failed (non-fatal): ${err}`);
-        return out;
-      }
-      throw new Error(`Meta API error (${edge}): ${err}`);
+      throw new Error(`Meta ${edge} API error (status ${res.status}): ${err.substring(0, 400)}`);
     }
     const json = await res.json();
     for (const acc of json.data ?? []) out.push(acc);
@@ -83,6 +79,28 @@ async function fetchMetaAccountEdge(
   }
   return out;
 }
+
+// ── Meta: fetch ad accounts the System User has direct access to ──
+async function fetchMetaSystemUserAccounts(token: string): Promise<any[]> {
+  const fields = "account_id,name,currency,funding_source_details,account_status,business";
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/me/adaccounts?fields=${fields}&limit=500&access_token=${token}`;
+  const out: any[] = [];
+  let pages = 0;
+  while (url && pages < 10) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Meta me/adaccounts API error (status ${res.status}): ${err.substring(0, 400)}`);
+    }
+    const json = await res.json();
+    for (const acc of json.data ?? []) out.push(acc);
+    url = json.paging?.next ?? null;
+    pages++;
+  }
+  return out;
+}
+
 
 // ── Meta: fetch owned + partner (client) ad accounts from Business Manager ──
 async function fetchMetaAccounts(appId: string, token: string) {
