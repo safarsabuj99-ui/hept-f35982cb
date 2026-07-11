@@ -70,11 +70,7 @@ async function fetchMetaAccountEdge(
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.text();
-      if (edge === "client_ad_accounts") {
-        console.warn(`Meta ${edge} fetch failed (non-fatal): ${err}`);
-        return out;
-      }
-      throw new Error(`Meta API error (${edge}): ${err}`);
+      throw new Error(`Meta ${edge} API error (status ${res.status}): ${err.substring(0, 400)}`);
     }
     const json = await res.json();
     for (const acc of json.data ?? []) out.push(acc);
@@ -84,22 +80,79 @@ async function fetchMetaAccountEdge(
   return out;
 }
 
-// ── Meta: fetch owned + partner (client) ad accounts from Business Manager ──
-async function fetchMetaAccounts(appId: string, token: string) {
-  const [owned, partner] = await Promise.all([
+// ── Meta: fetch ad accounts the System User has direct access to ──
+async function fetchMetaSystemUserAccounts(token: string): Promise<any[]> {
+  const fields = "account_id,name,currency,funding_source_details,account_status,business";
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/me/adaccounts?fields=${fields}&limit=500&access_token=${token}`;
+  const out: any[] = [];
+  let pages = 0;
+  while (url && pages < 10) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Meta me/adaccounts API error (status ${res.status}): ${err.substring(0, 400)}`);
+    }
+    const json = await res.json();
+    for (const acc of json.data ?? []) out.push(acc);
+    url = json.paging?.next ?? null;
+    pages++;
+  }
+  return out;
+}
+
+
+// ── Meta: fetch owned + partner + system-user ad accounts ──
+async function fetchMetaAccounts(
+  appId: string,
+  token: string,
+): Promise<{ accounts: any[]; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  const [ownedRes, partnerRes, systemUserRes] = await Promise.allSettled([
     fetchMetaAccountEdge(appId, "owned_ad_accounts", token),
     fetchMetaAccountEdge(appId, "client_ad_accounts", token),
+    fetchMetaSystemUserAccounts(token),
   ]);
 
-  // Merge, dedupe by account_id (owned wins)
-  const map = new Map<string, { acc: any; ownership: "owned" | "partner" }>();
+  if (ownedRes.status === "rejected") {
+    throw ownedRes.reason instanceof Error ? ownedRes.reason : new Error(String(ownedRes.reason));
+  }
+  const owned = ownedRes.value;
+
+  let partner: any[] = [];
+  if (partnerRes.status === "fulfilled") {
+    partner = partnerRes.value;
+  } else {
+    const msg = partnerRes.reason instanceof Error ? partnerRes.reason.message : String(partnerRes.reason);
+    warnings.push(msg);
+    console.warn(`Partner (client_ad_accounts) fetch failed: ${msg}`);
+  }
+
+  let systemUser: any[] = [];
+  if (systemUserRes.status === "fulfilled") {
+    systemUser = systemUserRes.value;
+  } else {
+    const msg = systemUserRes.reason instanceof Error ? systemUserRes.reason.message : String(systemUserRes.reason);
+    warnings.push(msg);
+    console.warn(`System User (me/adaccounts) fetch failed: ${msg}`);
+  }
+
+  // Merge, dedupe by account_id (precedence: owned > partner > system_user)
+  const map = new Map<string, { acc: any; ownership: "owned" | "partner" | "system_user" }>();
+  for (const acc of systemUser) {
+    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "system_user" });
+  }
   for (const acc of partner) {
     if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "partner" });
   }
   for (const acc of owned) {
     if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "owned" });
   }
-  console.log(`Meta BM fetch: owned=${owned.length}, partner=${partner.length}, merged=${map.size}`);
+  console.log(
+    `Meta fetch: owned=${owned.length}, partner=${partner.length}, system_user=${systemUser.length}, merged=${map.size}`,
+  );
+
 
   const accounts: any[] = [];
   for (const { acc, ownership } of map.values()) {
@@ -148,7 +201,7 @@ async function fetchMetaAccounts(appId: string, token: string) {
     });
   }
 
-  return accounts;
+  return { accounts, warnings };
 }
 
 
@@ -442,9 +495,14 @@ Deno.serve(async (req) => {
         try {
           let platformAccounts: any[] = [];
           switch (integration.platform) {
-            case "meta":
-              platformAccounts = await fetchMetaAccounts(integration.app_id, integration.api_token);
+            case "meta": {
+              const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
+              platformAccounts = meta.accounts;
+              for (const w of meta.warnings) {
+                errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
+              }
               break;
+            }
             case "tiktok":
               platformAccounts = await fetchTikTokAccounts(integration.app_id, integration.api_token, tiktokBase);
               break;
@@ -548,9 +606,14 @@ Deno.serve(async (req) => {
         try {
           let platformAccounts: any[] = [];
           switch (integration.platform) {
-            case "meta":
-              platformAccounts = await fetchMetaAccounts(integration.app_id, integration.api_token);
+            case "meta": {
+              const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
+              platformAccounts = meta.accounts;
+              for (const w of meta.warnings) {
+                errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
+              }
               break;
+            }
             case "tiktok":
               platformAccounts = await fetchTikTokAccounts(integration.app_id, integration.api_token, tiktokBase);
               break;

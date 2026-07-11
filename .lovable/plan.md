@@ -1,40 +1,51 @@
-# Fix: Import Partner-Shared Meta Ad Accounts from BM
+## Problem
 
-## Root Cause
+Partner ad accounts (shared with HEPT's BM by another business) are completely missing from Fetch results. The current `fetchMetaAccounts()` in `supabase/functions/auto-import-accounts/index.ts` queries two edges (`owned_ad_accounts` + `client_ad_accounts`), but:
 
-`supabase/functions/auto-import-accounts/index.ts` → `fetchMetaAccounts()` only calls Meta's `/{business_id}/owned_ad_accounts` endpoint. This returns **only ad accounts owned by the BM**. Ad accounts shared with the BM as a **partner/client** (added via "Request Access" or another BM sharing theirs) live under a different endpoint: `/{business_id}/client_ad_accounts`.
-
-Even after granting System User + App access to a partner ad account, it won't show up in the import because we never ask Meta for the partner list.
+1. **`client_ad_accounts` errors are swallowed** — a `console.warn` + `return []` means a 403 / token-scope / permission failure looks identical to "no partner accounts exist". The user sees nothing.
+2. **Not every "partner-shared" account lives under `client_ad_accounts`.** Depending on how the sharing was set up on Meta's side (BM-to-BM partner share vs. agency/client relationship), the account can instead surface via:
+   - `/{business_id}/agencies` → then `/{agency_business_id}/owned_ad_accounts`
+   - or only via the System User's direct `/me/adaccounts` edge.
+3. There's no way today to tell which case we're in, because the edge function returns `errors: []` even when a partner endpoint failed.
 
 ## Fix
 
-Update `fetchMetaAccounts(appId, token)` to fetch **both** endpoints in parallel and merge:
+Scope: `supabase/functions/auto-import-accounts/index.ts` only. No schema, no frontend logic change (aside from optionally showing the new warnings that already flow through the existing `errors` array in the preview response).
 
-1. `GET /v21.0/{business_id}/owned_ad_accounts?fields=...&limit=500`
-2. `GET /v21.0/{business_id}/client_ad_accounts?fields=...&limit=500`
+### 1. Stop swallowing partner-endpoint failures
 
-Merge into a single list, dedupe by `account_id` (owned wins if duplicated), then continue with the existing per-account billing-cycle enrichment loop.
+`fetchMetaAccountEdge(..., "client_ad_accounts", ...)` currently returns `[]` on any non-OK response. Change it to **throw a tagged error** (e.g. `throw new Error("client_ad_accounts: <status> <body-snippet>")`) so the outer `try/catch` in the preview loop pushes it into the `errors[]` array that the UI already renders. Owned-account fetch keeps its existing throw behaviour.
 
-Add graceful handling:
-- If `client_ad_accounts` returns 403 / permission error (System User lacks BM-level partner-read scope), log a warning but still return owned accounts — do not fail the whole import.
-- Tag each imported account with its source (`ownership: 'owned' | 'partner'`) internally for logs; DB schema stays unchanged (no column added — out of scope unless requested).
+To avoid one bad edge nuking the whole integration, wrap the two edge calls in `Promise.allSettled` inside `fetchMetaAccounts` and:
+- If `owned` rejects → rethrow (fatal, same as today).
+- If `client` rejects → attach the error message to a `partnerFetchError` field on the returned payload and continue with owned + whatever partner rows we got.
 
-Also handle pagination for both endpoints (`json.paging.next`) with a max of ~10 pages, since a BM with many partner accounts can exceed 500. Keep the current 500-limit request but follow `paging.next` if present.
+Propagate `partnerFetchError` up to the preview response's `errors[]` so the operator sees the exact Meta API message.
 
-## Technical Details
+### 2. Add a third discovery path: System User's direct ad accounts
 
-- File: `supabase/functions/auto-import-accounts/index.ts`
-- Function edited: `fetchMetaAccounts()`
-- New helper: `fetchMetaAccountList(businessId, edge, token)` that handles pagination + returns raw account objects; called twice (`owned_ad_accounts`, `client_ad_accounts`).
-- Existing enrichment (`fetchMetaBillingCycle`, funding source parsing, currency, ID normalization) is applied uniformly to the merged list — no behavior change there.
-- No schema changes. No frontend changes. No changes to TikTok / Google branches.
+Add `fetchMetaSystemUserAccounts(token)`:
+- `GET /v21.0/me/adaccounts?fields=account_id,name,currency,funding_source_details,account_status,business&limit=500` (paginated, 10-page cap).
+- Merge into the same dedup `Map` used today, with ownership `"system_user"` (lowest precedence: owned > partner > system_user).
 
-## Out of Scope
+Rationale: BM-to-BM partner shares where the System User was granted account-level access frequently surface here even when they don't appear under the BM's `client_ad_accounts` edge. This is the reliable fallback that matches what the user sees in Ads Manager.
 
-- Showing "owned vs partner" badge in the UI (can add later if you want).
-- Changing preview/quota logic in `AdAccounts.tsx`.
-- Fixing TikTok BC partner discovery (only asked about Meta partner accounts here — confirm if you also want TikTok/Google reviewed).
+### 3. Log discovery counts
+
+Extend the existing `console.log("Meta BM fetch: owned=X, partner=Y, merged=Z")` line to also include `system_user=N` and the raw counts before dedup, so edge-function logs make it obvious which edge produced results.
+
+### 4. No changes to
+
+- Insert / import flow (still keyed on `ad_account_id`).
+- Billing-cycle enrichment.
+- TikTok / Google fetchers.
+- UI — the existing preview error panel already renders `errors[]`.
 
 ## Verification
 
-After deploy: run "Fetch Ad Accounts" in Ad Accounts settings for the Meta integration. Partner ad accounts (where your BM is listed as *Partner*, not *Owner*) should now appear in the preview list, provided the System User has access and the app is authorized on them.
+1. Deploy, then run **Fetch Ad Accounts** in Settings.
+2. Expected outcomes:
+   - Partner accounts now appear (via one of the three edges).
+   - If Meta rejects `client_ad_accounts`, the exact error text appears in the preview's error panel instead of a silent empty result.
+   - Edge-function logs show a line like `Meta BM fetch: owned=12, partner=0, system_user=8, merged=20`, telling us which edge produced the partner rows.
+3. If partner accounts still don't appear, the surfaced Meta error tells us exactly which permission/scope is missing on the System User token — a follow-up fix on the Meta side, not code.
