@@ -27,32 +27,66 @@ async function safeJson(response: Response): Promise<any> {
   }
 }
 
+type MetaOwnership = "owned" | "partner" | "system_user";
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function normalizeMetaAccountId(raw: unknown): string {
+  return String(raw ?? "").trim().replace(/^act_/i, "");
+}
+
+function formatMetaAccountId(raw: unknown): string {
+  const normalized = normalizeMetaAccountId(raw);
+  return normalized ? `act_${normalized}` : String(raw ?? "").trim();
+}
+
+function makeAccountKey(platform: string, adAccountId: unknown): string {
+  const id = platform === "meta" ? normalizeMetaAccountId(adAccountId) : String(adAccountId ?? "").trim();
+  return `${platform}:${id}`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Meta: fetch billing cycle data for a single ad account ──
 async function fetchMetaBillingCycle(adAccountId: string, token: string) {
-  try {
-    const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const cycle = json.data?.[0];
-    if (!cycle) return null;
-
-    const thresholdLimit = cycle.threshold_amount ? Number(cycle.threshold_amount) / 100 : null;
-    const currentSpend = cycle.amount_spent ? Number(cycle.amount_spent) / 100 : null;
-    let nextBillingDate: string | null = null;
-    if (cycle.end_time) {
-      const d = typeof cycle.end_time === "number"
-        ? new Date(cycle.end_time * 1000)
-        : new Date(cycle.end_time);
-      if (!isNaN(d.getTime())) {
-        nextBillingDate = d.toISOString().split("T")[0];
-      }
-    }
-
-    return { thresholdLimit, currentSpend, nextBillingDate };
-  } catch {
-    return null;
+  const url = `https://graph.facebook.com/v21.0/${adAccountId}/adspaymentcycle?fields=threshold_amount,amount_spent,end_time&access_token=${token}`;
+  const res = await fetchWithTimeout(url, {}, 2500);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`billing ${adAccountId}: status ${res.status} ${err.substring(0, 180)}`);
   }
+  const json = await safeJson(res);
+  const cycle = json.data?.[0];
+  if (!cycle) return null;
+
+  const thresholdLimit = cycle.threshold_amount ? Number(cycle.threshold_amount) / 100 : null;
+  const currentSpend = cycle.amount_spent ? Number(cycle.amount_spent) / 100 : null;
+  let nextBillingDate: string | null = null;
+  if (cycle.end_time) {
+    const d = typeof cycle.end_time === "number"
+      ? new Date(cycle.end_time * 1000)
+      : new Date(cycle.end_time);
+    if (!isNaN(d.getTime())) {
+      nextBillingDate = d.toISOString().split("T")[0];
+    }
+  }
+
+  return { thresholdLimit, currentSpend, nextBillingDate };
 }
 
 // ── Meta: fetch a paginated ad-account edge (owned or client) from BM ──
@@ -67,12 +101,12 @@ async function fetchMetaAccountEdge(
   const out: any[] = [];
   let pages = 0;
   while (url && pages < 10) {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 8000);
     if (!res.ok) {
       const err = await res.text();
       throw new Error(`Meta ${edge} API error (status ${res.status}): ${err.substring(0, 400)}`);
     }
-    const json = await res.json();
+    const json = await safeJson(res);
     for (const acc of json.data ?? []) out.push(acc);
     url = json.paging?.next ?? null;
     pages++;
@@ -88,12 +122,12 @@ async function fetchMetaSystemUserAccounts(token: string): Promise<any[]> {
   const out: any[] = [];
   let pages = 0;
   while (url && pages < 10) {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 8000);
     if (!res.ok) {
       const err = await res.text();
       throw new Error(`Meta me/adaccounts API error (status ${res.status}): ${err.substring(0, 400)}`);
     }
-    const json = await res.json();
+    const json = await safeJson(res);
     for (const acc of json.data ?? []) out.push(acc);
     url = json.paging?.next ?? null;
     pages++;
@@ -101,18 +135,62 @@ async function fetchMetaSystemUserAccounts(token: string): Promise<any[]> {
   return out;
 }
 
+// ── Meta: partner-shared businesses sometimes expose accounts through agency businesses ──
+async function fetchMetaPartnerBusinessAccounts(
+  businessId: string,
+  token: string,
+): Promise<{ accounts: any[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  let url: string | null =
+    `https://graph.facebook.com/v21.0/${businessId}/agencies?fields=id,name&limit=100&access_token=${token}`;
+  const businesses: any[] = [];
+  let pages = 0;
+
+  while (url && pages < 5) {
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Meta agencies API error (status ${res.status}): ${err.substring(0, 400)}`);
+    }
+    const json = await safeJson(res);
+    for (const biz of json.data ?? []) businesses.push(biz);
+    url = json.paging?.next ?? null;
+    pages++;
+  }
+
+  const settled = await Promise.allSettled(
+    businesses.slice(0, 10).map(async (biz) => {
+      const rows = await fetchMetaAccountEdge(String(biz.id), "owned_ad_accounts", token);
+      return rows.map((acc) => ({ ...acc, partner_business: { id: biz.id, name: biz.name } }));
+    }),
+  );
+
+  const accounts: any[] = [];
+  settled.forEach((result, index) => {
+    const biz = businesses[index];
+    if (result.status === "fulfilled") {
+      accounts.push(...result.value);
+    } else {
+      warnings.push(`partner business ${biz?.name ?? biz?.id ?? index}: ${getErrorMessage(result.reason)}`);
+    }
+  });
+
+  return { accounts, warnings };
+}
+
 
 // ── Meta: fetch owned + partner + system-user ad accounts ──
 async function fetchMetaAccounts(
   appId: string,
   token: string,
-): Promise<{ accounts: any[]; warnings: string[] }> {
+): Promise<{ accounts: any[]; warnings: string[]; counts: Record<string, number> }> {
   const warnings: string[] = [];
 
-  const [ownedRes, partnerRes, systemUserRes] = await Promise.allSettled([
+  const [ownedRes, partnerRes, systemUserRes, partnerBusinessRes] = await Promise.allSettled([
     fetchMetaAccountEdge(appId, "owned_ad_accounts", token),
     fetchMetaAccountEdge(appId, "client_ad_accounts", token),
     fetchMetaSystemUserAccounts(token),
+    fetchMetaPartnerBusinessAccounts(appId, token),
   ]);
 
   if (ownedRes.status === "rejected") {
@@ -124,7 +202,7 @@ async function fetchMetaAccounts(
   if (partnerRes.status === "fulfilled") {
     partner = partnerRes.value;
   } else {
-    const msg = partnerRes.reason instanceof Error ? partnerRes.reason.message : String(partnerRes.reason);
+    const msg = getErrorMessage(partnerRes.reason);
     warnings.push(msg);
     console.warn(`Partner (client_ad_accounts) fetch failed: ${msg}`);
   }
@@ -133,33 +211,49 @@ async function fetchMetaAccounts(
   if (systemUserRes.status === "fulfilled") {
     systemUser = systemUserRes.value;
   } else {
-    const msg = systemUserRes.reason instanceof Error ? systemUserRes.reason.message : String(systemUserRes.reason);
+    const msg = getErrorMessage(systemUserRes.reason);
     warnings.push(msg);
     console.warn(`System User (me/adaccounts) fetch failed: ${msg}`);
   }
 
+  let partnerBusiness: any[] = [];
+  if (partnerBusinessRes.status === "fulfilled") {
+    partnerBusiness = partnerBusinessRes.value.accounts;
+    warnings.push(...partnerBusinessRes.value.warnings);
+  } else {
+    const msg = getErrorMessage(partnerBusinessRes.reason);
+    warnings.push(msg);
+    console.warn(`Partner business discovery failed: ${msg}`);
+  }
+
   // Merge, dedupe by account_id (precedence: owned > partner > system_user)
-  const map = new Map<string, { acc: any; ownership: "owned" | "partner" | "system_user" }>();
+  const map = new Map<string, { acc: any; ownership: MetaOwnership }>();
   for (const acc of systemUser) {
-    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "system_user" });
+    const id = normalizeMetaAccountId(acc?.account_id);
+    if (id) map.set(id, { acc, ownership: "system_user" });
+  }
+  for (const acc of partnerBusiness) {
+    const id = normalizeMetaAccountId(acc?.account_id);
+    if (id) map.set(id, { acc, ownership: "partner" });
   }
   for (const acc of partner) {
-    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "partner" });
+    const id = normalizeMetaAccountId(acc?.account_id);
+    if (id) map.set(id, { acc, ownership: "partner" });
   }
   for (const acc of owned) {
-    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "owned" });
+    const id = normalizeMetaAccountId(acc?.account_id);
+    if (id) map.set(id, { acc, ownership: "owned" });
   }
   console.log(
-    `Meta fetch: owned=${owned.length}, partner=${partner.length}, system_user=${systemUser.length}, merged=${map.size}`,
+    `Meta fetch: owned=${owned.length}, partner=${partner.length}, partner_business=${partnerBusiness.length}, system_user=${systemUser.length}, merged=${map.size}`,
   );
 
-
-  const accounts: any[] = [];
-  for (const { acc, ownership } of map.values()) {
+  const enriched = await Promise.allSettled(Array.from(map.values()).map(async ({ acc, ownership }) => {
     let billingType = "prepaid";
     let thresholdLimit: number | null = null;
     let nextBillingDate: string | null = null;
     let currentThresholdSpend: number | null = null;
+    let billingWarning: string | null = null;
 
     if (acc.funding_source_details) {
       const fsd = acc.funding_source_details;
@@ -173,35 +267,63 @@ async function fetchMetaAccounts(
     }
 
     const currency = acc.currency === "BDT" ? "BDT" : "USD";
-    const formattedId = acc.account_id?.replace(/^act_/, "") ? `act_${acc.account_id.replace(/^act_/, "")}` : acc.account_id;
+    const formattedId = formatMetaAccountId(acc.account_id);
 
-    const billingCycle = await fetchMetaBillingCycle(formattedId, token);
-    if (billingCycle) {
-      if (billingCycle.thresholdLimit) {
-        billingType = "threshold_postpaid";
-        thresholdLimit = billingCycle.thresholdLimit;
+    try {
+      const billingCycle = await fetchMetaBillingCycle(formattedId, token);
+      if (billingCycle) {
+        if (billingCycle.thresholdLimit) {
+          billingType = "threshold_postpaid";
+          thresholdLimit = billingCycle.thresholdLimit;
+        }
+        if (billingCycle.nextBillingDate) {
+          nextBillingDate = billingCycle.nextBillingDate;
+        }
+        if (billingCycle.currentSpend !== null) {
+          currentThresholdSpend = billingCycle.currentSpend;
+        }
       }
-      if (billingCycle.nextBillingDate) {
-        nextBillingDate = billingCycle.nextBillingDate;
-      }
-      if (billingCycle.currentSpend !== null) {
-        currentThresholdSpend = billingCycle.currentSpend;
-      }
+    } catch (err) {
+      billingWarning = getErrorMessage(err);
+      console.warn(`Meta billing enrichment skipped: ${billingWarning}`);
     }
 
-    accounts.push({
-      ad_account_id: formattedId,
-      account_name: acc.name ?? "",
-      account_currency: currency,
-      billing_type: billingType,
-      threshold_limit: thresholdLimit,
-      next_billing_date: nextBillingDate,
-      current_threshold_spend: currentThresholdSpend ?? 0,
-      ownership,
-    });
+    return {
+      account: {
+        ad_account_id: formattedId,
+        account_name: acc.name ?? "",
+        account_currency: currency,
+        billing_type: billingType,
+        threshold_limit: thresholdLimit,
+        next_billing_date: nextBillingDate,
+        current_threshold_spend: currentThresholdSpend ?? 0,
+        ownership,
+      },
+      warning: billingWarning,
+    };
+  }));
+
+  const accounts: any[] = [];
+  for (const result of enriched) {
+    if (result.status === "fulfilled") {
+      accounts.push(result.value.account);
+      if (result.value.warning) warnings.push(result.value.warning);
+    } else {
+      warnings.push(`Meta account enrichment failed: ${getErrorMessage(result.reason)}`);
+    }
   }
 
-  return { accounts, warnings };
+  return {
+    accounts,
+    warnings,
+    counts: {
+      owned: owned.length,
+      partner: partner.length,
+      partner_business: partnerBusiness.length,
+      system_user: systemUser.length,
+      merged: map.size,
+    },
+  };
 }
 
 
