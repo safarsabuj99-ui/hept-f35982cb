@@ -84,6 +84,7 @@ export default function AdAccounts() {
   const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(new Set());
   const [orgLimits, setOrgLimits] = useState<OrgLimits | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [discoverySummary, setDiscoverySummary] = useState<string[]>([]);
   const [form, setForm] = useState({
     platform_name: "", ad_account_id: "", account_currency: "USD",
     account_spending_limit: "250", billing_type: "prepaid", threshold_limit: "250",
@@ -189,6 +190,7 @@ export default function AdAccounts() {
       setDiscoveredAccounts(discovered);
       setOrgLimits(data.limits ?? null);
       setImportErrors(data.errors ?? []);
+      setDiscoverySummary(data.discovery_summary ?? []);
       // Pre-select new, inactive, and relinkable accounts
       const selectable = discovered.filter(isSelectableDiscovered).map(getDiscoveredKey);
       // Cap at remaining limit
@@ -253,6 +255,7 @@ export default function AdAccounts() {
     setSelectedDiscovered(new Set());
     setOrgLimits(null);
     setImportErrors([]);
+    setDiscoverySummary([]);
   };
 
   const toggleDiscoveredAccount = (key: string) => {
@@ -533,6 +536,12 @@ export default function AdAccounts() {
                   {importErrors.length > 0 && (
                     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive space-y-1">
                       {importErrors.map((err, i) => <p key={i}>⚠ {err}</p>)}
+                    </div>
+                  )}
+
+                  {discoverySummary.length > 0 && (
+                    <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                      {discoverySummary.map((line, i) => <p key={i}>{line}</p>)}
                     </div>
                   )}
 
