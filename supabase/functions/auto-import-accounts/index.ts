@@ -102,22 +102,57 @@ async function fetchMetaSystemUserAccounts(token: string): Promise<any[]> {
 }
 
 
-// ── Meta: fetch owned + partner (client) ad accounts from Business Manager ──
-async function fetchMetaAccounts(appId: string, token: string) {
-  const [owned, partner] = await Promise.all([
+// ── Meta: fetch owned + partner + system-user ad accounts ──
+async function fetchMetaAccounts(
+  appId: string,
+  token: string,
+): Promise<{ accounts: any[]; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  const [ownedRes, partnerRes, systemUserRes] = await Promise.allSettled([
     fetchMetaAccountEdge(appId, "owned_ad_accounts", token),
     fetchMetaAccountEdge(appId, "client_ad_accounts", token),
+    fetchMetaSystemUserAccounts(token),
   ]);
 
-  // Merge, dedupe by account_id (owned wins)
-  const map = new Map<string, { acc: any; ownership: "owned" | "partner" }>();
+  if (ownedRes.status === "rejected") {
+    throw ownedRes.reason instanceof Error ? ownedRes.reason : new Error(String(ownedRes.reason));
+  }
+  const owned = ownedRes.value;
+
+  let partner: any[] = [];
+  if (partnerRes.status === "fulfilled") {
+    partner = partnerRes.value;
+  } else {
+    const msg = partnerRes.reason instanceof Error ? partnerRes.reason.message : String(partnerRes.reason);
+    warnings.push(msg);
+    console.warn(`Partner (client_ad_accounts) fetch failed: ${msg}`);
+  }
+
+  let systemUser: any[] = [];
+  if (systemUserRes.status === "fulfilled") {
+    systemUser = systemUserRes.value;
+  } else {
+    const msg = systemUserRes.reason instanceof Error ? systemUserRes.reason.message : String(systemUserRes.reason);
+    warnings.push(msg);
+    console.warn(`System User (me/adaccounts) fetch failed: ${msg}`);
+  }
+
+  // Merge, dedupe by account_id (precedence: owned > partner > system_user)
+  const map = new Map<string, { acc: any; ownership: "owned" | "partner" | "system_user" }>();
+  for (const acc of systemUser) {
+    if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "system_user" });
+  }
   for (const acc of partner) {
     if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "partner" });
   }
   for (const acc of owned) {
     if (acc?.account_id) map.set(acc.account_id, { acc, ownership: "owned" });
   }
-  console.log(`Meta BM fetch: owned=${owned.length}, partner=${partner.length}, merged=${map.size}`);
+  console.log(
+    `Meta fetch: owned=${owned.length}, partner=${partner.length}, system_user=${systemUser.length}, merged=${map.size}`,
+  );
+
 
   const accounts: any[] = [];
   for (const { acc, ownership } of map.values()) {
