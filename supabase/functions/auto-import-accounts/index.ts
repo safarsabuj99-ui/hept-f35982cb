@@ -592,15 +592,16 @@ Deno.serve(async (req) => {
     // Get existing account IDs to mark as already imported (org-scoped to prevent cross-tenant false positives)
     let existingQuery = adminClient
       .from("ad_accounts")
-      .select("ad_account_id, platform_name");
+      .select("id, ad_account_id, platform_name, account_name, account_currency, billing_type, threshold_limit, next_billing_date, current_threshold_spend, is_active, api_integration_id, org_id");
     if (orgId) {
       existingQuery = existingQuery.eq("org_id", orgId);
     }
     const { data: existingAccounts } = await existingQuery;
 
-    const existingSet = new Set(
-      (existingAccounts ?? []).map((a: any) => `${a.platform_name}:${a.ad_account_id}`)
+    const existingAccountMap = new Map(
+      (existingAccounts ?? []).map((a: any) => [makeAccountKey(a.platform_name, a.ad_account_id), a])
     );
+    const existingSet = new Set(existingAccountMap.keys());
 
     // Get TikTok proxy URL setting
     const { data: proxySetting } = await adminClient
@@ -620,6 +621,9 @@ Deno.serve(async (req) => {
             case "meta": {
               const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
               platformAccounts = meta.accounts;
+              errors.push(
+                `meta (${integration.instance_name ?? integration.id}): discovered owned=${meta.counts.owned}, partner=${meta.counts.partner}, partner_business=${meta.counts.partner_business}, system_user=${meta.counts.system_user}, merged=${meta.counts.merged}`,
+              );
               for (const w of meta.warnings) {
                 errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
               }
@@ -637,13 +641,17 @@ Deno.serve(async (req) => {
           }
 
           for (const acc of platformAccounts) {
-            const key = `${integration.platform}:${acc.ad_account_id}`;
+            const key = makeAccountKey(integration.platform, acc.ad_account_id);
+            const existing = existingAccountMap.get(key) as any;
             discovered.push({
               ...acc,
               platform: integration.platform,
               integration_id: integration.id,
               integration_name: integration.instance_name || `${integration.platform} integration`,
-              already_imported: existingSet.has(key),
+              already_imported: !!existing,
+              existing_id: existing?.id ?? null,
+              existing_is_active: existing?.is_active ?? null,
+              import_status: !existing ? "new" : existing.is_active ? "already_active" : "inactive",
             });
           }
         } catch (err: any) {
@@ -659,9 +667,11 @@ Deno.serve(async (req) => {
 
     // ── INSERT MODE: Import only selected accounts ──
     let created = 0;
+    let updated = 0;
     let skipped = 0;
     const errors: string[] = [];
     const newAccounts: any[] = [];
+    const accountsToUpdate: { existing: any; account: any; integration: any }[] = [];
 
     if (selected_accounts && Array.isArray(selected_accounts) && selected_accounts.length > 0) {
       // Enforce limit check
@@ -679,15 +689,17 @@ Deno.serve(async (req) => {
       const integrationMap = new Map(integrations.map((i: any) => [i.id, i]));
 
       for (const account of selected_accounts) {
-        const key = `${account.platform}:${account.ad_account_id}`;
-        if (existingSet.has(key)) {
-          skipped++;
-          continue;
-        }
+        const key = makeAccountKey(account.platform, account.ad_account_id);
 
         const integration = integrationMap.get(account.integration_id);
         if (!integration) {
           errors.push(`Integration not found for account ${account.ad_account_id}`);
+          continue;
+        }
+
+        const existing = existingAccountMap.get(key) as any;
+        if (existing) {
+          accountsToUpdate.push({ existing, account, integration });
           continue;
         }
 
@@ -708,6 +720,30 @@ Deno.serve(async (req) => {
         existingSet.add(key);
       }
 
+      for (const { existing, account, integration } of accountsToUpdate) {
+        const updatePayload: any = {
+          account_name: account.account_name || existing.account_name,
+          api_integration_id: integration.id,
+          billing_type: account.billing_type || existing.billing_type,
+          threshold_limit: account.threshold_limit ?? existing.threshold_limit,
+          next_billing_date: account.next_billing_date ?? existing.next_billing_date,
+          current_threshold_spend: account.current_threshold_spend ?? existing.current_threshold_spend ?? 0,
+          account_currency: account.account_currency || existing.account_currency,
+          org_id: orgId ?? integration.org_id ?? existing.org_id ?? null,
+        };
+        if (!existing.is_active) updatePayload.is_active = true;
+
+        const { error: updateError } = await adminClient
+          .from("ad_accounts")
+          .update(updatePayload)
+          .eq("id", existing.id);
+        if (updateError) {
+          errors.push(`Failed to update ${account.ad_account_id}: ${updateError.message}`);
+        } else {
+          updated++;
+        }
+      }
+
       if (newAccounts.length > 0) {
         const { error: insertError } = await adminClient.from("ad_accounts").insert(newAccounts);
         if (insertError) throw insertError;
@@ -715,7 +751,12 @@ Deno.serve(async (req) => {
       }
 
       // Update last_synced_at for involved integrations
-      const usedIntegrationIds = [...new Set(newAccounts.map((a: any) => a.api_integration_id))];
+      const usedIntegrationIds = [
+        ...new Set([
+          ...newAccounts.map((a: any) => a.api_integration_id),
+          ...accountsToUpdate.map((a) => a.integration.id),
+        ]),
+      ];
       for (const intId of usedIntegrationIds) {
         await adminClient
           .from("api_integrations")
@@ -731,6 +772,9 @@ Deno.serve(async (req) => {
             case "meta": {
               const meta = await fetchMetaAccounts(integration.app_id, integration.api_token);
               platformAccounts = meta.accounts;
+              errors.push(
+                `meta (${integration.instance_name ?? integration.id}): discovered owned=${meta.counts.owned}, partner=${meta.counts.partner}, partner_business=${meta.counts.partner_business}, system_user=${meta.counts.system_user}, merged=${meta.counts.merged}`,
+              );
               for (const w of meta.warnings) {
                 errors.push(`meta (${integration.instance_name ?? integration.id}): ${w}`);
               }
@@ -748,8 +792,29 @@ Deno.serve(async (req) => {
           }
 
           for (const account of platformAccounts) {
-            const key = `${integration.platform}:${account.ad_account_id}`;
-            if (existingSet.has(key)) {
+            const key = makeAccountKey(integration.platform, account.ad_account_id);
+            const existing = existingAccountMap.get(key) as any;
+            if (existing) {
+              const updatePayload: any = {
+                account_name: account.account_name || existing.account_name,
+                api_integration_id: integration.id,
+                billing_type: account.billing_type || existing.billing_type,
+                threshold_limit: account.threshold_limit ?? existing.threshold_limit,
+                next_billing_date: account.next_billing_date ?? existing.next_billing_date,
+                current_threshold_spend: account.current_threshold_spend ?? existing.current_threshold_spend ?? 0,
+                account_currency: account.account_currency || existing.account_currency,
+                org_id: orgId ?? integration.org_id ?? existing.org_id ?? null,
+              };
+              if (!existing.is_active) updatePayload.is_active = true;
+              const { error: updateError } = await adminClient
+                .from("ad_accounts")
+                .update(updatePayload)
+                .eq("id", existing.id);
+              if (updateError) {
+                errors.push(`Failed to update ${account.ad_account_id}: ${updateError.message}`);
+              } else {
+                updated++;
+              }
               skipped++;
               continue;
             }
@@ -768,6 +833,7 @@ Deno.serve(async (req) => {
               org_id: orgId ?? integration.org_id ?? null,
             });
             existingSet.add(key);
+            existingAccountMap.set(key, { ...account, platform_name: integration.platform, api_integration_id: integration.id, is_active: true });
           }
 
           await adminClient
@@ -787,7 +853,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ created, skipped, errors, accounts: newAccounts, limits }),
+      JSON.stringify({ created, updated, skipped, errors, accounts: newAccounts, limits }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
