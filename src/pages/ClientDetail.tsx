@@ -143,7 +143,7 @@ export default function ClientDetail() {
     const [profileRes, adAccountClientsRes, paymentsRes, txRows, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_account_clients").select("id, ad_account_id, client_id, mapping_keyword").eq("client_id", userId!),
-      supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date").eq("client_id", userId!).order("created_at", { ascending: false }),
+      supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date, exchange_rate_snapshot, platform_amounts, paid_to_account_id, org_id, client_id").eq("client_id", userId!).order("created_at", { ascending: false }),
       fetchAllRows<any>(() =>
         supabase
           .from("transactions")
