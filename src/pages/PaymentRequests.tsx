@@ -570,6 +570,11 @@ export default function PaymentRequests() {
                               </Button>
                             </div>
                           )}
+                          {r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) && (
+                            <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1 h-7 px-2 text-xs">
+                              <Undo2 className="h-3 w-3" /> Refund
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
