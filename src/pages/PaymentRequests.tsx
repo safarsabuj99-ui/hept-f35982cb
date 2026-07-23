@@ -153,11 +153,8 @@ export default function PaymentRequests() {
 
   const fetchRequests = async () => {
     const { data: prs } = await (supabase.from("payment_requests" as any).select("*").order("created_at", { ascending: false }) as any);
-    if (!prs || prs.length === 0) { setRequests([]); setLoading(false); return; }
-
-  const fetchRequests = async () => {
-    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").order("created_at", { ascending: false }) as any);
     if (!prs || prs.length === 0) { setRequests([]); setRefundTotals({}); setLoading(false); return; }
+
 
     const clientIds = [...new Set(prs.map((p: any) => p.client_id))];
     const requestIds = prs.map((p: any) => p.id);
