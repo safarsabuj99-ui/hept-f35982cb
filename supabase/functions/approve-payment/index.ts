@@ -189,6 +189,7 @@ Deno.serve(async (req) => {
         final_amount_usd: finalUsd,
         admin_note: admin_note || null,
         received_in_account_id: received_in_account_id || null,
+        mfs_fee_percent: isMfs && feePct > 0 ? feePct : null,
       })
       .eq("id", request_id)
       .eq("status", "pending");
