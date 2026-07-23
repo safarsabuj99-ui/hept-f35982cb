@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock, Loader2, Zap } from "lucide-react";
+import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock, Loader2, Zap, Undo2 } from "lucide-react";
+import { RefundDialog } from "@/components/RefundDialog";
 import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { TablePagination } from "@/components/TablePagination";
@@ -107,6 +108,7 @@ export default function ClientDetail() {
   const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
   const [spendAdAccountMap, setSpendAdAccountMap] = useState<Record<string, string>>({});
   const [payments, setPayments] = useState<any[]>([]);
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: any | null }>({ open: false, request: null });
   const [transactions, setTransactions] = useState<any[]>([]);
 
   // Ad Account assignments
@@ -142,7 +144,7 @@ export default function ClientDetail() {
     const [profileRes, adAccountClientsRes, paymentsRes, txRows, managersRes, roleRes, allAdAccountsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId!).single(),
       supabase.from("ad_account_clients").select("id, ad_account_id, client_id, mapping_keyword").eq("client_id", userId!),
-      supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date").eq("client_id", userId!).order("created_at", { ascending: false }),
+      supabase.from("payment_requests").select("id, amount_bdt, payment_method, status, created_at, final_amount_usd, admin_note, proof_image_url, platform, payment_date, exchange_rate_snapshot, platform_amounts, paid_to_account_id, org_id, client_id").eq("client_id", userId!).order("created_at", { ascending: false }),
       fetchAllRows<any>(() =>
         supabase
           .from("transactions")
@@ -205,7 +207,21 @@ export default function ClientDetail() {
       await loadSpendData(accountIds, { from: getLocalTodayClient(), to: getLocalTodayClient() });
     }
 
-    setPayments(paymentsRes.data || []);
+    const paymentRows = paymentsRes.data || [];
+    const paymentIds = paymentRows.map((p: any) => p.id);
+    let refundedMap: Record<string, number> = {};
+    if (paymentIds.length) {
+      const { data: refundRows } = await supabase
+        .from("refunds" as any)
+        .select("payment_request_id, amount_bdt, status")
+        .in("payment_request_id", paymentIds);
+      (refundRows || []).forEach((r: any) => {
+        if (r.status === "approved" || r.status === "completed" || !r.status) {
+          refundedMap[r.payment_request_id] = (refundedMap[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
+        }
+      });
+    }
+    setPayments(paymentRows.map((p: any) => ({ ...p, refunded_bdt: refundedMap[p.id] || 0 })));
     setTransactions(txRes.data || []);
     setLoading(false);
   }
@@ -1272,10 +1288,16 @@ export default function ClientDetail() {
                         <TableHead className="text-right">Amount (BDT)</TableHead>
                         <TableHead className="text-right">Credited (USD)</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {payments.map((p: any) => (
+                      {payments.map((p: any) => {
+                        const refunded = Number(p.refunded_bdt || 0);
+                        const amount = Number(p.amount_bdt || 0);
+                        const remaining = amount - refunded;
+                        const canRefund = p.status === "approved" && remaining > 0.009;
+                        return (
                         <TableRow key={p.id}>
                           <TableCell className="text-sm">{new Date(p.created_at).toLocaleDateString()}</TableCell>
                           <TableCell>
@@ -1286,15 +1308,35 @@ export default function ClientDetail() {
                             {p.final_amount_usd ? fmt(p.final_amount_usd) : "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"}
-                              className="text-xs"
-                            >
-                              {p.status}
-                            </Badge>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge
+                                variant={p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"}
+                                className="text-xs"
+                              >
+                                {p.status}
+                              </Badge>
+                              {refunded > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {remaining <= 0.009 ? "Fully refunded" : `Refunded ৳${fmtBdt(refunded)}`}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canRefund && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1"
+                                onClick={() => setRefundDialog({ open: true, request: p })}
+                              >
+                                <Undo2 className="h-3.5 w-3.5" /> Refund
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -1416,6 +1458,13 @@ export default function ClientDetail() {
         clientId={userId}
         onSuccess={loadAll}
       />
+      <RefundDialog
+        open={refundDialog.open}
+        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
+        request={refundDialog.request as any}
+        onSuccess={loadAll}
+      />
     </div>
   );
 }
+
