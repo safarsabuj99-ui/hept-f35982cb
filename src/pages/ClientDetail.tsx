@@ -1458,6 +1458,13 @@ export default function ClientDetail() {
         clientId={userId}
         onSuccess={loadAll}
       />
+      <RefundDialog
+        open={refundDialog.open}
+        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
+        request={refundDialog.request as any}
+        onSuccess={loadAll}
+      />
     </div>
   );
 }
+
