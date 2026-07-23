@@ -607,7 +607,7 @@ export default function PaymentRequests() {
                             </TableCell>
                             <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground font-mono">{r.transaction_id || "—"}</TableCell>
-                            <TableCell>{statusBadge(r.status)}</TableCell>
+                            <TableCell>{statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}</TableCell>
                             <TableCell className="hidden lg:table-cell text-right font-mono">
                               {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
                             </TableCell>
