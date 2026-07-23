@@ -20,6 +20,8 @@ interface PaymentRequestLite {
   received_in_account_id: string | null;
   platform: string | null;
   platform_amounts: Record<string, number> | null;
+  payment_method?: string | null;
+  mfs_fee_percent?: number | null;
   client_name?: string;
   org_id?: string | null;
 }
