@@ -1019,6 +1019,14 @@ export default function PaymentRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RefundDialog
+        open={refundDialog.open}
+        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
+        request={refundDialog.request as any}
+        onSuccess={fetchRequests}
+      />
     </div>
   );
 }
+
