@@ -53,17 +53,39 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
     [request, refundedSoFar]
   );
 
-  // Derive default single rate from snapshot
-  const defaultRate = useMemo(() => {
+  // Effective all-in rate = amount_bdt / final_amount_usd.
+  // This bakes in MFS fee + any multi-platform blending, so refund reverses exactly what was credited.
+  const effectiveRate = useMemo(() => {
+    const bdt = Number(request?.amount_bdt ?? 0);
+    const usd = Number(request?.final_amount_usd ?? 0);
+    if (bdt > 0 && usd > 0) return bdt / usd;
+    // Fallback for legacy rows without final_amount_usd: use snapshot avg
     const snap = request?.exchange_rate_snapshot;
-    if (!snap) return 120;
-    if (typeof snap === "number") return Number(snap);
-    if (typeof snap === "object") {
+    if (typeof snap === "number") return Number(snap) || 120;
+    if (snap && typeof snap === "object") {
       const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-      if (vals.length === 0) return 120;
-      return vals.reduce((s, v) => s + v, 0) / vals.length;
+      if (vals.length) return vals.reduce((s, v) => s + v, 0) / vals.length;
     }
-    return Number(snap) || 120;
+    return 120;
+  }, [request]);
+
+  const feePct = useMemo(() => {
+    if (request?.mfs_fee_percent != null) return Number(request.mfs_fee_percent);
+    // Derive from amounts if possible
+    const bdt = Number(request?.amount_bdt ?? 0);
+    const usd = Number(request?.final_amount_usd ?? 0);
+    const snap = request?.exchange_rate_snapshot;
+    let rawRate: number | null = null;
+    if (typeof snap === "number") rawRate = Number(snap);
+    else if (snap && typeof snap === "object") {
+      const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
+      if (vals.length) rawRate = vals.reduce((s, v) => s + v, 0) / vals.length;
+    }
+    if (bdt > 0 && usd > 0 && rawRate && rawRate > 0) {
+      const derived = (1 - (usd * rawRate) / bdt) * 100;
+      if (derived > 0.05 && derived < 15) return Math.round(derived * 100) / 100;
+    }
+    return 0;
   }, [request]);
 
   useEffect(() => {
@@ -81,13 +103,13 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       setRefundedSoFar(already);
       const remaining = Math.max(0, Number(request.amount_bdt) - already);
       setAmountBdt(remaining.toFixed(2));
-      const r = defaultRate;
-      setRate(r.toFixed(2));
+      const r = effectiveRate;
+      setRate(r.toFixed(4));
       setAmountUsd((remaining / r).toFixed(2));
       setAccountId(request.received_in_account_id || "");
       setLoading(false);
     })();
-  }, [open, request, defaultRate]);
+  }, [open, request, effectiveRate]);
 
   // Live recompute USD when BDT or rate changes
   useEffect(() => {
@@ -97,6 +119,17 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       setAmountUsd((b / r).toFixed(2));
     }
   }, [amountBdt, rate]);
+
+  // Drift warning: computed fee-adjusted USD vs current USD
+  const computedUsd = useMemo(() => {
+    const b = Number(amountBdt);
+    return b > 0 && effectiveRate > 0 ? b / effectiveRate : 0;
+  }, [amountBdt, effectiveRate]);
+  const usdDriftPct = useMemo(() => {
+    const u = Number(amountUsd);
+    if (!(computedUsd > 0) || !(u > 0)) return 0;
+    return Math.abs(u - computedUsd) / computedUsd * 100;
+  }, [amountUsd, computedUsd]);
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const wouldOverdraw = selectedAccount ? Number(selectedAccount.current_balance_bdt) - Number(amountBdt) < 0 : false;
