@@ -206,7 +206,21 @@ export default function ClientDetail() {
       await loadSpendData(accountIds, { from: getLocalTodayClient(), to: getLocalTodayClient() });
     }
 
-    setPayments(paymentsRes.data || []);
+    const paymentRows = paymentsRes.data || [];
+    const paymentIds = paymentRows.map((p: any) => p.id);
+    let refundedMap: Record<string, number> = {};
+    if (paymentIds.length) {
+      const { data: refundRows } = await supabase
+        .from("refunds" as any)
+        .select("payment_request_id, amount_bdt, status")
+        .in("payment_request_id", paymentIds);
+      (refundRows || []).forEach((r: any) => {
+        if (r.status === "approved" || r.status === "completed" || !r.status) {
+          refundedMap[r.payment_request_id] = (refundedMap[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
+        }
+      });
+    }
+    setPayments(paymentRows.map((p: any) => ({ ...p, refunded_bdt: refundedMap[p.id] || 0 })));
     setTransactions(txRes.data || []);
     setLoading(false);
   }
