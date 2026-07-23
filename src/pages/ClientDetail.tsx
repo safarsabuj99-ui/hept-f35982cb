@@ -108,6 +108,7 @@ export default function ClientDetail() {
   const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
   const [spendAdAccountMap, setSpendAdAccountMap] = useState<Record<string, string>>({});
   const [payments, setPayments] = useState<any[]>([]);
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: any | null }>({ open: false, request: null });
   const [transactions, setTransactions] = useState<any[]>([]);
 
   // Ad Account assignments
