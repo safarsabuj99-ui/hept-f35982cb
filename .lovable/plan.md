@@ -1,19 +1,31 @@
-## Add Refund button to Client Detail → Payments tab
+## Fix: Payments tab shows "No payment requests" on Client Detail
 
-The Refund system already exists (`RefundDialog`, DB schema, refund logic used on `/admin/payment-requests`). Only the entry point is missing on the per-client page.
+### Root cause (verified)
 
-### Changes
+`src/pages/ClientDetail.tsx` (line 147) selects `paid_to_account_id` from `payment_requests`, but that column does not exist. The actual column is `received_in_account_id`. PostgREST rejects the whole query, `paymentsRes.data` is `null`, and the Payments tab renders the empty state — even though the DB has 10+ approved payment requests for this client.
 
-**`src/pages/ClientDetail.tsx`**
-1. Import `RefundDialog` and `Undo2` icon; add `refundDialog` state (`{ open, request }`).
-2. In `fetchAll`, extend the `payment_requests` select to include the fields `RefundDialog` needs: `exchange_rate_snapshot`, `platform_amounts`, `paid_to_account_id`, `org_id`, `client_id`.
-3. Also fetch approved-refund totals (`SELECT payment_request_id, sum(amount_bdt)` from `refunds`) and attach `refunded_bdt` to each payment row so partial-refund state is visible.
-4. In the Payments table:
-   - Add an **Actions** column (admin-only, gated by existing role check used elsewhere in the file).
-   - Show a **Refund** button (`variant="outline"`, `Undo2` icon) on rows where `status === 'approved'` and `refunded_bdt < amount_bdt`.
-   - Show a small "Partial refund: ৳X" / "Fully refunded" badge next to the status badge when applicable.
-5. Mount `<RefundDialog>` at the end of the component, passing `onSuccess={fetchAll}` to refresh balances and refund totals after a refund.
+This was introduced in the last turn when the refund button was added and `RefundDialog`'s required fields were appended to the select.
+
+### Change
+
+**`src/pages/ClientDetail.tsx` (line 147)** — rename the column in the select:
+
+- `paid_to_account_id` → `received_in_account_id`
+
+Then, wherever the loaded payment row is passed into `<RefundDialog>` (the refund button click handler / `refundDialog` state population), map it so the dialog still receives its expected `paid_to_account_id` field:
+
+```ts
+setRefundDialog({ open: true, request: { ...p, paid_to_account_id: p.received_in_account_id } })
+```
+
+(or read `received_in_account_id` directly if `RefundDialog` is updated to accept both — but keeping the fix scoped to this file is safer.)
 
 ### Out of scope
-- No changes to refund logic, DB, or the existing dialog.
-- No changes to non-admin views.
+
+- No DB migration. The column name in the DB is correct as-is; only the client query is wrong.
+- No changes to `RefundDialog`, `PaymentRequests.tsx`, or any other page.
+- No changes to refund logic or UI.
+
+### Why this won't recur
+
+The fix uses the real column name, so the query will succeed. If a future edit reintroduces a wrong column, PostgREST will fail loudly — the deeper prevention (typed Supabase queries flagging bad column names at build time) is out of scope for this bug.
