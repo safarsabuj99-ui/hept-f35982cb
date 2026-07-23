@@ -5578,7 +5578,7 @@ export type Database = {
         | "pending_payment"
       payment_gateway_type: "sslcommerz" | "stripe" | "manual"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
-      payment_request_status: "pending" | "approved" | "rejected"
+      payment_request_status: "pending" | "approved" | "rejected" | "refunded"
       plan_change_status: "pending" | "completed" | "cancelled"
       referral_status: "pending" | "qualified" | "paid" | "expired"
       subscription_payment_status: "paid" | "pending" | "overdue" | "cancelled"
@@ -5791,7 +5791,7 @@ export const Constants = {
       ],
       payment_gateway_type: ["sslcommerz", "stripe", "manual"],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],
-      payment_request_status: ["pending", "approved", "rejected"],
+      payment_request_status: ["pending", "approved", "rejected", "refunded"],
       plan_change_status: ["pending", "completed", "cancelled"],
       referral_status: ["pending", "qualified", "paid", "expired"],
       subscription_payment_status: ["paid", "pending", "overdue", "cancelled"],
