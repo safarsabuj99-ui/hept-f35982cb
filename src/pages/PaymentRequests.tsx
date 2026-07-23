@@ -115,6 +115,8 @@ export default function PaymentRequests() {
   const [depositPage, setDepositPage] = useState(1);
   const [depositPageSize, setDepositPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: PaymentRequest | null }>({ open: false, request: null });
+  const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
