@@ -4533,6 +4533,80 @@ export type Database = {
           },
         ]
       }
+      refunds: {
+        Row: {
+          amount_bdt: number
+          amount_usd: number
+          client_id: string
+          created_at: string
+          exchange_rate: number
+          id: string
+          note: string
+          org_id: string | null
+          payment_request_id: string
+          refunded_by: string
+          refunded_from_account_id: string
+          transaction_id: string | null
+        }
+        Insert: {
+          amount_bdt: number
+          amount_usd: number
+          client_id: string
+          created_at?: string
+          exchange_rate: number
+          id?: string
+          note: string
+          org_id?: string | null
+          payment_request_id: string
+          refunded_by: string
+          refunded_from_account_id: string
+          transaction_id?: string | null
+        }
+        Update: {
+          amount_bdt?: number
+          amount_usd?: number
+          client_id?: string
+          created_at?: string
+          exchange_rate?: number
+          id?: string
+          note?: string
+          org_id?: string | null
+          payment_request_id?: string
+          refunded_by?: string
+          refunded_from_account_id?: string
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refunds_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "payment_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_refunded_from_account_id_fkey"
+            columns: ["refunded_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           id: string
