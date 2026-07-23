@@ -1,38 +1,63 @@
-## Findings
+# Refund System for Client Deposits
 
-- The backend is now discovering HEPT Digital partner access: latest function log shows `owned=3, partner=1, system_user=2, merged=4`.
-- So the current problem is likely after discovery: slow/blocking enrichment, inconsistent ID dedupe, or imported/existing accounts being skipped/hidden instead of updated/reactivated.
+Let agencies refund an approved payment request (fully or partially) back to a client, deducting from a chosen agency account and reversing the client's wallet balance — with the original exchange rate pre-filled and editable.
 
-## Plan
+## Behavior
 
-1. **Make Meta discovery resilient and complete**
-   - Normalize every Meta account ID before dedupe (`123` and `act_123` become the same account).
-   - Keep the current three discovery paths:
-     - Business owned accounts
-     - Business partner/client accounts
-     - System User direct `/me/adaccounts`
-   - Add a safe fourth fallback for partner-shared business assets where available, without making it fatal if Meta rejects it.
+1. On every **approved** `payment_requests` row, admins see a new **Refund** action.
+2. Refund dialog opens with smart defaults:
+   - **Refund from account** → defaults to the original `received_in_account_id` (editable — any active `agency_accounts` row).
+   - **Refund BDT amount** → defaults to the remaining refundable amount (original BDT − already-refunded BDT).
+   - **Exchange rate** → defaults to the original `exchange_rate_snapshot` (single rate, or per-platform if multi-platform deposit). Editable.
+   - **Refund USD** → auto-computed as `BDT / rate`, live-updated. Also editable if admin needs manual override.
+   - **Reason / note** (required, min 5 chars).
+3. On submit:
+   - Validate: amount > 0, amount ≤ remaining refundable, source account exists, rate > 0.
+   - Deduct BDT from the chosen agency account via `adjustAccountBalance(account_id, -bdt)`.
+   - Insert a `debit` transaction (type='debit', status='completed', amount=refund_usd, description="Refund: <note>", exchange_rate=rate) → this reduces the client's USD wallet balance through existing balance logic.
+   - Insert a `refunds` row linking to the original payment request (audit trail + partial-refund tracking).
+   - If total refunded ≥ original amount, flip `payment_requests.status` to `refunded`; otherwise leave as `approved` (partial).
+   - Fire notification to the client: "Refund of ৳X issued".
+4. Refunded / partially-refunded requests show a **Refunded ৳X of ৳Y** badge and cannot be re-approved.
+5. Client wallet history shows the refund as a debit line with the note.
 
-2. **Stop billing enrichment from hiding accounts**
-   - Move billing-cycle fetches behind short per-account timeouts.
-   - Run enrichment with `Promise.allSettled`, so account discovery returns even if Meta billing/payment-cycle APIs are slow or permission-denied.
-   - If billing enrichment fails, still show/import the ad account with default billing fields and add a warning.
+## Where refunds appear
 
-3. **Fix import behavior for existing/previously imported accounts**
-   - Replace the current simple “skip if existing” logic with smart upsert behavior:
-     - If the account is new: create it.
-     - If the same org already has the account but it is inactive: reactivate/update it.
-     - If the same account exists under a different integration: update `api_integration_id` to the selected HEPT Digital integration.
-     - Avoid duplicate rows.
-   - Return counts for `created`, `updated/reactivated`, and `skipped`.
+- **Admin → Payment Requests page**: Refund button on approved rows (with tooltip showing remaining refundable).
+- **Client Detail → Wallet/Payments tab**: same Refund button next to each approved deposit.
 
-4. **Make the preview UI explain what happened**
-   - Show ownership source in Fetch Accounts: `Owned`, `Partner`, or `System User`.
-   - Show imported status clearly: `New`, `Already active`, `Inactive — can reactivate`.
-   - Allow selecting inactive existing accounts so import can reactivate them instead of disabling them forever.
-   - Show discovery summary/counts and warnings so partner API failures are visible.
+## Safeguards
 
-5. **Verify with HEPT Digital**
-   - Test the function for the HEPT Digital integration.
-   - Confirm the response includes all 4 discovered accounts from the latest log.
-   - Confirm import writes/reactivates them in `ad_accounts` and they appear in Active/Inactive tabs correctly.
+- Cannot refund more than `original_bdt - sum(prior_refunds_bdt)`.
+- Cannot refund if the chosen source account would go negative (warn + require confirm to allow overdraft).
+- Refund action is admin-only, gated by `has_role('admin')` and org isolation.
+- All refunds logged to `audit_logs` (action_type = `payment_refunded`).
+- Refund cannot be edited/deleted once issued — to reverse, admin issues a new credit transaction.
+
+## Technical Details
+
+### Database migration
+- New table `public.refunds`:
+  - `id`, `payment_request_id` (FK), `client_id`, `org_id`
+  - `refunded_from_account_id` (FK → agency_accounts)
+  - `amount_bdt`, `exchange_rate`, `amount_usd`
+  - `note`, `refunded_by` (FK → auth.users), `created_at`
+  - GRANTs (authenticated + service_role), RLS: admin all within org, client SELECT own.
+  - BEFORE INSERT trigger to auto-fill `org_id` from payment request.
+- Extend `payment_request_status` enum with `'refunded'`.
+- Helper view / RPC `get_refundable_amount(payment_request_id)` returning `original_bdt - COALESCE(sum(refunds.amount_bdt), 0)` for efficient UI checks.
+
+### Frontend
+- New component `src/components/RefundDialog.tsx` (mirrors `DepositFundsDialog` structure): account picker, BDT input, rate input (per-platform when snapshot is jsonb object), computed USD, note field, submit handler.
+- Hook up in `src/pages/PaymentRequests.tsx` (row action + refunded badge) and `src/pages/ClientDetail.tsx` payments list.
+- Wallet history in `ClientWallet.tsx` / `WalletInventory.tsx` already renders debit transactions — the "Refund:" description prefix will render naturally; add a red "Refund" badge when description starts with `Refund:`.
+
+### Balance flow (reuses existing atomic helpers)
+```text
+adjustAccountBalance(source_account, -refund_bdt)   // agency cash out
+INSERT transactions (type=debit, amount=refund_usd) // client wallet down
+INSERT refunds (...)                                // audit + partial tracking
+UPDATE payment_requests SET status='refunded' if fully refunded
+```
+
+No edge function needed — all client-side with RLS-protected writes, matching the existing deposit approval pattern.

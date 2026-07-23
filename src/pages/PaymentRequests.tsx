@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X, Undo2 } from "lucide-react";
+import { RefundDialog } from "@/components/RefundDialog";
 import { Input } from "@/components/ui/input";
 import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { cn } from "@/lib/utils";
@@ -114,6 +115,8 @@ export default function PaymentRequests() {
   const [depositPage, setDepositPage] = useState(1);
   const [depositPageSize, setDepositPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: PaymentRequest | null }>({ open: false, request: null });
+  const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
   const { hasPermission } = usePermissions();
 
   const canManageFinance = hasPermission("can_manage_finance");
@@ -150,12 +153,21 @@ export default function PaymentRequests() {
 
   const fetchRequests = async () => {
     const { data: prs } = await (supabase.from("payment_requests" as any).select("*").order("created_at", { ascending: false }) as any);
-    if (!prs || prs.length === 0) { setRequests([]); setLoading(false); return; }
+    if (!prs || prs.length === 0) { setRequests([]); setRefundTotals({}); setLoading(false); return; }
+
 
     const clientIds = [...new Set(prs.map((p: any) => p.client_id))];
-    const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, business_name").in("user_id", clientIds as string[]);
+    const requestIds = prs.map((p: any) => p.id);
+    const [{ data: profiles }, { data: refunds }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, business_name").in("user_id", clientIds as string[]),
+      (supabase.from("refunds" as any).select("payment_request_id, amount_bdt").in("payment_request_id", requestIds) as any),
+    ]);
     const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name + (p.business_name ? ` (${p.business_name})` : "")]));
-
+    const rTotals: Record<string, number> = {};
+    ((refunds as any[]) ?? []).forEach((r: any) => {
+      rTotals[r.payment_request_id] = (rTotals[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
+    });
+    setRefundTotals(rTotals);
     setRequests(prs.map((p: any) => ({ ...p, client_name: nameMap[p.client_id] || "Unknown" })));
     setLoading(false);
   };
@@ -329,9 +341,15 @@ export default function PaymentRequests() {
     }
   };
 
-  const statusBadge = (status: string) => {
+  const statusBadge = (status: string, refundedBdt?: number, originalBdt?: number) => {
     if (status === "pending") return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Pending</Badge>;
-    if (status === "approved") return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Approved</Badge>;
+    if (status === "refunded") return <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">Refunded</Badge>;
+    if (status === "approved") {
+      if (refundedBdt && refundedBdt > 0 && originalBdt && refundedBdt < originalBdt) {
+        return <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30">Partial refund ৳{refundedBdt.toLocaleString()}</Badge>;
+      }
+      return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Approved</Badge>;
+    }
     return <Badge variant="destructive">Rejected</Badge>;
   };
 
@@ -502,7 +520,7 @@ export default function PaymentRequests() {
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
-                          {statusBadge(r.status)}
+                          {statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}
                         </div>
                         {/* Row 2: Metrics inline */}
                         <div className="grid grid-cols-3 gap-1 text-[11px]">
@@ -552,6 +570,11 @@ export default function PaymentRequests() {
                               </Button>
                             </div>
                           )}
+                          {r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) && (
+                            <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1 h-7 px-2 text-xs">
+                              <Undo2 className="h-3 w-3" /> Refund
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -584,7 +607,7 @@ export default function PaymentRequests() {
                             </TableCell>
                             <TableCell className="text-right font-mono">৳{fmt(r.amount_bdt)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground font-mono">{r.transaction_id || "—"}</TableCell>
-                            <TableCell>{statusBadge(r.status)}</TableCell>
+                            <TableCell>{statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}</TableCell>
                             <TableCell className="hidden lg:table-cell text-right font-mono">
                               {r.final_amount_usd ? `$${fmt(r.final_amount_usd)}` : "—"}
                             </TableCell>
@@ -597,6 +620,12 @@ export default function PaymentRequests() {
                                   </Button>
                                   <Button size="sm" variant="destructive" onClick={() => openConfirm(r, "rejected")} disabled={processing === r.id} className="gap-1">
                                     <XCircle className="h-3 w-3" /> Reject
+                                  </Button>
+                                </div>
+                              ) : r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) ? (
+                                <div className="flex items-center justify-center">
+                                  <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1" title={`Refundable: ৳${(Number(r.amount_bdt) - (refundTotals[r.id] || 0)).toLocaleString()}`}>
+                                    <Undo2 className="h-3 w-3" /> Refund
                                   </Button>
                                 </div>
                               ) : r.status === "pending" ? (
@@ -990,6 +1019,14 @@ export default function PaymentRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RefundDialog
+        open={refundDialog.open}
+        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
+        request={refundDialog.request as any}
+        onSuccess={fetchRequests}
+      />
     </div>
   );
 }
+

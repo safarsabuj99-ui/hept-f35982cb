@@ -4533,6 +4533,80 @@ export type Database = {
           },
         ]
       }
+      refunds: {
+        Row: {
+          amount_bdt: number
+          amount_usd: number
+          client_id: string
+          created_at: string
+          exchange_rate: number
+          id: string
+          note: string
+          org_id: string | null
+          payment_request_id: string
+          refunded_by: string
+          refunded_from_account_id: string
+          transaction_id: string | null
+        }
+        Insert: {
+          amount_bdt: number
+          amount_usd: number
+          client_id: string
+          created_at?: string
+          exchange_rate: number
+          id?: string
+          note: string
+          org_id?: string | null
+          payment_request_id: string
+          refunded_by: string
+          refunded_from_account_id: string
+          transaction_id?: string | null
+        }
+        Update: {
+          amount_bdt?: number
+          amount_usd?: number
+          client_id?: string
+          created_at?: string
+          exchange_rate?: number
+          id?: string
+          note?: string
+          org_id?: string | null
+          payment_request_id?: string
+          refunded_by?: string
+          refunded_from_account_id?: string
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refunds_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_payment_request_id_fkey"
+            columns: ["payment_request_id"]
+            isOneToOne: false
+            referencedRelation: "payment_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_refunded_from_account_id_fkey"
+            columns: ["refunded_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "agency_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           id: string
@@ -5578,7 +5652,7 @@ export type Database = {
         | "pending_payment"
       payment_gateway_type: "sslcommerz" | "stripe" | "manual"
       payment_method: "Bank" | "bKash" | "Cash" | "Nagad"
-      payment_request_status: "pending" | "approved" | "rejected"
+      payment_request_status: "pending" | "approved" | "rejected" | "refunded"
       plan_change_status: "pending" | "completed" | "cancelled"
       referral_status: "pending" | "qualified" | "paid" | "expired"
       subscription_payment_status: "paid" | "pending" | "overdue" | "cancelled"
@@ -5791,7 +5865,7 @@ export const Constants = {
       ],
       payment_gateway_type: ["sslcommerz", "stripe", "manual"],
       payment_method: ["Bank", "bKash", "Cash", "Nagad"],
-      payment_request_status: ["pending", "approved", "rejected"],
+      payment_request_status: ["pending", "approved", "rejected", "refunded"],
       plan_change_status: ["pending", "completed", "cancelled"],
       referral_status: ["pending", "qualified", "paid", "expired"],
       subscription_payment_status: ["paid", "pending", "overdue", "cancelled"],
