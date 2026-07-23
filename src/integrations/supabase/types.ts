@@ -3746,6 +3746,7 @@ export type Database = {
           exchange_rate_snapshot: Json | null
           final_amount_usd: number | null
           id: string
+          mfs_fee_percent: number | null
           org_id: string | null
           payment_date: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
@@ -3765,6 +3766,7 @@ export type Database = {
           exchange_rate_snapshot?: Json | null
           final_amount_usd?: number | null
           id?: string
+          mfs_fee_percent?: number | null
           org_id?: string | null
           payment_date?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
@@ -3784,6 +3786,7 @@ export type Database = {
           exchange_rate_snapshot?: Json | null
           final_amount_usd?: number | null
           id?: string
+          mfs_fee_percent?: number | null
           org_id?: string | null
           payment_date?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
@@ -4539,8 +4542,10 @@ export type Database = {
           amount_usd: number
           client_id: string
           created_at: string
+          effective_rate: number | null
           exchange_rate: number
           id: string
+          mfs_fee_percent: number | null
           note: string
           org_id: string | null
           payment_request_id: string
@@ -4553,8 +4558,10 @@ export type Database = {
           amount_usd: number
           client_id: string
           created_at?: string
+          effective_rate?: number | null
           exchange_rate: number
           id?: string
+          mfs_fee_percent?: number | null
           note: string
           org_id?: string | null
           payment_request_id: string
@@ -4567,8 +4574,10 @@ export type Database = {
           amount_usd?: number
           client_id?: string
           created_at?: string
+          effective_rate?: number | null
           exchange_rate?: number
           id?: string
+          mfs_fee_percent?: number | null
           note?: string
           org_id?: string | null
           payment_request_id?: string
