@@ -190,6 +190,8 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       note: note.trim(),
       transaction_id: (txn as any)?.id,
       refunded_by: user.id,
+      mfs_fee_percent: feePct > 0 ? feePct : null,
+      effective_rate: effectiveRate,
     } as any);
 
     if (refErr) {
