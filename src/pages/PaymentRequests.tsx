@@ -520,7 +520,7 @@ export default function PaymentRequests() {
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
-                          {statusBadge(r.status)}
+                          {statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}
                         </div>
                         {/* Row 2: Metrics inline */}
                         <div className="grid grid-cols-3 gap-1 text-[11px]">
