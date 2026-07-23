@@ -1288,10 +1288,16 @@ export default function ClientDetail() {
                         <TableHead className="text-right">Amount (BDT)</TableHead>
                         <TableHead className="text-right">Credited (USD)</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {payments.map((p: any) => (
+                      {payments.map((p: any) => {
+                        const refunded = Number(p.refunded_bdt || 0);
+                        const amount = Number(p.amount_bdt || 0);
+                        const remaining = amount - refunded;
+                        const canRefund = p.status === "approved" && remaining > 0.009;
+                        return (
                         <TableRow key={p.id}>
                           <TableCell className="text-sm">{new Date(p.created_at).toLocaleDateString()}</TableCell>
                           <TableCell>
@@ -1302,15 +1308,35 @@ export default function ClientDetail() {
                             {p.final_amount_usd ? fmt(p.final_amount_usd) : "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"}
-                              className="text-xs"
-                            >
-                              {p.status}
-                            </Badge>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge
+                                variant={p.status === "approved" ? "default" : p.status === "rejected" ? "destructive" : "secondary"}
+                                className="text-xs"
+                              >
+                                {p.status}
+                              </Badge>
+                              {refunded > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {remaining <= 0.009 ? "Fully refunded" : `Refunded ৳${fmtBdt(refunded)}`}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canRefund && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1"
+                                onClick={() => setRefundDialog({ open: true, request: p })}
+                              >
+                                <Undo2 className="h-3.5 w-3.5" /> Refund
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
