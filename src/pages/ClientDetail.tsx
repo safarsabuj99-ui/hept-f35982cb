@@ -221,7 +221,7 @@ export default function ClientDetail() {
         }
       });
     }
-    setPayments(paymentRows.map((p: any) => ({ ...p, refunded_bdt: refundedMap[p.id] || 0 })));
+    setPayments(paymentRows.map((p: any) => ({ ...p, paid_to_account_id: p.received_in_account_id, refunded_bdt: refundedMap[p.id] || 0 })));
     setTransactions(txRes.data || []);
     setLoading(false);
   }
