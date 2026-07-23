@@ -622,6 +622,12 @@ export default function PaymentRequests() {
                                     <XCircle className="h-3 w-3" /> Reject
                                   </Button>
                                 </div>
+                              ) : r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) ? (
+                                <div className="flex items-center justify-center">
+                                  <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1" title={`Refundable: ৳${(Number(r.amount_bdt) - (refundTotals[r.id] || 0)).toLocaleString()}`}>
+                                    <Undo2 className="h-3 w-3" /> Refund
+                                  </Button>
+                                </div>
                               ) : r.status === "pending" ? (
                                 <span className="text-xs text-muted-foreground text-center block">View only</span>
                               ) : (
