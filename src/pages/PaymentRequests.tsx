@@ -155,10 +155,22 @@ export default function PaymentRequests() {
     const { data: prs } = await (supabase.from("payment_requests" as any).select("*").order("created_at", { ascending: false }) as any);
     if (!prs || prs.length === 0) { setRequests([]); setLoading(false); return; }
 
-    const clientIds = [...new Set(prs.map((p: any) => p.client_id))];
-    const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, business_name").in("user_id", clientIds as string[]);
-    const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name + (p.business_name ? ` (${p.business_name})` : "")]));
+  const fetchRequests = async () => {
+    const { data: prs } = await (supabase.from("payment_requests" as any).select("*").order("created_at", { ascending: false }) as any);
+    if (!prs || prs.length === 0) { setRequests([]); setRefundTotals({}); setLoading(false); return; }
 
+    const clientIds = [...new Set(prs.map((p: any) => p.client_id))];
+    const requestIds = prs.map((p: any) => p.id);
+    const [{ data: profiles }, { data: refunds }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, business_name").in("user_id", clientIds as string[]),
+      (supabase.from("refunds" as any).select("payment_request_id, amount_bdt").in("payment_request_id", requestIds) as any),
+    ]);
+    const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.full_name + (p.business_name ? ` (${p.business_name})` : "")]));
+    const rTotals: Record<string, number> = {};
+    ((refunds as any[]) ?? []).forEach((r: any) => {
+      rTotals[r.payment_request_id] = (rTotals[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
+    });
+    setRefundTotals(rTotals);
     setRequests(prs.map((p: any) => ({ ...p, client_name: nameMap[p.client_id] || "Unknown" })));
     setLoading(false);
   };
