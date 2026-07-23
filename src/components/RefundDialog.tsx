@@ -20,6 +20,8 @@ interface PaymentRequestLite {
   received_in_account_id: string | null;
   platform: string | null;
   platform_amounts: Record<string, number> | null;
+  payment_method?: string | null;
+  mfs_fee_percent?: number | null;
   client_name?: string;
   org_id?: string | null;
 }
@@ -51,17 +53,39 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
     [request, refundedSoFar]
   );
 
-  // Derive default single rate from snapshot
-  const defaultRate = useMemo(() => {
+  // Effective all-in rate = amount_bdt / final_amount_usd.
+  // This bakes in MFS fee + any multi-platform blending, so refund reverses exactly what was credited.
+  const effectiveRate = useMemo(() => {
+    const bdt = Number(request?.amount_bdt ?? 0);
+    const usd = Number(request?.final_amount_usd ?? 0);
+    if (bdt > 0 && usd > 0) return bdt / usd;
+    // Fallback for legacy rows without final_amount_usd: use snapshot avg
     const snap = request?.exchange_rate_snapshot;
-    if (!snap) return 120;
-    if (typeof snap === "number") return Number(snap);
-    if (typeof snap === "object") {
+    if (typeof snap === "number") return Number(snap) || 120;
+    if (snap && typeof snap === "object") {
       const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-      if (vals.length === 0) return 120;
-      return vals.reduce((s, v) => s + v, 0) / vals.length;
+      if (vals.length) return vals.reduce((s, v) => s + v, 0) / vals.length;
     }
-    return Number(snap) || 120;
+    return 120;
+  }, [request]);
+
+  const feePct = useMemo(() => {
+    if (request?.mfs_fee_percent != null) return Number(request.mfs_fee_percent);
+    // Derive from amounts if possible
+    const bdt = Number(request?.amount_bdt ?? 0);
+    const usd = Number(request?.final_amount_usd ?? 0);
+    const snap = request?.exchange_rate_snapshot;
+    let rawRate: number | null = null;
+    if (typeof snap === "number") rawRate = Number(snap);
+    else if (snap && typeof snap === "object") {
+      const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
+      if (vals.length) rawRate = vals.reduce((s, v) => s + v, 0) / vals.length;
+    }
+    if (bdt > 0 && usd > 0 && rawRate && rawRate > 0) {
+      const derived = (1 - (usd * rawRate) / bdt) * 100;
+      if (derived > 0.05 && derived < 15) return Math.round(derived * 100) / 100;
+    }
+    return 0;
   }, [request]);
 
   useEffect(() => {
@@ -79,13 +103,13 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       setRefundedSoFar(already);
       const remaining = Math.max(0, Number(request.amount_bdt) - already);
       setAmountBdt(remaining.toFixed(2));
-      const r = defaultRate;
-      setRate(r.toFixed(2));
+      const r = effectiveRate;
+      setRate(r.toFixed(4));
       setAmountUsd((remaining / r).toFixed(2));
       setAccountId(request.received_in_account_id || "");
       setLoading(false);
     })();
-  }, [open, request, defaultRate]);
+  }, [open, request, effectiveRate]);
 
   // Live recompute USD when BDT or rate changes
   useEffect(() => {
@@ -95,6 +119,17 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       setAmountUsd((b / r).toFixed(2));
     }
   }, [amountBdt, rate]);
+
+  // Drift warning: computed fee-adjusted USD vs current USD
+  const computedUsd = useMemo(() => {
+    const b = Number(amountBdt);
+    return b > 0 && effectiveRate > 0 ? b / effectiveRate : 0;
+  }, [amountBdt, effectiveRate]);
+  const usdDriftPct = useMemo(() => {
+    const u = Number(amountUsd);
+    if (!(computedUsd > 0) || !(u > 0)) return 0;
+    return Math.abs(u - computedUsd) / computedUsd * 100;
+  }, [amountUsd, computedUsd]);
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const wouldOverdraw = selectedAccount ? Number(selectedAccount.current_balance_bdt) - Number(amountBdt) < 0 : false;
@@ -155,6 +190,8 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       note: note.trim(),
       transaction_id: (txn as any)?.id,
       refunded_by: user.id,
+      mfs_fee_percent: feePct > 0 ? feePct : null,
+      effective_rate: effectiveRate,
     } as any);
 
     if (refErr) {
@@ -230,8 +267,8 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
                 <Input type="number" step="0.01" value={amountBdt} onChange={(e) => { setAmountBdt(e.target.value); setConfirmOverdraft(false); }} />
               </div>
               <div>
-                <Label>Rate (৳/USD) *</Label>
-                <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+                <Label>Effective Rate (৳/USD) *</Label>
+                <Input type="number" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} />
               </div>
             </div>
 
@@ -240,10 +277,23 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
               <Input type="number" step="0.01" value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} className="font-mono" />
             </div>
 
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Original ৳{Number(request.amount_bdt).toLocaleString()} → ${Number(request.final_amount_usd ?? 0).toFixed(2)}
+              {feePct > 0 && <> · MFS fee <span className="font-medium text-foreground">{feePct}%</span> applied at approval</>}
+              . Default rate is fee-adjusted so the wallet reversal matches exactly what was credited.
+            </p>
+
             {isMultiRate && (
               <p className="text-xs text-muted-foreground">
-                Original was multi-platform. Default rate is the average of the snapshot ({Object.entries(request.exchange_rate_snapshot as Record<string, any>).map(([k, v]) => `${k}: ৳${v}`).join(", ")}).
+                Multi-platform payment. Snapshot: {Object.entries(request.exchange_rate_snapshot as Record<string, any>).map(([k, v]) => `${k}: ৳${v}`).join(", ")}.
               </p>
+            )}
+
+            {usdDriftPct > 1 && Number(amountUsd) > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <span>USD refund differs from fee-adjusted default (${computedUsd.toFixed(2)}) by {usdDriftPct.toFixed(1)}%. Double-check before submitting.</span>
+              </div>
             )}
 
             <div>
