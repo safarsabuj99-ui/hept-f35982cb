@@ -341,9 +341,15 @@ export default function PaymentRequests() {
     }
   };
 
-  const statusBadge = (status: string) => {
+  const statusBadge = (status: string, refundedBdt?: number, originalBdt?: number) => {
     if (status === "pending") return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Pending</Badge>;
-    if (status === "approved") return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Approved</Badge>;
+    if (status === "refunded") return <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">Refunded</Badge>;
+    if (status === "approved") {
+      if (refundedBdt && refundedBdt > 0 && originalBdt && refundedBdt < originalBdt) {
+        return <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30">Partial refund ৳{refundedBdt.toLocaleString()}</Badge>;
+      }
+      return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Approved</Badge>;
+    }
     return <Badge variant="destructive">Rejected</Badge>;
   };
 
