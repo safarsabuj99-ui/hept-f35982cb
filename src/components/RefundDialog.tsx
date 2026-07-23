@@ -267,8 +267,8 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
                 <Input type="number" step="0.01" value={amountBdt} onChange={(e) => { setAmountBdt(e.target.value); setConfirmOverdraft(false); }} />
               </div>
               <div>
-                <Label>Rate (৳/USD) *</Label>
-                <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+                <Label>Effective Rate (৳/USD) *</Label>
+                <Input type="number" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} />
               </div>
             </div>
 
@@ -277,10 +277,23 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
               <Input type="number" step="0.01" value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} className="font-mono" />
             </div>
 
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Original ৳{Number(request.amount_bdt).toLocaleString()} → ${Number(request.final_amount_usd ?? 0).toFixed(2)}
+              {feePct > 0 && <> · MFS fee <span className="font-medium text-foreground">{feePct}%</span> applied at approval</>}
+              . Default rate is fee-adjusted so the wallet reversal matches exactly what was credited.
+            </p>
+
             {isMultiRate && (
               <p className="text-xs text-muted-foreground">
-                Original was multi-platform. Default rate is the average of the snapshot ({Object.entries(request.exchange_rate_snapshot as Record<string, any>).map(([k, v]) => `${k}: ৳${v}`).join(", ")}).
+                Multi-platform payment. Snapshot: {Object.entries(request.exchange_rate_snapshot as Record<string, any>).map(([k, v]) => `${k}: ৳${v}`).join(", ")}.
               </p>
+            )}
+
+            {usdDriftPct > 1 && Number(amountUsd) > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <span>USD refund differs from fee-adjusted default (${computedUsd.toFixed(2)}) by {usdDriftPct.toFixed(1)}%. Double-check before submitting.</span>
+              </div>
             )}
 
             <div>
