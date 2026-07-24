@@ -108,7 +108,7 @@ export default function ClientDetail() {
   const [spendCampaigns, setSpendCampaigns] = useState<any[]>([]);
   const [spendAdAccountMap, setSpendAdAccountMap] = useState<Record<string, string>>({});
   const [payments, setPayments] = useState<any[]>([]);
-  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: any | null }>({ open: false, request: null });
+  const [refundOpen, setRefundOpen] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   // Ad Account assignments
@@ -1272,8 +1272,11 @@ export default function ClientDetail() {
         {/* PAYMENTS TAB */}
         <TabsContent value="payments">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Payment Requests</CardTitle>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => setRefundOpen(true)}>
+                <Undo2 className="h-3.5 w-3.5" /> Refund Client
+              </Button>
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
@@ -1288,7 +1291,6 @@ export default function ClientDetail() {
                         <TableHead className="text-right">Amount (BDT)</TableHead>
                         <TableHead className="text-right">Credited (USD)</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1296,7 +1298,6 @@ export default function ClientDetail() {
                         const refunded = Number(p.refunded_bdt || 0);
                         const amount = Number(p.amount_bdt || 0);
                         const remaining = amount - refunded;
-                        const canRefund = p.status === "approved" && remaining > 0.009;
                         return (
                         <TableRow key={p.id}>
                           <TableCell className="text-sm">{new Date(p.created_at).toLocaleDateString()}</TableCell>
@@ -1321,18 +1322,6 @@ export default function ClientDetail() {
                                 </Badge>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {canRefund && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-1"
-                                onClick={() => setRefundDialog({ open: true, request: p })}
-                              >
-                                <Undo2 className="h-3.5 w-3.5" /> Refund
-                              </Button>
-                            )}
                           </TableCell>
                         </TableRow>
                         );
@@ -1459,9 +1448,9 @@ export default function ClientDetail() {
         onSuccess={loadAll}
       />
       <RefundDialog
-        open={refundDialog.open}
-        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
-        request={refundDialog.request as any}
+        open={refundOpen}
+        onOpenChange={setRefundOpen}
+        client={profile ? { id: profile.id, name: profile.full_name, org_id: (profile as any).org_id } : null}
         onSuccess={loadAll}
       />
     </div>
