@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +7,7 @@ import { fetchAllRows } from "@/lib/fetchAllRows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, TrendingUp, ChevronDown, ChevronRight, ArrowUpRight } from "lucide-react";
 import { format } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -222,8 +223,16 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <TrendingUp className="h-4 w-4" /> Profitability View (BDT)
+        <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" /> Profitability View (BDT)
+          </span>
+          <Link
+            to="/admin/profitability"
+            className="flex items-center gap-1 text-xs font-normal text-primary hover:underline"
+          >
+            View all <ArrowUpRight className="h-3 w-3" />
+          </Link>
         </CardTitle>
       </CardHeader>
       <CardContent>

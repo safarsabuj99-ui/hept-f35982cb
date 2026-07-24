@@ -1,51 +1,63 @@
-## Goal
-Make refunds respect the MFS fee logic used at approval so the client's USD wallet and the agency's BDT account always reverse the exact amounts that were originally posted — no calculation drift.
+# Active Profitability Page
 
-## Current behavior (the bug)
+A dedicated page showing **only ad accounts with currently-running campaigns**, with profit broken down **per ad account** and **per client**. Opens when the "Profitability View" card on the Admin Dashboard is clicked.
 
-On approval of an MFS payment (bKash / Nagad):
-- Agency BDT account receives the **full** `amount_bdt` (fee stays with the agency as its cost of collecting via MFS).
-- Client USD wallet is credited **net of fee**: `USD = (amount_bdt × (1 − fee%)) / rate`.
-- `payment_requests.final_amount_usd` stores the net USD; the fee% itself is not stored (only mentioned in the transaction description).
+## What the user will see
 
-On refund today (`RefundDialog`):
-- Admin types BDT + rate; USD is computed as `BDT / rate`.
-- This ignores the fee, so refunding an MFS deposit debits the client's wallet **more USD than they were ever credited**, and the numbers stop matching the original approval.
+Route: `/admin/profitability`
 
-## Fix (system-friendly, no recalculation guesswork)
+Layout (top → bottom):
 
-Anchor the refund math to what was actually posted at approval, not to a re-entered rate.
+1. **Header** — title "Active Profitability", date range filter (defaults to Today, reuses `DateRangeFilter`), refresh button.
+2. **KPI strip (4 cards)** — Active Ad Accounts count, Active Clients count, Total Spend (USD), Total Profit (BDT) with margin %.
+3. **View toggle** — pill tabs: `By Client` | `By Ad Account`.
+4. **Table** — columns depend on tab:
+   - **By Client**: Client · Active Accounts · Spend USD · Revenue BDT · Cost BDT · Profit BDT · Margin %. Expandable row → per-ad-account breakdown (account name, platform, spend, profit, margin, active campaign count).
+   - **By Ad Account**: Ad Account · Platform · Client · Active Campaigns · Spend USD · Revenue BDT · Cost BDT · Profit BDT · Margin %. Row click → navigate to `/admin/ad-accounts/:id`.
+5. **Search + platform filter + sort** on the table. Pagination (default 20/page).
 
-### 1. Persist the fee at approval time
-- Add `mfs_fee_percent numeric` to `public.payment_requests` (nullable, defaults NULL for non-MFS).
-- `approve-payment` writes the `feePct` it already computes into this column when updating the request to `approved`.
-- Backfill existing approved MFS rows by deriving the implied fee from `amount_bdt`, `final_amount_usd`, and `exchange_rate_snapshot` (single-rate: `1 − final_usd × rate / amount_bdt`; multi-rate: use the average of the snapshot, same convention `RefundDialog` already uses for display).
+## "Active" definition
 
-### 2. Derive refund USD proportionally, not from a re-entered rate
-In `RefundDialog`:
-- Compute an **effective all-in rate** for the payment once: `effRate = amount_bdt / final_amount_usd`. This rate already bakes in the MFS fee and any multi-platform blending, so using it guarantees reversal parity.
-- Default `USD refund = refund_bdt / effRate` (equivalently `refund_bdt / amount_bdt × final_amount_usd`, rounded to 2 dp).
-- Show the rate field pre-filled with `effRate` and labelled "Effective rate (fee-adjusted)" with a small hint: "Original ৳X → $Y, fee Z%". Still editable for edge cases, but the default now reverses cleanly.
-- Keep the existing "editable USD" override for admin discretion.
+An ad account is considered active in the selected range if it has **at least one campaign whose `isActiveStatus(status)` is true AND that campaign has spend > 0 in the range**. This filters out paused/archived accounts and truly idle ones — the same rule the Campaign hub already uses.
 
-### 3. Record the fee on the refund row for audit
-- Add `mfs_fee_percent numeric` and `effective_rate numeric` to `public.refunds`.
-- `RefundDialog` writes both when inserting the refund, so the audit trail shows what fee assumption was applied.
+## Data flow (single RPC for speed)
 
-### 4. Cash flow stays truthful
-- Agency BDT account is debited exactly `refund_bdt` (what left the account), matching what was originally received — no change to that leg, this already works.
-- Client USD wallet is debited the fee-adjusted USD from step 2 — matches what was credited.
-- Partial refund tracking (`refundedSoFar`, "Partial refund" badges) continues to work unchanged because it's BDT-based.
+Add a new Postgres function `get_active_profitability(p_date_from, p_date_to, p_org_id)` returning JSON with two arrays: `by_client` and `by_account`. Server-side aggregation avoids fetching thousands of `daily_metrics` rows to the browser.
 
-### 5. Guardrail
-Add a soft warning in `RefundDialog` when the admin's edited USD differs from the computed fee-adjusted USD by more than 1%, so accidental overrides are flagged before submit.
+Steps inside the RPC:
 
-## Files touched
-- Migration: add `mfs_fee_percent` to `payment_requests`, add `mfs_fee_percent` + `effective_rate` to `refunds`, backfill existing approved MFS rows.
-- `supabase/functions/approve-payment/index.ts` — persist `mfs_fee_percent` on the update.
-- `src/components/RefundDialog.tsx` — compute effective rate, default USD from it, show fee context, add drift warning, write new refund columns.
-- `src/pages/PaymentRequests.tsx` and `src/pages/ClientDetail.tsx` — include `mfs_fee_percent` in the fields fetched for the refund dialog (no UI change beyond that).
+```text
+1. WAC := weighted avg (bdt_paid / usd_received) from usd_purchases in range,
+   with cascading fallback (range → current month → all-time), mirroring
+   ProfitabilityTable + aggregateFinance.
+2. Active campaigns := campaigns where isActiveStatus(status) is true.
+3. Spend rows := daily_metrics joined to active campaigns in date range,
+   grouped by (ad_account_id, client_id, platform).
+4. Revenue BDT per group := spend_usd * platform_rate(client.pricing_config, platform)
+   (+ optional percentage markup if set), matching aggregateFinance logic.
+5. Cost BDT := spend_usd * WAC.
+6. Emit by_account rows and by_client rollups (sum of that client's accounts).
+7. Include active_campaign_count per account/client from step 2.
+```
 
-## Out of scope
-- No change to how the fee is charged at approval time.
-- No change to non-MFS payments (fee% stays NULL → effective rate collapses to the plain rate, behavior is identical to today).
+Frontend calls the RPC once per date change and renders both views from the same payload.
+
+## Dashboard entry point
+
+`src/components/dashboard/ProfitabilityTable.tsx` — wrap the `CardHeader` (or the whole card) in a clickable link to `/admin/profitability`, add a small "View all →" affordance in the header. No behavior change to the existing preview table.
+
+## Files to add / change
+
+- **new** `supabase/migrations/<ts>_active_profitability_rpc.sql` — creates `public.get_active_profitability(...)` as `SECURITY DEFINER`, `GRANT EXECUTE` to `authenticated`, org-scoped via `p_org_id`.
+- **new** `src/pages/ActiveProfitability.tsx` — page component (header, KPIs, tabs, tables, pagination, search).
+- **new** `src/hooks/useActiveProfitability.ts` — react-query hook wrapping the RPC, gated with `authReady && !!orgId`, `staleTime 60s`, invalidated on realtime `daily_metrics` / `campaigns` inserts (debounced, same pattern as `useAdminDashboardData`).
+- **edit** `src/App.tsx` — register `/admin/profitability` inside the admin layout with `ProtectedRoute` + `can_view_profit` permission gate.
+- **edit** `src/components/dashboard/ProfitabilityTable.tsx` — make the card header a link to the new page; keep the existing top-5 preview.
+
+## Technical details
+
+- Currency: spend in USD, revenue/cost/profit in BDT — matches existing memory (Currency Display Policy).
+- Rates: use `getPlatformRates(pricing_config)` semantics inside SQL by reading `flat_rates → platform_rates → 120` fallback.
+- Permission: page hidden/blocked unless `can_view_profit` is true (same as `ProfitabilityTable`).
+- Performance: one RPC, indexes already exist on `daily_metrics(campaign_id, data_date)` and `campaigns(ad_account_id, status)`; no client-side N+1.
+- Design: reuses `Card`, `Table`, `Badge`, `Tabs`, `TablePagination` primitives — no new design tokens.

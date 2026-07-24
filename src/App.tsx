@@ -76,6 +76,7 @@ const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
 const PlatformPaymentGateways = lazy(() => import("@/pages/PlatformPaymentGateways"));
 const AICopilot = lazy(() => import("@/pages/AICopilot"));
 const AICampaignBuilder = lazy(() => import("@/pages/AICampaignBuilder"));
+const ActiveProfitability = lazy(() => import("@/pages/ActiveProfitability"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -237,6 +238,7 @@ const FullApp = () => (
                   }
                 >
                   <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/profitability" element={<ActiveProfitability />} />
                   <Route path="/admin/attention" element={<AttentionRequired />} />
                   <Route path="/admin/clients" element={<ClientList />} />
                   <Route path="/admin/clients/new" element={<NewClient />} />

@@ -5559,6 +5559,10 @@ export type Database = {
           supported_currencies: string[]
         }[]
       }
+      get_active_profitability: {
+        Args: { p_date_from: string; p_date_to: string; p_org_id: string }
+        Returns: Json
+      }
       get_admin_dashboard_summary:
         | { Args: { p_date_from: string; p_date_to: string }; Returns: Json }
         | {
