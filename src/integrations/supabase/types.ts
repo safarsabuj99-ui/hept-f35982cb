@@ -4548,7 +4548,7 @@ export type Database = {
           mfs_fee_percent: number | null
           note: string
           org_id: string | null
-          payment_request_id: string
+          payment_request_id: string | null
           refunded_by: string
           refunded_from_account_id: string
           transaction_id: string | null
@@ -4564,7 +4564,7 @@ export type Database = {
           mfs_fee_percent?: number | null
           note: string
           org_id?: string | null
-          payment_request_id: string
+          payment_request_id?: string | null
           refunded_by: string
           refunded_from_account_id: string
           transaction_id?: string | null
@@ -4580,7 +4580,7 @@ export type Database = {
           mfs_fee_percent?: number | null
           note?: string
           org_id?: string | null
-          payment_request_id?: string
+          payment_request_id?: string | null
           refunded_by?: string
           refunded_from_account_id?: string
           transaction_id?: string | null
