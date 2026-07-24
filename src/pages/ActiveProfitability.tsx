@@ -255,7 +255,7 @@ export default function ActiveProfitability() {
                     </Table>
                   </div>
                   <TablePagination
-                    page={page}
+                    currentPage={page}
                     pageSize={pageSize}
                     totalItems={filteredClients.length}
                     onPageChange={setPage}
@@ -337,7 +337,7 @@ export default function ActiveProfitability() {
                     </Table>
                   </div>
                   <TablePagination
-                    page={page}
+                    currentPage={page}
                     pageSize={pageSize}
                     totalItems={filteredAccounts.length}
                     onPageChange={setPage}
