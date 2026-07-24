@@ -7,22 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Undo2, AlertTriangle } from "lucide-react";
+import { Loader2, Undo2, AlertTriangle, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
+import { computeWalletBalance } from "@/lib/walletBalance";
 
-interface PaymentRequestLite {
+export interface RefundClient {
   id: string;
-  client_id: string;
-  amount_bdt: number;
-  final_amount_usd: number | null;
-  exchange_rate_snapshot: any;
-  received_in_account_id: string | null;
-  platform: string | null;
-  platform_amounts: Record<string, number> | null;
-  payment_method?: string | null;
-  mfs_fee_percent?: number | null;
-  client_name?: string;
+  name?: string;
   org_id?: string | null;
 }
 
@@ -31,120 +23,124 @@ interface AgencyAccount { id: string; name: string; type: string; current_balanc
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  request: PaymentRequestLite | null;
+  client: RefundClient | null;
   onSuccess?: () => void;
 }
 
-export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) {
+interface RateSource {
+  rate: number;
+  paymentId: string | null;
+  paymentDate: string | null;
+  amountBdt: number | null;
+  amountUsd: number | null;
+}
+
+export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<AgencyAccount[]>([]);
-  const [refundedSoFar, setRefundedSoFar] = useState(0);
-  const [amountBdt, setAmountBdt] = useState<string>("");
-  const [rate, setRate] = useState<string>("");
+  const [walletUsd, setWalletUsd] = useState(0);
+  const [rateSource, setRateSource] = useState<RateSource>({
+    rate: 120, paymentId: null, paymentDate: null, amountBdt: null, amountUsd: null,
+  });
   const [amountUsd, setAmountUsd] = useState<string>("");
+  const [rate, setRate] = useState<string>("");
+  const [amountBdt, setAmountBdt] = useState<string>("");
   const [accountId, setAccountId] = useState<string>("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOverdraft, setConfirmOverdraft] = useState(false);
-
-  const remainingBdt = useMemo(
-    () => Math.max(0, Number(request?.amount_bdt ?? 0) - refundedSoFar),
-    [request, refundedSoFar]
-  );
-
-  // Effective all-in rate = amount_bdt / final_amount_usd.
-  // This bakes in MFS fee + any multi-platform blending, so refund reverses exactly what was credited.
-  const effectiveRate = useMemo(() => {
-    const bdt = Number(request?.amount_bdt ?? 0);
-    const usd = Number(request?.final_amount_usd ?? 0);
-    if (bdt > 0 && usd > 0) return bdt / usd;
-    // Fallback for legacy rows without final_amount_usd: use snapshot avg
-    const snap = request?.exchange_rate_snapshot;
-    if (typeof snap === "number") return Number(snap) || 120;
-    if (snap && typeof snap === "object") {
-      const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-      if (vals.length) return vals.reduce((s, v) => s + v, 0) / vals.length;
-    }
-    return 120;
-  }, [request]);
-
-  const feePct = useMemo(() => {
-    if (request?.mfs_fee_percent != null) return Number(request.mfs_fee_percent);
-    // Derive from amounts if possible
-    const bdt = Number(request?.amount_bdt ?? 0);
-    const usd = Number(request?.final_amount_usd ?? 0);
-    const snap = request?.exchange_rate_snapshot;
-    let rawRate: number | null = null;
-    if (typeof snap === "number") rawRate = Number(snap);
-    else if (snap && typeof snap === "object") {
-      const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-      if (vals.length) rawRate = vals.reduce((s, v) => s + v, 0) / vals.length;
-    }
-    if (bdt > 0 && usd > 0 && rawRate && rawRate > 0) {
-      const derived = (1 - (usd * rawRate) / bdt) * 100;
-      if (derived > 0.05 && derived < 15) return Math.round(derived * 100) / 100;
-    }
-    return 0;
-  }, [request]);
+  // Track which field the admin edited last so we don't fight their input
+  const [lastEdited, setLastEdited] = useState<"usd" | "bdt">("usd");
 
   useEffect(() => {
-    if (!open || !request) return;
+    if (!open || !client) return;
     setLoading(true);
     setNote("");
     setConfirmOverdraft(false);
+    setAmountUsd("");
+    setAmountBdt("");
+    setAccountId("");
+    setLastEdited("usd");
     (async () => {
-      const [{ data: accs }, { data: refunds }] = await Promise.all([
+      const [{ data: accs }, { data: txns }, { data: lastPayment }] = await Promise.all([
         supabase.from("agency_accounts").select("id, name, type, current_balance_bdt").eq("is_active", true).order("name"),
-        (supabase.from("refunds" as any).select("amount_bdt").eq("payment_request_id", request.id) as any),
+        supabase.from("transactions").select("type, amount, status, platform").eq("client_id", client.id).eq("status", "completed"),
+        supabase.from("payment_requests")
+          .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status")
+          .eq("client_id", client.id)
+          .in("status", ["approved", "refunded"])
+          .order("payment_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       setAccounts((accs as any[]) ?? []);
-      const already = ((refunds as any[]) ?? []).reduce((s, r) => s + Number(r.amount_bdt || 0), 0);
-      setRefundedSoFar(already);
-      const remaining = Math.max(0, Number(request.amount_bdt) - already);
-      setAmountBdt(remaining.toFixed(2));
-      const r = effectiveRate;
-      setRate(r.toFixed(4));
-      setAmountUsd((remaining / r).toFixed(2));
-      setAccountId(request.received_in_account_id || "");
+
+      const wallet = computeWalletBalance((txns as any[]) ?? []);
+      setWalletUsd(wallet.total);
+
+      // Derive rate from most recent approved payment
+      let derivedRate = 120;
+      let src: RateSource = { rate: 120, paymentId: null, paymentDate: null, amountBdt: null, amountUsd: null };
+      if (lastPayment) {
+        const bdt = Number((lastPayment as any).amount_bdt || 0);
+        const usd = Number((lastPayment as any).final_amount_usd || 0);
+        if (bdt > 0 && usd > 0) {
+          derivedRate = bdt / usd;
+        } else {
+          const snap = (lastPayment as any).exchange_rate_snapshot;
+          if (typeof snap === "number") derivedRate = Number(snap) || 120;
+          else if (snap && typeof snap === "object") {
+            const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
+            if (vals.length) derivedRate = vals.reduce((s, v) => s + v, 0) / vals.length;
+          }
+        }
+        src = {
+          rate: derivedRate,
+          paymentId: (lastPayment as any).id,
+          paymentDate: (lastPayment as any).payment_date || (lastPayment as any).created_at,
+          amountBdt: bdt || null,
+          amountUsd: usd || null,
+        };
+      }
+      setRateSource(src);
+      setRate(derivedRate.toFixed(4));
       setLoading(false);
     })();
-  }, [open, request, effectiveRate]);
+  }, [open, client]);
 
-  // Live recompute USD when BDT or rate changes
+  // Live recompute BDT ↔ USD, driven by lastEdited so we don't overwrite what the user is typing
   useEffect(() => {
-    const b = Number(amountBdt);
     const r = Number(rate);
-    if (b > 0 && r > 0) {
-      setAmountUsd((b / r).toFixed(2));
+    if (!(r > 0)) return;
+    if (lastEdited === "usd") {
+      const u = Number(amountUsd);
+      if (u > 0) setAmountBdt((u * r).toFixed(2));
+      else setAmountBdt("");
+    } else {
+      const b = Number(amountBdt);
+      if (b > 0) setAmountUsd((b / r).toFixed(2));
+      else setAmountUsd("");
     }
-  }, [amountBdt, rate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amountUsd, amountBdt, rate, lastEdited]);
 
-  // Drift warning: computed fee-adjusted USD vs current USD
-  const computedUsd = useMemo(() => {
-    const b = Number(amountBdt);
-    return b > 0 && effectiveRate > 0 ? b / effectiveRate : 0;
-  }, [amountBdt, effectiveRate]);
-  const usdDriftPct = useMemo(() => {
-    const u = Number(amountUsd);
-    if (!(computedUsd > 0) || !(u > 0)) return 0;
-    return Math.abs(u - computedUsd) / computedUsd * 100;
-  }, [amountUsd, computedUsd]);
-
+  const availableUsd = Math.max(0, walletUsd);
   const selectedAccount = accounts.find((a) => a.id === accountId);
-  const wouldOverdraw = selectedAccount ? Number(selectedAccount.current_balance_bdt) - Number(amountBdt) < 0 : false;
+  const wouldOverdraw = selectedAccount ? Number(selectedAccount.current_balance_bdt) - Number(amountBdt || 0) < 0 : false;
 
   const handleSubmit = async () => {
-    if (!request || !user) return;
-    const bdt = Number(amountBdt);
-    const r = Number(rate);
+    if (!client || !user) return;
     const usd = Number(amountUsd);
+    const r = Number(rate);
+    const bdt = Number(amountBdt);
 
-    if (!accountId) return toast.error("Select a source account");
-    if (!(bdt > 0)) return toast.error("Amount must be greater than 0");
-    if (bdt > remainingBdt + 0.001) return toast.error(`Cannot refund more than ৳${remainingBdt.toFixed(2)}`);
-    if (!(r > 0)) return toast.error("Exchange rate must be greater than 0");
+    if (!accountId) return toast.error("Select the account to refund from");
     if (!(usd > 0)) return toast.error("USD amount must be greater than 0");
+    if (usd > availableUsd + 0.001) return toast.error(`Cannot refund more than $${availableUsd.toFixed(2)} — that's the client's wallet balance`);
+    if (!(r > 0)) return toast.error("Exchange rate must be greater than 0");
+    if (!(bdt > 0)) return toast.error("BDT amount must be greater than 0");
     if (note.trim().length < 5) return toast.error("Reason must be at least 5 characters");
     if (wouldOverdraw && !confirmOverdraft) {
       setConfirmOverdraft(true);
@@ -153,7 +149,7 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
 
     setSubmitting(true);
 
-    // 1. Deduct from agency account
+    // 1. Deduct from agency account (BDT)
     const ok = await adjustAccountBalance(accountId, -bdt);
     if (!ok) {
       setSubmitting(false);
@@ -162,27 +158,26 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
 
     // 2. Client debit transaction (reduces wallet USD)
     const { data: txn, error: txnErr } = await supabase.from("transactions").insert({
-      client_id: request.client_id,
+      client_id: client.id,
       type: "debit",
       amount: usd,
       status: "completed",
       description: `Refund: ${note.trim()}`,
       exchange_rate: r,
       created_by: user.id,
-      org_id: request.org_id ?? undefined,
+      org_id: client.org_id ?? undefined,
     } as any).select("id").single();
 
     if (txnErr) {
-      // Roll back the account balance
-      await adjustAccountBalance(accountId, bdt);
+      await adjustAccountBalance(accountId, bdt); // rollback
       setSubmitting(false);
       return toast.error(`Refund failed: ${txnErr.message}`);
     }
 
-    // 3. Insert refund audit row
+    // 3. Refund audit row (standalone — no payment_request_id)
     const { error: refErr } = await supabase.from("refunds" as any).insert({
-      payment_request_id: request.id,
-      client_id: request.client_id,
+      payment_request_id: null,
+      client_id: client.id,
       refunded_from_account_id: accountId,
       amount_bdt: bdt,
       exchange_rate: r,
@@ -190,50 +185,44 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
       note: note.trim(),
       transaction_id: (txn as any)?.id,
       refunded_by: user.id,
-      mfs_fee_percent: feePct > 0 ? feePct : null,
-      effective_rate: effectiveRate,
+      effective_rate: r,
     } as any);
 
     if (refErr) {
-      // Best-effort rollback
       await supabase.from("transactions").delete().eq("id", (txn as any).id);
       await adjustAccountBalance(accountId, bdt);
       setSubmitting(false);
       return toast.error(`Refund failed: ${refErr.message}`);
     }
 
-    // 4. Flip payment_requests.status to 'refunded' if fully refunded
-    const totalRefunded = refundedSoFar + bdt;
-    if (totalRefunded >= Number(request.amount_bdt) - 0.01) {
-      await supabase.from("payment_requests").update({ status: "refunded" as any }).eq("id", request.id);
-    }
-
-    // 5. Audit log
+    // 4. Audit log
     await supabase.from("audit_logs").insert({
       user_id: user.id,
-      action_type: "payment_refunded",
-      description: `Refunded ৳${bdt.toFixed(2)} (USD $${usd.toFixed(2)} @ ${r}) to client for payment ${request.id}. Reason: ${note.trim()}`,
-      org_id: request.org_id ?? undefined,
+      action_type: "wallet_refund",
+      description: `Refunded $${usd.toFixed(2)} (৳${bdt.toFixed(2)} @ ${r.toFixed(4)}) to ${client.name || "client"} from wallet balance. Reason: ${note.trim()}`,
+      org_id: client.org_id ?? undefined,
     } as any);
 
     setSubmitting(false);
-    toast.success(`Refund of ৳${bdt.toFixed(2)} issued`);
+    toast.success(`Refund of $${usd.toFixed(2)} issued`);
     onOpenChange(false);
     onSuccess?.();
   };
 
-  if (!request) return null;
-  const isMultiRate = request.exchange_rate_snapshot && typeof request.exchange_rate_snapshot === "object";
+  if (!client) return null;
+
+  const overRefund = Number(amountUsd) > availableUsd + 0.001;
+  const rateDateStr = rateSource.paymentDate ? new Date(rateSource.paymentDate).toLocaleDateString() : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-md max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Undo2 className="h-5 w-5 text-destructive" /> Refund Payment
+            <Undo2 className="h-5 w-5 text-destructive" /> Refund from Wallet
           </DialogTitle>
           <DialogDescription>
-            Refund funds back to <span className="font-medium">{request.client_name || "client"}</span>. This will deduct from your agency account and reduce the client's wallet balance.
+            Refund USD from <span className="font-medium">{client.name || "client"}</span>'s wallet balance. The BDT equivalent is deducted from the selected agency account.
           </DialogDescription>
         </DialogHeader>
 
@@ -241,11 +230,85 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
           <div className="py-8 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Original</span><span className="font-mono font-semibold">৳{Number(request.amount_bdt).toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Already refunded</span><span className="font-mono">৳{refundedSoFar.toLocaleString()}</span></div>
-              <div className="flex justify-between border-t pt-1 mt-1"><span className="text-muted-foreground">Refundable</span><span className="font-mono font-bold text-primary">৳{remainingBdt.toLocaleString()}</span></div>
+            {/* Wallet snapshot */}
+            <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-muted-foreground"><Wallet className="h-3.5 w-3.5" /> Available to refund</span>
+                <span className={`font-mono font-bold ${availableUsd > 0 ? "text-primary" : "text-muted-foreground"}`}>
+                  ${availableUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Auto-detected rate</span>
+                <span className="font-mono">৳{Number(rate || 120).toFixed(4)} / USD</span>
+              </div>
+              {rateSource.paymentId ? (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  From last payment on {rateDateStr}
+                  {rateSource.amountBdt && rateSource.amountUsd
+                    ? ` — ৳${rateSource.amountBdt.toLocaleString()} → $${rateSource.amountUsd.toFixed(2)}`
+                    : ""}
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">No prior payments — using default rate ৳120.</p>
+              )}
             </div>
+
+            {availableUsd <= 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <span>This client has no positive USD balance. There is nothing to refund from the wallet.</span>
+              </div>
+            )}
+
+            {/* USD → BDT inputs */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Refund (USD) *</Label>
+                <Input
+                  type="number" step="0.01" min="0" value={amountUsd}
+                  onChange={(e) => { setLastEdited("usd"); setAmountUsd(e.target.value); setConfirmOverdraft(false); }}
+                  className="font-mono"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <Label>Rate (৳/USD) *</Label>
+                <Input
+                  type="number" step="0.0001" min="0" value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Deducted from account (BDT) <span className="text-muted-foreground text-xs">(editable)</span></Label>
+              <Input
+                type="number" step="0.01" min="0" value={amountBdt}
+                onChange={(e) => { setLastEdited("bdt"); setAmountBdt(e.target.value); setConfirmOverdraft(false); }}
+                className="font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Quick-fill max */}
+            {availableUsd > 0 && Number(amountUsd) !== availableUsd && (
+              <button
+                type="button"
+                onClick={() => { setLastEdited("usd"); setAmountUsd(availableUsd.toFixed(2)); }}
+                className="text-xs text-primary hover:underline"
+              >
+                Refund full balance (${availableUsd.toFixed(2)})
+              </button>
+            )}
+
+            {overRefund && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs">
+                <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                <span>Refund exceeds wallet balance by ${(Number(amountUsd) - availableUsd).toFixed(2)}.</span>
+              </div>
+            )}
 
             <div>
               <Label>Refund From Account *</Label>
@@ -261,41 +324,6 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Amount (BDT) *</Label>
-                <Input type="number" step="0.01" value={amountBdt} onChange={(e) => { setAmountBdt(e.target.value); setConfirmOverdraft(false); }} />
-              </div>
-              <div>
-                <Label>Effective Rate (৳/USD) *</Label>
-                <Input type="number" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} />
-              </div>
-            </div>
-
-            <div>
-              <Label>USD Refund <span className="text-muted-foreground text-xs">(editable — deducted from wallet)</span></Label>
-              <Input type="number" step="0.01" value={amountUsd} onChange={(e) => setAmountUsd(e.target.value)} className="font-mono" />
-            </div>
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Original ৳{Number(request.amount_bdt).toLocaleString()} → ${Number(request.final_amount_usd ?? 0).toFixed(2)}
-              {feePct > 0 && <> · MFS fee <span className="font-medium text-foreground">{feePct}%</span> applied at approval</>}
-              . Default rate is fee-adjusted so the wallet reversal matches exactly what was credited.
-            </p>
-
-            {isMultiRate && (
-              <p className="text-xs text-muted-foreground">
-                Multi-platform payment. Snapshot: {Object.entries(request.exchange_rate_snapshot as Record<string, any>).map(([k, v]) => `${k}: ৳${v}`).join(", ")}.
-              </p>
-            )}
-
-            {usdDriftPct > 1 && Number(amountUsd) > 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
-                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <span>USD refund differs from fee-adjusted default (${computedUsd.toFixed(2)}) by {usdDriftPct.toFixed(1)}%. Double-check before submitting.</span>
-              </div>
-            )}
-
             <div>
               <Label>Reason *</Label>
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why is this refund being issued?" rows={2} />
@@ -310,7 +338,12 @@ export function RefundDialog({ open, onOpenChange, request, onSuccess }: Props) 
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting} className="flex-1">Cancel</Button>
-              <Button variant="destructive" onClick={handleSubmit} disabled={submitting || remainingBdt <= 0} className="flex-1 gap-2">
+              <Button
+                variant="destructive"
+                onClick={handleSubmit}
+                disabled={submitting || availableUsd <= 0 || overRefund}
+                className="flex-1 gap-2"
+              >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
                 {confirmOverdraft && wouldOverdraw ? "Confirm Refund" : "Refund"}
               </Button>

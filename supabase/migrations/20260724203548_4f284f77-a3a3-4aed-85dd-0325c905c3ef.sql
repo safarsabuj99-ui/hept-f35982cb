@@ -1,0 +1,1 @@
+ALTER TABLE public.refunds ALTER COLUMN payment_request_id DROP NOT NULL;
