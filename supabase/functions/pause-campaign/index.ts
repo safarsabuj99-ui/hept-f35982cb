@@ -53,7 +53,10 @@ async function checkTikTokStatus(advertiserId: string, rawId: string, token: str
 function isOffStatus(platform: string, status: string | null): boolean {
   if (!status) return false;
   const s = status.toUpperCase();
-  if (platform === "meta") return ["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "ARCHIVED", "DELETED", "DISAPPROVED", "WITH_ISSUES", "NOT_DELIVERING"].includes(s);
+  // NOTE: ADSET_PAUSED is intentionally excluded — it means the campaign is ACTIVE
+  // but its ad sets are paused. Treating it as "off" incorrectly blocked pause/enable
+  // requests and mislabelled active campaigns.
+  if (platform === "meta") return ["PAUSED", "CAMPAIGN_PAUSED", "ARCHIVED", "DELETED", "DISAPPROVED", "WITH_ISSUES", "NOT_DELIVERING"].includes(s);
   if (platform === "google") return ["PAUSED", "REMOVED"].includes(s);
   if (platform === "tiktok") return ["DISABLE", "DELETE", "CAMPAIGN_STATUS_DISABLE"].includes(s);
   return false;
