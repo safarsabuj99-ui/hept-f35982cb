@@ -76,6 +76,7 @@ const PlatformAffiliates = lazy(() => import("@/pages/PlatformAffiliates"));
 const PlatformPaymentGateways = lazy(() => import("@/pages/PlatformPaymentGateways"));
 const AICopilot = lazy(() => import("@/pages/AICopilot"));
 const AICampaignBuilder = lazy(() => import("@/pages/AICampaignBuilder"));
+const ActiveProfitability = lazy(() => import("@/pages/ActiveProfitability"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
