@@ -1,53 +1,51 @@
-## Root cause
+# Upgrade: USD-First Wallet Refund
 
-Two distinct bugs make SaaS campaign status disagree with the ad platform:
+Rework refunds so admins refund **from the client's USD wallet balance** directly, instead of picking a specific payment row and working in BDT.
 
-### Bug A — Meta `ADSET_PAUSED` is misread as "paused"
-Meta's `effective_status` returns `ADSET_PAUSED` when the **campaign itself is ACTIVE** but every ad set inside it is paused. In `sync-deep-dive` (Meta status fetch) and in `pause-campaign` (`isOffStatus`) we currently treat `ADSET_PAUSED` and `CAMPAIGN_PAUSED` identically as "paused". Result: campaigns the user sees as ON in Ads Manager get displayed as OFF in the SaaS, and admins can't re-enable them (the "already paused" guard blocks the request). TikTok has the correct `"active - ad groups paused"` label already — Meta needs the equivalent.
+## New flow (what the admin sees)
 
-### Bug B — Status only refreshes on a full deep-dive
-- Fast-lane never touches `campaigns.status`, and deep-dive is the only writer.
-- Deep-dive is heavy, chunked and rate-limited, so status can be stale for hours after someone toggles a campaign directly on Meta/TikTok/Google.
-- Additionally, TikTok's `/campaign/get/` call in `sync-deep-dive` uses `page_size=500` **without pagination**. Accounts with >500 campaigns silently drop the tail — those campaigns come back with `statusConfirmed=false` and keep whatever stale status the DB had.
+1. Click **Refund** on a client (from `ClientDetail` payments tab, `PaymentRequests`, or a wallet-level button).
+2. Dialog opens showing:
+   - **Available to refund**: client's current USD wallet balance (e.g. `$247.30`)
+   - **Auto-detected rate**: effective rate from the client's most recent approved payment (e.g. `৳121.4500 / USD`) with a small caption showing which payment it came from and its date
+3. Admin types **USD refund amount** (capped at wallet balance). BDT auto-computes as `USD × rate`. Both fields remain editable if admin wants to override.
+4. Admin selects **Refund from account** (agency cash / bank / MFS account) — same picker as today.
+5. Admin adds a reason, clicks Refund.
 
-Together this is why the user sees "off in SaaS, on in Ads Manager" and why "when API call then SaaS not triggered" — nothing in the fast path refreshes status.
+## Rules
 
-## Fix plan
+- **Cap**: refund USD ≤ current wallet balance. Hard block if over.
+- **Rate source**: `amount_bdt / final_amount_usd` from the client's most recent `payment_requests` row with `status IN ('approved','refunded')`. Fallback to 120 if the client has no prior payment.
+- **Standalone**: refund is not tied to a payment row. `payment_requests.status` is no longer flipped by refund actions.
+- **Balances**:
+  - Client wallet: debit `amount_usd` via a `transactions` row (`type=debit`, existing logic).
+  - Agency account: deduct `amount_bdt` via `adjustAccountBalance` (existing helper).
+- **Overdraft warning**: keep current "account will go negative" confirm-twice guard.
+- **Audit**: keep `audit_logs` entry + `refunds` row for history.
 
-### 1. Correct Meta status mapping (`supabase/functions/sync-deep-dive/index.ts`)
-In the Meta status loop (~line 500):
-- `CAMPAIGN_PAUSED` → `"paused"` (campaign entity truly paused)
-- `PAUSED` → `"paused"`
-- `ADSET_PAUSED` → `"active - ad sets paused"` (NEW — campaign is active, only adsets paused)
-Mirrors the TikTok convention and `isActiveStatus()` in `src/lib/campaignStatus.ts` already treats `"active - ..."` as active.
+## Technical changes
 
-### 2. Correct `isOffStatus` in `pause-campaign` (`supabase/functions/pause-campaign/index.ts`)
-Remove `ADSET_PAUSED` from the Meta "off" list so:
-- The "already paused" pre-check no longer blocks legitimate pause/enable calls on active-with-paused-adsets campaigns.
-- Read-back verification doesn't report a real pause as failed.
+### Database (migration)
+- `ALTER TABLE public.refunds ALTER COLUMN payment_request_id DROP NOT NULL;` — allow standalone refunds.
+- Keep `mfs_fee_percent` / `effective_rate` columns (nullable, unused for standalone but preserved for old rows).
+- No new tables.
 
-### 3. Paginate TikTok `/campaign/get/` (`sync-deep-dive`, ~line 1358)
-Loop with `page` param until `page_info.total_page` reached, so status/objective/budget maps are complete for accounts with >500 campaigns. Prevents statuses from silently sticking to stale DB values.
+### Frontend
+- **`src/components/RefundDialog.tsx`** — rewrite:
+  - Props change from `request: PaymentRequestLite` → `client: { id, name, org_id }`.
+  - On open: fetch (a) client wallet USD balance via existing `walletBalance` helper, (b) most recent approved payment for rate derivation, (c) active agency accounts.
+  - USD-first inputs; BDT auto-derives; both editable.
+  - Remove "already refunded / remaining" block (no longer per-payment). Show wallet balance & derived rate provenance instead.
+  - Keep overdraft guard, reason field, submit rollback logic.
+- **`src/pages/ClientDetail.tsx`** — replace per-row Refund button in the Payments tab with a single **Refund Client** button in the tab header. Remove the per-payment approved-refund fetch/badges (or keep badges purely informational using `refunds` grouped by client, optional — will keep them off for simplicity).
+- **`src/pages/PaymentRequests.tsx`** — replace per-row Refund action with a "Refund client" action that opens the new dialog scoped to that client (no payment link).
+- Optional: add a **Refund** button on the client wallet page for parity (`ClientWallet.tsx`), same dialog.
 
-### 4. New lightweight status refresher — fast-lane hook
-Add a `refreshCampaignStatuses(accountId)` helper that hits ONLY the campaigns-list endpoint (Meta `/campaigns?fields=effective_status`, TikTok `/campaign/get/`, Google `SELECT campaign.status`). No insights, no metrics — cheap enough to call from `sync-fast-lane` every run. It updates `campaigns.status` for that account using the same guard-protection rules deep-dive uses (never overwrites `guard_paused`).
+### Untouched
+- `adjustAccountBalance`, `transactions` insert shape, `audit_logs`, RLS on `refunds`.
+- Old `refunds` rows with `payment_request_id` remain valid history.
 
-Result: within one fast-lane cycle (~a few minutes) any platform-side toggle propagates to the SaaS, without waiting for a full deep-dive.
-
-### 5. Post-action re-verification in `pause-campaign`
-After successful pause/enable, enqueue the lightweight status refresh for that ad account (or call it inline for a single campaign) so the UI reflects platform-confirmed state on the next query cycle even if the write and verify diverge.
-
-### 6. Backfill one-time correction
-Run a one-off SQL update to relabel existing Meta campaigns that are currently `status='paused'` but whose latest deep-dive returned `ADSET_PAUSED` (tracked by re-syncing). This is handled automatically by the next deep-dive after the mapping fix, so no explicit migration needed.
-
-## Verification
-- Trigger a deep-dive on a Meta account with a known "active but all adsets paused" campaign → confirm status shows `active - ad sets paused` in `DeepDiveTable`.
-- Pause a Meta campaign directly in Ads Manager → confirm SaaS reflects it after the next fast-lane run (< a few minutes), not next deep-dive.
-- Enable via SaaS a campaign whose effective status is `ADSET_PAUSED` → no longer rejected as "already paused".
-- Check `sync-deep-dive` logs for TikTok account with >500 campaigns → pagination log lines present, `statusConfirmed=true` for tail campaigns.
-
-## Files touched
-- `supabase/functions/sync-deep-dive/index.ts` — Meta mapping fix, TikTok pagination.
-- `supabase/functions/pause-campaign/index.ts` — `isOffStatus` fix, post-action refresh call.
-- `supabase/functions/sync-fast-lane/index.ts` — hook the new status-only refresher per synced account.
-- (No DB schema change; no frontend change — status labels already render via existing `isActiveStatus` helper.)
+## Out of scope
+- Changing how MFS fees are handled on inbound payments.
+- Bulk / multi-client refunds.
+- Refund approval workflow (still instant, admin-only).
