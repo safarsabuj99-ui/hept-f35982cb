@@ -74,6 +74,146 @@ function generateDateChunks(startDate: string, endDate: string, maxDays = 30): A
 function getDhakaToday(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Dhaka" }).split(" ")[0];
 }
+/**
+ * Lightweight per-account campaign STATUS refresher.
+ *
+ * Deep-Dive is the only writer of campaigns.status, but it's heavy and can lag
+ * hours behind. This helper hits ONLY each platform's cheap campaign-list
+ * endpoint (no insights) and syncs status changes into the DB. Running it every
+ * fast-lane cycle means platform-side toggles (pause/enable done directly in
+ * Ads Manager) surface in the SaaS within minutes, not the next Deep-Dive.
+ *
+ * Guard-locked campaigns are NEVER overwritten — matches Deep-Dive behavior.
+ */
+async function refreshCampaignStatuses(
+  supabase: any,
+  account: any,
+  integration: any,
+  tiktokBase: string,
+): Promise<{ updated: number; errors: string[] }> {
+  const errs: string[] = [];
+  let updated = 0;
+  if (!integration?.api_token) return { updated, errors: errs };
+  const platform = account.platform_name;
+
+  const statusMap = new Map<string, string>(); // platform_id -> normalized status
+
+  try {
+    if (platform === "meta") {
+      let url: string | null = `https://graph.facebook.com/v21.0/${account.ad_account_id}/campaigns?fields=id,effective_status&limit=500&access_token=${integration.api_token}`;
+      while (url) {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (json.error) { errs.push(`Meta status: ${json.error.message}`); break; }
+        for (const c of json.data || []) {
+          const raw = (c.effective_status || "").toUpperCase();
+          let norm = "active";
+          if (raw === "ACTIVE") norm = "active";
+          else if (raw === "ADSET_PAUSED") norm = "active - ad sets paused";
+          else if (raw === "PAUSED" || raw === "CAMPAIGN_PAUSED") norm = "paused";
+          else if (raw === "ARCHIVED") norm = "archived";
+          else if (raw === "DELETED") norm = "deleted";
+          else if (raw === "DISAPPROVED") norm = "disapproved";
+          else if (raw === "WITH_ISSUES") norm = "with issues";
+          else if (raw === "NOT_DELIVERING") norm = "not delivering";
+          else if (raw === "PENDING_REVIEW") norm = "pending review";
+          else if (raw === "IN_PROCESS") norm = "in process";
+          else if (raw) norm = raw.toLowerCase().replace(/_/g, " ");
+          statusMap.set(`meta_${c.id}`, norm);
+        }
+        url = json.paging?.next || null;
+      }
+    } else if (platform === "tiktok") {
+      let page = 1, totalPages = 1;
+      do {
+        const params = new URLSearchParams({
+          advertiser_id: account.ad_account_id,
+          page_size: "500",
+          page: String(page),
+        });
+        const json = await tiktokFetchWithRetry(
+          `${tiktokBase}/open_api/v1.3/campaign/get/?${params}`,
+          { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+        );
+        if (json.code !== 0 || !json.data?.list) {
+          if (page === 1) errs.push(`TikTok status: code=${json.code} ${json.message || ""}`);
+          break;
+        }
+        totalPages = Number(json.data?.page_info?.total_page) || 1;
+        for (const c of json.data.list) {
+          const op = (c.operation_status || "").toUpperCase();
+          const sec = (c.secondary_status || "").toUpperCase();
+          let norm = "active";
+          if (op === "CAMPAIGN_STATUS_DELETE") norm = "deleted";
+          else if (op === "CAMPAIGN_STATUS_DISABLE") norm = "paused";
+          else if (op === "CAMPAIGN_STATUS_ENABLE" || op === "CAMPAIGN_STATUS_ADVERTISER_BUDGET_FULL" ||
+                   op === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED" || op === "CAMPAIGN_STATUS_BUDGET_EXCEED" ||
+                   op === "CAMPAIGN_STATUS_NOT_START") {
+            if (sec.includes("ALL_ADGROUP_PAUSED") || op === "CAMPAIGN_STATUS_ALL_ADGROUP_PAUSED") norm = "active - ad groups paused";
+            else if (sec.includes("BUDGET_EXCEED") || op === "CAMPAIGN_STATUS_BUDGET_EXCEED") norm = "active - budget exceeded";
+            else if (sec.includes("NOT_START") || op === "CAMPAIGN_STATUS_NOT_START") norm = "active - not started";
+            else norm = "active";
+          } else if (op) {
+            norm = op.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
+          }
+          statusMap.set(`tiktok_${c.campaign_id}`, norm);
+        }
+        page++;
+      } while (page <= totalPages && page <= 20);
+    } else if (platform === "google") {
+      const customerId = String(account.ad_account_id).replace(/-/g, "");
+      const res = await fetch(
+        `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:searchStream`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${integration.api_token}`,
+            "developer-token": integration.app_id || "",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query: "SELECT campaign.id, campaign.status FROM campaign" }),
+        }
+      );
+      const json = await res.json();
+      const rows = Array.isArray(json) ? json.flatMap((s: any) => s.results || []) : [];
+      const gMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
+      for (const r of rows) {
+        const id = r.campaign?.id;
+        const s = r.campaign?.status;
+        if (id && s) statusMap.set(`google_${id}`, gMap[s] || "active");
+      }
+    } else {
+      return { updated, errors: errs };
+    }
+  } catch (e: any) {
+    errs.push(`${platform} status fetch: ${e?.message || String(e)}`);
+    return { updated, errors: errs };
+  }
+
+  if (statusMap.size === 0) return { updated, errors: errs };
+
+  // Load DB rows for this account so we only UPDATE actual diffs.
+  const { data: existing } = await supabase
+    .from("campaigns")
+    .select("id, platform_id, status")
+    .eq("ad_account_id", account.id);
+
+  for (const row of existing || []) {
+    const desired = statusMap.get(row.platform_id);
+    if (!desired) continue;
+    // Guard protection — never overwrite guard_paused.
+    if ((row.status || "").toLowerCase() === "guard_paused") continue;
+    if (row.status === desired) continue;
+    const { error } = await supabase
+      .from("campaigns")
+      .update({ status: desired, updated_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (error) errs.push(`update ${row.platform_id}: ${error.message}`);
+    else updated++;
+  }
+  return { updated, errors: errs };
+}
+
 
 /**
  * Fast-Lane spend → daily_metrics writer.
