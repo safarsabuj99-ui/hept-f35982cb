@@ -1004,6 +1004,19 @@ Deno.serve(async (req) => {
           await writeFastLaneMetrics(supabase, account.id, account.org_id, tiktokMetricItems, `TikTok ${account.ad_account_id}`);
         }
 
+        // Lightweight status refresh — cheap campaign-list call, no insights.
+        // Ensures platform-side pause/enable actions propagate within one fast-lane cycle
+        // instead of waiting for the next Deep-Dive.
+        try {
+          const tiktokProxyUrlLocal = (await supabase.from("settings").select("value").eq("key", "tiktok_proxy_url").maybeSingle()).data?.value || null;
+          const tiktokBaseLocal = tiktokProxyUrlLocal ? tiktokProxyUrlLocal.replace(/\/+$/, "") : TIKTOK_BASE_URL;
+          const sr = await refreshCampaignStatuses(supabase, account, integration, tiktokBaseLocal);
+          if (sr.updated > 0) console.log(`Status refresh ${platform} ${account.ad_account_id}: ${sr.updated} campaigns updated`);
+          if (sr.errors.length) errors.push(...sr.errors.map(e => `${platform} ${account.ad_account_id} status: ${e}`));
+        } catch (statusErr: any) {
+          errors.push(`${platform} ${account.ad_account_id} status refresh: ${statusErr?.message || String(statusErr)}`);
+        }
+
         syncedCount++;
       } catch (err: any) {
         errors.push(`${platform} ${account.ad_account_id}: ${err.message}`);
