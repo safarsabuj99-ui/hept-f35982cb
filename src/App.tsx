@@ -238,6 +238,7 @@ const FullApp = () => (
                   }
                 >
                   <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/profitability" element={<ActiveProfitability />} />
                   <Route path="/admin/attention" element={<AttentionRequired />} />
                   <Route path="/admin/clients" element={<ClientList />} />
                   <Route path="/admin/clients/new" element={<NewClient />} />
