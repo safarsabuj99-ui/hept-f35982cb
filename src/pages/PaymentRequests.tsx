@@ -115,7 +115,7 @@ export default function PaymentRequests() {
   const [depositPage, setDepositPage] = useState(1);
   const [depositPageSize, setDepositPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
-  const [refundDialog, setRefundDialog] = useState<{ open: boolean; request: PaymentRequest | null }>({ open: false, request: null });
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; client: { id: string; name?: string; org_id?: string | null } | null }>({ open: false, client: null });
   const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
   const { hasPermission } = usePermissions();
 
@@ -570,8 +570,8 @@ export default function PaymentRequests() {
                               </Button>
                             </div>
                           )}
-                          {r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) && (
-                            <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1 h-7 px-2 text-xs">
+                          {r.status === "approved" && canManageFinance && (
+                            <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, client: { id: r.client_id, name: r.client_name, org_id: (r as any).org_id } })} className="gap-1 h-7 px-2 text-xs">
                               <Undo2 className="h-3 w-3" /> Refund
                             </Button>
                           )}
@@ -622,9 +622,9 @@ export default function PaymentRequests() {
                                     <XCircle className="h-3 w-3" /> Reject
                                   </Button>
                                 </div>
-                              ) : r.status === "approved" && canManageFinance && (refundTotals[r.id] || 0) < Number(r.amount_bdt) ? (
+                              ) : r.status === "approved" && canManageFinance ? (
                                 <div className="flex items-center justify-center">
-                                  <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, request: r })} className="gap-1" title={`Refundable: ৳${(Number(r.amount_bdt) - (refundTotals[r.id] || 0)).toLocaleString()}`}>
+                                  <Button size="sm" variant="outline" onClick={() => setRefundDialog({ open: true, client: { id: r.client_id, name: r.client_name, org_id: (r as any).org_id } })} className="gap-1" title="Refund from client wallet">
                                     <Undo2 className="h-3 w-3" /> Refund
                                   </Button>
                                 </div>
@@ -1022,8 +1022,8 @@ export default function PaymentRequests() {
 
       <RefundDialog
         open={refundDialog.open}
-        onOpenChange={(v) => setRefundDialog({ open: v, request: v ? refundDialog.request : null })}
-        request={refundDialog.request as any}
+        onOpenChange={(v) => setRefundDialog({ open: v, client: v ? refundDialog.client : null })}
+        client={refundDialog.client}
         onSuccess={fetchRequests}
       />
     </div>
