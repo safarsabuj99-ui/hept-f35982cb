@@ -223,8 +223,16 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
   return (
     <Card className="dark:bg-card/80 dark:backdrop-blur-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <TrendingUp className="h-4 w-4" /> Profitability View (BDT)
+        <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" /> Profitability View (BDT)
+          </span>
+          <Link
+            to="/admin/profitability"
+            className="flex items-center gap-1 text-xs font-normal text-primary hover:underline"
+          >
+            View all <ArrowUpRight className="h-3 w-3" />
+          </Link>
         </CardTitle>
       </CardHeader>
       <CardContent>
