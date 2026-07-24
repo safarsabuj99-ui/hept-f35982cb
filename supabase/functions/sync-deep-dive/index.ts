@@ -1358,31 +1358,37 @@ Deno.serve(async (req) => {
           const tiktokNameMap: Record<string, string> = {};
           let tiktokStatusFetchFailed = false;
           try {
-            const statusParams = new URLSearchParams({
-              advertiser_id: account.ad_account_id,
-              page_size: "500",
-            });
-            const statusRes = await tiktokFetchWithRetry(
-              `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
-              { "Access-Token": integration.api_token, "Content-Type": "application/json" }
-            );
-            const statusJson = statusRes;
-            console.log(`TikTok status fetch response code: ${statusJson.code}, campaigns found: ${statusJson.data?.list?.length ?? 0}`);
-            if (statusJson.code === 0 && statusJson.data?.list) {
+            // Paginate — accounts with >500 campaigns previously dropped the tail,
+            // leaving those campaigns with stale DB statuses (statusConfirmed=false).
+            let page = 1;
+            let totalPages = 1;
+            do {
+              const statusParams = new URLSearchParams({
+                advertiser_id: account.ad_account_id,
+                page_size: "500",
+                page: String(page),
+              });
+              const statusRes = await tiktokFetchWithRetry(
+                `${tiktokBase}/open_api/v1.3/campaign/get/?${statusParams}`,
+                { "Access-Token": integration.api_token, "Content-Type": "application/json" }
+              );
+              const statusJson = statusRes;
+              console.log(`TikTok status fetch page=${page} code=${statusJson.code} count=${statusJson.data?.list?.length ?? 0}`);
+              if (statusJson.code !== 0 || !statusJson.data?.list) {
+                console.warn(`TikTok status fetch failed page=${page} code=${statusJson.code}: ${statusJson.message || 'unknown error'}`);
+                if (page === 1) tiktokStatusFetchFailed = true;
+                break;
+              }
+              totalPages = Number(statusJson.data?.page_info?.total_page) || 1;
               for (const c of statusJson.data.list) {
                 const opStatus = (c.operation_status || "").toUpperCase();
                 const secStatus = (c.secondary_status || "").toUpperCase();
-                console.log(`TikTok campaign ${c.campaign_id}: operation_status=${opStatus}, secondary_status=${secStatus}`);
-                // Capture authoritative campaign name from /campaign/get/ — the report endpoint
-                // returns the historical name at stat-time, which is stale after a rename.
                 if (c.campaign_name) {
                   tiktokNameMap[c.campaign_id] = String(c.campaign_name);
                 }
-                // Extract budget (TikTok returns budget in currency units)
                 if (c.budget !== undefined && c.budget !== null) {
                   tiktokBudgetMap[c.campaign_id] = parseFloat(c.budget) || 0;
                 }
-                // Map TikTok objective_type → simplified label (mirrors Meta mapping)
                 const rawObj = (c.objective_type || "").toUpperCase();
                 if (rawObj === "WEB_CONVERSIONS" || rawObj === "PRODUCT_SALES" || rawObj === "CONVERSIONS" || rawObj === "SHOP_PURCHASES") {
                   tiktokObjectiveMap[c.campaign_id] = "sales";
@@ -1429,16 +1435,14 @@ Deno.serve(async (req) => {
                   tiktokStatusMap[c.campaign_id] = opStatus.toLowerCase().replace(/campaign_status_/g, "").replace(/_/g, " ");
                 }
               }
-            } else {
-              // API returned non-zero code or no data — treat as failed
-              console.warn(`TikTok status fetch failed with code ${statusJson.code}: ${statusJson.message || 'unknown error'}`);
-              tiktokStatusFetchFailed = true;
-            }
+              page++;
+            } while (page <= totalPages && page <= 20); // safety cap: 10k campaigns
           } catch (e: any) {
             console.error(`TikTok status fetch exception: ${e.message}`);
             errors.push(`TikTok status fetch: ${e.message}`);
             tiktokStatusFetchFailed = true;
           }
+
 
           const rows = json.data?.list || [];
           const syncedAtIso = new Date().toISOString();
