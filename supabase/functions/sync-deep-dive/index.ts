@@ -500,7 +500,10 @@ Deno.serve(async (req) => {
                 for (const c of statusJson.data) {
                   const rawStatus = (c.effective_status || "").toUpperCase();
                   if (rawStatus === "ACTIVE") metaStatusMap[c.id] = "active";
-                  else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED" || rawStatus === "ADSET_PAUSED") metaStatusMap[c.id] = "paused";
+                  // ADSET_PAUSED means the CAMPAIGN entity is active but all its ad sets are paused —
+                  // mirror TikTok's "active - ad groups paused" convention so UI treats it as active.
+                  else if (rawStatus === "ADSET_PAUSED") metaStatusMap[c.id] = "active - ad sets paused";
+                  else if (rawStatus === "PAUSED" || rawStatus === "CAMPAIGN_PAUSED") metaStatusMap[c.id] = "paused";
                   else if (rawStatus === "NOT_DELIVERING") metaStatusMap[c.id] = "not delivering";
                   else if (rawStatus === "WITH_ISSUES") metaStatusMap[c.id] = "with issues";
                   else if (rawStatus === "IN_PROCESS") metaStatusMap[c.id] = "in process";
