@@ -64,8 +64,33 @@ export default function ActiveProfitability() {
     setPage(1);
   };
 
-  const handleRefresh = () =>
+  const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["active-profitability"] });
+    queryClient.invalidateQueries({ queryKey: ["active-entities-overview"] });
+  };
+
+  const liveClients = useMemo(() => {
+    let rows = liveData?.by_client ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter((r) => r.client_name?.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [liveData, search]);
+
+  const liveAccounts = useMemo(() => {
+    let rows = liveData?.by_account ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) => r.account_name?.toLowerCase().includes(q) || r.client_name?.toLowerCase().includes(q),
+      );
+    }
+    if (platformFilter !== "all") {
+      rows = rows.filter((r) => (r.platforms || "").includes(platformFilter));
+    }
+    return rows;
+  }, [liveData, search, platformFilter]);
 
   const filteredAccounts = useMemo(() => {
     let rows = data?.by_account ?? [];
