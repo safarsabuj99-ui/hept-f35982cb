@@ -49,13 +49,15 @@ export default function ActiveProfitability() {
     const t = getLocalToday();
     return { from: t, to: t };
   });
-  const [tab, setTab] = useState<"client" | "account">("client");
+  const [tab, setTab] = useState<"client" | "account" | "active-clients" | "active-accounts">("client");
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
   const { data, isLoading, isFetching } = useActiveProfitability(dateRange);
+  const { data: liveData, isLoading: liveLoading, isFetching: liveFetching } =
+    useActiveEntitiesOverview(dateRange);
 
   const handleDateChange = (r: DateRange | null, _p: DatePreset) => {
     setDateRange(r);
