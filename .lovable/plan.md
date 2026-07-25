@@ -1,39 +1,30 @@
 ## Problem
 
-`RefundDialog` shows **"Available to refund: $0.00"** and **"No prior payments — using default rate ৳120"** for clients that clearly have both.
+Ad Guard tab shows **Current Balance $2,114.44** for MUSA, but the Transactions tab correctly shows **$93.27** (Main Balance).
 
-## Root cause (confirmed by DB)
+## Root Cause
 
-For client `9e2fa8d9…`:
-- `transactions` (completed): **87 credits totaling $8,496.44** + **1,169 debits totaling $8,393.93** → true wallet balance **≈ $102.51**.
-- The dialog query in `src/components/RefundDialog.tsx` (line 68) selects transactions **without pagination or aggregation**. Supabase caps the response at **1,000 rows**, so only the most recent slice (all debits in this case) is returned. `computeWalletBalance` then sees a negative total, and `availableUsd = Math.max(0, walletUsd)` → **$0**.
-- Same class of bug applies to the rate detection: it works for this client (last approved payment has `exchange_rate_snapshot = {meta: 145}`, so 145 would be derived), but the code path is fragile — for the client in the screenshot (MUSA) the query genuinely returns nothing, so it falls back to ৳120. We should also fall back to any completed **credit** transaction's `exchange_rate` before dropping to the default.
+`src/components/AutomationConfigTab.tsx` (lines 100–108) fetches completed transactions with a plain `supabase.from("transactions").select(...)` — no pagination. Supabase's Data API silently caps result sets at **1000 rows**. MUSA has 1,256+ completed transactions, so the last ~256 rows (older debits or a mix) are dropped, inflating the computed balance.
+
+This is the identical bug we already fixed in `RefundDialog.tsx`; the same fix pattern applies here.
 
 ## Fix
 
-Keep this a scoped UI/data-fetching fix inside `RefundDialog.tsx` — no schema, no RLS changes.
+In `src/components/AutomationConfigTab.tsx`, replace the direct `.select()` with the existing `fetchAllRows` helper (`@/lib/fetchAllRows`) so every completed transaction is paginated in, then pass the full set to `computeWalletBalance`.
 
-1. **Replace the truncated transactions fetch with an aggregated one** so pagination can never lie:
-   - Query only what's needed: `SELECT type, amount, platform` filtered to `status='completed'` — but use `fetchAllRows` (already in `src/lib/fetchAllRows.ts`) to paginate through **every** row before calling `computeWalletBalance`.
-   - This preserves the existing `computeWalletBalance` contract (per-platform buckets, rounding) and keeps `computeBdtDebt` behaviour intact.
+```ts
+const txns = await fetchAllRows<{ type: string; amount: number; status: string }>(
+  () => supabase
+    .from("transactions")
+    .select("type, amount, status")
+    .eq("client_id", userId)
+    .eq("status", "completed")
+);
+setBalance(computeWalletBalance(txns as any).total);
+```
 
-2. **Harden rate detection** so it doesn't silently drop to ৳120 when it shouldn't:
-   - Keep the current `payment_requests` lookup (approved/refunded, latest first).
-   - If that returns nothing OR yields a non-positive rate, fall back to the most recent completed **credit** in `transactions` that has a positive `exchange_rate`.
-   - Only if both fail, use ৳120 and keep the "No prior payments" hint.
-   - Surface the source of the rate in the small caption already in the dialog (e.g. "From last deposit transaction on …") so admins can tell which source was used.
+No schema, RLS, or business-logic changes — presentation-layer only. After the fix, Ad Guard's "Current Balance" will match the wallet total shown on the Transactions tab.
 
-3. **Guard against the same bug elsewhere**: quick grep for other places that call `.from("transactions").select(...).eq("client_id", ...)` without pagination when computing wallet balance client-side (e.g. `ClientDetail`, `PaymentRequests`, `ClientWallet`). If any are found, switch them to `fetchAllRows` too. Scope this to wallet-balance call sites only — do not touch reporting/analytics queries in this task.
+## Regression guard
 
-## Verification
-
-- Reopen the refund dialog for client `9e2fa8d9…` → **Available to refund** shows ≈ **$102.51**, rate auto-fills to **৳145.00** (from the latest approved payment).
-- Reopen for a client with no payments but with a completed credit transaction → rate uses that transaction's `exchange_rate` instead of ৳120.
-- Reopen for a brand-new client with nothing → still shows ৳120 with the existing hint.
-- Refund submission math (USD × rate = BDT, agency BDT deduction, USD debit) unchanged.
-
-## Technical notes
-
-- Files touched: `src/components/RefundDialog.tsx` (primary). Possibly 1–2 sibling wallet-balance call sites if the grep in step 3 finds them.
-- No migration, no edge function change, no RLS change.
-- `fetchAllRows` already exists and is the standard fix for the 1000-row cap in this project.
+`fetchAllRows` already logs a debug warning when the result count is a perfect multiple of 1000, which helps catch future truncation regressions early.
