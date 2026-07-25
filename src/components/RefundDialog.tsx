@@ -268,7 +268,11 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
                 <span className="text-muted-foreground">Auto-detected rate</span>
                 <span className="font-mono">৳{Number(rate || 120).toFixed(4)} / USD</span>
               </div>
-              {rateSource.paymentId ? (
+              {rateSource.paymentId === "txn" ? (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  From last credit transaction on {rateDateStr}
+                </p>
+              ) : rateSource.paymentId ? (
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   From last payment on {rateDateStr}
                   {rateSource.amountBdt && rateSource.amountUsd
