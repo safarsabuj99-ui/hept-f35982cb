@@ -10,10 +10,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { DateRangeFilter, DateRange, DatePreset, getLocalToday } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 import { useActiveProfitability } from "@/hooks/useActiveProfitability";
+import { useActiveEntitiesOverview } from "@/hooks/useActiveEntitiesOverview";
 import { usePermissions } from "@/hooks/usePermissions";
-import { TrendingUp, DollarSign, Wallet, Users, Building2, Loader2, RefreshCw, Search } from "lucide-react";
+import { TrendingUp, DollarSign, Wallet, Users, Building2, Loader2, RefreshCw, Search, Zap } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { ActiveClientsTable } from "@/components/profitability/ActiveClientsTable";
+import { ActiveAdAccountsTable } from "@/components/profitability/ActiveAdAccountsTable";
 
 const PLATFORM_COLORS: Record<string, string> = {
   meta: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
