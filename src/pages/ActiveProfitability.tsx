@@ -10,10 +10,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { DateRangeFilter, DateRange, DatePreset, getLocalToday } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 import { useActiveProfitability } from "@/hooks/useActiveProfitability";
+import { useActiveEntitiesOverview } from "@/hooks/useActiveEntitiesOverview";
 import { usePermissions } from "@/hooks/usePermissions";
-import { TrendingUp, DollarSign, Wallet, Users, Building2, Loader2, RefreshCw, Search } from "lucide-react";
+import { TrendingUp, DollarSign, Wallet, Building2, Loader2, RefreshCw, Search, Zap } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { ActiveClientsTable } from "@/components/profitability/ActiveClientsTable";
+import { ActiveAdAccountsTable } from "@/components/profitability/ActiveAdAccountsTable";
 
 const PLATFORM_COLORS: Record<string, string> = {
   meta: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
@@ -46,21 +49,48 @@ export default function ActiveProfitability() {
     const t = getLocalToday();
     return { from: t, to: t };
   });
-  const [tab, setTab] = useState<"client" | "account">("client");
+  const [tab, setTab] = useState<"client" | "account" | "active-clients" | "active-accounts">("client");
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
   const { data, isLoading, isFetching } = useActiveProfitability(dateRange);
+  const { data: liveData, isLoading: liveLoading, isFetching: liveFetching } =
+    useActiveEntitiesOverview(dateRange);
 
   const handleDateChange = (r: DateRange | null, _p: DatePreset) => {
     setDateRange(r);
     setPage(1);
   };
 
-  const handleRefresh = () =>
+  const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["active-profitability"] });
+    queryClient.invalidateQueries({ queryKey: ["active-entities-overview"] });
+  };
+
+  const liveClients = useMemo(() => {
+    let rows = liveData?.by_client ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter((r) => r.client_name?.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [liveData, search]);
+
+  const liveAccounts = useMemo(() => {
+    let rows = liveData?.by_account ?? [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) => r.account_name?.toLowerCase().includes(q) || r.client_name?.toLowerCase().includes(q),
+      );
+    }
+    if (platformFilter !== "all") {
+      rows = rows.filter((r) => (r.platforms || "").includes(platformFilter));
+    }
+    return rows;
+  }, [liveData, search, platformFilter]);
 
   const filteredAccounts = useMemo(() => {
     let rows = data?.by_account ?? [];
@@ -111,8 +141,8 @@ export default function ActiveProfitability() {
         subtitle="Only ad accounts with currently-running campaigns and spend in the selected range"
         icon={<TrendingUp className="h-5 w-5" />}
         actions={
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching || liveFetching}>
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${isFetching || liveFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         }
@@ -122,26 +152,28 @@ export default function ActiveProfitability() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Active Ad Accounts"
-          value={String(totals?.active_accounts ?? 0)}
-          icon={Building2}
-          loading={isLoading}
-          accentColor="hsl(var(--chart-meta))"
-        />
-        <KpiCard
-          title="Active Clients"
-          value={String(totals?.active_clients ?? 0)}
-          icon={Users}
-          loading={isLoading}
+          title="Active Clients (now)"
+          value={String(liveData?.totals.active_clients ?? 0)}
+          subtitle={`${liveData?.totals.active_accounts ?? 0} ad accounts live`}
+          icon={Zap}
+          loading={liveLoading}
           accentColor="hsl(var(--primary))"
         />
         <KpiCard
-          title="Total Spend"
-          value={usd(totals?.spend_usd ?? 0)}
-          subtitle="USD"
+          title="Spend Today"
+          value={usd(liveData?.totals.spend_today_usd ?? 0)}
+          subtitle={`7d: ${usd(liveData?.totals.spend_7d_usd ?? 0)}`}
           icon={DollarSign}
-          loading={isLoading}
+          loading={liveLoading}
           accentColor="hsl(var(--destructive))"
+        />
+        <KpiCard
+          title="Active Ad Accounts (range)"
+          value={String(totals?.active_accounts ?? 0)}
+          subtitle={`${totals?.active_clients ?? 0} clients with spend`}
+          icon={Building2}
+          loading={isLoading}
+          accentColor="hsl(var(--chart-meta))"
         />
         <KpiCard
           title="Total Profit"
@@ -170,7 +202,7 @@ export default function ActiveProfitability() {
                   className="pl-8 h-8 w-[180px]"
                 />
               </div>
-              {tab === "account" && (
+              {(tab === "account" || tab === "active-accounts") && (
                 <select
                   className="h-8 rounded-md border bg-background text-xs px-2"
                   value={platformFilter}
@@ -192,14 +224,36 @@ export default function ActiveProfitability() {
           <Tabs
             value={tab}
             onValueChange={(v) => {
-              setTab(v as "client" | "account");
+              setTab(v as typeof tab);
               setPage(1);
             }}
           >
-            <TabsList>
-              <TabsTrigger value="client">By Client</TabsTrigger>
-              <TabsTrigger value="account">By Ad Account</TabsTrigger>
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="active-clients">
+                <Zap className="h-3.5 w-3.5 mr-1.5" />Active Clients
+              </TabsTrigger>
+              <TabsTrigger value="active-accounts">
+                <Zap className="h-3.5 w-3.5 mr-1.5" />Active Ad Accounts
+              </TabsTrigger>
+              <TabsTrigger value="client">By Client (P&amp;L)</TabsTrigger>
+              <TabsTrigger value="account">By Ad Account (P&amp;L)</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="active-clients" className="mt-4">
+              {liveLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : (
+                <ActiveClientsTable rows={liveClients} />
+              )}
+            </TabsContent>
+
+            <TabsContent value="active-accounts" className="mt-4">
+              {liveLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : (
+                <ActiveAdAccountsTable rows={liveAccounts} />
+              )}
+            </TabsContent>
 
             <TabsContent value="client" className="mt-4">
               {isLoading ? (
