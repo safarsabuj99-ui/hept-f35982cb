@@ -50,7 +50,7 @@ async function fetchRefundSnapshot(clientId: string): Promise<RefundSnapshot> {
       supabase.from("transactions").select("type, amount, status, platform").eq("client_id", clientId).eq("status", "completed")
     ),
     supabase.from("payment_requests")
-      .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status")
+      .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status, mfs_fee_percent")
       .eq("client_id", clientId)
       .in("status", ["approved", "refunded"])
       .order("payment_date", { ascending: false, nullsFirst: false })
@@ -135,16 +135,23 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
       if (snapshot.lastPayment) {
         const bdt = Number((snapshot.lastPayment as any).amount_bdt || 0);
         const usd = Number((snapshot.lastPayment as any).final_amount_usd || 0);
+        const mfsFeePercent = Number((snapshot.lastPayment as any).mfs_fee_percent || 0);
+        const snap = (snapshot.lastPayment as any).exchange_rate_snapshot;
+        let snapshotRate = 0;
+        if (typeof snap === "number") snapshotRate = Number(snap) || 0;
+        else if (snap && typeof snap === "object") {
+          const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
+          if (vals.length) snapshotRate = vals.reduce((s, v) => s + v, 0) / vals.length;
+        }
         let r = 0;
-        if (bdt > 0 && usd > 0) {
+        if (mfsFeePercent > 0 && bdt > 0 && usd > 0) {
+          r = bdt / usd;
+        } else if (snapshotRate > 0) {
+          r = snapshotRate;
+        } else if (bdt > 0 && usd > 0) {
           r = bdt / usd;
         } else {
-          const snap = (snapshot.lastPayment as any).exchange_rate_snapshot;
-          if (typeof snap === "number") r = Number(snap) || 0;
-          else if (snap && typeof snap === "object") {
-            const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-            if (vals.length) r = vals.reduce((s, v) => s + v, 0) / vals.length;
-          }
+          r = snapshotRate;
         }
         if (r > 0) {
           derivedRate = r;
