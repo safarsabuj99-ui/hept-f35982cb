@@ -1,120 +1,39 @@
-# Active Clients & Active Ad Accounts — Premium Overview
+## Problem
 
-Extend the existing **Active Profitability** page (`/admin/profitability`) with two new intelligent tabs — **Active Clients** and **Active Ad Accounts** — that surface only currently-delivering entities and the KPIs an operator needs to act on them.
+`RefundDialog` shows **"Available to refund: $0.00"** and **"No prior payments — using default rate ৳120"** for clients that clearly have both.
 
-## What "active" means
+## Root cause (confirmed by DB)
 
-An entity is active only when BOTH conditions hold (strict, hides zombies):
+For client `9e2fa8d9…`:
+- `transactions` (completed): **87 credits totaling $8,496.44** + **1,169 debits totaling $8,393.93** → true wallet balance **≈ $102.51**.
+- The dialog query in `src/components/RefundDialog.tsx` (line 68) selects transactions **without pagination or aggregation**. Supabase caps the response at **1,000 rows**, so only the most recent slice (all debits in this case) is returned. `computeWalletBalance` then sees a negative total, and `availableUsd = Math.max(0, walletUsd)` → **$0**.
+- Same class of bug applies to the rate detection: it works for this client (last approved payment has `exchange_rate_snapshot = {meta: 145}`, so 145 would be derived), but the code path is fragile — for the client in the screenshot (MUSA) the query genuinely returns nothing, so it falls back to ৳120. We should also fall back to any completed **credit** transaction's `exchange_rate` before dropping to the default.
 
-1. Has ≥1 campaign whose status passes `isActiveStatus()` right now, AND
-2. That campaign generated `daily_metrics.spend > 0` in the last 7 days.
+## Fix
 
-The existing tabs (Client / Ad Account profitability) stay untouched. The new tabs are additional views optimized for "what's live right now".
+Keep this a scoped UI/data-fetching fix inside `RefundDialog.tsx` — no schema, no RLS changes.
 
-## Page layout after change
+1. **Replace the truncated transactions fetch with an aggregated one** so pagination can never lie:
+   - Query only what's needed: `SELECT type, amount, platform` filtered to `status='completed'` — but use `fetchAllRows` (already in `src/lib/fetchAllRows.ts`) to paginate through **every** row before calling `computeWalletBalance`.
+   - This preserves the existing `computeWalletBalance` contract (per-platform buckets, rounding) and keeps `computeBdtDebt` behaviour intact.
 
-```text
-/admin/profitability
- ├─ [KPI hero row] — unchanged
- └─ Tabs
-     ├─ By Client           (existing — profitability)
-     ├─ By Ad Account       (existing — profitability)
-     ├─ Active Clients      (NEW)
-     └─ Active Ad Accounts  (NEW)
-```
+2. **Harden rate detection** so it doesn't silently drop to ৳120 when it shouldn't:
+   - Keep the current `payment_requests` lookup (approved/refunded, latest first).
+   - If that returns nothing OR yields a non-positive rate, fall back to the most recent completed **credit** in `transactions` that has a positive `exchange_rate`.
+   - Only if both fail, use ৳120 and keep the "No prior payments" hint.
+   - Surface the source of the rate in the small caption already in the dialog (e.g. "From last deposit transaction on …") so admins can tell which source was used.
 
-## Active Clients tab — columns
+3. **Guard against the same bug elsewhere**: quick grep for other places that call `.from("transactions").select(...).eq("client_id", ...)` without pagination when computing wallet balance client-side (e.g. `ClientDetail`, `PaymentRequests`, `ClientWallet`). If any are found, switch them to `fetchAllRows` too. Scope this to wallet-balance call sites only — do not touch reporting/analytics queries in this task.
 
-| Column | Source |
-|---|---|
-| Client name + platform badges | profiles + campaigns.platform |
-| Active campaigns (count) | campaigns filtered by active + 7d spend |
-| Spend Today / 7d / 30d (USD) | daily_metrics rollup, 3 chips per row |
-| Wallet balance (USD) | `computeWalletBalance(client_id)` |
-| Runway (days) | `wallet_usd ÷ avg_daily_spend_last_7d` — colored: red <3d, amber <7d, green ≥7d |
-| Profit (BDT) & margin % | reuses existing profitability math for selected date range |
-| Row action | link → `/admin/clients/:id` |
+## Verification
 
-## Active Ad Accounts tab — columns
+- Reopen the refund dialog for client `9e2fa8d9…` → **Available to refund** shows ≈ **$102.51**, rate auto-fills to **৳145.00** (from the latest approved payment).
+- Reopen for a client with no payments but with a completed credit transaction → rate uses that transaction's `exchange_rate` instead of ৳120.
+- Reopen for a brand-new client with nothing → still shows ৳120 with the existing hint.
+- Refund submission math (USD × rate = BDT, agency BDT deduction, USD debit) unchanged.
 
-| Column | Source |
-|---|---|
-| Account name + platform badge | ad_accounts |
-| Client | via campaigns.client_id → profiles |
-| Active campaigns | count |
-| Spend Today / 7d / 30d (USD) | daily_metrics rollup |
-| Account balance (if tracked) | ad_accounts.balance if present, else — |
-| Profit (BDT) & margin % | existing math |
-| Row action | link → `/admin/ad-accounts/:id` |
+## Technical notes
 
-Header controls (both tabs): search, platform filter, date range (drives the profit column window; spend chips are always fixed to today/7d/30d), refresh, CSV export button.
-
-## KPI hero additions
-
-Add two small KPIs to the existing hero row so the header reflects live posture:
-- **Active clients (now)** — count from the new definition
-- **Active ad accounts (now)** — count
-
-## Technical details
-
-### 1. New RPC `get_active_entities_overview(p_org_id uuid)`
-
-Single RPC returns both lists in one round-trip. Security-definer, org-scoped via `get_user_org_id`.
-
-Logic outline:
-```sql
--- base set: campaigns that are active AND have spend in last 7d
-WITH active_camp AS (
-  SELECT c.id, c.client_id, c.ad_account_id, c.platform
-  FROM campaigns c
-  WHERE c.org_id = p_org_id
-    AND (lower(c.status) = 'active'
-         OR lower(c.status) LIKE 'active -%'
-         OR lower(c.status) = 'enable')
-    AND EXISTS (
-      SELECT 1 FROM daily_metrics dm
-      WHERE dm.campaign_id = c.id
-        AND dm.data_date >= (current_date - interval '7 days')
-        AND dm.spend > 0
-    )
-),
-spend_windows AS (
-  SELECT campaign_id,
-         SUM(CASE WHEN data_date = current_date THEN spend END) AS s_today,
-         SUM(CASE WHEN data_date >= current_date - 6 THEN spend END) AS s_7d,
-         SUM(CASE WHEN data_date >= current_date - 29 THEN spend END) AS s_30d
-  FROM daily_metrics
-  WHERE campaign_id IN (SELECT id FROM active_camp)
-    AND data_date >= current_date - 29
-  GROUP BY campaign_id
-)
--- aggregate by client_id and by ad_account_id, join wallet balance,
--- compute runway = wallet_usd / NULLIF(s_7d/7, 0),
--- reuse existing profit calc (revenue_bdt - cogs_bdt) for selected date range.
-```
-
-Wallet balance derived from same view/helper used by `computeWalletBalance` (sum of transactions per client) so a client's runway matches the wallet page exactly.
-
-### 2. New hook `useActiveEntitiesOverview()`
-Mirrors `useActiveProfitability`: react-query, `enabled: authReady && !!session && !!orgId`, realtime invalidation on `campaigns` + `daily_metrics` (debounced 1.5s).
-
-### 3. UI components (new, minimal)
-- `src/components/profitability/ActiveClientsTable.tsx`
-- `src/components/profitability/ActiveAdAccountsTable.tsx`
-- Small `RunwayBadge` helper (red/amber/green + tooltip explaining formula).
-- Spend chips use existing formatters (`usd()`, `bdt()`).
-
-### 4. Wire-up in `ActiveProfitability.tsx`
-- Add two `TabsTrigger` + `TabsContent` blocks after the existing tabs.
-- Share the existing search/platform-filter state; add a "Sort by: Spend 7d ↓ / Runway ↑ / Profit ↓" select.
-- Add two KPI cards to the hero.
-
-### 5. Realtime & performance
-- Single RPC keeps this to one query per tab switch.
-- Realtime channel already exists on the page for `daily_metrics` / `campaigns` — extend key list to invalidate the new query.
-- Add btree index if missing: `CREATE INDEX IF NOT EXISTS idx_daily_metrics_campaign_date_spend ON daily_metrics(campaign_id, data_date) WHERE spend > 0;`
-
-## Out of scope
-- No changes to sync, campaign status logic, or wallet math.
-- No new writes — read-only overview.
-- No mobile-specific redesign beyond the existing responsive table pattern.
+- Files touched: `src/components/RefundDialog.tsx` (primary). Possibly 1–2 sibling wallet-balance call sites if the grep in step 3 finds them.
+- No migration, no edge function change, no RLS change.
+- `fetchAllRows` already exists and is the standard fix for the 1000-row cap in this project.
