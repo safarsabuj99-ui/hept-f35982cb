@@ -141,8 +141,8 @@ export default function ActiveProfitability() {
         subtitle="Only ad accounts with currently-running campaigns and spend in the selected range"
         icon={<TrendingUp className="h-5 w-5" />}
         actions={
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching || liveFetching}>
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${isFetching || liveFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         }
