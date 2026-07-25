@@ -12,7 +12,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { useActiveProfitability } from "@/hooks/useActiveProfitability";
 import { useActiveEntitiesOverview } from "@/hooks/useActiveEntitiesOverview";
 import { usePermissions } from "@/hooks/usePermissions";
-import { TrendingUp, DollarSign, Wallet, Users, Building2, Loader2, RefreshCw, Search, Zap } from "lucide-react";
+import { TrendingUp, DollarSign, Wallet, Building2, Loader2, RefreshCw, Search, Zap } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ActiveClientsTable } from "@/components/profitability/ActiveClientsTable";
