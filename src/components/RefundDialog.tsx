@@ -11,6 +11,7 @@ import { Loader2, Undo2, AlertTriangle, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
 import { computeWalletBalance } from "@/lib/walletBalance";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 
 export interface RefundClient {
   id: string;
@@ -63,9 +64,11 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
     setAccountId("");
     setLastEdited("usd");
     (async () => {
-      const [{ data: accs }, { data: txns }, { data: lastPayment }] = await Promise.all([
+      const [{ data: accs }, txns, { data: lastPayment }, { data: lastCredit }] = await Promise.all([
         supabase.from("agency_accounts").select("id, name, type, current_balance_bdt").eq("is_active", true).order("name"),
-        supabase.from("transactions").select("type, amount, status, platform").eq("client_id", client.id).eq("status", "completed"),
+        fetchAllRows<any>(() =>
+          supabase.from("transactions").select("type, amount, status, platform").eq("client_id", client.id).eq("status", "completed")
+        ),
         supabase.from("payment_requests")
           .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status")
           .eq("client_id", client.id)
@@ -74,34 +77,57 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase.from("transactions")
+          .select("exchange_rate, created_at")
+          .eq("client_id", client.id)
+          .eq("status", "completed")
+          .eq("type", "credit")
+          .gt("exchange_rate", 0)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       setAccounts((accs as any[]) ?? []);
 
-      const wallet = computeWalletBalance((txns as any[]) ?? []);
+      const wallet = computeWalletBalance(txns ?? []);
       setWalletUsd(wallet.total);
 
-      // Derive rate from most recent approved payment
+      // Derive rate: 1) last approved/refunded payment, 2) last credit txn's exchange_rate, 3) default 120
       let derivedRate = 120;
       let src: RateSource = { rate: 120, paymentId: null, paymentDate: null, amountBdt: null, amountUsd: null };
       if (lastPayment) {
         const bdt = Number((lastPayment as any).amount_bdt || 0);
         const usd = Number((lastPayment as any).final_amount_usd || 0);
+        let r = 0;
         if (bdt > 0 && usd > 0) {
-          derivedRate = bdt / usd;
+          r = bdt / usd;
         } else {
           const snap = (lastPayment as any).exchange_rate_snapshot;
-          if (typeof snap === "number") derivedRate = Number(snap) || 120;
+          if (typeof snap === "number") r = Number(snap) || 0;
           else if (snap && typeof snap === "object") {
             const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
-            if (vals.length) derivedRate = vals.reduce((s, v) => s + v, 0) / vals.length;
+            if (vals.length) r = vals.reduce((s, v) => s + v, 0) / vals.length;
           }
         }
+        if (r > 0) {
+          derivedRate = r;
+          src = {
+            rate: r,
+            paymentId: (lastPayment as any).id,
+            paymentDate: (lastPayment as any).payment_date || (lastPayment as any).created_at,
+            amountBdt: bdt || null,
+            amountUsd: usd || null,
+          };
+        }
+      }
+      if (src.paymentId === null && lastCredit && Number((lastCredit as any).exchange_rate) > 0) {
+        derivedRate = Number((lastCredit as any).exchange_rate);
         src = {
           rate: derivedRate,
-          paymentId: (lastPayment as any).id,
-          paymentDate: (lastPayment as any).payment_date || (lastPayment as any).created_at,
-          amountBdt: bdt || null,
-          amountUsd: usd || null,
+          paymentId: "txn",
+          paymentDate: (lastCredit as any).created_at,
+          amountBdt: null,
+          amountUsd: null,
         };
       }
       setRateSource(src);
@@ -242,7 +268,11 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
                 <span className="text-muted-foreground">Auto-detected rate</span>
                 <span className="font-mono">৳{Number(rate || 120).toFixed(4)} / USD</span>
               </div>
-              {rateSource.paymentId ? (
+              {rateSource.paymentId === "txn" ? (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  From last credit transaction on {rateDateStr}
+                </p>
+              ) : rateSource.paymentId ? (
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   From last payment on {rateDateStr}
                   {rateSource.amountBdt && rateSource.amountUsd
