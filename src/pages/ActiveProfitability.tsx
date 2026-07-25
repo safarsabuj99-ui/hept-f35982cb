@@ -202,7 +202,7 @@ export default function ActiveProfitability() {
                   className="pl-8 h-8 w-[180px]"
                 />
               </div>
-              {tab === "account" && (
+              {(tab === "account" || tab === "active-accounts") && (
                 <select
                   className="h-8 rounded-md border bg-background text-xs px-2"
                   value={platformFilter}
@@ -224,14 +224,36 @@ export default function ActiveProfitability() {
           <Tabs
             value={tab}
             onValueChange={(v) => {
-              setTab(v as "client" | "account");
+              setTab(v as typeof tab);
               setPage(1);
             }}
           >
-            <TabsList>
-              <TabsTrigger value="client">By Client</TabsTrigger>
-              <TabsTrigger value="account">By Ad Account</TabsTrigger>
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="active-clients">
+                <Zap className="h-3.5 w-3.5 mr-1.5" />Active Clients
+              </TabsTrigger>
+              <TabsTrigger value="active-accounts">
+                <Zap className="h-3.5 w-3.5 mr-1.5" />Active Ad Accounts
+              </TabsTrigger>
+              <TabsTrigger value="client">By Client (P&amp;L)</TabsTrigger>
+              <TabsTrigger value="account">By Ad Account (P&amp;L)</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="active-clients" className="mt-4">
+              {liveLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : (
+                <ActiveClientsTable rows={liveClients} />
+              )}
+            </TabsContent>
+
+            <TabsContent value="active-accounts" className="mt-4">
+              {liveLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : (
+                <ActiveAdAccountsTable rows={liveAccounts} />
+              )}
+            </TabsContent>
 
             <TabsContent value="client" className="mt-4">
               {isLoading ? (
