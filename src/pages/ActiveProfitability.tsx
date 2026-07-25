@@ -152,26 +152,28 @@ export default function ActiveProfitability() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Active Ad Accounts"
-          value={String(totals?.active_accounts ?? 0)}
-          icon={Building2}
-          loading={isLoading}
-          accentColor="hsl(var(--chart-meta))"
-        />
-        <KpiCard
-          title="Active Clients"
-          value={String(totals?.active_clients ?? 0)}
-          icon={Users}
-          loading={isLoading}
+          title="Active Clients (now)"
+          value={String(liveData?.totals.active_clients ?? 0)}
+          subtitle={`${liveData?.totals.active_accounts ?? 0} ad accounts live`}
+          icon={Zap}
+          loading={liveLoading}
           accentColor="hsl(var(--primary))"
         />
         <KpiCard
-          title="Total Spend"
-          value={usd(totals?.spend_usd ?? 0)}
-          subtitle="USD"
+          title="Spend Today"
+          value={usd(liveData?.totals.spend_today_usd ?? 0)}
+          subtitle={`7d: ${usd(liveData?.totals.spend_7d_usd ?? 0)}`}
           icon={DollarSign}
-          loading={isLoading}
+          loading={liveLoading}
           accentColor="hsl(var(--destructive))"
+        />
+        <KpiCard
+          title="Active Ad Accounts (range)"
+          value={String(totals?.active_accounts ?? 0)}
+          subtitle={`${totals?.active_clients ?? 0} clients with spend`}
+          icon={Building2}
+          loading={isLoading}
+          accentColor="hsl(var(--chart-meta))"
         />
         <KpiCard
           title="Total Profit"
