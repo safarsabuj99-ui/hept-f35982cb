@@ -1450,7 +1450,7 @@ export default function ClientDetail() {
       <RefundDialog
         open={refundOpen}
         onOpenChange={setRefundOpen}
-        client={profile ? { id: profile.id, name: profile.full_name, org_id: (profile as any).org_id } : null}
+        client={profile ? { id: profile.user_id, name: profile.full_name, org_id: (profile as any).org_id } : null}
         onSuccess={loadAll}
       />
     </div>

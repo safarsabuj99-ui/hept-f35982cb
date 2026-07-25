@@ -36,6 +36,46 @@ interface RateSource {
   amountUsd: number | null;
 }
 
+interface RefundSnapshot {
+  accounts: AgencyAccount[];
+  txns: any[];
+  lastPayment: any | null;
+  lastCredit: any | null;
+}
+
+async function fetchRefundSnapshot(clientId: string): Promise<RefundSnapshot> {
+  const [{ data: accs }, txns, { data: lastPayment }, { data: lastCredit }] = await Promise.all([
+    supabase.from("agency_accounts").select("id, name, type, current_balance_bdt").eq("is_active", true).order("name"),
+    fetchAllRows<any>(() =>
+      supabase.from("transactions").select("type, amount, status, platform").eq("client_id", clientId).eq("status", "completed")
+    ),
+    supabase.from("payment_requests")
+      .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status")
+      .eq("client_id", clientId)
+      .in("status", ["approved", "refunded"])
+      .order("payment_date", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("transactions")
+      .select("exchange_rate, created_at")
+      .eq("client_id", clientId)
+      .eq("status", "completed")
+      .eq("type", "credit")
+      .gt("exchange_rate", 0)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  return {
+    accounts: ((accs as AgencyAccount[]) ?? []),
+    txns: txns ?? [],
+    lastPayment: lastPayment ?? null,
+    lastCredit: lastCredit ?? null,
+  };
+}
+
 export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<AgencyAccount[]>([]);
@@ -51,6 +91,7 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOverdraft, setConfirmOverdraft] = useState(false);
+  const [walletClientId, setWalletClientId] = useState("");
   // Track which field the admin edited last so we don't fight their input
   const [lastEdited, setLastEdited] = useState<"usd" | "bdt">("usd");
 
@@ -62,47 +103,43 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
     setAmountUsd("");
     setAmountBdt("");
     setAccountId("");
+    setWalletClientId(client.id);
     setLastEdited("usd");
     (async () => {
-      const [{ data: accs }, txns, { data: lastPayment }, { data: lastCredit }] = await Promise.all([
-        supabase.from("agency_accounts").select("id, name, type, current_balance_bdt").eq("is_active", true).order("name"),
-        fetchAllRows<any>(() =>
-          supabase.from("transactions").select("type, amount, status, platform").eq("client_id", client.id).eq("status", "completed")
-        ),
-        supabase.from("payment_requests")
-          .select("id, amount_bdt, final_amount_usd, exchange_rate_snapshot, payment_date, created_at, status")
-          .eq("client_id", client.id)
-          .in("status", ["approved", "refunded"])
-          .order("payment_date", { ascending: false, nullsFirst: false })
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase.from("transactions")
-          .select("exchange_rate, created_at")
-          .eq("client_id", client.id)
-          .eq("status", "completed")
-          .eq("type", "credit")
-          .gt("exchange_rate", 0)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      setAccounts((accs as any[]) ?? []);
+      let resolvedClientId = client.id;
+      let snapshot = await fetchRefundSnapshot(resolvedClientId);
 
-      const wallet = computeWalletBalance(txns ?? []);
+      if (snapshot.txns.length === 0 && !snapshot.lastPayment && !snapshot.lastCredit) {
+        const { data: profileByRowId } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("id", client.id)
+          .maybeSingle();
+
+        const profileUserId = (profileByRowId as any)?.user_id;
+        if (profileUserId && profileUserId !== client.id) {
+          resolvedClientId = profileUserId;
+          snapshot = await fetchRefundSnapshot(resolvedClientId);
+        }
+      }
+
+      setWalletClientId(resolvedClientId);
+      setAccounts(snapshot.accounts);
+
+      const wallet = computeWalletBalance(snapshot.txns ?? []);
       setWalletUsd(wallet.total);
 
       // Derive rate: 1) last approved/refunded payment, 2) last credit txn's exchange_rate, 3) default 120
       let derivedRate = 120;
       let src: RateSource = { rate: 120, paymentId: null, paymentDate: null, amountBdt: null, amountUsd: null };
-      if (lastPayment) {
-        const bdt = Number((lastPayment as any).amount_bdt || 0);
-        const usd = Number((lastPayment as any).final_amount_usd || 0);
+      if (snapshot.lastPayment) {
+        const bdt = Number((snapshot.lastPayment as any).amount_bdt || 0);
+        const usd = Number((snapshot.lastPayment as any).final_amount_usd || 0);
         let r = 0;
         if (bdt > 0 && usd > 0) {
           r = bdt / usd;
         } else {
-          const snap = (lastPayment as any).exchange_rate_snapshot;
+          const snap = (snapshot.lastPayment as any).exchange_rate_snapshot;
           if (typeof snap === "number") r = Number(snap) || 0;
           else if (snap && typeof snap === "object") {
             const vals = Object.values(snap).map((v) => Number(v)).filter((n) => !isNaN(n) && n > 0);
@@ -113,19 +150,19 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
           derivedRate = r;
           src = {
             rate: r,
-            paymentId: (lastPayment as any).id,
-            paymentDate: (lastPayment as any).payment_date || (lastPayment as any).created_at,
+            paymentId: (snapshot.lastPayment as any).id,
+            paymentDate: (snapshot.lastPayment as any).payment_date || (snapshot.lastPayment as any).created_at,
             amountBdt: bdt || null,
             amountUsd: usd || null,
           };
         }
       }
-      if (src.paymentId === null && lastCredit && Number((lastCredit as any).exchange_rate) > 0) {
-        derivedRate = Number((lastCredit as any).exchange_rate);
+      if (src.paymentId === null && snapshot.lastCredit && Number((snapshot.lastCredit as any).exchange_rate) > 0) {
+        derivedRate = Number((snapshot.lastCredit as any).exchange_rate);
         src = {
           rate: derivedRate,
           paymentId: "txn",
-          paymentDate: (lastCredit as any).created_at,
+          paymentDate: (snapshot.lastCredit as any).created_at,
           amountBdt: null,
           amountUsd: null,
         };
@@ -158,6 +195,7 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
 
   const handleSubmit = async () => {
     if (!client || !user) return;
+    if (!walletClientId) return toast.error("Client wallet is still loading. Please try again.");
     const usd = Number(amountUsd);
     const r = Number(rate);
     const bdt = Number(amountBdt);
@@ -184,7 +222,7 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
 
     // 2. Client debit transaction (reduces wallet USD)
     const { data: txn, error: txnErr } = await supabase.from("transactions").insert({
-      client_id: client.id,
+      client_id: walletClientId,
       type: "debit",
       amount: usd,
       status: "completed",
@@ -203,7 +241,7 @@ export function RefundDialog({ open, onOpenChange, client, onSuccess }: Props) {
     // 3. Refund audit row (standalone — no payment_request_id)
     const { error: refErr } = await supabase.from("refunds" as any).insert({
       payment_request_id: null,
-      client_id: client.id,
+      client_id: walletClientId,
       refunded_from_account_id: accountId,
       amount_bdt: bdt,
       exchange_rate: r,
