@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, DollarSign, Receipt, CreditCard, TrendingUp, Shield, Plus, User, KeyRound, Settings2, RefreshCw, CalendarIcon, Eye, Trash2, MonitorSmartphone, Check, ShoppingCart, Target, Radio, BarChart3, Lock, Loader2, Zap, Undo2 } from "lucide-react";
 import { RefundDialog } from "@/components/RefundDialog";
+import { computeWalletBalance } from "@/lib/walletBalance";
 import { CampaignRow } from "@/components/client-analytics/DeepDiveTable";
 import { CampaignAnalyticsPanel } from "@/components/client-analytics/CampaignAnalyticsPanel";
 import { TablePagination } from "@/components/TablePagination";
@@ -1350,9 +1351,8 @@ export default function ClientDetail() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
             {(() => {
-              const txCredits = transactions.reduce((s: number, t: any) => s + (t.type === "credit" ? Number(t.amount) : 0), 0);
-              const txDebits = transactions.reduce((s: number, t: any) => s + (t.type === "debit" ? Number(t.amount) : 0), 0);
-              const mainBal = txCredits - txDebits;
+              const wallet = computeWalletBalance(transactions);
+              const mainBal = wallet.total;
               const platforms = ["meta", "tiktok", "google"];
               const labels: Record<string, string> = { meta: "Meta", tiktok: "TikTok", google: "Google" };
               const colors: Record<string, string> = { meta: "hsl(214, 80%, 52%)", tiktok: "hsl(340, 75%, 55%)", google: "hsl(142, 60%, 45%)" };
@@ -1365,9 +1365,7 @@ export default function ClientDetail() {
                     </CardContent>
                   </Card>
                   {platforms.map((p) => {
-                    const pC = transactions.filter((t: any) => t.type === "credit" && t.platform === p).reduce((s: number, t: any) => s + Number(t.amount), 0);
-                    const pD = transactions.filter((t: any) => t.type === "debit" && t.platform === p).reduce((s: number, t: any) => s + Number(t.amount), 0);
-                    const bal = pC - pD;
+                    const bal = wallet.platforms[p as keyof typeof wallet.platforms];
                     return (
                       <Card key={p}>
                         <CardContent className="pt-4 text-center">
@@ -1450,7 +1448,7 @@ export default function ClientDetail() {
       <RefundDialog
         open={refundOpen}
         onOpenChange={setRefundOpen}
-        client={profile ? { id: profile.id, name: profile.full_name, org_id: (profile as any).org_id } : null}
+        client={profile ? { id: profile.user_id, name: profile.full_name, org_id: (profile as any).org_id } : null}
         onSuccess={loadAll}
       />
     </div>
