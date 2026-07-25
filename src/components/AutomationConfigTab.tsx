@@ -96,17 +96,18 @@ export function AutomationConfigTab({
 
   // Fetch campaign details + balance
   const fetchData = useCallback(async () => {
-    // Fetch balance
-    const { data: txns } = await supabase
-      .from("transactions")
-      .select("type, amount, status")
-      .eq("client_id", userId)
-      .eq("status", "completed");
+    // Fetch balance (paginated to bypass Supabase's 1000-row cap)
+    const { fetchAllRows } = await import("@/lib/fetchAllRows");
+    const txns = await fetchAllRows<{ type: string; amount: number; status: string }>(
+      () => supabase
+        .from("transactions")
+        .select("type, amount, status")
+        .eq("client_id", userId)
+        .eq("status", "completed")
+    );
+    const { computeWalletBalance } = await import("@/lib/walletBalance");
+    setBalance(computeWalletBalance(txns as any).total);
 
-    if (txns) {
-      const { computeWalletBalance } = await import("@/lib/walletBalance");
-      setBalance(computeWalletBalance(txns as any).total);
-    }
 
     // Fetch campaign details if there are paused campaigns
     if (systemPausedCampaigns.length > 0) {
