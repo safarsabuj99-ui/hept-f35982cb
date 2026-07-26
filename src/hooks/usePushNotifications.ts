@@ -43,14 +43,24 @@ export function usePushNotifications() {
   }, [isSupported, previewEnv]);
 
 
-  // Check existing subscription — gated on authReady
+  // Check existing subscription — gated on authReady. Always upserts so the row
+  // stays fresh (Chrome/Android can rotate keys silently), and re-subscribes
+  // whenever permission is granted but no subscription exists (covers PWA
+  // reinstalls, browser cache clears, and iOS Safari edge cases).
   useEffect(() => {
     if (!isSupported || !authReady || !user?.id) return;
 
     (async () => {
       try {
         const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
+        let sub = await reg.pushManager.getSubscription();
+
+        if (!sub && Notification.permission === "granted") {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
+          });
+        }
 
         if (sub) {
           const subJson = sub.toJSON();
@@ -64,28 +74,15 @@ export function usePushNotifications() {
             { onConflict: "user_id,endpoint" }
           );
           setIsSubscribed(true);
-        } else if (Notification.permission === "granted") {
-          const newSub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
-          });
-          const subJson = newSub.toJSON();
-          await supabase.from("push_subscriptions").upsert(
-            {
-              user_id: user.id,
-              endpoint: newSub.endpoint,
-              keys_p256dh: subJson.keys?.p256dh ?? "",
-              keys_auth: subJson.keys?.auth ?? "",
-            },
-            { onConflict: "user_id,endpoint" }
-          );
-          setIsSubscribed(true);
+        } else {
+          setIsSubscribed(false);
         }
       } catch (err) {
         console.error("Push auto-subscribe check failed:", err);
       }
     })();
   }, [isSupported, authReady, user?.id]);
+
 
   const subscribe = useCallback(async () => {
     if (!isSupported || !user?.id) return false;
