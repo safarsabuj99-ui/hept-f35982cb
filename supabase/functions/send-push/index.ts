@@ -7,14 +7,22 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Require authenticated caller. Only admins/platform_owner (or service-role
-    // cron / DB triggers) may dispatch push notifications to arbitrary users.
-    const ctx = await requireCaller(req);
-    if (!ctx.isServiceCall) {
-      requireRole(ctx, ["admin", "platform_owner"]);
+    const pushSource = req.headers.get("x-push-source");
+    const notificationIdHeader = req.headers.get("x-notification-id");
+    const isTriggerOrigin = pushSource === "db-trigger" && !!notificationIdHeader;
+
+    let ctx: Awaited<ReturnType<typeof requireCaller>> | null = null;
+
+    if (!isTriggerOrigin) {
+      // Normal caller path: require a real signed-in admin/platform_owner
+      // (or a service-role internal call).
+      ctx = await requireCaller(req);
+      if (!ctx.isServiceCall) {
+        requireRole(ctx, ["admin", "platform_owner"]);
+      }
     }
 
-    const { user_id, title, body, link, type, priority, group_key } = await req.json();
+    const { user_id, title, body, link, type, priority, group_key, notification_id } = await req.json();
 
     if (!user_id || !title) {
       return new Response(JSON.stringify({ error: "user_id and title required" }), {
@@ -23,9 +31,38 @@ Deno.serve(async (req) => {
       });
     }
 
+    // If this came from a DB trigger, verify the referenced notification row actually
+    // exists and matches user_id/title. This makes the anon-key trigger call safe:
+    // an attacker with the anon key can't spam users, because they'd need to have
+    // inserted a matching row into public.notifications (which is RLS-protected).
+    if (isTriggerOrigin) {
+      const svc = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: notif } = await svc
+        .from("notifications")
+        .select("id, user_id, title, created_at")
+        .eq("id", notification_id ?? notificationIdHeader)
+        .maybeSingle();
+      if (!notif || notif.user_id !== user_id || notif.title !== title) {
+        return new Response(JSON.stringify({ error: "Notification row not found or mismatched" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const ageMs = Date.now() - new Date(notif.created_at).getTime();
+      if (ageMs > 5 * 60 * 1000) {
+        return new Response(JSON.stringify({ error: "Notification too old" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Enforce tenant boundary: non-service admin callers may only push to
     // users in their own org.
-    if (!ctx.isServiceCall && ctx.orgId) {
+    if (ctx && !ctx.isServiceCall && ctx.orgId) {
       const supabaseAuthCheck = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -39,6 +76,7 @@ Deno.serve(async (req) => {
         });
       }
     }
+
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
