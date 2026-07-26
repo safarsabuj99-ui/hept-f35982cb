@@ -79,11 +79,11 @@ export function useGlobalClientSearch() {
           .map((r) => r.user_id as string)
           .filter((id) => id && !byId.has(id));
         if (missingIds.length > 0) {
-          const { data: profs } = await supabase
+          const { data: profs } = await (supabase as any)
             .from("profiles")
-            .select("user_id, full_name, email, business_name, phone, mapping_keyword, is_active, org_id" as any)
-            .in("user_id" as any, missingIds)
-            .eq("org_id" as any, orgId!);
+            .select("user_id, full_name, email, business_name, phone, mapping_keyword, is_active, org_id")
+            .in("user_id", missingIds)
+            .eq("org_id", orgId!);
           for (const p of (profs ?? []) as any[]) {
             if (!p?.user_id || byId.has(p.user_id)) continue;
             byId.set(p.user_id, {
