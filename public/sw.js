@@ -77,15 +77,26 @@ self.addEventListener("notificationclick", (event) => {
 // Auto-recover a dropped/rotated subscription. Chrome/Android sometimes replaces
 // the endpoint silently; without this handler our stored push_subscriptions row
 // would be dead and no future push would ever land on the device.
+const VAPID_PUBLIC_KEY_B64 = "BApytxnwgrWgRXe4jlovIcb0-mDVXL8jxm1acUxrunW4ZgeK1z5TGUkuP682ald5mhsYKLePfQh0fwtydvQT9EM";
+function b64UrlToBytes(s) {
+  const pad = "=".repeat((4 - (s.length % 4)) % 4);
+  const b = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil((async () => {
     try {
       const applicationServerKey = event.oldSubscription?.options?.applicationServerKey
-        || (await (await fetch("/vapid-key.json")).json()).key;
+        || b64UrlToBytes(VAPID_PUBLIC_KEY_B64).buffer;
       const newSub = await self.registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
       });
+
       const subJson = newSub.toJSON();
       await fetch("/functions/v1/refresh-push-subscription", {
         method: "POST",
