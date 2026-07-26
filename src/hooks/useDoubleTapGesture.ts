@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { timeSinceSearchClosed } from "@/hooks/useSearchDialog";
 
 interface Options {
   /** Disable the listener (e.g. when popup is already open). */
@@ -45,6 +46,8 @@ export function useDoubleTapGesture(
 
       const now = performance.now();
       if (now < cooldownUntilRef.current) return;
+      // Don't immediately re-open the search after a close-tap.
+      if (timeSinceSearchClosed() < 400) return;
 
       const last = lastTapRef.current;
       const x = e.clientX;
