@@ -1,31 +1,20 @@
-import { useCallback, useState } from "react";
-import { ClientSearchCommand } from "@/components/dashboard/ClientSearchCommand";
+import { useCallback } from "react";
 import { useDoubleTapGesture } from "@/hooks/useDoubleTapGesture";
-import type { GlobalSearchClient } from "@/hooks/useGlobalClientSearch";
-
-interface Props {
-  clients: GlobalSearchClient[];
-}
+import { openSearch, useSearchDialogOpen } from "@/hooks/useSearchDialog";
 
 /**
  * Mobile-only: double-tap anywhere on the page (away from controls) to open
- * the global client search popup. Reuses the same dialog as the ⌘K hotkey.
+ * the global client search popup. Renders no UI — the dialog itself lives in
+ * `GlobalSearchMount` and is toggled via the shared `useSearchDialog` store.
  */
-export function MobileDoubleTapSearch({ clients }: Props) {
-  const [open, setOpen] = useState(false);
+export function MobileDoubleTapSearch() {
+  const open = useSearchDialogOpen();
 
   const handleDoubleTap = useCallback(() => {
-    setOpen((prev) => (prev ? prev : true));
+    openSearch();
   }, []);
 
   useDoubleTapGesture(handleDoubleTap, { disabled: open });
 
-  return (
-    <ClientSearchCommand
-      clients={clients}
-      mode="hotkey-only"
-      forceOpen={open}
-      onOpenChange={setOpen}
-    />
-  );
+  return null;
 }
