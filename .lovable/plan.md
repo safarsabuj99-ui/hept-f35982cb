@@ -1,73 +1,84 @@
+# PWA Mobile Push Notifications — Deep Fix + Feature Upgrade
 
-## Problem
+## What's actually broken (verified in code)
 
-1. **Double-close animation** — On both mobile and desktop, closing the search popup shows a close animation, then a *second* dialog appears still open and has to be closed again.
-2. **Missing profiles** — Some clients (e.g. Yasin Arafat) never appear in the search list, even though the database confirms they exist as clients in the org.
+1. **Every DB-trigger push is silently rejected.** `trigger_send_push()` calls `send-push` with the **anon key**. `send-push` runs `requireCaller` → `requireRole(["admin","platform_owner"])`. Anon token has no role, so every trigger-driven push returns 401/403 and never reaches the device. This is why payment/guard/refund notifications never appear on your phone even though rows are being inserted into `notifications`.
+2. **No trigger exists for manual campaign status changes.** Guard-pause fires on `status = 'guard_paused'` only. When a *client* pauses a campaign from their dashboard (`status = 'paused'`), nothing notifies the agency.
+3. **Payload loses smart-gating fields.** `trigger_send_push` doesn't forward `priority` or `group_key`, so urgent guard/payment alerts get demoted to `normal` and get blocked by quiet-hours/DND that they shouldn't be blocked by.
+4. **Push subscription can go stale on installed PWA.** `usePushNotifications` only re-subscribes if a subscription already exists; if the browser/OS rotates or drops the subscription (common on iOS after reinstall), we never recover it. There's also no periodic freshness check.
+5. **Service worker doesn't refresh on notification click** — click handler navigates but doesn't focus reliably on Android when app is fully closed (missing `openWindow` fallback for terminated state is OK, but click deep-link uses in-app custom event that won't fire on cold start).
 
-## Root causes (verified)
+## What we'll build
 
-**Double dialog:** The `ClientSearchCommand` component is mounted **three times on the dashboard** and **two times on other admin pages**:
-- `QuickActions` on the dashboard renders one instance (`mode="full"`) — this is the visible search bar / mobile pill trigger.
-- `GlobalSearchMount` (in `AdminLayout` / `ManagerLayout`) renders one instance (`mode="hotkey-only"`) for the ⌘K listener.
-- `GlobalSearchMount` also renders `MobileDoubleTapSearch` — another full instance controlled by the double-tap gesture.
+### A. Fix the trigger → edge function auth (root cause of "no mobile push")
+- Store the project's service-role key inside Postgres `vault` as `service_role_key` (one-time via a migration using existing `vault.create_secret` — value fetched from the runtime env inside a DO block so we never hardcode it).
+- Rewrite `trigger_send_push()` to:
+  - Read the key from vault at call time.
+  - Send `Authorization: Bearer <service_role_key>` so `send-push` sees `isServiceCall = true` and bypasses the role check.
+  - Forward **all** payload fields: `priority`, `group_key`, `type`, `link`.
+- Effect: every existing notification row (payments, guards, refunds, campaign requests) starts delivering to the mobile lock screen immediately, with correct urgency.
 
-Each instance keeps its own local `open` state, and each renders its own Radix `Dialog.Portal` with its own overlay and content. When the user opens via one path (e.g. clicks the search bar, then also presses ⌘K, or the double-tap fires while another is closing), two dialogs mount at the same time; closing the top one plays its exit animation and reveals the second one still open.
+### B. New notification: client pauses a campaign → agency mobile alert
+Add trigger `trg_notify_on_client_pause` on `public.campaigns` AFTER UPDATE:
+- Fires when `OLD.status` was an active variant and `NEW.status = 'paused'` (skip `guard_paused` — already covered).
+- Distinguish *who* paused: check `auth.uid()` at trigger time. If the caller resolves to a `client` role, insert one urgent notification per agency admin/manager assigned to that client:
+  - Title: `"Client Paused a Campaign ⏸️"`
+  - Body: `"<Client name> paused <campaign name> (<platform>)"`
+  - Link: `/admin/clients/<client_id>?tab=campaigns&highlight=<campaign_id>`
+  - `type: 'campaign'`, `priority: 'high'`, `group_key: 'client_pause_<client_id>'` (30 s debounce so bulk pauses collapse into one push).
+- If the pauser is an admin/manager (agency-side), skip — no self-notification.
 
-**Missing profiles:** Confirmed via DB query that Arafat is returned by `get_admin_dashboard_summary` (46 clients total). So the data layer is fine. The disappearance happens because different mount points use different query hooks with different cache keys / staleness:
-- `QuickActions` uses `data.clients` from `useAdminDashboardData` (dashboard-scoped, updates with date range).
-- `GlobalSearchMount` uses `useGlobalClientSearch` (separate query, may be stale or not yet loaded on non-dashboard pages).
+### C. PWA subscription resilience (mobile lock-screen reliability)
+- In `usePushNotifications.ts`: on every mount with `authReady` **always** call `pushManager.subscribe` when permission is granted and no subscription exists, and re-upsert the row even if the subscription already exists (keeps `keys_p256dh`/`keys_auth`/`updated_at` fresh — Chrome/Android rotates keys).
+- Add a `pushsubscriptionchange` handler in `public/sw.js` that re-subscribes and posts the new endpoint to `/functions/v1/refresh-push-subscription` (new tiny edge function that upserts using service role — no auth needed because endpoint itself is the identity).
+- Prune dead endpoints in `send-push`: on Web Push 404/410 response, `DELETE` from `push_subscriptions` so future notifications don't waste time on stale devices.
 
-Since we're already deduplicating dialogs, we also unify to a single source of truth for the client list — and add a defensive supplemental fetch so nobody is ever missing.
+### D. Notification click reliability from cold-closed PWA
+- Update `public/sw.js` `notificationclick`:
+  - If any client window exists, `focus()` + `navigate(link)`.
+  - Otherwise `clients.openWindow(link)` directly (already there, keep).
+  - Fix: use absolute `new URL(link, self.location.origin).href` so relative links like `/admin/...` open correctly when the PWA is cold-started from a notification.
 
-## Fix
+### E. Small hygiene
+- Bump `public/sw.js` version comment to `v4` so browsers pick up the new install (`skipWaiting` on first install is already correct).
+- Add a "Send test push" button in `NotificationsTab` that hits `send-push` with the current user's id — one-tap way for you to verify on your phone.
 
-### 1. One global dialog, shared open state
+## Technical details
 
-Introduce a tiny module-level store (`useSearchDialog`) with `open` / `setOpen` — a zustand-lite pattern using `useSyncExternalStore`. Any code path (hotkey, dashboard search bar click, mobile pill tap, double-tap gesture) simply calls `open()` on the shared store. Only the one instance mounted in `GlobalSearchMount` renders the Radix dialog.
+**Files changed**
+- `supabase/migrations/<new>.sql` — new `trigger_send_push` body, vault secret bootstrap, new `notify_on_client_pause` fn + trigger.
+- `supabase/functions/send-push/index.ts` — prune 404/410 subscriptions; keep existing gating.
+- `supabase/functions/refresh-push-subscription/index.ts` — new, `verify_jwt = false`, upserts by endpoint.
+- `supabase/config.toml` — add `[functions.refresh-push-subscription]` block.
+- `public/sw.js` — v4, `pushsubscriptionchange` handler, absolute-URL fix in click handler.
+- `src/hooks/usePushNotifications.ts` — always subscribe when permission granted; always upsert on mount.
+- `src/components/settings/NotificationsTab.tsx` — add "Send test push" button.
 
-Changes:
-- New file `src/hooks/useSearchDialog.ts` — module-scoped subscribable store.
-- `ClientSearchCommand`: reads/writes `open` from the shared store (falls back to controlled `forceOpen` only if not using the store). Remove the per-instance `internalOpen`.
-- `QuickActions`: on both mobile and desktop, render **only a trigger** (the pretty search bar / the bottom pill) that calls `useSearchDialog().open()`. Do **not** mount another `ClientSearchCommand`.
-- `MobileDoubleTapSearch`: strip the dialog render — the hook just calls `useSearchDialog().open()` when double-tap fires. Deleted or kept as a listener-only component.
-- `GlobalSearchMount` remains the **only** place the dialog is rendered. It also owns the ⌘K listener (already does) and mounts the double-tap listener.
+**Vault bootstrap pattern (safe on Lovable Cloud)**
+```sql
+DO $$
+DECLARE k text;
+BEGIN
+  SELECT decrypted_secret INTO k FROM vault.decrypted_secrets WHERE name = 'service_role_key';
+  IF k IS NULL THEN
+    PERFORM vault.create_secret(current_setting('app.settings.service_role_key', true), 'service_role_key');
+  END IF;
+END $$;
+```
+(Falls back gracefully — I'll set `app.settings.service_role_key` via a one-line `ALTER DATABASE` in the same migration, sourced from the existing project.)
 
-Result: only one dialog exists in the tree at any time, so the close animation cannot reveal a second one behind it.
-
-### 2. Guarantee every client is searchable
-
-- `useGlobalClientSearch` stays as the fast path (uses cached dashboard RPC data — 46 clients).
-- Add a supplemental lightweight query in the same hook that fetches **all** client profiles directly from `profiles + user_roles + ad_account_clients` (id, name, email, business_name, phone, mapping_keyword, org_id, is_active) filtered by `org_id`. Union both sources by `user_id`, preferring RPC data (which has balance) and falling back to the profile row for anyone the RPC omitted, with `balance = 0` when not known.
-- Ensures anyone with a `client` role in the org is present in the search list, even if they have no transactions/mapping/balance data for the RPC to compute.
-
-### 3. Double-tap safety
-
-- Add a small guard so the double-tap gesture cannot fire during the dialog's exit animation (300 ms lockout after `open → false`), preventing "close then re-open" flicker on rapid taps.
-
-## Files touched
-
+**Client-pause detector logic (SQL sketch)**
 ```text
-NEW  src/hooks/useSearchDialog.ts              (shared open state)
-EDIT src/components/dashboard/ClientSearchCommand.tsx
-       - read/write open via useSearchDialog
-       - keep forceOpen support as a fallback (unused after refactor)
-EDIT src/components/dashboard/QuickActions.tsx
-       - render trigger only (desktop bar / mobile pill); no dialog
-EDIT src/components/MobileDoubleTapSearch.tsx
-       - reduce to a listener-only component that calls store.open()
-EDIT src/components/GlobalSearchMount.tsx
-       - single dialog render; owns hotkey + double-tap listeners
-EDIT src/hooks/useGlobalClientSearch.ts
-       - union RPC clients with a direct profiles fallback so no
-         client with role='client' in the org is ever missing
-EDIT src/hooks/useDoubleTapGesture.ts
-       - respect a short cooldown after the dialog closes
+IF NEW.status = 'paused' AND OLD.status <> 'paused' AND OLD.status <> 'guard_paused'
+   AND EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'client')
+THEN insert one notification per admin/manager in NEW.org_id
 ```
 
-## Verification
+**No breaking changes.** Existing notification rows keep flowing; we only fix delivery + add one new trigger + harden the SW.
 
-- Open dashboard, click the search bar → close: single close animation, no ghost dialog.
-- Same on `/admin/finance`, `/admin/clients`, etc. via ⌘K.
-- On mobile: double-tap page → close via Done → no re-open flicker.
-- Search "arafat" from any admin page → Yasin Arafat / Nakshi Bari appears in "All Clients".
-- Spot check: type a substring of every group (mapping keyword, phone digits, business name) — matches surface.
+## After this ships you'll get on your phone
+- Client pauses any campaign → push within seconds.
+- Client submits a payment → push.
+- You approve/reject that payment → client gets a push.
+- Ad guard pauses campaigns → both sides get a push.
+- All work with the app fully closed on Android and installed-PWA iOS 16.4+.
