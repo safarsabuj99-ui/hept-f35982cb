@@ -50,13 +50,7 @@ export function useGlobalClientSearch() {
           p_date_to: today,
           p_org_id: orgId!,
         }),
-        // Every client-role user in this org — guarantees no profile is
-        // missing from search even if the RPC left them out.
-        supabase
-          .from("user_roles")
-          .select("user_id, role, profiles!inner(user_id, full_name, email, business_name, phone, mapping_keyword, is_active, org_id)" as any)
-          .eq("role", "client" as any)
-          .eq("profiles.org_id" as any, orgId!),
+        supabase.from("user_roles").select("user_id, role").eq("role", "client" as any),
       ]);
 
       if (rpcRes.error) throw rpcRes.error;
