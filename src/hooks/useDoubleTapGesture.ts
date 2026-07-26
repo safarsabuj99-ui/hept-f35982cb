@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { timeSinceSearchClosed } from "@/hooks/useSearchDialog";
 
 interface Options {
   /** Disable the listener (e.g. when popup is already open). */
