@@ -155,18 +155,25 @@ function pushRecent(userId: string | null | undefined, clientId: string) {
 }
 
 export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenChange }: ClientSearchCommandProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
+  const isHotkeyOnly = mode === "hotkey-only";
+  const storeOpen = useSearchDialogOpen();
   const isControlled = forceOpen !== undefined;
-  const open = isControlled ? !!forceOpen : internalOpen;
+  // Priority: explicit forceOpen prop > global store. This lets the layout-mounted
+  // dialog own its state via the store, while any legacy caller passing forceOpen
+  // still works.
+  const open = isControlled ? !!forceOpen : storeOpen;
   const setOpen = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
       const resolved = typeof next === "function" ? (next as (p: boolean) => boolean)(open) : next;
-      if (!isControlled) setInternalOpen(resolved);
-      onOpenChange?.(resolved);
+      if (isControlled) {
+        onOpenChange?.(resolved);
+      } else {
+        setSearchOpen(resolved);
+        onOpenChange?.(resolved);
+      }
     },
     [isControlled, onOpenChange, open],
   );
-  const isHotkeyOnly = mode === "hotkey-only";
   const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [activeMenuFor, setActiveMenuFor] = useState<string | null>(null);
@@ -192,12 +199,12 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((o) => !o);
+        setSearchOpen(!storeOpen);
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, [isHotkeyOnly]);
+  }, [isHotkeyOnly, storeOpen]);
 
   // Pre-compute heavy fields once per client.
   // - `_value` is a STABLE UNIQUE id (user_id) so cmdk never silently dedupes
