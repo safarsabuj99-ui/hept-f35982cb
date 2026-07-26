@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { registerMobilePill, useIsTopMobilePill } from "@/components/ui/mobile-search-pill";
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll";
+import { useSearchDialogOpen, openSearch, closeSearch, setSearchOpen } from "@/hooks/useSearchDialog";
 
 interface ClientItem {
   user_id: string;
