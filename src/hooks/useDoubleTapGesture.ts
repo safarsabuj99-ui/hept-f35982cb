@@ -46,6 +46,8 @@ export function useDoubleTapGesture(
 
       const now = performance.now();
       if (now < cooldownUntilRef.current) return;
+      // Don't immediately re-open the search after a close-tap.
+      if (timeSinceSearchClosed() < 400) return;
 
       const last = lastTapRef.current;
       const x = e.clientX;
