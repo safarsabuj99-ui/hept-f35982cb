@@ -485,6 +485,7 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
         <MobileGlobalSearchPill onOpen={() => setOpen(true)} />
       )}
 
+      {isHotkeyOnly && (
       <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay
