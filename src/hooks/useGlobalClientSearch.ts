@@ -73,26 +73,34 @@ export function useGlobalClientSearch() {
       const byId = new Map<string, GlobalSearchClient>();
       for (const c of rpcClients) byId.set(c.user_id, c);
 
-      // Fallback: fill in any client role missing from the RPC.
+      // Fallback: any client-role user missing from the RPC.
       if (!rolesRes.error && Array.isArray(rolesRes.data)) {
-        for (const row of rolesRes.data as any[]) {
-          const p = row.profiles;
-          if (!p?.user_id) continue;
-          if (byId.has(p.user_id)) continue;
-          byId.set(p.user_id, {
-            user_id: p.user_id,
-            full_name: p.full_name ?? "Unnamed client",
-            email: p.email ?? "",
-            business_name: p.business_name ?? null,
-            balance: 0,
-            pricing_config: null,
-            platform_balances: {},
-            phone: p.phone ?? null,
-            mapping_keyword: p.mapping_keyword ?? null,
-            is_active: p.is_active !== false,
-            is_paused: false,
-            pending_payments: 0,
-          });
+        const missingIds = (rolesRes.data as any[])
+          .map((r) => r.user_id as string)
+          .filter((id) => id && !byId.has(id));
+        if (missingIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("user_id, full_name, email, business_name, phone, mapping_keyword, is_active, org_id" as any)
+            .in("user_id" as any, missingIds)
+            .eq("org_id" as any, orgId!);
+          for (const p of (profs ?? []) as any[]) {
+            if (!p?.user_id || byId.has(p.user_id)) continue;
+            byId.set(p.user_id, {
+              user_id: p.user_id,
+              full_name: p.full_name ?? "Unnamed client",
+              email: p.email ?? "",
+              business_name: p.business_name ?? null,
+              balance: 0,
+              pricing_config: null,
+              platform_balances: {},
+              phone: p.phone ?? null,
+              mapping_keyword: p.mapping_keyword ?? null,
+              is_active: p.is_active !== false,
+              is_paused: false,
+              pending_payments: 0,
+            });
+          }
         }
       }
 
