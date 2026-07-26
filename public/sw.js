@@ -1,11 +1,8 @@
 // Service Worker for Web Push Notifications
-// v3 — reload-loop fix: no aggressive skipWaiting/claim on already-controlled pages
+// v4 — pushsubscriptionchange auto-recovery + absolute-URL click nav
 // Does NOT cache anything — purely for push notification handling
 
 self.addEventListener("install", (event) => {
-  // Only skip waiting on the very first install (no existing controller).
-  // On subsequent installs we let the new SW wait until all tabs close,
-  // which prevents activation races that look like full-page reloads.
   event.waitUntil((async () => {
     const existing = await self.registration.active;
     if (!existing) {
@@ -16,12 +13,9 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // Only claim uncontrolled clients (first ever activation).
-    // Claiming already-controlled tabs is what triggers the reload flash on
-    // some browsers / installed PWAs.
     const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const anyUncontrolled = clientList.some((c) => !c.frameType || c.frameType === "top-level");
-    const alreadyControlled = clientList.some((c) => (c).type === "window" && self.registration.active && (c).url);
+    const alreadyControlled = clientList.some((c) => c.type === "window" && self.registration.active && c.url);
     if (!alreadyControlled || clientList.length === 0) {
       try { await self.clients.claim(); } catch {}
     }
@@ -62,20 +56,49 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-
   if (event.action === "dismiss") return;
 
-  const link = event.notification.data?.link || "/";
+  const rawLink = event.notification.data?.link || "/";
+  // Resolve relative paths ("/admin/...") to an absolute URL scoped to this SW origin
+  const absLink = new URL(rawLink, self.location.origin).href;
 
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url.includes(self.location.origin) && "focus" in client) {
-          client.navigate(link);
-          return client.focus();
-        }
+  event.waitUntil((async () => {
+    const windowClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windowClients) {
+      if (client.url.startsWith(self.location.origin) && "focus" in client) {
+        try { await client.navigate(absLink); } catch {}
+        return client.focus();
       }
-      return clients.openWindow(link);
-    })
-  );
+    }
+    return clients.openWindow(absLink);
+  })());
+});
+
+// Auto-recover a dropped/rotated subscription. Chrome/Android sometimes replaces
+// the endpoint silently; without this handler our stored push_subscriptions row
+// would be dead and no future push would ever land on the device.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    try {
+      const applicationServerKey = event.oldSubscription?.options?.applicationServerKey
+        || (await (await fetch("/vapid-key.json")).json()).key;
+      const newSub = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+      const subJson = newSub.toJSON();
+      await fetch("/functions/v1/refresh-push-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          old_endpoint: event.oldSubscription?.endpoint || null,
+          endpoint: newSub.endpoint,
+          keys_p256dh: subJson.keys?.p256dh ?? "",
+          keys_auth: subJson.keys?.auth ?? "",
+        }),
+      }).catch(() => {});
+    } catch (err) {
+      // swallow — next foreground mount will re-subscribe via the hook
+    }
+  })());
 });
