@@ -797,6 +797,7 @@ export function ClientSearchCommand({ clients, mode = "full", forceOpen, onOpenC
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
+      )}
     </>
   );
 }
