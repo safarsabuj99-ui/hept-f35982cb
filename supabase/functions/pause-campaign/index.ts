@@ -152,12 +152,6 @@ Deno.serve(async (req) => {
         .from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
       isAdmin = !!roleData;
 
-      if (isEnableAction && !isAdmin) {
-        return new Response(JSON.stringify({ error: "Only admins can enable campaigns" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
       if (isAdmin) {
         // Cross-tenant guard: admin's org must match campaign's org (platform_owner bypasses)
         const { data: po } = await supabase
@@ -185,7 +179,34 @@ Deno.serve(async (req) => {
             status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        // Client-side granular permissions (same source the client UI reads).
+        const { data: clientProfile } = await supabase
+          .from("profiles").select("client_permissions").eq("user_id", user.id).maybeSingle();
+        const perms = (clientProfile?.client_permissions as Record<string, unknown> | null) || {};
+        const legacyToggle = perms.can_toggle_campaigns === true;
+        const canPause = perms.can_pause_campaigns === true || legacyToggle;
+        const canResume = perms.can_resume_campaigns === true || legacyToggle;
+
+        if (isEnableAction && !canResume) {
+          return new Response(JSON.stringify({ error: "Your agency has not enabled campaign resume access for your account." }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (!isEnableAction && !canPause) {
+          return new Response(JSON.stringify({ error: "Your agency has not enabled campaign pause access for your account." }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Guard-paused campaigns stay admin-only — they were paused for balance protection.
+        if (isEnableAction && campaign.status.toLowerCase() === "guard_paused") {
+          return new Response(JSON.stringify({ error: "This campaign was paused automatically due to low balance. Please add funds or contact your agency to resume it." }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
+
     }
     // Get API credentials
     const { data: adAccount } = await supabase
