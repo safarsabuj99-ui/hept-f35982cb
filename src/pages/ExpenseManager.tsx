@@ -240,9 +240,8 @@ export default function ExpenseManager() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
-    if (deletingExpense.paid_from_account_id) {
-      await adjustAccountBalance(deletingExpense.paid_from_account_id, Number(deletingExpense.amount_bdt));
-    }
+    // Balance refund is handled by the DB trigger on DELETE.
+
     toast({ title: "Deleted", description: "Expense removed" });
     setDeletingExpense(null);
     fetchExpenses(dateRange);
