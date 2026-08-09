@@ -1,35 +1,37 @@
-## Problem
+# Fix: Expense delete/edit double-counts the cash account balance
 
-The client UI already supports both directions: `ClientReports.tsx` reads `profiles.client_permissions` and passes `canPause` / `canResume` into the campaign table, and `ClientDetail.tsx` lets the agency toggle those flags.
+## What I found
 
-The block is server-side. In `supabase/functions/pause-campaign/index.ts`, before any ownership check:
+Your 6 August expense of ৳17,000 from the cash account behaved like this:
 
-```
-if (isEnableAction && !isAdmin) → 403 "Only admins can enable campaigns"
-```
+- Adding it: balance 17,000 → 0. Correct.
+- Deleting it: balance 0 → 34,000. Wrong — it gave the money back twice.
 
-So a client with resume permission can pause (allowed path) but every enable request is rejected outright.
+Cause (confirmed in the database and code): the balance is adjusted in two places at once.
 
-## Fix
+1. The database has a trigger (`sync_agency_expense_account_balance`) that already handles INSERT, UPDATE and DELETE — it subtracts on insert, and refunds on delete/edit.
+2. The Expense Manager page *also* manually adjusts the account balance after an edit or delete (`adjustAccountBalance`).
 
-In `pause-campaign`, replace the blanket admin-only rule for `action = "enable"` with a permission-aware check:
+So creating an expense is correct (the page does not adjust manually there), but deleting refunds twice (17,000 + 17,000 = 34,000), and editing an amount or switching accounts also double-applies the change.
 
-1. When the caller is not an admin/platform_owner, load their `profiles.client_permissions`.
-2. Resolve effective flags, matching the frontend logic exactly:
-   - pause allowed if `can_pause_campaigns === true` or legacy `can_toggle_campaigns === true`
-   - resume allowed if `can_resume_campaigns === true` or legacy `can_toggle_campaigns === true`
-3. Reject with a clear message only when the specific flag for the requested action is missing ("Your agency has not enabled campaign resume access").
-4. Keep the existing `ad_account_clients` ownership check for clients — the client must still own the ad account tied to the campaign.
-5. Keep guard-paused campaigns admin-only: if the campaign status is `guard_paused`, a client resume stays blocked (balance protection), with a message telling them to add funds. This mirrors the frontend, which already only offers resume for plain `paused` / `disable`.
+The Cash Flow page's transfer-fee expense is already written correctly — it relies on the trigger only — so this bug is isolated to the Expense Manager page.
 
-Everything after the permission gate (platform API call, verification, local status update, audit log) is unchanged, so Meta / TikTok / Google enable behaviour and error hints stay the same.
+## The fix
+
+1. Make the database trigger the single source of truth for expense-driven balance changes. Remove the manual balance adjustments from the Expense Manager edit and delete flows.
+2. Refresh accounts after the operation so the UI shows the trigger's result immediately.
+3. Correct the current wrong balance on the cash account (MD SABUJ MIAH) by subtracting the extra ৳17,000 that was refunded twice, so it reflects reality again.
+4. Add a guard so this class of bug cannot come back: a short comment plus a runtime-safe rule that all `agency_expenses` writes go through insert/update/delete only, with no client-side balance math.
+
+## Technical details
+
+- File: `src/pages/ExpenseManager.tsx`
+  - Remove the `adjustAccountBalance` calls in the update branch (old-account refund + new-account debit) and in `confirmDelete`.
+  - Drop the now-unused import.
+- No schema change needed; `sync_agency_expense_account_balance` already covers INSERT/UPDATE/DELETE including account switches.
+- Data correction: one balance update on the affected agency account to remove the duplicated ৳17,000 refund.
 
 ## Verification
 
-- Confirm a client with resume permission can enable a plain paused campaign owned by their ad account.
-- Confirm a client without the flag still gets a 403 with the clearer message.
-- Confirm a guard-paused campaign still cannot be resumed from the client side.
-
-## Technical notes
-
-Single file changed: `supabase/functions/pause-campaign/index.ts`. No schema or migration needed — `client_permissions` already exists on `profiles` and is the same source the client UI reads.
+- Re-check the account balance value after the correction.
+- Add a test expense, edit its amount, then delete it, and confirm the balance returns exactly to its starting value.
