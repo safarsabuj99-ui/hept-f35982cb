@@ -29,7 +29,9 @@ import { cn } from "@/lib/utils";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from "recharts";
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
-import { adjustAccountBalance } from "@/lib/adjustAccountBalance";
+// NOTE: Account balances for expenses are maintained ONLY by the database trigger
+// `sync_agency_expense_account_balance` (INSERT/UPDATE/DELETE, incl. account switches).
+// Never adjust agency_accounts balances from this page — that double-counts.
 
 const CATEGORIES = ["Rent", "Salary", "Software", "Owner_Draw", "Marketing", "Transfer_Fee", "Other"] as const;
 const CATEGORY_COLORS: Record<string, string> = {
@@ -184,8 +186,7 @@ export default function ExpenseManager() {
     setSubmitting(true);
 
     if (editingId) {
-      // Update — refund old account, debit new
-      const original = expenses.find(x => x.id === editingId);
+      // Update — the DB trigger refunds the old account and debits the new one.
       const { error } = await supabase.from("agency_expenses")
         .update({
           date: expDate,
@@ -196,14 +197,6 @@ export default function ExpenseManager() {
         } as any)
         .eq("id", editingId);
 
-      if (!error && original) {
-        if (original.paid_from_account_id) {
-          await adjustAccountBalance(original.paid_from_account_id, Number(original.amount_bdt));
-        }
-        if (paidFromAccountId) {
-          await adjustAccountBalance(paidFromAccountId, -Number(amount));
-        }
-      }
 
       setSubmitting(false);
       if (error) {
@@ -247,9 +240,8 @@ export default function ExpenseManager() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
-    if (deletingExpense.paid_from_account_id) {
-      await adjustAccountBalance(deletingExpense.paid_from_account_id, Number(deletingExpense.amount_bdt));
-    }
+    // Balance refund is handled by the DB trigger on DELETE.
+
     toast({ title: "Deleted", description: "Expense removed" });
     setDeletingExpense(null);
     fetchExpenses(dateRange);
