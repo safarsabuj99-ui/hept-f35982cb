@@ -383,7 +383,7 @@ Deno.serve(async (req) => {
                 .single();
               return retry ? { id: retry.id, status: retry.status } : null;
             }
-            return inserted ? { id: inserted.id, status } : null;
+            return inserted ? { id: inserted.id, status: insertStatus } : null;
           }
         };
 
@@ -1074,8 +1074,8 @@ Deno.serve(async (req) => {
             if (!clientId) { skippedCampaigns++; continue; }
 
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
-            const googleStatusConfirmed = !!row.campaign?.status;
-            const status = statusMap[row.campaign?.status] || "active";
+            const googleStatusConfirmed = !!row.campaign?.status && row.campaign.status in statusMap;
+            const status = statusMap[row.campaign?.status] || "paused";
 
             const campaignResult = await upsertCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
@@ -1633,8 +1633,11 @@ Deno.serve(async (req) => {
             }
             const tiktokLeadsDm = tiktokConvDm; // formerly hacky; now = raw web-detail views
 
-            const tiktokStatusConfirmed = true;
-            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
+            // Only trust the status when the platform actually reported this campaign.
+            // Backfills replay metrics for old campaigns that the status endpoint no longer
+            // returns — defaulting those to "active" used to resurrect dead campaigns.
+            const tiktokStatusConfirmed = !tiktokStatusFetchFailed && (rawCampaignId in tiktokStatusMap);
+            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "paused";
             const tiktokObjective = tiktokObjectiveMap[rawCampaignId] || "";
             const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed, tiktokObjective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
