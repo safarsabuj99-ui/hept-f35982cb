@@ -858,7 +858,7 @@ Deno.serve(async (req) => {
             const platformId = `meta_${rawCampaignId}`;
             const objective = metaObjectiveMap[rawCampaignId] || "";
             const statusConfirmed = rawCampaignId in metaStatusMap;
-            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
+            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "paused";
 
             const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
