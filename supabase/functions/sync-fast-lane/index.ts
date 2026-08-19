@@ -203,10 +203,16 @@ async function refreshCampaignStatuses(
     if (!desired) continue;
     // Guard protection — never overwrite guard_paused.
     if ((row.status || "").toLowerCase() === "guard_paused") continue;
-    if (row.status === desired) continue;
+    const nowIso = new Date().toISOString();
+    if (row.status === desired) {
+      // Status unchanged, but the platform DID confirm it — refresh the confirmation stamp
+      // so Ad Guard knows this campaign's on/off state is current.
+      await supabase.from("campaigns").update({ status_confirmed_at: nowIso }).eq("id", row.id);
+      continue;
+    }
     const { error } = await supabase
       .from("campaigns")
-      .update({ status: desired, updated_at: new Date().toISOString() })
+      .update({ status: desired, status_confirmed_at: nowIso, updated_at: nowIso })
       .eq("id", row.id);
     if (error) errs.push(`update ${row.platform_id}: ${error.message}`);
     else updated++;
