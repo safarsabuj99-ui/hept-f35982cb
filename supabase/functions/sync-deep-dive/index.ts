@@ -344,6 +344,8 @@ Deno.serve(async (req) => {
               finalStatus = status;
             }
             const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
+            // Only stamp confirmation when the status truly came from the platform API.
+            if (statusConfirmed && !isGuardLocked) updatePayload.status_confirmed_at = new Date().toISOString();
             if (objective) updatePayload.objective = objective;
             await supabase
               .from("campaigns")
@@ -351,7 +353,10 @@ Deno.serve(async (req) => {
               .eq("id", existing.id);
             return { id: existing.id, status: finalStatus };
           } else {
-            // Insert new with original_name_tag = current name
+            // Insert new with original_name_tag = current name.
+            // If the platform did NOT confirm the status, never create the row as "active" —
+            // an unknown campaign must not be able to trip Ad Guard.
+            const insertStatus = statusConfirmed ? status : "paused";
             const { data: inserted, error: insErr } = await supabase
               .from("campaigns")
               .insert({
@@ -359,7 +364,8 @@ Deno.serve(async (req) => {
                 name,
                 original_name_tag: name,
                 platform,
-                status,
+                status: insertStatus,
+                status_confirmed_at: statusConfirmed ? new Date().toISOString() : null,
                 ad_account_id: account.id,
                 client_id: clientId,
                 objective: objective || "",
@@ -377,7 +383,7 @@ Deno.serve(async (req) => {
                 .single();
               return retry ? { id: retry.id, status: retry.status } : null;
             }
-            return inserted ? { id: inserted.id, status } : null;
+            return inserted ? { id: inserted.id, status: insertStatus } : null;
           }
         };
 
@@ -852,7 +858,7 @@ Deno.serve(async (req) => {
             const platformId = `meta_${rawCampaignId}`;
             const objective = metaObjectiveMap[rawCampaignId] || "";
             const statusConfirmed = rawCampaignId in metaStatusMap;
-            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "active";
+            const metaCampaignStatus = metaStatusMap[rawCampaignId] || "paused";
 
             const campaignResult = await upsertCampaign(platformId, campaignName, metaCampaignStatus, clientId, statusConfirmed, objective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
@@ -1068,8 +1074,8 @@ Deno.serve(async (req) => {
             if (!clientId) { skippedCampaigns++; continue; }
 
             const statusMap: Record<string, string> = { ENABLED: "active", PAUSED: "paused", REMOVED: "removed" };
-            const googleStatusConfirmed = !!row.campaign?.status;
-            const status = statusMap[row.campaign?.status] || "active";
+            const googleStatusConfirmed = !!row.campaign?.status && row.campaign.status in statusMap;
+            const status = statusMap[row.campaign?.status] || "paused";
 
             const campaignResult = await upsertCampaign(platformId, campaignName, status, clientId, googleStatusConfirmed);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }
@@ -1627,8 +1633,11 @@ Deno.serve(async (req) => {
             }
             const tiktokLeadsDm = tiktokConvDm; // formerly hacky; now = raw web-detail views
 
-            const tiktokStatusConfirmed = true;
-            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "active";
+            // Only trust the status when the platform actually reported this campaign.
+            // Backfills replay metrics for old campaigns that the status endpoint no longer
+            // returns — defaulting those to "active" used to resurrect dead campaigns.
+            const tiktokStatusConfirmed = !tiktokStatusFetchFailed && (rawCampaignId in tiktokStatusMap);
+            const tiktokCampaignStatus = tiktokStatusMap[rawCampaignId] || "paused";
             const tiktokObjective = tiktokObjectiveMap[rawCampaignId] || "";
             const campaignResult = await upsertCampaign(platformId, campaignName, tiktokCampaignStatus, clientId, tiktokStatusConfirmed, tiktokObjective);
             if (!campaignResult) { errors.push(`Failed to upsert campaign ${platformId}`); continue; }

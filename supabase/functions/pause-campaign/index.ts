@@ -440,7 +440,7 @@ Deno.serve(async (req) => {
         : `Campaign "${campaign.name}" has been ${actionVerb}`;
 
     return new Response(
-      JSON.stringify({ success: true, message }),
+      JSON.stringify({ success: true, message, already_in_state: alreadyInState }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
