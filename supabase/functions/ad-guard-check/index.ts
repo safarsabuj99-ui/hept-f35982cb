@@ -228,11 +228,16 @@ Deno.serve(async (req) => {
 
     // ===== PHASE 2: Scan for active campaigns on low-balance clients + IMMEDIATE pause =====
     if (timeLeft() > 5000) {
+      // Only consider campaigns whose ON state was confirmed by the platform in the last 24h.
+      // Stale/synthetic "active" rows (e.g. written by a historical backfill) must never
+      // trigger a pause — that produced mass re-pauses of long-dead campaigns.
+      const freshCutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
       const { data: activeCampaigns } = await sb
         .from("campaigns")
-        .select("id, name, platform, platform_id, ad_account_id, client_id")
+        .select("id, name, platform, platform_id, ad_account_id, client_id, status_confirmed_at")
         .in("status", ["active", "enable", "Active"])
-        .not("client_id", "is", null);
+        .not("client_id", "is", null)
+        .gte("status_confirmed_at", freshCutoff);
 
       if (activeCampaigns && activeCampaigns.length > 0) {
         const clientCampaigns = new Map<string, typeof activeCampaigns>();
