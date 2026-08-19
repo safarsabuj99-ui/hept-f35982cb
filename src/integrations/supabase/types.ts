@@ -1737,6 +1737,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
           status: string
+          status_confirmed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1756,6 +1757,7 @@ export type Database = {
           platform: Database["public"]["Enums"]["ad_platform"]
           platform_id: string
           status?: string
+          status_confirmed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1775,6 +1777,7 @@ export type Database = {
           platform?: Database["public"]["Enums"]["ad_platform"]
           platform_id?: string
           status?: string
+          status_confirmed_at?: string | null
           updated_at?: string
         }
         Relationships: [
