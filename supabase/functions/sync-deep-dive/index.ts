@@ -353,7 +353,10 @@ Deno.serve(async (req) => {
               .eq("id", existing.id);
             return { id: existing.id, status: finalStatus };
           } else {
-            // Insert new with original_name_tag = current name
+            // Insert new with original_name_tag = current name.
+            // If the platform did NOT confirm the status, never create the row as "active" —
+            // an unknown campaign must not be able to trip Ad Guard.
+            const insertStatus = statusConfirmed ? status : "paused";
             const { data: inserted, error: insErr } = await supabase
               .from("campaigns")
               .insert({
@@ -361,7 +364,8 @@ Deno.serve(async (req) => {
                 name,
                 original_name_tag: name,
                 platform,
-                status,
+                status: insertStatus,
+                status_confirmed_at: statusConfirmed ? new Date().toISOString() : null,
                 ad_account_id: account.id,
                 client_id: clientId,
                 objective: objective || "",
