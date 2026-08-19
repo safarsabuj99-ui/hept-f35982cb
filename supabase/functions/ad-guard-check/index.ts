@@ -94,6 +94,13 @@ Deno.serve(async (req) => {
           }).eq("id", campaignId);
 
           totalConfirmed++;
+
+          if (result.already_in_state) {
+            // Campaign was already off on the platform — silent reconcile, no audit noise.
+            console.log(`= RECONCILED: ${campaignName} (${platform}) was already off on platform`);
+            return true;
+          }
+
           console.log(`✓ CONFIRMED: ${campaignName} (${platform}) — paused via pause-campaign`);
 
           await sb.from("audit_logs").insert({
