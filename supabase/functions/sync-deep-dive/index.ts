@@ -344,6 +344,8 @@ Deno.serve(async (req) => {
               finalStatus = status;
             }
             const updatePayload: any = { name, status: finalStatus, client_id: clientId, updated_at: new Date().toISOString() };
+            // Only stamp confirmation when the status truly came from the platform API.
+            if (statusConfirmed && !isGuardLocked) updatePayload.status_confirmed_at = new Date().toISOString();
             if (objective) updatePayload.objective = objective;
             await supabase
               .from("campaigns")
