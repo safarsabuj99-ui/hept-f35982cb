@@ -183,6 +183,7 @@ function hasLocalSession(): boolean {
  */
 const LandingFastPath = () => (
   <BrowserRouter>
+    <RouteMeta />
     <LandingPage />
   </BrowserRouter>
 );
