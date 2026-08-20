@@ -214,12 +214,10 @@ export default function ClientDetail() {
     if (paymentIds.length) {
       const { data: refundRows } = await supabase
         .from("refunds" as any)
-        .select("payment_request_id, amount_bdt, status")
+        .select("payment_request_id, amount_bdt")
         .in("payment_request_id", paymentIds);
       (refundRows || []).forEach((r: any) => {
-        if (r.status === "approved" || r.status === "completed" || !r.status) {
-          refundedMap[r.payment_request_id] = (refundedMap[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
-        }
+        refundedMap[r.payment_request_id] = (refundedMap[r.payment_request_id] || 0) + Number(r.amount_bdt || 0);
       });
     }
     setPayments(paymentRows.map((p: any) => ({ ...p, paid_to_account_id: p.received_in_account_id, refunded_bdt: refundedMap[p.id] || 0 })));
