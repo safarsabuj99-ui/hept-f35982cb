@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { useLocation, matchPath } from "react-router-dom";
 
@@ -129,6 +130,27 @@ function resolveMeta(pathname: string): { meta: Meta; pattern: string } {
  */
 export function RouteMeta() {
   const { pathname } = useLocation();
+
+  // The static index.html head keeps sitewide description/og tags as a
+  // fallback for crawlers that do not execute JS. Once React runs, Helmet
+  // owns these tags, so drop the static duplicates to avoid two
+  // descriptions / og:titles in the live document.
+  useEffect(() => {
+    const selectors = [
+      'meta[name="description"]',
+      'meta[property="og:title"]',
+      'meta[property="og:description"]',
+      'meta[property="og:url"]',
+      'meta[property="og:type"]',
+      'meta[name="twitter:card"]',
+      'meta[name="twitter:title"]',
+      'meta[name="twitter:description"]',
+    ].join(",");
+    document.head.querySelectorAll(selectors).forEach((el) => {
+      if (!el.hasAttribute("data-rh")) el.remove();
+    });
+  }, []);
+
   const { meta } = resolveMeta(pathname);
   const canonical = `${SITE}${pathname === "/" ? "/" : pathname.replace(/\/$/, "")}`;
   const indexable = meta.index === true;
