@@ -10,6 +10,7 @@ import { useNotificationNavigator } from "@/hooks/useNotifications";
 import { CurrencyProvider } from "@/hooks/useCurrency";
 import { BrandingProvider } from "@/hooks/useBranding";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { RouteMeta } from "@/components/RouteMeta";
 import { AdminLayout } from "@/components/AdminLayout";
 import { ManagerLayout } from "@/components/ManagerLayout";
 import { ClientLayout } from "@/components/ClientLayout";
@@ -182,6 +183,7 @@ function hasLocalSession(): boolean {
  */
 const LandingFastPath = () => (
   <BrowserRouter>
+    <RouteMeta />
     <LandingPage />
   </BrowserRouter>
 );
@@ -197,6 +199,7 @@ const FullApp = () => (
             <Sonner />
             <NotifNavigator />
             <RouteTracker />
+            <RouteMeta />
 
             <Suspense fallback={<PageLoader />}>
               <Routes>
