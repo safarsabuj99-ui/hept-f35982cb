@@ -114,9 +114,10 @@ export function BrandingTab() {
             <div className="relative h-20 w-20 shrink-0 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center overflow-hidden bg-muted/30">
               {logo ? (
                 <>
-                  <img src={logo} alt="Logo" className="h-full w-full object-contain p-1" />
+                  <img src={logo} alt="Uploaded brand logo preview" className="h-full w-full object-contain p-1" />
                   <button
                     onClick={() => setLogo(null)}
+                    aria-label="Remove logo"
                     className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs hover:scale-110 transition-transform"
                   >
                     <X className="h-3 w-3" />

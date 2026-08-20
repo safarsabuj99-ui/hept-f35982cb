@@ -308,7 +308,7 @@ export default function Signup() {
                   <Label>Password *</Label>
                   <div className="relative">
                     <Input type={showPassword ? "text" : "password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Min 6 characters" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
@@ -376,8 +376,8 @@ export default function Signup() {
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
                   {proofPreview ? (
                     <div className="relative">
-                      <img src={proofPreview} alt="Proof" className="w-full h-48 object-contain rounded-lg border bg-muted" />
-                      <button onClick={() => { setProofFile(null); setProofPreview(null); }} className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full p-1 text-xs">✕</button>
+                      <img src={proofPreview} alt="Payment transaction proof" className="w-full h-48 object-contain rounded-lg border bg-muted" />
+                      <button onClick={() => { setProofFile(null); setProofPreview(null); }} aria-label="Remove payment proof" className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full p-1 text-xs">✕</button>
                     </div>
                   ) : (
                     <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed rounded-lg p-6 text-center hover:border-primary/50 transition-colors">

@@ -40,7 +40,7 @@ export default function AffiliateLogin() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-2">
             <Gem className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Affiliate Login</CardTitle>
+          <h1 className="text-2xl font-bold tracking-tight">Affiliate Login</h1>
           <CardDescription>Access your affiliate dashboard</CardDescription>
         </CardHeader>
         <CardContent>
