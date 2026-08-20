@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +40,7 @@ export default function AffiliateLogin() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-2">
             <Gem className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Affiliate Login</CardTitle>
+          <h1 className="text-2xl font-bold tracking-tight">Affiliate Login</h1>
           <CardDescription>Access your affiliate dashboard</CardDescription>
         </CardHeader>
         <CardContent>

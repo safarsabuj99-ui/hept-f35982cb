@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -58,7 +58,7 @@ export default function AffiliateRegister() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-2">
             <Gem className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Become an Affiliate</CardTitle>
+          <h1 className="text-2xl font-bold tracking-tight">Become an Affiliate</h1>
           <CardDescription>Earn commissions by referring agencies to our platform</CardDescription>
         </CardHeader>
         <CardContent>

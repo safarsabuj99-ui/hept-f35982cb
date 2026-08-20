@@ -555,7 +555,7 @@ export default function PaymentRequests() {
                           <div className="flex items-center gap-2">
                             {(r as any).proof_image_url && (
                               <a href={(r as any).proof_image_url} target="_blank" rel="noopener noreferrer">
-                                <img src={(r as any).proof_image_url} alt="Proof" className="h-8 w-auto rounded border object-cover" />
+                                <img src={(r as any).proof_image_url} alt="Payment transaction proof" className="h-8 w-auto rounded border object-cover" />
                               </a>
                             )}
                           </div>

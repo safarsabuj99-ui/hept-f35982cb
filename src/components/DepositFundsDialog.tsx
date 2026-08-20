@@ -377,6 +377,7 @@ export function DepositFundsDialog({
                 <button
                   type="button"
                   onClick={removeProof}
+                  aria-label="Remove payment proof"
                   className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-destructive-foreground shadow-sm hover:bg-destructive/90"
                 >
                   <X className="h-3 w-3" />
