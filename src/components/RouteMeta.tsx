@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { useLocation, matchPath } from "react-router-dom";
 
 const SITE = "https://heptbd.com";
+const OG_IMAGE = `${SITE}/og-image.jpg`;
 
 type Meta = { title: string; description: string; index?: boolean };
 
