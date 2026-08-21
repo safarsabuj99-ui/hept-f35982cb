@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { useLocation, matchPath } from "react-router-dom";
 
 const SITE = "https://heptbd.com";
+const OG_IMAGE = `${SITE}/og-image.jpg`;
 
 type Meta = { title: string; description: string; index?: boolean };
 
@@ -165,10 +166,17 @@ export function RouteMeta() {
       <meta property="og:description" content={meta.description} />
       <meta property="og:url" content={canonical} />
       <meta property="og:type" content="website" />
+      <meta property="og:site_name" content="HEPT" />
+      <meta property="og:image" content={OG_IMAGE} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content="HEPT agency analytics dashboard showing ad spend, ROAS and client performance." />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={meta.title} />
       <meta name="twitter:description" content={meta.description} />
+      <meta name="twitter:image" content={OG_IMAGE} />
     </Helmet>
+
   );
 }
 
