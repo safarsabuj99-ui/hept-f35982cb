@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClientNameLink } from "@/components/ClientNameLink";
+import { Table, TableBody, TableHead, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { ActiveAccountRow } from "@/hooks/useActiveEntitiesOverview";
 
@@ -62,15 +63,9 @@ export function ActiveAdAccountsTable({ rows }: Props) {
                 </Link>
               </TableCell>
               <TableCell><PlatformBadges platforms={r.platforms} /></TableCell>
-              <TableCell className="text-muted-foreground">
-                {r.client_id ? (
-                  <Link to={`/admin/clients/${r.client_id}`} className="hover:underline">
-                    {r.client_name}
-                  </Link>
-                ) : (
-                  r.client_name
-                )}
-              </TableCell>
+               <TableCell className="text-muted-foreground">
+                 <ClientNameLink clientId={r.client_id} name={r.client_name} />
+               </TableCell>
               <TableCell className="text-right font-mono text-xs">{r.active_campaigns}</TableCell>
               <TableCell className="text-right font-mono text-xs">{usd(r.spend_today)}</TableCell>
               <TableCell className="text-right font-mono text-xs">{usd(r.spend_7d)}</TableCell>

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDhakaDateString } from "@/components/DateRangeFilter";
+import { ClientNameLink } from "@/components/ClientNameLink";
 
 interface AlertClient {
   user_id: string;
@@ -71,7 +72,7 @@ export function LowBalanceAlerts() {
         {alerts.map((a) => (
           <div key={a.user_id} className="flex items-center justify-between rounded-lg bg-card p-3 text-sm">
             <div>
-              <p className="font-medium">{a.full_name}</p>
+              <ClientNameLink clientId={a.user_id} name={a.full_name} className="font-medium" />
               <p className="text-xs text-muted-foreground">Avg daily: {fmt(a.avgDailySpend)}</p>
             </div>
             <div className="text-right">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { getPlatformRates } from "@/lib/pricing";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
@@ -21,6 +22,7 @@ interface PlatformDetail {
 }
 
 interface ProfitRow {
+  clientId: string;
   clientName: string;
   spendUsd: number;
   revenueBdt: number;
@@ -199,8 +201,9 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
       const profitBdt = revenueBdt - cogsBdt;
       const marginPct = revenueBdt > 0 ? (profitBdt / revenueBdt) * 100 : 0;
 
-      result.push({
-        clientName: profile.full_name || "Unknown",
+       result.push({
+         clientId: cid,
+         clientName: profile.full_name || "Unknown",
         spendUsd: Math.round(totalSpend * 100) / 100,
         revenueBdt: Math.round(revenueBdt),
         cogsBdt: Math.round(cogsBdt),
@@ -256,7 +259,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
-                    <span className="font-medium truncate">{r.clientName}</span>
+                    <ClientNameLink clientId={r.clientId} name={r.clientName} className="font-medium truncate" />
                     <span className="font-mono text-muted-foreground text-right">${r.spendUsd.toLocaleString()}</span>
                     <span className="font-mono text-right">৳{r.profitBdt.toLocaleString()}</span>
                     <Badge variant={r.marginPct >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5 py-0 justify-center">
@@ -313,7 +316,7 @@ export function ProfitabilityTable({ dateRange }: ProfitabilityTableProps) {
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           )}
                         </TableCell>
-                        <TableCell className="font-medium">{r.clientName}</TableCell>
+                        <TableCell className="font-medium"><ClientNameLink clientId={r.clientId} name={r.clientName} /></TableCell>
                         <TableCell className="text-right font-mono text-xs">${r.spendUsd.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs">৳{r.revenueBdt.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-mono text-xs">৳{r.cogsBdt.toLocaleString()}</TableCell>
