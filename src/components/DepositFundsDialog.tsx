@@ -21,6 +21,8 @@ interface DepositFundsDialogProps {
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   showClientSelector?: boolean;
+  /** Marks staff-initiated deposits (kept for call-site clarity). */
+  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
