@@ -11,14 +11,13 @@ interface ClientNameLinkProps {
 }
 
 /**
- * Renders a client name that links to the client detail page for staff roles
- * (admin / manager / platform_owner). For clients themselves — or when no id
- * is available — it degrades gracefully to plain text.
+ * Renders a client name that links to the client detail page for administrators.
+ * Other roles — or rows without a client id — receive safe plain text because
+ * the current client-detail route is administrator-only.
  */
 export function ClientNameLink({ clientId, name, className, stopPropagation = true }: ClientNameLinkProps) {
   const { role } = useAuth();
-  const canNavigate =
-    !!clientId && (role === "admin" || role === "manager" || role === "platform_owner");
+  const canNavigate = !!clientId && role === "admin";
 
   if (!canNavigate) {
     return <span className={className}>{name}</span>;
