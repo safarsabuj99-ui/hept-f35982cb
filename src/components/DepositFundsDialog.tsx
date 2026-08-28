@@ -21,7 +21,6 @@ interface DepositFundsDialogProps {
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   showClientSelector?: boolean;
-  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
