@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Clock, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { cn } from "@/lib/utils";
 import { getDhakaDateString } from "@/components/DateRangeFilter";
 
@@ -137,7 +138,7 @@ export function RunwayPrediction() {
             >
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <p className="font-medium">{c.full_name}</p>
+                  <ClientNameLink clientId={c.user_id} name={c.full_name} className="font-medium" />
                   {c.isSystemPaused && (
                     <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                       SYSTEM PAUSED

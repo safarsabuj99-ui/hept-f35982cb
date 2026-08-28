@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DateRangeFilter, DateRange, DatePreset, toISODate, getLocalToday, getDhakaDateString } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ClientNameLink } from "@/components/ClientNameLink";
 
 interface ClientBalance {
   client_id: string;
@@ -787,7 +788,7 @@ export default function WalletInventory() {
                           <TableBody>
                             {overview.clientBalances.map((cb) => (
                               <TableRow key={cb.client_id} className="hover:bg-muted/30">
-                                <TableCell className="py-1.5 text-sm">{cb.full_name}</TableCell>
+                                <TableCell className="py-1.5 text-sm"><ClientNameLink clientId={cb.client_id} name={cb.full_name} /></TableCell>
                                 <TableCell className="py-1.5 text-sm text-right font-mono font-medium">
                                   ${cb.balance.toLocaleString()}
                                 </TableCell>
