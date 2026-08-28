@@ -354,10 +354,8 @@ export default function ClientList() {
                     <div key={c.user_id} className="rounded-xl border bg-card p-3 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <Link to={`/admin/clients/${c.user_id}`} className="font-medium text-sm text-primary hover:underline truncate block">
-                            {c.full_name}
-                          </Link>
-                          {c.business_name && <p className="text-[11px] text-muted-foreground truncate">{c.business_name}</p>}
+                           <ClientNameLink clientId={c.user_id} name={c.full_name} className="font-medium text-sm text-primary truncate block" />
+                           {c.business_name && <p className="text-[11px] text-muted-foreground truncate">{c.business_name}</p>}
                         </div>
                         <Badge variant="outline" className="text-[10px] shrink-0 h-5">
                           {getPricingLabel(c.pricing_config)}
@@ -420,11 +418,9 @@ export default function ClientList() {
                   <TableBody>
                     {paginatedData.map((c) => (
                       <TableRow key={c.user_id} className="group cursor-pointer hover:bg-muted/50">
-                        <TableCell className="font-medium">
-                          <Link to={`/admin/clients/${c.user_id}`} className="hover:underline">
-                            {c.full_name}
-                          </Link>
-                        </TableCell>
+                         <TableCell className="font-medium">
+                           <ClientNameLink clientId={c.user_id} name={c.full_name} />
+                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {c.business_name || "—"}
                         </TableCell>

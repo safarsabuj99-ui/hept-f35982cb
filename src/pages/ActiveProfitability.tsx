@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -283,14 +284,9 @@ export default function ActiveProfitability() {
                       <TableBody>
                         {pagedClients.map((r) => (
                           <TableRow key={r.client_id}>
-                            <TableCell className="font-medium">
-                              <Link
-                                to={`/admin/clients/${r.client_id}`}
-                                className="hover:underline"
-                              >
-                                {r.client_name}
-                              </Link>
-                            </TableCell>
+                             <TableCell className="font-medium">
+                               <ClientNameLink clientId={r.client_id} name={r.client_name} />
+                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">{r.active_accounts}</TableCell>
                             <TableCell className="text-right font-mono text-xs">{r.active_campaigns}</TableCell>
                             <TableCell className="text-right font-mono text-xs">{usd(r.spend_usd)}</TableCell>
@@ -362,18 +358,9 @@ export default function ActiveProfitability() {
                             <TableCell>
                               <PlatformBadges platforms={r.platforms} />
                             </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {r.client_id ? (
-                                <Link
-                                  to={`/admin/clients/${r.client_id}`}
-                                  className="hover:underline"
-                                >
-                                  {r.client_name}
-                                </Link>
-                              ) : (
-                                r.client_name
-                              )}
-                            </TableCell>
+                             <TableCell className="text-muted-foreground">
+                               <ClientNameLink clientId={r.client_id} name={r.client_name} />
+                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">{r.active_campaigns}</TableCell>
                             <TableCell className="text-right font-mono text-xs">{usd(r.spend_usd)}</TableCell>
                             <TableCell className="text-right font-mono text-xs">{bdt(r.revenue_bdt)}</TableCell>

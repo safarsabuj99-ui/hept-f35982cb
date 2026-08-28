@@ -529,7 +529,7 @@ export default function PaymentRequests() {
                       <div key={r.id} id={`payment-row-${r.id}`} className={cn("rounded-lg border p-3 space-y-1.5 bg-card", highlightId === r.id && "deep-link-highlight")}>
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
+                          <ClientNameLink clientId={r.client_id} name={r.client_name || "Unknown"} className="font-medium text-xs truncate mr-2" />
                           {statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}
                         </div>
                         {/* Row 2: Metrics inline */}
@@ -610,7 +610,7 @@ export default function PaymentRequests() {
                         {paginatedRequests.map((r) => (
                           <TableRow key={r.id} id={`payment-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                            <TableCell className="font-medium">{r.client_name}</TableCell>
+                            <TableCell className="font-medium"><ClientNameLink clientId={r.client_id} name={r.client_name || "Unknown"} /></TableCell>
                             <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
                             <TableCell>
                               <PlatformBadges platformAmounts={r.platform_amounts} platform={r.platform} exchangeRateSnapshot={r.exchange_rate_snapshot} />
@@ -682,7 +682,7 @@ export default function PaymentRequests() {
                     {paginatedDeposits.map((t) => (
                       <div key={t.id} className="rounded-xl border p-4 space-y-3 bg-card">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{t.client_name}</span>
+                          <ClientNameLink clientId={t.client_id} name={t.client_name || "Unknown"} className="font-medium text-sm" />
                           <span className="font-mono font-semibold">${Number(t.amount).toFixed(2)}</span>
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -731,7 +731,7 @@ export default function PaymentRequests() {
                         {paginatedDeposits.map((t) => (
                           <TableRow key={t.id}>
                             <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                            <TableCell className="font-medium">{t.client_name}</TableCell>
+                            <TableCell className="font-medium"><ClientNameLink clientId={t.client_id} name={t.client_name || "Unknown"} /></TableCell>
                             <TableCell className="hidden sm:table-cell">{t.creator_name}</TableCell>
                             <TableCell className="hidden md:table-cell">{t.description || "—"}</TableCell>
                             <TableCell className="text-right font-mono font-semibold">${Number(t.amount).toFixed(2)}</TableCell>
@@ -800,7 +800,7 @@ export default function PaymentRequests() {
               <div className="rounded-lg bg-muted/50 p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Client</span>
-                  <span className="font-medium">{confirmModal.request.client_name}</span>
+                  <ClientNameLink clientId={confirmModal.request.client_id} name={confirmModal.request.client_name || "Unknown"} className="font-medium" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Amount Sent</span>
