@@ -12,8 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X, Undo2 } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X, Undo2, Plus } from "lucide-react";
 import { RefundDialog } from "@/components/RefundDialog";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { Input } from "@/components/ui/input";
 import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { cn } from "@/lib/utils";
@@ -116,6 +118,7 @@ export default function PaymentRequests() {
   const [depositPageSize, setDepositPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
   const [refundDialog, setRefundDialog] = useState<{ open: boolean; client: { id: string; name?: string; org_id?: string | null } | null }>({ open: false, client: null });
+  const [depositOpen, setDepositOpen] = useState(false);
   const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
   const { hasPermission } = usePermissions();
 
@@ -416,11 +419,18 @@ export default function PaymentRequests() {
 
   return (
     <div className="space-y-6">
-      <div className="animate-slide-up-fade">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
-        </h1>
-        <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between animate-slide-up-fade">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
+          </h1>
+          <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
+        </div>
+        {canManageFinance && (
+          <Button onClick={() => setDepositOpen(true)} className="gap-2 self-start">
+            <Plus className="h-4 w-4" /> Deposit Funds
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2">
@@ -1019,6 +1029,14 @@ export default function PaymentRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        showClientSelector
+        isAdmin
+        onSuccess={() => { fetchRequests(); fetchDeposits(); }}
+      />
 
       <RefundDialog
         open={refundDialog.open}
