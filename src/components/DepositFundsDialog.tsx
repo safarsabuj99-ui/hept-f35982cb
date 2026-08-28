@@ -244,14 +244,50 @@ export function DepositFundsDialog({
           {showClientSelector && (
             <div className="space-y-2">
               <Label>Client</Label>
-              <Select value={selectedClient} onValueChange={setSelectedClient} required>
-                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clientPickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className={cn("truncate", !selectedClientProfile && "text-muted-foreground")}>
+                      {selectedClientLabel}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search name, business, email..." />
+                    <CommandList>
+                      <CommandEmpty>No client found.</CommandEmpty>
+                      <CommandGroup>
+                        {clients.map((c) => (
+                          <CommandItem
+                            key={c.user_id}
+                            value={[c.full_name, c.business_name, c.email, c.phone].filter(Boolean).join(" ")}
+                            onSelect={() => {
+                              setSelectedClient(c.user_id);
+                              setClientPickerOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedClient === c.user_id ? "opacity-100" : "opacity-0")} />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm">{c.full_name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {[c.business_name, c.email || c.phone].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           )}
 
