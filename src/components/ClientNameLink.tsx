@@ -24,7 +24,7 @@ export function ClientNameLink({ clientId, name, className, stopPropagation = tr
     return <span className={className}>{name}</span>;
   }
 
-  const base = role === "manager" ? "/manager/clients" : "/admin/clients";
+  const base = "/admin/clients";
 
   return (
     <Link
