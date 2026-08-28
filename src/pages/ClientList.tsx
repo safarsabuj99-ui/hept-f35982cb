@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { Search, Users, ChevronRight, Plus, PlusCircle, TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Save } from "lucide-react";
 import { DepositFundsDialog } from "@/components/DepositFundsDialog";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { TablePagination } from "@/components/TablePagination";
 import { DataPageSkeleton } from "@/components/ui/premium-skeletons";
 import { usePermissions } from "@/hooks/usePermissions";
