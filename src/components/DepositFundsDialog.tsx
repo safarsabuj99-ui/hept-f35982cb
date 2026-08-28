@@ -125,17 +125,18 @@ export function DepositFundsDialog({
 
   // Reset on close
   useEffect(() => {
-    if (!open) {
-      setTrxId("");
-      setSubmitting(false);
-      setPaymentDate(new Date());
-      setSelectedAccountId("");
-      setProofFile(null);
-      setProofPreview(null);
-      setPlatformEnabled({ meta: false, tiktok: false, google: false });
-      setPlatformAmounts({ meta: "", tiktok: "", google: "" });
-      if (!clientId) setSelectedClient("");
-    }
+     if (!open) {
+       setTrxId("");
+       setSubmitting(false);
+       setClientPickerOpen(false);
+       setPaymentDate(new Date());
+       setSelectedAccountId("");
+       setProofFile(null);
+       setProofPreview(null);
+       setPlatformEnabled({ meta: false, tiktok: false, google: false });
+       setPlatformAmounts({ meta: "", tiktok: "", google: "" });
+       if (!clientId) setSelectedClient("");
+     }
   }, [open, clientId]);
 
   const resolvedClientId = showClientSelector ? selectedClient : clientId;
