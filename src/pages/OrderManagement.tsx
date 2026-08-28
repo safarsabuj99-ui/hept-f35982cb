@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Play, CheckCircle2, XCircle, Eye, Megaphone, ExternalLink, Package, Search, X as XIcon, ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -285,8 +286,8 @@ export default function OrderManagement() {
                         <div id={`order-row-${r.id}`} className={cn("rounded-xl border bg-card p-4 space-y-3", highlightId === r.id && "deep-link-highlight")}>
                           <div className="flex items-start justify-between">
                             <div>
-                              <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
-                              {client?.business_name && <p className="text-xs text-muted-foreground">{client.business_name}</p>}
+                               <ClientNameLink clientId={r.client_id} name={client?.full_name || "Unknown"} className="font-medium text-sm" />
+                               {client?.business_name && <p className="text-xs text-muted-foreground">{client.business_name}</p>}
                             </div>
                             <Badge variant="outline" className={cn("text-xs shrink-0", badge.className)}>{badge.label}</Badge>
                           </div>
@@ -410,12 +411,12 @@ export default function OrderManagement() {
                                     : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 )}
                               </TableCell>
-                              <TableCell>
-                                <div>
-                                  <p className="font-medium text-sm">{client?.full_name || "Unknown"}</p>
-                                  <p className="text-xs text-muted-foreground">{client?.business_name || ""}</p>
-                                </div>
-                              </TableCell>
+                               <TableCell>
+                                 <div>
+                                   <ClientNameLink clientId={r.client_id} name={client?.full_name || "Unknown"} className="font-medium text-sm" />
+                                   <p className="text-xs text-muted-foreground">{client?.business_name || ""}</p>
+                                 </div>
+                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -552,7 +553,10 @@ export default function OrderManagement() {
                 <span className="text-sm font-medium truncate">{selectedRequest.title || selectedRequest.platform || "Untitled"}</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <DetailItem label="Client" value={profiles[selectedRequest.client_id]?.full_name || "Unknown"} />
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <p className="text-xs text-muted-foreground mb-0.5">Client</p>
+                  <ClientNameLink clientId={selectedRequest.client_id} name={profiles[selectedRequest.client_id]?.full_name || "Unknown"} className="text-sm font-medium" />
+                </div>
                 <DetailItem label="Total Budget" value={`$${Number(selectedRequest.total_budget_usd || selectedRequest.budget_usd || 0).toFixed(2)}`} />
                 <DetailItem label="Submitted" value={new Date(selectedRequest.created_at).toLocaleDateString()} />
               </div>

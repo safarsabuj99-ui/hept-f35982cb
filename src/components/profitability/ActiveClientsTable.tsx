@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { RunwayBadge } from "./RunwayBadge";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import type { ActiveClientRow } from "@/hooks/useActiveEntitiesOverview";
 
 const usd = (n: number) => `$${(Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,11 +39,9 @@ export function ActiveClientsTable({ rows }: Props) {
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.client_id}>
-              <TableCell className="font-medium">
-                <Link to={`/admin/clients/${r.client_id}`} className="hover:underline">
-                  {r.client_name}
-                </Link>
-              </TableCell>
+               <TableCell className="font-medium">
+                 <ClientNameLink clientId={r.client_id} name={r.client_name} />
+               </TableCell>
               <TableCell className="text-right font-mono text-xs">{r.active_accounts}</TableCell>
               <TableCell className="text-right font-mono text-xs">{r.active_campaigns}</TableCell>
               <TableCell className="text-right font-mono text-xs">{usd(r.spend_today)}</TableCell>

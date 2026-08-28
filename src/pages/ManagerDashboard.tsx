@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { DollarSign, Users, TrendingUp } from "lucide-react";
 
 interface ClientWithBalance {
@@ -119,7 +120,7 @@ export default function ManagerDashboard() {
                 <TableBody>
                   {clients.map((client) => (
                     <TableRow key={client.user_id}>
-                      <TableCell className="font-medium">{client.full_name}</TableCell>
+                      <TableCell className="font-medium"><ClientNameLink clientId={client.user_id} name={client.full_name} /></TableCell>
                       <TableCell className="hidden sm:table-cell">{client.business_name || "—"}</TableCell>
                       <TableCell className="hidden md:table-cell">{client.email}</TableCell>
                       <TableCell className="text-right">

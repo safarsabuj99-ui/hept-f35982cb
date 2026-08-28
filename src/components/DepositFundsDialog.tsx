@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { Banknote, CalendarIcon, Loader2, ImagePlus, X } from "lucide-react";
+import { Banknote, CalendarIcon, Loader2, ImagePlus, X, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/compressImage";
 
@@ -20,7 +21,6 @@ interface DepositFundsDialogProps {
   onOpenChange: (open: boolean) => void;
   clientId?: string;
   showClientSelector?: boolean;
-  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
@@ -65,7 +65,8 @@ export function DepositFundsDialog({
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedClient, setSelectedClient] = useState(clientId || "");
-  const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [clients, setClients] = useState<{ user_id: string; full_name: string; business_name: string | null; email: string | null; phone: string | null }[]>([]);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
@@ -95,13 +96,16 @@ export function DepositFundsDialog({
       const ids = roles.map((r) => r.user_id);
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, full_name")
+        .select("user_id, full_name, business_name, email, phone")
         .in("user_id", ids)
         .order("full_name");
       setClients(profiles || []);
     }
     loadClients();
   }, [showClientSelector, open]);
+
+  const selectedClientProfile = clients.find((client) => client.user_id === selectedClient);
+  const selectedClientLabel = selectedClientProfile?.full_name || "Select client";
 
   // Load agency accounts
   useEffect(() => {
@@ -120,17 +124,18 @@ export function DepositFundsDialog({
 
   // Reset on close
   useEffect(() => {
-    if (!open) {
-      setTrxId("");
-      setSubmitting(false);
-      setPaymentDate(new Date());
-      setSelectedAccountId("");
-      setProofFile(null);
-      setProofPreview(null);
-      setPlatformEnabled({ meta: false, tiktok: false, google: false });
-      setPlatformAmounts({ meta: "", tiktok: "", google: "" });
-      if (!clientId) setSelectedClient("");
-    }
+     if (!open) {
+       setTrxId("");
+       setSubmitting(false);
+       setClientPickerOpen(false);
+       setPaymentDate(new Date());
+       setSelectedAccountId("");
+       setProofFile(null);
+       setProofPreview(null);
+       setPlatformEnabled({ meta: false, tiktok: false, google: false });
+       setPlatformAmounts({ meta: "", tiktok: "", google: "" });
+       if (!clientId) setSelectedClient("");
+     }
   }, [open, clientId]);
 
   const resolvedClientId = showClientSelector ? selectedClient : clientId;
@@ -239,14 +244,50 @@ export function DepositFundsDialog({
           {showClientSelector && (
             <div className="space-y-2">
               <Label>Client</Label>
-              <Select value={selectedClient} onValueChange={setSelectedClient} required>
-                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.user_id} value={c.user_id}>{c.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clientPickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className={cn("truncate", !selectedClientProfile && "text-muted-foreground")}>
+                      {selectedClientLabel}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search name, business, email..." />
+                    <CommandList>
+                      <CommandEmpty>No client found.</CommandEmpty>
+                      <CommandGroup>
+                        {clients.map((c) => (
+                          <CommandItem
+                            key={c.user_id}
+                            value={[c.full_name, c.business_name, c.email, c.phone].filter(Boolean).join(" ")}
+                            onSelect={() => {
+                              setSelectedClient(c.user_id);
+                              setClientPickerOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedClient === c.user_id ? "opacity-100" : "opacity-0")} />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm">{c.full_name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {[c.business_name, c.email || c.phone].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           )}
 

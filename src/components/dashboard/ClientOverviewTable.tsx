@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, Plus, ArrowUpDown } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { TablePagination } from "@/components/TablePagination";
 
 interface Client {
@@ -72,8 +73,8 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                 <div key={c.user_id} className="rounded-xl border bg-card p-4 space-y-2">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium text-sm">{c.full_name}</p>
-                      {c.business_name && <p className="text-xs text-muted-foreground">{c.business_name}</p>}
+                       <ClientNameLink clientId={c.user_id} name={c.full_name} className="font-medium text-sm" />
+                       {c.business_name && <p className="text-xs text-muted-foreground">{c.business_name}</p>}
                     </div>
                     <Badge variant={c.balance >= 0 ? "default" : "destructive"} className="font-mono text-xs shrink-0">
                       {fmt(c.balance)}
@@ -112,7 +113,7 @@ export function ClientOverviewTable({ clients, loading }: Props) {
                 <TableBody>
                   {sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((c) => (
                     <TableRow key={c.user_id} className="group">
-                      <TableCell className="font-medium">{c.full_name}</TableCell>
+                      <TableCell className="font-medium"><ClientNameLink clientId={c.user_id} name={c.full_name} /></TableCell>
                       <TableCell className="text-muted-foreground">{c.business_name || "—"}</TableCell>
                       <TableCell className="text-right">
                         <Badge variant={c.balance >= 0 ? "default" : "destructive"} className="font-mono text-xs">

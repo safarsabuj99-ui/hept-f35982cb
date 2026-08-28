@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserCog } from "lucide-react";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { TablePagination } from "@/components/TablePagination";
 
 interface Profile {
@@ -96,7 +97,7 @@ export default function ClientAssignment() {
                 <TableBody>
                   {clients.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((client) => (
                     <TableRow key={client.user_id}>
-                      <TableCell className="font-medium">{client.full_name}</TableCell>
+                      <TableCell className="font-medium"><ClientNameLink clientId={client.user_id} name={client.full_name} /></TableCell>
                       <TableCell className="hidden sm:table-cell">{client.business_name || "—"}</TableCell>
                       <TableCell>
                         <Select

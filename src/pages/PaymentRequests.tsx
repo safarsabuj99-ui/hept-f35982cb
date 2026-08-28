@@ -12,8 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X, Undo2 } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Banknote, AlertTriangle, DollarSign, Clock, CheckCheck, Search, X, Undo2, Plus } from "lucide-react";
 import { RefundDialog } from "@/components/RefundDialog";
+import { DepositFundsDialog } from "@/components/DepositFundsDialog";
+import { ClientNameLink } from "@/components/ClientNameLink";
 import { Input } from "@/components/ui/input";
 import { MobileSearchPill } from "@/components/ui/mobile-search-pill";
 import { cn } from "@/lib/utils";
@@ -116,6 +118,7 @@ export default function PaymentRequests() {
   const [depositPageSize, setDepositPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
   const [refundDialog, setRefundDialog] = useState<{ open: boolean; client: { id: string; name?: string; org_id?: string | null } | null }>({ open: false, client: null });
+  const [depositOpen, setDepositOpen] = useState(false);
   const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
   const { hasPermission } = usePermissions();
 
@@ -416,11 +419,18 @@ export default function PaymentRequests() {
 
   return (
     <div className="space-y-6">
-      <div className="animate-slide-up-fade">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
-        </h1>
-        <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between animate-slide-up-fade">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> Payments & Deposits
+          </h1>
+          <p className="text-muted-foreground text-sm">Manage client payment requests and fund deposit approvals</p>
+        </div>
+        {canManageFinance && (
+          <Button onClick={() => setDepositOpen(true)} className="gap-2 self-start">
+            <Plus className="h-4 w-4" /> Deposit Funds
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2">
@@ -519,7 +529,7 @@ export default function PaymentRequests() {
                       <div key={r.id} id={`payment-row-${r.id}`} className={cn("rounded-lg border p-3 space-y-1.5 bg-card", highlightId === r.id && "deep-link-highlight")}>
                         {/* Row 1: Name + Status */}
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-xs truncate mr-2">{r.client_name}</span>
+                          <ClientNameLink clientId={r.client_id} name={r.client_name || "Unknown"} className="font-medium text-xs truncate mr-2" />
                           {statusBadge(r.status, refundTotals[r.id], r.amount_bdt)}
                         </div>
                         {/* Row 2: Metrics inline */}
@@ -600,7 +610,7 @@ export default function PaymentRequests() {
                         {paginatedRequests.map((r) => (
                           <TableRow key={r.id} id={`payment-row-${r.id}`} className={cn(highlightId === r.id && "deep-link-highlight")}>
                             <TableCell className="whitespace-nowrap">{new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                            <TableCell className="font-medium">{r.client_name}</TableCell>
+                            <TableCell className="font-medium"><ClientNameLink clientId={r.client_id} name={r.client_name || "Unknown"} /></TableCell>
                             <TableCell><Badge variant="secondary">{r.payment_method}</Badge></TableCell>
                             <TableCell>
                               <PlatformBadges platformAmounts={r.platform_amounts} platform={r.platform} exchangeRateSnapshot={r.exchange_rate_snapshot} />
@@ -672,7 +682,7 @@ export default function PaymentRequests() {
                     {paginatedDeposits.map((t) => (
                       <div key={t.id} className="rounded-xl border p-4 space-y-3 bg-card">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{t.client_name}</span>
+                          <ClientNameLink clientId={t.client_id} name={t.client_name || "Unknown"} className="font-medium text-sm" />
                           <span className="font-mono font-semibold">${Number(t.amount).toFixed(2)}</span>
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -721,7 +731,7 @@ export default function PaymentRequests() {
                         {paginatedDeposits.map((t) => (
                           <TableRow key={t.id}>
                             <TableCell className="whitespace-nowrap">{new Date(t.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</TableCell>
-                            <TableCell className="font-medium">{t.client_name}</TableCell>
+                            <TableCell className="font-medium"><ClientNameLink clientId={t.client_id} name={t.client_name || "Unknown"} /></TableCell>
                             <TableCell className="hidden sm:table-cell">{t.creator_name}</TableCell>
                             <TableCell className="hidden md:table-cell">{t.description || "—"}</TableCell>
                             <TableCell className="text-right font-mono font-semibold">${Number(t.amount).toFixed(2)}</TableCell>
@@ -790,7 +800,7 @@ export default function PaymentRequests() {
               <div className="rounded-lg bg-muted/50 p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Client</span>
-                  <span className="font-medium">{confirmModal.request.client_name}</span>
+                  <ClientNameLink clientId={confirmModal.request.client_id} name={confirmModal.request.client_name || "Unknown"} className="font-medium" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Amount Sent</span>
@@ -1019,6 +1029,14 @@ export default function PaymentRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DepositFundsDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        showClientSelector
+        isAdmin
+        onSuccess={() => { fetchRequests(); fetchDeposits(); }}
+      />
 
       <RefundDialog
         open={refundDialog.open}
