@@ -66,7 +66,8 @@ export function DepositFundsDialog({
   const [trxId, setTrxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedClient, setSelectedClient] = useState(clientId || "");
-  const [clients, setClients] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [clients, setClients] = useState<{ user_id: string; full_name: string; business_name: string | null; email: string | null; phone: string | null }[]>([]);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(new Date());
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [agencyAccounts, setAgencyAccounts] = useState<AgencyAccount[]>([]);
@@ -96,13 +97,16 @@ export function DepositFundsDialog({
       const ids = roles.map((r) => r.user_id);
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, full_name")
+        .select("user_id, full_name, business_name, email, phone")
         .in("user_id", ids)
         .order("full_name");
       setClients(profiles || []);
     }
     loadClients();
   }, [showClientSelector, open]);
+
+  const selectedClientProfile = clients.find((client) => client.user_id === selectedClient);
+  const selectedClientLabel = selectedClientProfile?.full_name || "Select client";
 
   // Load agency accounts
   useEffect(() => {
