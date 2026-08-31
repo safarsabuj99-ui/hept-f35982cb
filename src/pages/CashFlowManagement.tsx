@@ -979,7 +979,13 @@ export default function CashFlowManagement() {
                       <div><div>Returned</div><div className="font-mono font-semibold text-success">৳{totalReturned.toLocaleString()}</div></div>
                       <div><div>Outstanding</div><div className="font-mono font-semibold text-destructive">৳{outstanding.toLocaleString()}</div></div>
                     </div>
+                    {wdFromAccId && wdFromAccId !== root.from_account_id && (
+                      <p className="text-xs text-warning pt-1">
+                        Borrowing from a different account ({accounts.find(a => a.id === wdFromAccId)?.name || "?"}) — will be added to the same ledger.
+                      </p>
+                    )}
                   </div>
+
                 );
               })()}
 
