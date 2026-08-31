@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle, Landmark, ChevronDown, Check } from "lucide-react";
+import { Plus, ArrowLeftRight, Loader2, Banknote, Building2, Smartphone, Wallet, Trash2, ArrowDown, ArrowUp, MoveHorizontal, PiggyBank, HandCoins, RotateCcw, AlertTriangle, Landmark, ChevronDown, Check, UserPlus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { TablePagination } from "@/components/TablePagination";
@@ -167,8 +167,11 @@ export default function CashFlowManagement() {
   const [wdNote, setWdNote] = useState("");
   const [wdSubmitting, setWdSubmitting] = useState(false);
   const [wdParentId, setWdParentId] = useState<string | null>(null); // root id when topping up existing borrower
+  const [wdBorrowerMode, setWdBorrowerMode] = useState<"none" | "picked" | "new">("none");
   const [borrowerPickerOpen, setBorrowerPickerOpen] = useState(false);
+  const [borrowerSearch, setBorrowerSearch] = useState("");
   const [historyGroup, setHistoryGroup] = useState<any | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
 
   // Borrower return state (consolidated, auto-allocates FIFO)
   const [returnOpen, setReturnOpen] = useState(false);
@@ -524,8 +527,8 @@ export default function CashFlowManagement() {
 
   const handleWithdraw = async () => {
     const amt = Number(wdAmount);
-    if (!wdFromAccId || amt <= 0 || !wdBorrower.trim()) {
-      toast({ title: "Error", description: "Fill in account, borrower name, and amount", variant: "destructive" });
+    if (!wdFromAccId || amt <= 0 || !wdBorrower.trim() || wdBorrowerMode === "none") {
+      toast({ title: "Error", description: "Select an account, choose or create a borrower, and enter an amount", variant: "destructive" });
       return;
     }
     const { data: freshAcc } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", wdFromAccId).single();
@@ -565,12 +568,24 @@ export default function CashFlowManagement() {
     setWdSubmitting(false);
     toast({
       title: rootId ? "Top-Up Recorded" : "Withdrawal Recorded",
-      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name}`,
+      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name} · Borrower: ${wdBorrower.trim()}`,
     });
-    setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
-    setWdFromAccId(""); setWdExpectedDate(""); setWdNote(""); setWdParentId(null);
+    resetWithdrawForm();
     setWithdrawOpen(false);
     fetchData();
+  };
+
+  /** Wipe every field of the Withdraw dialog so nothing carries over between uses. */
+  const resetWithdrawForm = () => {
+    setWdCategory("personal_loan");
+    setWdBorrower("");
+    setWdAmount("");
+    setWdFromAccId("");
+    setWdExpectedDate("");
+    setWdNote("");
+    setWdParentId(null);
+    setWdBorrowerMode("none");
+    setBorrowerPickerOpen(false);
   };
 
   const openReturnDialog = (group: any) => {
@@ -596,7 +611,57 @@ export default function CashFlowManagement() {
     setWdAmount("");
     setWdExpectedDate("");
     setWdNote("");
+    setWdBorrowerMode("picked");
     setWithdrawOpen(true);
+  };
+
+  /** Delete a single borrow row, refunding its amount to the account it came from. */
+  const handleDeleteBorrow = async (row: CashWithdrawal) => {
+    const hasChildren = withdrawals.some(w => w.parent_withdrawal_id === row.id);
+    if (hasChildren) {
+      toast({ title: "Cannot Delete", description: "This is the original borrow. Delete its top-up borrows first.", variant: "destructive" });
+      return;
+    }
+    if (Number(row.returned_bdt) > 0) {
+      toast({ title: "Cannot Delete", description: "This borrow has returns recorded against it. Delete those returns first.", variant: "destructive" });
+      return;
+    }
+    setDeletingEventId(row.id);
+    const { error } = await supabase.from("cash_withdrawals" as any).delete().eq("id", row.id);
+    if (error) {
+      setDeletingEventId(null);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    await adjustAccountBalance(row.from_account_id, Number(row.amount_bdt));
+    setDeletingEventId(null);
+    setHistoryGroup(null);
+    toast({ title: "Borrow Deleted", description: `৳${Number(row.amount_bdt).toLocaleString()} returned to the account balance` });
+    fetchData();
+  };
+
+  /** Delete a return row, re-adding the debt and pulling the money back out of the account. */
+  const handleDeleteReturn = async (ret: CashWithdrawalReturn) => {
+    const parent = withdrawals.find(w => w.id === ret.withdrawal_id);
+    setDeletingEventId(ret.id);
+    const { error } = await supabase.from("cash_withdrawal_returns" as any).delete().eq("id", ret.id);
+    if (error) {
+      setDeletingEventId(null);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (parent) {
+      const newReturned = Math.max(0, Number(parent.returned_bdt) - Number(ret.amount_bdt));
+      const newStatus = newReturned <= 0 ? "active" : newReturned >= Number(parent.amount_bdt) ? "fully_returned" : "partially_returned";
+      await supabase.from("cash_withdrawals" as any)
+        .update({ returned_bdt: newReturned, status: newStatus } as any)
+        .eq("id", parent.id);
+    }
+    await adjustAccountBalance(ret.to_account_id, -Number(ret.amount_bdt));
+    setDeletingEventId(null);
+    setHistoryGroup(null);
+    toast({ title: "Return Deleted", description: `৳${Number(ret.amount_bdt).toLocaleString()} removed from the account balance` });
+    fetchData();
   };
 
 
@@ -837,7 +902,7 @@ export default function CashFlowManagement() {
         </Dialog>
 
         {/* 2. Withdraw — warning accent */}
-        <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <Dialog open={withdrawOpen} onOpenChange={(o) => { resetWithdrawForm(); setWithdrawOpen(o); }}>
           <DialogTrigger asChild>
             <Button
               variant="warning"
@@ -902,10 +967,12 @@ export default function CashFlowManagement() {
                           setWdCategory(b.category);
                           if (!wdFromAccId) setWdFromAccId(b.from_account_id);
                           setWdParentId(b.id);
+                          setWdBorrowerMode("picked");
+                          setBorrowerSearch("");
                           setBorrowerPickerOpen(false);
                         }}
                       >
-                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5 text-warning" />}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{b.borrower_name}</div>
                           <div className="text-xs text-muted-foreground">
@@ -916,8 +983,11 @@ export default function CashFlowManagement() {
                     );
                   };
 
+                  const typed = borrowerSearch.trim();
+                  const exactExists = allActive.some(b => b.borrower_name.trim().toLowerCase() === typed.toLowerCase());
+
                   return (
-                    <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
+                    <Popover open={borrowerPickerOpen} onOpenChange={(o) => { setBorrowerPickerOpen(o); if (!o) setBorrowerSearch(""); }}>
                       <PopoverTrigger asChild>
                         <Button
                           type="button"
@@ -926,7 +996,7 @@ export default function CashFlowManagement() {
                           className="w-full justify-between font-normal"
                         >
                           <span className={wdBorrower ? "" : "text-muted-foreground"}>
-                            {wdBorrower || "Type or pick a borrower"}
+                            {wdBorrower || "Choose or create a borrower"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-50" />
                         </Button>
@@ -934,18 +1004,9 @@ export default function CashFlowManagement() {
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                         <Command shouldFilter={true}>
                           <CommandInput
-                            placeholder="Search or create new..."
-                            value={wdBorrower}
-                            onValueChange={(v) => {
-                              setWdBorrower(v);
-                              // Typing breaks the link unless they re-pick
-                              if (wdParentId) {
-                                const root = withdrawals.find(w => w.id === wdParentId);
-                                if (!root || root.borrower_name.toLowerCase() !== v.trim().toLowerCase()) {
-                                  setWdParentId(null);
-                                }
-                              }
-                            }}
+                            placeholder="Search or type a new name..."
+                            value={borrowerSearch}
+                            onValueChange={setBorrowerSearch}
                           />
                           <CommandList>
                             {sameAccount.length > 0 && (
@@ -958,11 +1019,25 @@ export default function CashFlowManagement() {
                                 {otherAccounts.map(renderItem)}
                               </CommandGroup>
                             )}
-
+                            {typed && !exactExists && (
+                              <CommandGroup heading="New">
+                                <CommandItem
+                                  value={`__create__ ${typed}`}
+                                  onSelect={() => {
+                                    setWdBorrower(typed);
+                                    setWdParentId(null);
+                                    setWdBorrowerMode("new");
+                                    setBorrowerSearch("");
+                                    setBorrowerPickerOpen(false);
+                                  }}
+                                >
+                                  <UserPlus className="mr-2 h-3.5 w-3.5" />
+                                  <span className="truncate">Create new borrower: “{typed}”</span>
+                                </CommandItem>
+                              </CommandGroup>
+                            )}
                             <CommandEmpty>
-                              {wdBorrower.trim()
-                                ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
-                                : "No active borrowers"}
+                              {typed ? "No match — use “Create new borrower” above" : "No active borrowers yet"}
                             </CommandEmpty>
                           </CommandList>
                         </Command>
@@ -971,6 +1046,7 @@ export default function CashFlowManagement() {
                   );
                 })()}
               </div>
+
 
               {/* Top-up summary card */}
               {wdParentId && (() => {
@@ -986,7 +1062,7 @@ export default function CashFlowManagement() {
                       <span className="font-medium text-warning">Top-Up Mode</span>
                       <button
                         type="button"
-                        onClick={() => { setWdParentId(null); setWdBorrower(""); }}
+                        onClick={() => { setWdParentId(null); setWdBorrower(""); setWdBorrowerMode("none"); }}
                         className="text-xs underline text-muted-foreground hover:text-foreground"
                       >
                         Make new instead
@@ -1032,9 +1108,52 @@ export default function CashFlowManagement() {
                 <Label>Note (optional)</Label>
                 <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
               </div>
-              <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
+              {/* Confirmation strip — states in plain words where the money lands */}
+              {(() => {
+                const amt = Number(wdAmount) || 0;
+                const acc = accounts.find(a => a.id === wdFromAccId);
+                if (wdBorrowerMode === "none" || !wdBorrower.trim()) {
+                  return (
+                    <p className="text-xs text-muted-foreground rounded-lg border border-dashed p-3">
+                      Choose or create a borrower above before recording this withdrawal.
+                    </p>
+                  );
+                }
+                if (wdBorrowerMode === "picked" && wdParentId) {
+                  const root = withdrawals.find(w => w.id === wdParentId);
+                  const rows = withdrawals.filter(w => w.id === wdParentId || w.parent_withdrawal_id === wdParentId);
+                  const outstanding = rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
+                  return (
+                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs space-y-1">
+                      <p>
+                        Adding <span className="font-mono font-semibold">৳{amt.toLocaleString()}</span> to{" "}
+                        <span className="font-semibold">{root?.borrower_name || wdBorrower}</span> — outstanding becomes{" "}
+                        <span className="font-mono font-semibold text-destructive">৳{(outstanding + amt).toLocaleString()}</span>
+                      </p>
+                      <p className="text-muted-foreground">Money leaves: {acc?.name || "— select an account"}</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs space-y-1">
+                    <p>
+                      Creating new borrower <span className="font-semibold">{wdBorrower.trim()}</span> with{" "}
+                      <span className="font-mono font-semibold">৳{amt.toLocaleString()}</span>
+                    </p>
+                    <p className="text-muted-foreground">Money leaves: {acc?.name || "— select an account"}</p>
+                  </div>
+                );
+              })()}
+
+              <Button
+                className="w-full"
+                onClick={handleWithdraw}
+                disabled={wdSubmitting || wdBorrowerMode === "none" || !wdBorrower.trim() || !wdFromAccId || Number(wdAmount) <= 0}
+              >
                 {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {wdParentId ? "Add Top-Up" : "Record Withdrawal"}
+                {wdBorrowerMode === "none" || !wdBorrower.trim()
+                  ? "Select a borrower first"
+                  : `${wdParentId ? "Add" : "Withdraw"} ৳${(Number(wdAmount) || 0).toLocaleString()} to ${wdBorrower.trim()}`}
               </Button>
             </div>
           </DialogContent>
@@ -1803,10 +1922,11 @@ export default function CashFlowManagement() {
           </DialogHeader>
           {historyGroup && (() => {
             const childIds = new Set<string>(historyGroup.all.map((r: CashWithdrawal) => r.id));
-            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string }> = [];
+            const events: Array<{ id: string; kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string; borrow?: CashWithdrawal; ret?: CashWithdrawalReturn }> = [];
             for (const w of historyGroup.all as CashWithdrawal[]) {
               const acc = accounts.find(a => a.id === w.from_account_id);
               events.push({
+                id: w.id,
                 kind: "borrow",
                 date: w.date,
                 created_at: w.created_at,
@@ -1814,12 +1934,14 @@ export default function CashFlowManagement() {
                 note: w.note,
                 meta: w.parent_withdrawal_id ? "Top-up borrow" : "Original borrow",
                 account: `From ${acc?.name ?? "?"}`,
+                borrow: w,
               });
             }
             for (const r of withdrawalReturns) {
               if (childIds.has(r.withdrawal_id)) {
                 const toAcc = accounts.find(a => a.id === r.to_account_id);
                 events.push({
+                  id: r.id,
                   kind: "return",
                   date: r.date,
                   created_at: r.created_at,
@@ -1827,6 +1949,7 @@ export default function CashFlowManagement() {
                   note: r.note,
                   meta: "Return",
                   account: `To ${toAcc?.name ?? "?"}`,
+                  ret: r,
                 });
               }
             }
@@ -1853,13 +1976,14 @@ export default function CashFlowManagement() {
                         <TableHead>Event</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead className="text-right">Balance</TableHead>
+                        <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {events.map((e, i) => {
                         running += e.kind === "borrow" ? e.amount : -e.amount;
                         return (
-                          <TableRow key={i}>
+                          <TableRow key={e.id}>
                             <TableCell className="font-mono text-xs whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</TableCell>
                             <TableCell className="text-xs">
                               <div className="font-medium">{e.meta}</div>
@@ -1870,6 +1994,27 @@ export default function CashFlowManagement() {
                               {e.kind === "borrow" ? "+" : "−"}৳{e.amount.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs font-semibold">৳{running.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                aria-label={`Delete this ${e.kind === "borrow" ? "borrow" : "return"} of ৳${e.amount.toLocaleString()}`}
+                                disabled={deletingEventId === e.id}
+                                onClick={() => {
+                                  const label = e.kind === "borrow"
+                                    ? `Delete this borrow of ৳${e.amount.toLocaleString()}? The money will be added back to ${e.account.replace("From ", "")}.`
+                                    : `Delete this return of ৳${e.amount.toLocaleString()}? The money will be taken back out of ${e.account.replace("To ", "")} and the debt restored.`;
+                                  if (!window.confirm(label)) return;
+                                  if (e.kind === "borrow" && e.borrow) handleDeleteBorrow(e.borrow);
+                                  if (e.kind === "return" && e.ret) handleDeleteReturn(e.ret);
+                                }}
+                              >
+                                {deletingEventId === e.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
