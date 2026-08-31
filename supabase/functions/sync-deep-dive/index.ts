@@ -28,16 +28,20 @@ const pastDeadline = () => Date.now() > workerDeadlineAt;
 /** Fetch TikTok API with retry on transient errors (41000 geo, 40100 QPS, 546 proxy upstream, empty body) */
 async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
   let lastErr: any = null;
+  const canRetry = (attempt: number) => attempt < maxRetries && !pastDeadline();
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (pastDeadline()) {
+      return lastErr ?? { code: -996, message: "proxy_upstream deadline exceeded before request" };
+    }
     try {
       const res = await fetch(url, { headers });
       // 546 = Cloudflare worker upstream error; 5xx generally retryable
       if (res.status === 546 || (res.status >= 500 && res.status < 600)) {
         const txt = await res.text().catch(() => "");
         lastErr = { code: -1 * res.status, message: `proxy_upstream HTTP ${res.status}: ${txt.slice(0, 200) || "empty body"}` };
-        if (attempt < maxRetries) {
-          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
+        if (canRetry(attempt)) {
+          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         return lastErr;
@@ -45,9 +49,9 @@ async function tiktokFetchWithRetry(url: string, headers: Record<string, string>
       const bodyText = await res.text();
       if (!bodyText || bodyText.trim() === "") {
         lastErr = { code: -999, message: "proxy_upstream empty body" };
-        if (attempt < maxRetries) {
-          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
+        if (canRetry(attempt)) {
+          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         return lastErr;
@@ -55,18 +59,24 @@ async function tiktokFetchWithRetry(url: string, headers: Record<string, string>
       let json: any;
       try { json = JSON.parse(bodyText); } catch {
         lastErr = { code: -998, message: `proxy_upstream invalid JSON: ${bodyText.slice(0, 200)}` };
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+        if (canRetry(attempt)) { await new Promise(r => setTimeout(r, 2000)); continue; }
         return lastErr;
       }
-      if (json.code === 41000 && attempt < maxRetries) {
+      if (json.code === 41000 && canRetry(attempt)) {
         console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
         await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      // 40100 = QPS limit exceeded — short backoff then retry
+      if (json.code === 40100 && canRetry(attempt)) {
+        console.warn(`TikTok 40100 QPS limit on attempt ${attempt}/${maxRetries}, retrying in 1.5s...`);
+        await new Promise(r => setTimeout(r, 1500));
         continue;
       }
       return json;
     } catch (e: any) {
       lastErr = { code: -997, message: `proxy_upstream fetch failed: ${e.message}` };
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      if (canRetry(attempt)) { await new Promise(r => setTimeout(r, 2000)); continue; }
       return lastErr;
     }
   }
