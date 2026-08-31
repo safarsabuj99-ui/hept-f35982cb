@@ -930,35 +930,17 @@ export default function CashFlowManagement() {
                             }}
                           />
                           <CommandList>
-                            {activeBorrowers.length > 0 && (
-                              <CommandGroup heading="Active borrowers (top-up)">
-                                {activeBorrowers.map(b => {
-                                  const outstanding = computeOutstanding(b.id);
-                                  const acc = accounts.find(a => a.id === b.from_account_id);
-                                  return (
-                                    <CommandItem
-                                      key={b.id}
-                                      value={b.borrower_name + " " + b.id}
-                                      onSelect={() => {
-                                        setWdBorrower(b.borrower_name);
-                                        setWdCategory(b.category);
-                                        setWdFromAccId(b.from_account_id);
-                                        setWdParentId(b.id);
-                                        setBorrowerPickerOpen(false);
-                                      }}
-                                    >
-                                      {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-medium truncate">{b.borrower_name}</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
-                                        </div>
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
+                            {sameAccount.length > 0 && (
+                              <CommandGroup heading="This account (top-up)">
+                                {sameAccount.map(renderItem)}
                               </CommandGroup>
                             )}
+                            {otherAccounts.length > 0 && (
+                              <CommandGroup heading={sameAccount.length > 0 ? "Other accounts (top-up)" : "Active borrowers (top-up)"}>
+                                {otherAccounts.map(renderItem)}
+                              </CommandGroup>
+                            )}
+
                             <CommandEmpty>
                               {wdBorrower.trim()
                                 ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
