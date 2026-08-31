@@ -16,19 +16,32 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on transient errors (41000 geo, 546 proxy upstream, empty body) */
-async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 5): Promise<any> {
+/**
+ * Hard wall-clock deadline for all upstream TikTok work in this invocation.
+ * Set per-request. Once passed, retries stop immediately and the caller returns
+ * a 408 cpu_timeout so sync-queue-worker auto-splits the window — instead of the
+ * runtime killing the worker (HTTP 546).
+ */
+let workerDeadlineAt = Number.POSITIVE_INFINITY;
+const pastDeadline = () => Date.now() > workerDeadlineAt;
+
+/** Fetch TikTok API with retry on transient errors (41000 geo, 40100 QPS, 546 proxy upstream, empty body) */
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
   let lastErr: any = null;
+  const canRetry = (attempt: number) => attempt < maxRetries && !pastDeadline();
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (pastDeadline()) {
+      return lastErr ?? { code: -996, message: "proxy_upstream deadline exceeded before request" };
+    }
     try {
       const res = await fetch(url, { headers });
       // 546 = Cloudflare worker upstream error; 5xx generally retryable
       if (res.status === 546 || (res.status >= 500 && res.status < 600)) {
         const txt = await res.text().catch(() => "");
         lastErr = { code: -1 * res.status, message: `proxy_upstream HTTP ${res.status}: ${txt.slice(0, 200) || "empty body"}` };
-        if (attempt < maxRetries) {
-          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
+        if (canRetry(attempt)) {
+          console.warn(`TikTok HTTP ${res.status} on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         return lastErr;
@@ -36,9 +49,9 @@ async function tiktokFetchWithRetry(url: string, headers: Record<string, string>
       const bodyText = await res.text();
       if (!bodyText || bodyText.trim() === "") {
         lastErr = { code: -999, message: "proxy_upstream empty body" };
-        if (attempt < maxRetries) {
-          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
+        if (canRetry(attempt)) {
+          console.warn(`TikTok empty body on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         return lastErr;
@@ -46,18 +59,24 @@ async function tiktokFetchWithRetry(url: string, headers: Record<string, string>
       let json: any;
       try { json = JSON.parse(bodyText); } catch {
         lastErr = { code: -998, message: `proxy_upstream invalid JSON: ${bodyText.slice(0, 200)}` };
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+        if (canRetry(attempt)) { await new Promise(r => setTimeout(r, 2000)); continue; }
         return lastErr;
       }
-      if (json.code === 41000 && attempt < maxRetries) {
+      if (json.code === 41000 && canRetry(attempt)) {
         console.warn(`TikTok 41000 geo-restriction on attempt ${attempt}/${maxRetries}, retrying in 2s...`);
         await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      // 40100 = QPS limit exceeded — short backoff then retry
+      if (json.code === 40100 && canRetry(attempt)) {
+        console.warn(`TikTok 40100 QPS limit on attempt ${attempt}/${maxRetries}, retrying in 1.5s...`);
+        await new Promise(r => setTimeout(r, 1500));
         continue;
       }
       return json;
     } catch (e: any) {
       lastErr = { code: -997, message: `proxy_upstream fetch failed: ${e.message}` };
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, attempt * 3000)); continue; }
+      if (canRetry(attempt)) { await new Promise(r => setTimeout(r, 2000)); continue; }
       return lastErr;
     }
   }
@@ -101,6 +120,11 @@ Deno.serve(async (req) => {
   // cleanly instead of being aborted mid-write (which leaves stale daily_metrics).
   const startTime = Date.now();
   const TIME_BUDGET_MS = 18_000;
+  // Hard upstream deadline (well under the 150s runtime wall-clock limit that
+  // produces HTTP 546). Past this, TikTok fetching stops and we hand back a
+  // 408 cpu_timeout so the queue worker splits the window into smaller chunks.
+  const UPSTREAM_DEADLINE_MS = 100_000;
+  workerDeadlineAt = startTime + UPSTREAM_DEADLINE_MS;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1273,14 +1297,27 @@ Deno.serve(async (req) => {
             let chunkRows = 0;
 
             do {
-              // Three parallel calls per page — TikTok caps each report call at 10 metrics,
-              // and Ads-Manager-parity now needs 20+ (spend, impressions, ctr, conversions,
-              // result, cost_per_result, frequency, video milestones, etc.).
-              const [resA, resB, resC] = await Promise.all([
-                fetchPage(BC_METRICS_A, chunk.start, chunk.end, page),
-                fetchPage(BC_METRICS_B, chunk.start, chunk.end, page),
-                fetchPage(BC_METRICS_C, chunk.start, chunk.end, page),
-              ]);
+              // Bail out cleanly before the runtime kills the worker (HTTP 546).
+              // 408 cpu_timeout makes sync-queue-worker split this window.
+              if (pastDeadline()) {
+                console.warn(`TikTok deadline reached at chunk ${chunk.start}-${chunk.end} p${page} — returning cpu_timeout for auto-split`);
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: `TikTok deep-dive exceeded time budget at ${chunk.start}→${chunk.end} (page ${page})`,
+                    error_code: "cpu_timeout",
+                  }),
+                  { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+
+              // Three report calls per page — TikTok caps each report call at 10 metrics,
+              // and Ads-Manager-parity needs 20+. Issued sequentially (not Promise.all)
+              // to stay under TikTok's 10 QPS per-advertiser cap (error 40100), which
+              // previously self-throttled and inflated per-request latency.
+              const resA = await fetchPage(BC_METRICS_A, chunk.start, chunk.end, page);
+              const resB = await fetchPage(BC_METRICS_B, chunk.start, chunk.end, page);
+              const resC = await fetchPage(BC_METRICS_C, chunk.start, chunk.end, page);
 
               for (const cJson of [resA, resB, resC]) {
                 if (cJson.code !== 0) {
