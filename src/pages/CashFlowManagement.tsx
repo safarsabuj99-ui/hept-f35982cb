@@ -194,6 +194,7 @@ export default function CashFlowManagement() {
   // Withdrawal pagination
   const [wdPage, setWdPage] = useState(1);
   const [wdPageSize, setWdPageSize] = useState(20);
+  const [wdSubTab, setWdSubTab] = useState<"active" | "partial" | "fully">("active");
 
   // Loan pagination
   const [loanPage, setLoanPage] = useState(1);
