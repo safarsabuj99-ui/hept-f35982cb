@@ -1486,13 +1486,41 @@ export default function CashFlowManagement() {
                       const allReturned = all.every(r => r.status === "fully_returned");
                       const anyOverdue = all.some(r => isOverdue(r));
                       const latestDate = all.reduce((m, r) => (r.created_at > m ? r.created_at : m), g.root.created_at);
-                      return { ...g, all, totalBorrowed, totalReturned, outstanding, allReturned, anyOverdue, latestDate };
+                      const state: "active" | "partial" | "fully" = allReturned ? "fully" : (totalReturned > 0 ? "partial" : "active");
+                      return { ...g, all, totalBorrowed, totalReturned, outstanding, allReturned, anyOverdue, latestDate, state };
                     }).sort((a, b) => b.latestDate.localeCompare(a.latestDate));
 
-                    const pagedGroups = groups.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize);
+                    const activeGroups = groups.filter(g => g.state === "active");
+                    const partialGroups = groups.filter(g => g.state === "partial");
+                    const fullyGroups = groups.filter(g => g.state === "fully");
+
+                    const currentGroups = wdSubTab === "active" ? activeGroups : wdSubTab === "partial" ? partialGroups : fullyGroups;
+                    const pagedGroups = currentGroups.slice((wdPage - 1) * wdPageSize, wdPage * wdPageSize);
+
+                    const emptyLabel = wdSubTab === "active"
+                      ? "No active borrowers"
+                      : wdSubTab === "partial"
+                        ? "No partially returned borrowers"
+                        : "No fully returned borrowers yet";
 
                     return (
                       <>
+                        <Tabs
+                          value={wdSubTab}
+                          onValueChange={(v) => { setWdSubTab(v as any); setWdPage(1); }}
+                          className="mb-4"
+                        >
+                          <TabsList className="flex w-full overflow-x-auto scrollbar-hide justify-start">
+                            <TabsTrigger value="active" className="flex-shrink-0">Active ({activeGroups.length})</TabsTrigger>
+                            <TabsTrigger value="partial" className="flex-shrink-0">Partially Returned ({partialGroups.length})</TabsTrigger>
+                            <TabsTrigger value="fully" className="flex-shrink-0">Fully Returned ({fullyGroups.length})</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+
+                        {currentGroups.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-8">{emptyLabel}</p>
+                        ) : (
+                          <>
                         {/* Mobile card view */}
                         <div className="flex flex-col gap-3 md:hidden">
                           {pagedGroups.map(g => {
@@ -1593,16 +1621,19 @@ export default function CashFlowManagement() {
                           </Table>
                         </div>
                         <TablePagination
-                          totalItems={groups.length}
+                          totalItems={currentGroups.length}
                           pageSize={wdPageSize}
                           currentPage={wdPage}
                           onPageChange={setWdPage}
                           onPageSizeChange={setWdPageSize}
                         />
+                          </>
+                        )}
                       </>
                     );
                   })()}
                 </>
+
               )}
             </CardContent>
           </Card>
