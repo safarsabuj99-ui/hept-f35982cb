@@ -1297,14 +1297,27 @@ Deno.serve(async (req) => {
             let chunkRows = 0;
 
             do {
-              // Three parallel calls per page — TikTok caps each report call at 10 metrics,
-              // and Ads-Manager-parity now needs 20+ (spend, impressions, ctr, conversions,
-              // result, cost_per_result, frequency, video milestones, etc.).
-              const [resA, resB, resC] = await Promise.all([
-                fetchPage(BC_METRICS_A, chunk.start, chunk.end, page),
-                fetchPage(BC_METRICS_B, chunk.start, chunk.end, page),
-                fetchPage(BC_METRICS_C, chunk.start, chunk.end, page),
-              ]);
+              // Bail out cleanly before the runtime kills the worker (HTTP 546).
+              // 408 cpu_timeout makes sync-queue-worker split this window.
+              if (pastDeadline()) {
+                console.warn(`TikTok deadline reached at chunk ${chunk.start}-${chunk.end} p${page} — returning cpu_timeout for auto-split`);
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: `TikTok deep-dive exceeded time budget at ${chunk.start}→${chunk.end} (page ${page})`,
+                    error_code: "cpu_timeout",
+                  }),
+                  { status: 408, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+
+              // Three report calls per page — TikTok caps each report call at 10 metrics,
+              // and Ads-Manager-parity needs 20+. Issued sequentially (not Promise.all)
+              // to stay under TikTok's 10 QPS per-advertiser cap (error 40100), which
+              // previously self-throttled and inflated per-request latency.
+              const resA = await fetchPage(BC_METRICS_A, chunk.start, chunk.end, page);
+              const resB = await fetchPage(BC_METRICS_B, chunk.start, chunk.end, page);
+              const resC = await fetchPage(BC_METRICS_C, chunk.start, chunk.end, page);
 
               for (const cJson of [resA, resB, resC]) {
                 if (cJson.code !== 0) {
