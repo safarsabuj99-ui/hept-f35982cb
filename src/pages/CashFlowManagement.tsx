@@ -966,10 +966,12 @@ export default function CashFlowManagement() {
                           setWdCategory(b.category);
                           if (!wdFromAccId) setWdFromAccId(b.from_account_id);
                           setWdParentId(b.id);
+                          setWdBorrowerMode("picked");
+                          setBorrowerSearch("");
                           setBorrowerPickerOpen(false);
                         }}
                       >
-                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5 text-warning" />}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{b.borrower_name}</div>
                           <div className="text-xs text-muted-foreground">
@@ -980,8 +982,11 @@ export default function CashFlowManagement() {
                     );
                   };
 
+                  const typed = borrowerSearch.trim();
+                  const exactExists = allActive.some(b => b.borrower_name.trim().toLowerCase() === typed.toLowerCase());
+
                   return (
-                    <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
+                    <Popover open={borrowerPickerOpen} onOpenChange={(o) => { setBorrowerPickerOpen(o); if (!o) setBorrowerSearch(""); }}>
                       <PopoverTrigger asChild>
                         <Button
                           type="button"
@@ -990,7 +995,7 @@ export default function CashFlowManagement() {
                           className="w-full justify-between font-normal"
                         >
                           <span className={wdBorrower ? "" : "text-muted-foreground"}>
-                            {wdBorrower || "Type or pick a borrower"}
+                            {wdBorrower || "Choose or create a borrower"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-50" />
                         </Button>
@@ -998,18 +1003,9 @@ export default function CashFlowManagement() {
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                         <Command shouldFilter={true}>
                           <CommandInput
-                            placeholder="Search or create new..."
-                            value={wdBorrower}
-                            onValueChange={(v) => {
-                              setWdBorrower(v);
-                              // Typing breaks the link unless they re-pick
-                              if (wdParentId) {
-                                const root = withdrawals.find(w => w.id === wdParentId);
-                                if (!root || root.borrower_name.toLowerCase() !== v.trim().toLowerCase()) {
-                                  setWdParentId(null);
-                                }
-                              }
-                            }}
+                            placeholder="Search or type a new name..."
+                            value={borrowerSearch}
+                            onValueChange={setBorrowerSearch}
                           />
                           <CommandList>
                             {sameAccount.length > 0 && (
@@ -1022,11 +1018,25 @@ export default function CashFlowManagement() {
                                 {otherAccounts.map(renderItem)}
                               </CommandGroup>
                             )}
-
+                            {typed && !exactExists && (
+                              <CommandGroup heading="New">
+                                <CommandItem
+                                  value={`__create__ ${typed}`}
+                                  onSelect={() => {
+                                    setWdBorrower(typed);
+                                    setWdParentId(null);
+                                    setWdBorrowerMode("new");
+                                    setBorrowerSearch("");
+                                    setBorrowerPickerOpen(false);
+                                  }}
+                                >
+                                  <UserPlus className="mr-2 h-3.5 w-3.5" />
+                                  <span className="truncate">Create new borrower: “{typed}”</span>
+                                </CommandItem>
+                              </CommandGroup>
+                            )}
                             <CommandEmpty>
-                              {wdBorrower.trim()
-                                ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
-                                : "No active borrowers"}
+                              {typed ? "No match — use “Create new borrower” above" : "No active borrowers yet"}
                             </CommandEmpty>
                           </CommandList>
                         </Command>
@@ -1035,6 +1045,7 @@ export default function CashFlowManagement() {
                   );
                 })()}
               </div>
+
 
               {/* Top-up summary card */}
               {wdParentId && (() => {
