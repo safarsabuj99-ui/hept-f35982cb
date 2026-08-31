@@ -1976,13 +1976,14 @@ export default function CashFlowManagement() {
                         <TableHead>Event</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead className="text-right">Balance</TableHead>
+                        <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {events.map((e, i) => {
                         running += e.kind === "borrow" ? e.amount : -e.amount;
                         return (
-                          <TableRow key={i}>
+                          <TableRow key={e.id}>
                             <TableCell className="font-mono text-xs whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</TableCell>
                             <TableCell className="text-xs">
                               <div className="font-medium">{e.meta}</div>
@@ -1993,6 +1994,27 @@ export default function CashFlowManagement() {
                               {e.kind === "borrow" ? "+" : "−"}৳{e.amount.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs font-semibold">৳{running.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                aria-label={`Delete this ${e.kind === "borrow" ? "borrow" : "return"} of ৳${e.amount.toLocaleString()}`}
+                                disabled={deletingEventId === e.id}
+                                onClick={() => {
+                                  const label = e.kind === "borrow"
+                                    ? `Delete this borrow of ৳${e.amount.toLocaleString()}? The money will be added back to ${e.account.replace("From ", "")}.`
+                                    : `Delete this return of ৳${e.amount.toLocaleString()}? The money will be taken back out of ${e.account.replace("To ", "")} and the debt restored.`;
+                                  if (!window.confirm(label)) return;
+                                  if (e.kind === "borrow" && e.borrow) handleDeleteBorrow(e.borrow);
+                                  if (e.kind === "return" && e.ret) handleDeleteReturn(e.ret);
+                                }}
+                              >
+                                {deletingEventId === e.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
