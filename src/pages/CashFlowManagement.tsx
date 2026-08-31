@@ -1922,10 +1922,11 @@ export default function CashFlowManagement() {
           </DialogHeader>
           {historyGroup && (() => {
             const childIds = new Set<string>(historyGroup.all.map((r: CashWithdrawal) => r.id));
-            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string }> = [];
+            const events: Array<{ id: string; kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string; borrow?: CashWithdrawal; ret?: CashWithdrawalReturn }> = [];
             for (const w of historyGroup.all as CashWithdrawal[]) {
               const acc = accounts.find(a => a.id === w.from_account_id);
               events.push({
+                id: w.id,
                 kind: "borrow",
                 date: w.date,
                 created_at: w.created_at,
@@ -1933,12 +1934,14 @@ export default function CashFlowManagement() {
                 note: w.note,
                 meta: w.parent_withdrawal_id ? "Top-up borrow" : "Original borrow",
                 account: `From ${acc?.name ?? "?"}`,
+                borrow: w,
               });
             }
             for (const r of withdrawalReturns) {
               if (childIds.has(r.withdrawal_id)) {
                 const toAcc = accounts.find(a => a.id === r.to_account_id);
                 events.push({
+                  id: r.id,
                   kind: "return",
                   date: r.date,
                   created_at: r.created_at,
@@ -1946,6 +1949,7 @@ export default function CashFlowManagement() {
                   note: r.note,
                   meta: "Return",
                   account: `To ${toAcc?.name ?? "?"}`,
+                  ret: r,
                 });
               }
             }
