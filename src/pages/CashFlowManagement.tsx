@@ -1742,6 +1742,20 @@ export default function CashFlowManagement() {
                 <div><div className="text-muted-foreground">Already Returned</div><div className="font-mono font-semibold text-success">৳{Number(returnGroup.totalReturned).toLocaleString()}</div></div>
                 <div><div className="text-muted-foreground">Outstanding</div><div className="font-mono font-semibold text-destructive">৳{Number(returnGroup.outstanding).toLocaleString()}</div></div>
               </div>
+              {(() => {
+                const srcNames = Array.from(new Set(
+                  (returnGroup.all as CashWithdrawal[])
+                    .filter(r => Number(r.amount_bdt) - Number(r.returned_bdt) > 0)
+                    .map(r => accounts.find(a => a.id === r.from_account_id)?.name ?? "?")
+                ));
+                if (srcNames.length === 0) return null;
+                return (
+                  <p className="text-[11px] text-muted-foreground">
+                    Outstanding borrowed from: {srcNames.join(", ")}
+                  </p>
+                );
+              })()}
+
               <div>
                 <Label>Return Amount (BDT)</Label>
                 <Input
