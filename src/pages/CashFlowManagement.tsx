@@ -1108,9 +1108,52 @@ export default function CashFlowManagement() {
                 <Label>Note (optional)</Label>
                 <Textarea value={wdNote} onChange={e => setWdNote(e.target.value)} placeholder="e.g. Lending to friend for 2 weeks" />
               </div>
-              <Button className="w-full" onClick={handleWithdraw} disabled={wdSubmitting}>
+              {/* Confirmation strip — states in plain words where the money lands */}
+              {(() => {
+                const amt = Number(wdAmount) || 0;
+                const acc = accounts.find(a => a.id === wdFromAccId);
+                if (wdBorrowerMode === "none" || !wdBorrower.trim()) {
+                  return (
+                    <p className="text-xs text-muted-foreground rounded-lg border border-dashed p-3">
+                      Choose or create a borrower above before recording this withdrawal.
+                    </p>
+                  );
+                }
+                if (wdBorrowerMode === "picked" && wdParentId) {
+                  const root = withdrawals.find(w => w.id === wdParentId);
+                  const rows = withdrawals.filter(w => w.id === wdParentId || w.parent_withdrawal_id === wdParentId);
+                  const outstanding = rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
+                  return (
+                    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs space-y-1">
+                      <p>
+                        Adding <span className="font-mono font-semibold">৳{amt.toLocaleString()}</span> to{" "}
+                        <span className="font-semibold">{root?.borrower_name || wdBorrower}</span> — outstanding becomes{" "}
+                        <span className="font-mono font-semibold text-destructive">৳{(outstanding + amt).toLocaleString()}</span>
+                      </p>
+                      <p className="text-muted-foreground">Money leaves: {acc?.name || "— select an account"}</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs space-y-1">
+                    <p>
+                      Creating new borrower <span className="font-semibold">{wdBorrower.trim()}</span> with{" "}
+                      <span className="font-mono font-semibold">৳{amt.toLocaleString()}</span>
+                    </p>
+                    <p className="text-muted-foreground">Money leaves: {acc?.name || "— select an account"}</p>
+                  </div>
+                );
+              })()}
+
+              <Button
+                className="w-full"
+                onClick={handleWithdraw}
+                disabled={wdSubmitting || wdBorrowerMode === "none" || !wdBorrower.trim() || !wdFromAccId || Number(wdAmount) <= 0}
+              >
                 {wdSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {wdParentId ? "Add Top-Up" : "Record Withdrawal"}
+                {wdBorrowerMode === "none" || !wdBorrower.trim()
+                  ? "Select a borrower first"
+                  : `${wdParentId ? "Add" : "Withdraw"} ৳${(Number(wdAmount) || 0).toLocaleString()} to ${wdBorrower.trim()}`}
               </Button>
             </div>
           </DialogContent>
