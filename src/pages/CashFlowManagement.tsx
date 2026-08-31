@@ -526,8 +526,8 @@ export default function CashFlowManagement() {
 
   const handleWithdraw = async () => {
     const amt = Number(wdAmount);
-    if (!wdFromAccId || amt <= 0 || !wdBorrower.trim()) {
-      toast({ title: "Error", description: "Fill in account, borrower name, and amount", variant: "destructive" });
+    if (!wdFromAccId || amt <= 0 || !wdBorrower.trim() || wdBorrowerMode === "none") {
+      toast({ title: "Error", description: "Select an account, choose or create a borrower, and enter an amount", variant: "destructive" });
       return;
     }
     const { data: freshAcc } = await supabase.from("agency_accounts").select("current_balance_bdt, name").eq("id", wdFromAccId).single();
