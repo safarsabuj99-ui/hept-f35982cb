@@ -901,7 +901,7 @@ export default function CashFlowManagement() {
         </Dialog>
 
         {/* 2. Withdraw — warning accent */}
-        <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <Dialog open={withdrawOpen} onOpenChange={(o) => { resetWithdrawForm(); setWithdrawOpen(o); }}>
           <DialogTrigger asChild>
             <Button
               variant="warning"
