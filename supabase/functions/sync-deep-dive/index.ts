@@ -16,8 +16,17 @@ function getTikTokBaseUrl(proxyUrl: string | null): string {
   return TIKTOK_BASE_URL;
 }
 
-/** Fetch TikTok API with retry on transient errors (41000 geo, 546 proxy upstream, empty body) */
-async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 5): Promise<any> {
+/**
+ * Hard wall-clock deadline for all upstream TikTok work in this invocation.
+ * Set per-request. Once passed, retries stop immediately and the caller returns
+ * a 408 cpu_timeout so sync-queue-worker auto-splits the window — instead of the
+ * runtime killing the worker (HTTP 546).
+ */
+let workerDeadlineAt = Number.POSITIVE_INFINITY;
+const pastDeadline = () => Date.now() > workerDeadlineAt;
+
+/** Fetch TikTok API with retry on transient errors (41000 geo, 40100 QPS, 546 proxy upstream, empty body) */
+async function tiktokFetchWithRetry(url: string, headers: Record<string, string>, maxRetries = 3): Promise<any> {
   let lastErr: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
