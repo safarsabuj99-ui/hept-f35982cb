@@ -567,12 +567,24 @@ export default function CashFlowManagement() {
     setWdSubmitting(false);
     toast({
       title: rootId ? "Top-Up Recorded" : "Withdrawal Recorded",
-      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name}`,
+      description: `৳${amt.toLocaleString()} ${rootId ? "added to" : "withdrawn from"} ${(freshAcc as any)?.name} · Borrower: ${wdBorrower.trim()}`,
     });
-    setWdCategory("personal_loan"); setWdBorrower(""); setWdAmount("");
-    setWdFromAccId(""); setWdExpectedDate(""); setWdNote(""); setWdParentId(null);
+    resetWithdrawForm();
     setWithdrawOpen(false);
     fetchData();
+  };
+
+  /** Wipe every field of the Withdraw dialog so nothing carries over between uses. */
+  const resetWithdrawForm = () => {
+    setWdCategory("personal_loan");
+    setWdBorrower("");
+    setWdAmount("");
+    setWdFromAccId("");
+    setWdExpectedDate("");
+    setWdNote("");
+    setWdParentId(null);
+    setWdBorrowerMode("none");
+    setBorrowerPickerOpen(false);
   };
 
   const openReturnDialog = (group: any) => {
@@ -598,7 +610,57 @@ export default function CashFlowManagement() {
     setWdAmount("");
     setWdExpectedDate("");
     setWdNote("");
+    setWdBorrowerMode("picked");
     setWithdrawOpen(true);
+  };
+
+  /** Delete a single borrow row, refunding its amount to the account it came from. */
+  const handleDeleteBorrow = async (row: CashWithdrawal) => {
+    const hasChildren = withdrawals.some(w => w.parent_withdrawal_id === row.id);
+    if (hasChildren) {
+      toast({ title: "Cannot Delete", description: "This is the original borrow. Delete its top-up borrows first.", variant: "destructive" });
+      return;
+    }
+    if (Number(row.returned_bdt) > 0) {
+      toast({ title: "Cannot Delete", description: "This borrow has returns recorded against it. Delete those returns first.", variant: "destructive" });
+      return;
+    }
+    setDeletingEventId(row.id);
+    const { error } = await supabase.from("cash_withdrawals" as any).delete().eq("id", row.id);
+    if (error) {
+      setDeletingEventId(null);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    await adjustAccountBalance(row.from_account_id, Number(row.amount_bdt));
+    setDeletingEventId(null);
+    setHistoryGroup(null);
+    toast({ title: "Borrow Deleted", description: `৳${Number(row.amount_bdt).toLocaleString()} returned to the account balance` });
+    fetchData();
+  };
+
+  /** Delete a return row, re-adding the debt and pulling the money back out of the account. */
+  const handleDeleteReturn = async (ret: CashWithdrawalReturn) => {
+    const parent = withdrawals.find(w => w.id === ret.withdrawal_id);
+    setDeletingEventId(ret.id);
+    const { error } = await supabase.from("cash_withdrawal_returns" as any).delete().eq("id", ret.id);
+    if (error) {
+      setDeletingEventId(null);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (parent) {
+      const newReturned = Math.max(0, Number(parent.returned_bdt) - Number(ret.amount_bdt));
+      const newStatus = newReturned <= 0 ? "active" : newReturned >= Number(parent.amount_bdt) ? "fully_returned" : "partially_returned";
+      await supabase.from("cash_withdrawals" as any)
+        .update({ returned_bdt: newReturned, status: newStatus } as any)
+        .eq("id", parent.id);
+    }
+    await adjustAccountBalance(ret.to_account_id, -Number(ret.amount_bdt));
+    setDeletingEventId(null);
+    setHistoryGroup(null);
+    toast({ title: "Return Deleted", description: `৳${Number(ret.amount_bdt).toLocaleString()} removed from the account balance` });
+    fetchData();
   };
 
 
