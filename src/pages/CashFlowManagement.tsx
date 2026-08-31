@@ -1789,8 +1789,9 @@ export default function CashFlowManagement() {
           </DialogHeader>
           {historyGroup && (() => {
             const childIds = new Set<string>(historyGroup.all.map((r: CashWithdrawal) => r.id));
-            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string }> = [];
+            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string }> = [];
             for (const w of historyGroup.all as CashWithdrawal[]) {
+              const acc = accounts.find(a => a.id === w.from_account_id);
               events.push({
                 kind: "borrow",
                 date: w.date,
@@ -1798,6 +1799,7 @@ export default function CashFlowManagement() {
                 amount: Number(w.amount_bdt),
                 note: w.note,
                 meta: w.parent_withdrawal_id ? "Top-up borrow" : "Original borrow",
+                account: `From ${acc?.name ?? "?"}`,
               });
             }
             for (const r of withdrawalReturns) {
@@ -1809,13 +1811,16 @@ export default function CashFlowManagement() {
                   created_at: r.created_at,
                   amount: Number(r.amount_bdt),
                   note: r.note,
-                  meta: `Returned to ${toAcc?.name ?? "?"}`,
+                  meta: "Return",
+                  account: `To ${toAcc?.name ?? "?"}`,
                 });
               }
             }
             events.sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
             let running = 0;
-            const fromAcc = accounts.find(a => a.id === historyGroup.root.from_account_id);
+            const accountNames = Array.from(
+              new Set((historyGroup.all as CashWithdrawal[]).map(w => accounts.find(a => a.id === w.from_account_id)?.name ?? "?"))
+            );
             return (
               <div className="space-y-4">
                 <div className="rounded-lg bg-muted p-3 grid grid-cols-3 gap-2 text-xs">
@@ -1823,7 +1828,9 @@ export default function CashFlowManagement() {
                   <div><div className="text-muted-foreground">Total Returned</div><div className="font-mono font-semibold text-success">৳{Number(historyGroup.totalReturned).toLocaleString()}</div></div>
                   <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${historyGroup.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{Number(historyGroup.outstanding).toLocaleString()}</div></div>
                 </div>
-                <p className="text-xs text-muted-foreground">Account: {fromAcc?.name ?? "?"} · Category: {CATEGORY_LABELS[historyGroup.root.category] || historyGroup.root.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  {accountNames.length > 1 ? "Accounts" : "Account"}: {accountNames.join(", ")} · Category: {CATEGORY_LABELS[historyGroup.root.category] || historyGroup.root.category}
+                </p>
                 <div className="border rounded-lg max-h-[420px] overflow-y-auto">
                   <Table>
                     <TableHeader>
@@ -1842,6 +1849,7 @@ export default function CashFlowManagement() {
                             <TableCell className="font-mono text-xs whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</TableCell>
                             <TableCell className="text-xs">
                               <div className="font-medium">{e.meta}</div>
+                              <div className="text-muted-foreground">{e.account}</div>
                               {e.note && <div className="text-muted-foreground">{e.note}</div>}
                             </TableCell>
                             <TableCell className={`text-right font-mono text-xs ${e.kind === "borrow" ? "text-destructive" : "text-success"}`}>
@@ -1854,18 +1862,32 @@ export default function CashFlowManagement() {
                     </TableBody>
                   </Table>
                 </div>
-                {historyGroup.outstanding > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button
-                    className="w-full"
+                    variant="warning"
+                    className="flex-1"
                     onClick={() => {
                       const g = historyGroup;
                       setHistoryGroup(null);
-                      openReturnDialog(g);
+                      openTopUpForGroup(g);
                     }}
                   >
-                    <RotateCcw className="mr-1 h-4 w-4" /> Record Return
+                    <HandCoins className="mr-1 h-4 w-4" /> Add Borrow
                   </Button>
-                )}
+                  {historyGroup.outstanding > 0 && (
+                    <Button
+                      className="flex-1"
+                      onClick={() => {
+                        const g = historyGroup;
+                        setHistoryGroup(null);
+                        openReturnDialog(g);
+                      }}
+                    >
+                      <RotateCcw className="mr-1 h-4 w-4" /> Record Return
+                    </Button>
+                  )}
+                </div>
+
               </div>
             );
           })()}
