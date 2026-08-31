@@ -574,13 +574,31 @@ export default function CashFlowManagement() {
   };
 
   const openReturnDialog = (group: any) => {
+    // Default the "to account" to the account of the oldest still-open borrow
+    const openRows = (group.all as CashWithdrawal[])
+      .filter(r => Number(r.amount_bdt) - Number(r.returned_bdt) > 0)
+      .sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
     setReturnGroup(group);
     setRetAmount("");
-    setRetToAccId(group.root.from_account_id);
+    setRetToAccId(openRows[0]?.from_account_id || group.root.from_account_id);
     setRetDate(new Date().toISOString().slice(0, 10));
     setRetNote("");
     setReturnOpen(true);
   };
+
+  /** Open the Withdraw dialog in top-up mode for an existing borrower group. */
+  const openTopUpForGroup = (group: any) => {
+    const root = group.root as CashWithdrawal;
+    setWdParentId(root.id);
+    setWdBorrower(root.borrower_name);
+    setWdCategory(root.category);
+    setWdFromAccId(root.from_account_id);
+    setWdAmount("");
+    setWdExpectedDate("");
+    setWdNote("");
+    setWithdrawOpen(true);
+  };
+
 
   const handleRecordBorrowerReturn = async () => {
     if (!returnGroup) return;
