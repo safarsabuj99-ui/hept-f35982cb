@@ -840,18 +840,9 @@ export default function CashFlowManagement() {
                 <Label>From Account</Label>
                 <Select
                   value={wdFromAccId}
-                  onValueChange={(v) => {
-                    setWdFromAccId(v);
-                    // Clear top-up linkage if account changes
-                    if (wdParentId) {
-                      const root = withdrawals.find(w => w.id === wdParentId);
-                      if (root && root.from_account_id !== v) {
-                        setWdParentId(null);
-                        setWdBorrower("");
-                      }
-                    }
-                  }}
+                  onValueChange={(v) => setWdFromAccId(v)}
                 >
+
                   <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
                   <SelectContent>
                     {activeAccounts.map(a => (
