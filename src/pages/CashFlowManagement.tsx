@@ -1062,7 +1062,7 @@ export default function CashFlowManagement() {
                       <span className="font-medium text-warning">Top-Up Mode</span>
                       <button
                         type="button"
-                        onClick={() => { setWdParentId(null); setWdBorrower(""); }}
+                        onClick={() => { setWdParentId(null); setWdBorrower(""); setWdBorrowerMode("none"); }}
                         className="text-xs underline text-muted-foreground hover:text-foreground"
                       >
                         Make new instead
