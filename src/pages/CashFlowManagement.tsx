@@ -574,13 +574,31 @@ export default function CashFlowManagement() {
   };
 
   const openReturnDialog = (group: any) => {
+    // Default the "to account" to the account of the oldest still-open borrow
+    const openRows = (group.all as CashWithdrawal[])
+      .filter(r => Number(r.amount_bdt) - Number(r.returned_bdt) > 0)
+      .sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
     setReturnGroup(group);
     setRetAmount("");
-    setRetToAccId(group.root.from_account_id);
+    setRetToAccId(openRows[0]?.from_account_id || group.root.from_account_id);
     setRetDate(new Date().toISOString().slice(0, 10));
     setRetNote("");
     setReturnOpen(true);
   };
+
+  /** Open the Withdraw dialog in top-up mode for an existing borrower group. */
+  const openTopUpForGroup = (group: any) => {
+    const root = group.root as CashWithdrawal;
+    setWdParentId(root.id);
+    setWdBorrower(root.borrower_name);
+    setWdCategory(root.category);
+    setWdFromAccId(root.from_account_id);
+    setWdAmount("");
+    setWdExpectedDate("");
+    setWdNote("");
+    setWithdrawOpen(true);
+  };
+
 
   const handleRecordBorrowerReturn = async () => {
     if (!returnGroup) return;
@@ -840,18 +858,9 @@ export default function CashFlowManagement() {
                 <Label>From Account</Label>
                 <Select
                   value={wdFromAccId}
-                  onValueChange={(v) => {
-                    setWdFromAccId(v);
-                    // Clear top-up linkage if account changes
-                    if (wdParentId) {
-                      const root = withdrawals.find(w => w.id === wdParentId);
-                      if (root && root.from_account_id !== v) {
-                        setWdParentId(null);
-                        setWdBorrower("");
-                      }
-                    }
-                  }}
+                  onValueChange={(v) => setWdFromAccId(v)}
                 >
+
                   <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
                   <SelectContent>
                     {activeAccounts.map(a => (
@@ -863,20 +872,50 @@ export default function CashFlowManagement() {
                 </Select>
               </div>
 
-              {/* Smart Borrower picker: lists existing active borrowers for the chosen account */}
+              {/* Smart Borrower picker: every active borrower, regardless of account */}
               <div>
                 <Label>Borrower Name</Label>
                 {(() => {
-                  // Build active borrower list (root rows only) for this account
-                  const activeBorrowers = withdrawals.filter(
-                    w => !w.parent_withdrawal_id
-                      && w.status !== "fully_returned"
-                      && (!wdFromAccId || w.from_account_id === wdFromAccId)
-                  );
                   const computeOutstanding = (rootId: string) => {
                     const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
                     return rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
                   };
+                  const latestActivity = (rootId: string) => {
+                    const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
+                    return rows.reduce((m, r) => (r.created_at > m ? r.created_at : m), "");
+                  };
+                  // All active borrowers (root rows), never filtered by the chosen account
+                  const allActive = withdrawals
+                    .filter(w => !w.parent_withdrawal_id && computeOutstanding(w.id) > 0)
+                    .sort((a, b) => latestActivity(b.id).localeCompare(latestActivity(a.id)));
+                  const sameAccount = allActive.filter(b => wdFromAccId && b.from_account_id === wdFromAccId);
+                  const otherAccounts = allActive.filter(b => !wdFromAccId || b.from_account_id !== wdFromAccId);
+                  const renderItem = (b: CashWithdrawal) => {
+                    const outstanding = computeOutstanding(b.id);
+                    const acc = accounts.find(a => a.id === b.from_account_id);
+                    return (
+                      <CommandItem
+                        key={b.id}
+                        value={b.borrower_name + " " + b.id}
+                        onSelect={() => {
+                          setWdBorrower(b.borrower_name);
+                          setWdCategory(b.category);
+                          if (!wdFromAccId) setWdFromAccId(b.from_account_id);
+                          setWdParentId(b.id);
+                          setBorrowerPickerOpen(false);
+                        }}
+                      >
+                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{b.borrower_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    );
+                  };
+
                   return (
                     <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
                       <PopoverTrigger asChild>
@@ -909,35 +948,17 @@ export default function CashFlowManagement() {
                             }}
                           />
                           <CommandList>
-                            {activeBorrowers.length > 0 && (
-                              <CommandGroup heading="Active borrowers (top-up)">
-                                {activeBorrowers.map(b => {
-                                  const outstanding = computeOutstanding(b.id);
-                                  const acc = accounts.find(a => a.id === b.from_account_id);
-                                  return (
-                                    <CommandItem
-                                      key={b.id}
-                                      value={b.borrower_name + " " + b.id}
-                                      onSelect={() => {
-                                        setWdBorrower(b.borrower_name);
-                                        setWdCategory(b.category);
-                                        setWdFromAccId(b.from_account_id);
-                                        setWdParentId(b.id);
-                                        setBorrowerPickerOpen(false);
-                                      }}
-                                    >
-                                      {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-medium truncate">{b.borrower_name}</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
-                                        </div>
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
+                            {sameAccount.length > 0 && (
+                              <CommandGroup heading="This account (top-up)">
+                                {sameAccount.map(renderItem)}
                               </CommandGroup>
                             )}
+                            {otherAccounts.length > 0 && (
+                              <CommandGroup heading={sameAccount.length > 0 ? "Other accounts (top-up)" : "Active borrowers (top-up)"}>
+                                {otherAccounts.map(renderItem)}
+                              </CommandGroup>
+                            )}
+
                             <CommandEmpty>
                               {wdBorrower.trim()
                                 ? `Press enter to create "${wdBorrower.trim()}" as new borrower`
@@ -976,7 +997,13 @@ export default function CashFlowManagement() {
                       <div><div>Returned</div><div className="font-mono font-semibold text-success">৳{totalReturned.toLocaleString()}</div></div>
                       <div><div>Outstanding</div><div className="font-mono font-semibold text-destructive">৳{outstanding.toLocaleString()}</div></div>
                     </div>
+                    {wdFromAccId && wdFromAccId !== root.from_account_id && (
+                      <p className="text-xs text-warning pt-1">
+                        Borrowing from a different account ({accounts.find(a => a.id === wdFromAccId)?.name || "?"}) — will be added to the same ledger.
+                      </p>
+                    )}
                   </div>
+
                 );
               })()}
 
@@ -1715,6 +1742,20 @@ export default function CashFlowManagement() {
                 <div><div className="text-muted-foreground">Already Returned</div><div className="font-mono font-semibold text-success">৳{Number(returnGroup.totalReturned).toLocaleString()}</div></div>
                 <div><div className="text-muted-foreground">Outstanding</div><div className="font-mono font-semibold text-destructive">৳{Number(returnGroup.outstanding).toLocaleString()}</div></div>
               </div>
+              {(() => {
+                const srcNames = Array.from(new Set(
+                  (returnGroup.all as CashWithdrawal[])
+                    .filter(r => Number(r.amount_bdt) - Number(r.returned_bdt) > 0)
+                    .map(r => accounts.find(a => a.id === r.from_account_id)?.name ?? "?")
+                ));
+                if (srcNames.length === 0) return null;
+                return (
+                  <p className="text-[11px] text-muted-foreground">
+                    Outstanding borrowed from: {srcNames.join(", ")}
+                  </p>
+                );
+              })()}
+
               <div>
                 <Label>Return Amount (BDT)</Label>
                 <Input
@@ -1762,8 +1803,9 @@ export default function CashFlowManagement() {
           </DialogHeader>
           {historyGroup && (() => {
             const childIds = new Set<string>(historyGroup.all.map((r: CashWithdrawal) => r.id));
-            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string }> = [];
+            const events: Array<{ kind: "borrow" | "return"; date: string; created_at: string; amount: number; note: string | null; meta: string; account: string }> = [];
             for (const w of historyGroup.all as CashWithdrawal[]) {
+              const acc = accounts.find(a => a.id === w.from_account_id);
               events.push({
                 kind: "borrow",
                 date: w.date,
@@ -1771,6 +1813,7 @@ export default function CashFlowManagement() {
                 amount: Number(w.amount_bdt),
                 note: w.note,
                 meta: w.parent_withdrawal_id ? "Top-up borrow" : "Original borrow",
+                account: `From ${acc?.name ?? "?"}`,
               });
             }
             for (const r of withdrawalReturns) {
@@ -1782,13 +1825,16 @@ export default function CashFlowManagement() {
                   created_at: r.created_at,
                   amount: Number(r.amount_bdt),
                   note: r.note,
-                  meta: `Returned to ${toAcc?.name ?? "?"}`,
+                  meta: "Return",
+                  account: `To ${toAcc?.name ?? "?"}`,
                 });
               }
             }
             events.sort((a, b) => (a.date === b.date ? a.created_at.localeCompare(b.created_at) : a.date.localeCompare(b.date)));
             let running = 0;
-            const fromAcc = accounts.find(a => a.id === historyGroup.root.from_account_id);
+            const accountNames = Array.from(
+              new Set((historyGroup.all as CashWithdrawal[]).map(w => accounts.find(a => a.id === w.from_account_id)?.name ?? "?"))
+            );
             return (
               <div className="space-y-4">
                 <div className="rounded-lg bg-muted p-3 grid grid-cols-3 gap-2 text-xs">
@@ -1796,7 +1842,9 @@ export default function CashFlowManagement() {
                   <div><div className="text-muted-foreground">Total Returned</div><div className="font-mono font-semibold text-success">৳{Number(historyGroup.totalReturned).toLocaleString()}</div></div>
                   <div><div className="text-muted-foreground">Outstanding</div><div className={`font-mono font-semibold ${historyGroup.outstanding > 0 ? "text-destructive" : "text-success"}`}>৳{Number(historyGroup.outstanding).toLocaleString()}</div></div>
                 </div>
-                <p className="text-xs text-muted-foreground">Account: {fromAcc?.name ?? "?"} · Category: {CATEGORY_LABELS[historyGroup.root.category] || historyGroup.root.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  {accountNames.length > 1 ? "Accounts" : "Account"}: {accountNames.join(", ")} · Category: {CATEGORY_LABELS[historyGroup.root.category] || historyGroup.root.category}
+                </p>
                 <div className="border rounded-lg max-h-[420px] overflow-y-auto">
                   <Table>
                     <TableHeader>
@@ -1815,6 +1863,7 @@ export default function CashFlowManagement() {
                             <TableCell className="font-mono text-xs whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</TableCell>
                             <TableCell className="text-xs">
                               <div className="font-medium">{e.meta}</div>
+                              <div className="text-muted-foreground">{e.account}</div>
                               {e.note && <div className="text-muted-foreground">{e.note}</div>}
                             </TableCell>
                             <TableCell className={`text-right font-mono text-xs ${e.kind === "borrow" ? "text-destructive" : "text-success"}`}>
@@ -1827,18 +1876,32 @@ export default function CashFlowManagement() {
                     </TableBody>
                   </Table>
                 </div>
-                {historyGroup.outstanding > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button
-                    className="w-full"
+                    variant="warning"
+                    className="flex-1"
                     onClick={() => {
                       const g = historyGroup;
                       setHistoryGroup(null);
-                      openReturnDialog(g);
+                      openTopUpForGroup(g);
                     }}
                   >
-                    <RotateCcw className="mr-1 h-4 w-4" /> Record Return
+                    <HandCoins className="mr-1 h-4 w-4" /> Add Borrow
                   </Button>
-                )}
+                  {historyGroup.outstanding > 0 && (
+                    <Button
+                      className="flex-1"
+                      onClick={() => {
+                        const g = historyGroup;
+                        setHistoryGroup(null);
+                        openReturnDialog(g);
+                      }}
+                    >
+                      <RotateCcw className="mr-1 h-4 w-4" /> Record Return
+                    </Button>
+                  )}
+                </div>
+
               </div>
             );
           })()}
