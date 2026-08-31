@@ -854,20 +854,50 @@ export default function CashFlowManagement() {
                 </Select>
               </div>
 
-              {/* Smart Borrower picker: lists existing active borrowers for the chosen account */}
+              {/* Smart Borrower picker: every active borrower, regardless of account */}
               <div>
                 <Label>Borrower Name</Label>
                 {(() => {
-                  // Build active borrower list (root rows only) for this account
-                  const activeBorrowers = withdrawals.filter(
-                    w => !w.parent_withdrawal_id
-                      && w.status !== "fully_returned"
-                      && (!wdFromAccId || w.from_account_id === wdFromAccId)
-                  );
                   const computeOutstanding = (rootId: string) => {
                     const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
                     return rows.reduce((s, r) => s + (Number(r.amount_bdt) - Number(r.returned_bdt)), 0);
                   };
+                  const latestActivity = (rootId: string) => {
+                    const rows = withdrawals.filter(w => w.id === rootId || w.parent_withdrawal_id === rootId);
+                    return rows.reduce((m, r) => (r.created_at > m ? r.created_at : m), "");
+                  };
+                  // All active borrowers (root rows), never filtered by the chosen account
+                  const allActive = withdrawals
+                    .filter(w => !w.parent_withdrawal_id && computeOutstanding(w.id) > 0)
+                    .sort((a, b) => latestActivity(b.id).localeCompare(latestActivity(a.id)));
+                  const sameAccount = allActive.filter(b => wdFromAccId && b.from_account_id === wdFromAccId);
+                  const otherAccounts = allActive.filter(b => !wdFromAccId || b.from_account_id !== wdFromAccId);
+                  const renderItem = (b: CashWithdrawal) => {
+                    const outstanding = computeOutstanding(b.id);
+                    const acc = accounts.find(a => a.id === b.from_account_id);
+                    return (
+                      <CommandItem
+                        key={b.id}
+                        value={b.borrower_name + " " + b.id}
+                        onSelect={() => {
+                          setWdBorrower(b.borrower_name);
+                          setWdCategory(b.category);
+                          if (!wdFromAccId) setWdFromAccId(b.from_account_id);
+                          setWdParentId(b.id);
+                          setBorrowerPickerOpen(false);
+                        }}
+                      >
+                        {wdParentId === b.id && <Check className="mr-2 h-3.5 w-3.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{b.borrower_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {acc?.name || "?"} · Outstanding ৳{outstanding.toLocaleString()}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    );
+                  };
+
                   return (
                     <Popover open={borrowerPickerOpen} onOpenChange={setBorrowerPickerOpen}>
                       <PopoverTrigger asChild>
