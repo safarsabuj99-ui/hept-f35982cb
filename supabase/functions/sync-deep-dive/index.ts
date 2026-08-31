@@ -120,6 +120,11 @@ Deno.serve(async (req) => {
   // cleanly instead of being aborted mid-write (which leaves stale daily_metrics).
   const startTime = Date.now();
   const TIME_BUDGET_MS = 18_000;
+  // Hard upstream deadline (well under the 150s runtime wall-clock limit that
+  // produces HTTP 546). Past this, TikTok fetching stops and we hand back a
+  // 408 cpu_timeout so the queue worker splits the window into smaller chunks.
+  const UPSTREAM_DEADLINE_MS = 100_000;
+  workerDeadlineAt = startTime + UPSTREAM_DEADLINE_MS;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
